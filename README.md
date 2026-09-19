@@ -19,7 +19,7 @@
 | # | پیشنیاز | راهنما |
 |---|---|---|
 | ۱ | یک حساب کلادفلر برای مدیریت DNS | داشبورد › My Profile › API Tokens |
-| ۲ | توکن API کلادفلر (۵ دسترسی زیر) | [آموزش تصویری ساخت توکن](docs/cloudflare-api-token.md) |
+| ۲ | توکن API کلادفلر | [آموزش تصویری ساخت توکن](docs/cloudflare-api-token.md) |
 | ۳ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۴ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 | ۵ | یک سرور لینوکسی (فقط برای نصب — بعد از نصب دیگر لازم نیست) | هر VPS کوچک کافی است |
@@ -36,7 +36,7 @@
 
 **Zone · Cache Purge · Purge**
 
-> دسترسی `Account · Settings` لازم نیست. اگر اکانتتان سابدامنهٔ `workers.dev` ندارد، یک دسترسی ششم هم اضافه کنید: **Account · Workers Subdomain · Edit**.
+**Account · Workers Subdomain · Edit**
 
 ---
 
