@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.04";
+const BOT_VERSION = "9.05";
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -23,6 +23,7 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.05": ["📢 تبلیغ منوی اصلی به t.me/panelSazFilterBot تغییر کرد"],
   "9.04": ["🏠 متن روی منوی اصلی کوتاه شد: نوشتههای «در منوی اصلی هستید / یک گزینه را انتخاب کن» حذف شد"],
   "9.03": ["🏠 منوی اصلی: دکمه «دیتاسنترها» حذف شد و بهجایش «هتزنر | لینود | آروان» در یک ردیف سبز قرار گرفت؛ «سرورها» هم یک "],
   "9.02": ["به‌روزرسانی و نگهداری"],
@@ -931,7 +932,7 @@ async function getAdmins(kv, env) {
 }
 
 // تبلیغ روی /start: اول مقدار محلی (KV)، بعد کش دیتای مرکزی از مخزن (قابل تغییر بدون آپدیت مشتری)، بعد env، بعد پیش‌فرض
-const PROMO_DEFAULT = "طراحی توسط @panelSazFilterBot";
+const PROMO_DEFAULT = "طراحی توسط t.me/panelSazFilterBot";
 const PROMO_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/promo.txt";
 
 async function getPromo(kv, env) {
