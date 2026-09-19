@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.09";
+const BOT_VERSION = "9.10";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -19,6 +19,11 @@ const QUOTA_PAUSE_KEY = "quota_pause";
 const QUOTA_CFG_KEY = "quota_cfg";
 const QUOTA_TOKEN_KEY = "quota_token";
 const QUOTA_SCHED_KEY = "quota_sched_saved";
+
+// سقف روزانهٔ رایگان Workers KV
+const KV_LIMITS_DAILY = { read: 100000, write: 1000, delete: 1000, list: 1000 };
+const KV_ACTION_LABEL = { read: "خواندن", write: "نوشتن", delete: "حذف", list: "لیست" };
+const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان)
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -32,6 +37,10 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.10": [
+    "🗄 سهمیهٔ Workers KV به منوی «☁️ سهمیهٔ کلادفلر» اضافه شد: خواندن/نوشتن/حذف/لیست روزانه + حجم اشغالی و تعداد کلید، با نوار مصرف و هشدار بالای ۹۰٪",
+    "⚠️ گارد سهمیه حالا عبور از سقف KV را هم در پیام هشدار گزارش می‌دهد (استاپ خودکار همچنان فقط برای سهمیهٔ درخواست‌های ورکر است)",
+  ],
   "9.09": [
     "☁️ منوی «سهمیهٔ کلادفلر» در بخش مانیتورها (کنار «مانیتور سرورها»): نمایش مصرف امروز/سقف، روشن‌وخاموش‌کردن استاپ خودکار، تغییر سقف روزانه، وضعیت کرون‌جاب‌ها و روشن‌کردن ربات",
     "🔓 روشن‌کردن فوری ربات با لینک (بدون نیاز به وب‌هوک) + دکمه‌های «خاموش‌کردن موقت کرون ۶/۲۴ ساعت» روی پیام هشدار سهمیه",
@@ -1186,6 +1195,117 @@ async function fetchRequestsToday(tok, aid) {
   }
 }
 
+async function fetchKvUsageToday(tok, aid) {
+  if (!tok || !aid) return null;
+  const day = new Date().toISOString().slice(0, 10);
+  const q =
+    `{viewer{accounts(filter:{accountTag:"${aid}"}){kvOperationsAdaptiveGroups(limit:50,` +
+    `filter:{date_geq:"${day}",date_leq:"${day}"}){dimensions{actionType} sum{requests}}}}}`;
+  try {
+    const res = await fetch(`${CF_API}/graphql`, {
+      method: "POST",
+      headers: hdr(tok),
+      body: JSON.stringify({ query: q }),
+      signal: withTimeout(25000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const arr =
+      data && data.data && data.data.viewer && data.data.viewer.accounts &&
+      data.data.viewer.accounts[0] && data.data.viewer.accounts[0].kvOperationsAdaptiveGroups;
+    if (!Array.isArray(arr)) return null;
+    const out = { read: 0, write: 0, delete: 0, list: 0 };
+    for (const g of arr) {
+      const t = String((g && g.dimensions && g.dimensions.actionType) || "").toLowerCase();
+      const n = Number(g && g.sum && g.sum.requests) || 0;
+      if (t === "read") out.read = n;
+      else if (t === "write") out.write = n;
+      else if (t === "delete" || t === "del") out.delete = n;
+      else if (t === "list") out.list = n;
+    }
+    return out;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function fetchKvStorage(tok, aid) {
+  if (!tok || !aid) return null;
+  const day = new Date().toISOString().slice(0, 10);
+  const q =
+    `{viewer{accounts(filter:{accountTag:"${aid}"}){kvStorageAdaptiveGroups(limit:50,` +
+    `filter:{date_geq:"${day}",date_leq:"${day}"}){max{byteCount keyCount}}}}}`;
+  try {
+    const res = await fetch(`${CF_API}/graphql`, {
+      method: "POST",
+      headers: hdr(tok),
+      body: JSON.stringify({ query: q }),
+      signal: withTimeout(25000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const arr =
+      data && data.data && data.data.viewer && data.data.viewer.accounts &&
+      data.data.viewer.accounts[0] && data.data.viewer.accounts[0].kvStorageAdaptiveGroups;
+    if (!Array.isArray(arr)) return null;
+    let bytes = 0;
+    let keys = 0;
+    for (const g of arr) {
+      bytes += Number((g && g.max && g.max.byteCount) || 0);
+      keys += Number((g && g.max && g.max.keyCount) || 0);
+    }
+    return { bytes, keys };
+  } catch (e) {
+    return null;
+  }
+}
+
+function quotaPct(used, limit) {
+  if (used === null || used === undefined || !limit) return null;
+  const p = Math.round((Number(used) / Number(limit)) * 100);
+  return Number.isFinite(p) ? p : null;
+}
+
+function quotaBar(pct) {
+  if (pct === null) return "";
+  const filled = Math.max(0, Math.min(10, Math.round(pct / 10)));
+  return "▮".repeat(filled) + "▯".repeat(10 - filled) + " " + pct + "٪";
+}
+
+function fmtBytes(n) {
+  const b = Number(n) || 0;
+  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GB";
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+  if (b >= 1024) return (b / 1024).toFixed(1) + " KB";
+  return b + " B";
+}
+
+// ساخت متن هشدارهای عبور از سهمیه (درخواست ورکر + KV)
+function quotaAlertsList(cfg, count, kvOps, storage) {
+  const alerts = [];
+  const limit = Number(cfg.limit) || 0;
+  if (limit > 0 && count !== null) {
+    const p = quotaPct(count, limit);
+    if (p !== null && p >= Math.round(QUOTA_WARN_RATIO * 100)) {
+      alerts.push(`• درخواست‌های ورکر: ${count.toLocaleString("en-US")} از ${limit.toLocaleString("en-US")} (${p}٪)`);
+    }
+  }
+  if (kvOps) {
+    for (const k of ["read", "write", "delete", "list"]) {
+      const lim = KV_LIMITS_DAILY[k];
+      const p = quotaPct(kvOps[k], lim);
+      if (p !== null && p >= 90) {
+        alerts.push(`• KV ${KV_ACTION_LABEL[k]}: ${kvOps[k].toLocaleString("en-US")} از ${lim.toLocaleString("en-US")} (${p}٪)`);
+      }
+    }
+  }
+  if (storage) {
+    const p = quotaPct(storage.bytes, KV_STORAGE_LIMIT);
+    if (p !== null && p >= 90) alerts.push(`• حجم KV: ${fmtBytes(storage.bytes)} از ۱ گیگ (${p}٪)`);
+  }
+  return alerts;
+}
+
 async function getSelfWebhook(env, tok) {
   const aid = env.WORKER_ACCOUNT_ID || "";
   const wname = env.WORKER_NAME || "";
@@ -1354,31 +1474,35 @@ async function quotaGuard(env, botToken, adminId) {
     return;
   }
 
-  const limit = Number(cfg.limit) || 0;
-  if (!(limit > 0)) return; // 0 = گارد غیرفعال
   const acc = await getQuotaAcct(kv, env);
   if (!acc) return;
   const count = await fetchRequestsToday(acc.tok, acc.aid);
-  if (count === null) return; // آنالیتیکس در دسترس نیست → بی‌سر و صدا رد شو
-  if (count < Math.round(limit * QUOTA_WARN_RATIO)) return;
+  const kvOps = await fetchKvUsageToday(acc.tok, acc.aid);
+  const storage = await fetchKvStorage(acc.tok, acc.aid);
+  const alerts = quotaAlertsList(cfg, count, kvOps, storage);
+  if (!alerts.length) return; // همه‌چیز زیر آستانه
 
   const today = new Date().toISOString().slice(0, 10);
   if (cfg.warnedDay === today) return; // روزی یک‌بار هشدار
   cfg.warnedDay = today;
   await saveQuotaCfg(kv, cfg);
 
+  const limit = Number(cfg.limit) || 0;
+  const reqHigh = limit > 0 && count !== null && count >= Math.round(limit * QUOTA_WARN_RATIO);
   const resetAt = _nextUtcMidnight();
-  const pct = Math.round((count / limit) * 100);
   const base = await selfUrlBase(env, kv);
   const token = await getQuotaToken(kv);
   const resumeUrl = base && token ? `${base}/qresume?t=${token}` : "";
   const lines = [
-    "⚠️ هشدار سهمیهٔ روزانهٔ کلادفلر!",
+    "⚠️ هشدار سهمیهٔ کلادفلر!",
     "",
-    `تعداد درخواست‌های امروز ربات: ${count.toLocaleString("en-US")} از ${limit.toLocaleString("en-US")} (${pct}٪).`,
+    "این موارد نزدیک/بالای سقف پلن رایگان هستند:",
+    ...alerts,
     "",
     cfg.autoStop
-      ? "🔒 به‌خاطر امنیت اکانت، ربات موقتاً استاپ می‌شود و بعد از ریست سهمیه"
+      ? reqHigh
+        ? "🔒 به‌خاطر امنیت اکانت، ربات موقتاً استاپ می‌شود و بعد از ریست سهمیه"
+        : "ℹ️ (استاپ خودکار فقط برای سهمیهٔ درخواست‌های ورکر اعمال می‌شود.)"
       : "ℹ️ استاپ خودکار خاموش است؛ ربات روشن می‌ماند.",
     `(ریست: ۰۰:۰۰ UTC = ساعت ${_tehranHm(resetAt)} به‌وقت تهران)`,
     "",
@@ -1396,7 +1520,7 @@ async function quotaGuard(env, botToken, adminId) {
     await sendMessage(botToken, adminId, lines.join("\n"), kb);
   } catch (e) {}
 
-  if (cfg.autoStop) {
+  if (cfg.autoStop && reqHigh) {
     const webhook = await getSelfWebhook(env, acc.tok);
     if (!webhook) return; // اگر URL ورکر معلوم نبود فقط هشدار بده؛ استاپ نکن
     await kv.put(QUOTA_PAUSE_KEY, JSON.stringify({ reset_at: resetAt, webhook, count }));
@@ -1410,20 +1534,45 @@ async function renderQuotaMenu(edit, kv, env) {
   const cfg = await getQuotaCfg(kv, env);
   const acc = await getQuotaAcct(kv, env);
   let count = null;
-  if (acc) count = await fetchRequestsToday(acc.tok, acc.aid);
+  let kvOps = null;
+  let storage = null;
+  if (acc) {
+    count = await fetchRequestsToday(acc.tok, acc.aid);
+    kvOps = await fetchKvUsageToday(acc.tok, acc.aid);
+    storage = await fetchKvStorage(acc.tok, acc.aid);
+  }
   let paused = null;
   try {
     const raw = await kv.get(QUOTA_PAUSE_KEY, "text");
     paused = raw ? JSON.parse(raw) : null;
   } catch (e) {}
-  const pct = count !== null && cfg.limit ? Math.round((count / cfg.limit) * 100) : null;
   const lines = ["☁️ سهمیهٔ کلادفلر", ""];
+
+  lines.push("🚦 درخواست‌های ورکر (روزانه):");
   lines.push(
-    "📊 مصرف امروز: " +
-      (count === null
-        ? "نامشخص (آنالیتیکس در دسترس نیست)"
-        : count.toLocaleString("en-US") + " از " + cfg.limit.toLocaleString("en-US") + (pct === null ? "" : " (" + pct + "٪)"))
+    count === null
+      ? "• نامشخص (آنالیتیکس در دسترس نیست)"
+      : "• " + count.toLocaleString("en-US") + " / " + cfg.limit.toLocaleString("en-US") + " — " + quotaBar(quotaPct(count, cfg.limit))
   );
+
+  lines.push("", "🗄 Workers KV (روزانه):");
+  if (kvOps) {
+    for (const k of ["read", "write", "delete", "list"]) {
+      const lim = KV_LIMITS_DAILY[k];
+      const p = quotaPct(kvOps[k], lim);
+      lines.push(
+        "• " + KV_ACTION_LABEL[k] + ": " + kvOps[k].toLocaleString("en-US") + " / " + lim.toLocaleString("en-US") + " — " + quotaBar(p) + (p !== null && p >= 90 ? " ⚠️" : "")
+      );
+    }
+    if (storage) {
+      const sp = quotaPct(storage.bytes, KV_STORAGE_LIMIT);
+      lines.push("• حجم: " + fmtBytes(storage.bytes) + " / ۱ گیگ — " + quotaBar(sp) + " · " + storage.keys + " کلید");
+    }
+  } else {
+    lines.push("• نامشخص (آنالیتیکس در دسترس نیست)");
+  }
+
+  lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
   lines.push(
     "⏸ کرون‌جاب‌ها: " +
