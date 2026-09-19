@@ -1,0 +1,4 @@
+# تنظیمات محلی — هرگز در مخزن قرار نگیرد
+config.json
+deploy.json
+*.log
