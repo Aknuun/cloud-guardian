@@ -36,7 +36,7 @@ read -r -p "توکن API کلادفلر (Workers Scripts Edit + Workers KV + Zon
 echo "   تلاش برای یافتن خودکار Account ID…"
 ACC_ID=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$API/accounts?per_page=50" | python3 -c "import sys,json;r=json.load(sys.stdin);print(r['result'][0]['id'] if r.get('success') and r.get('result') else '')" 2>/dev/null || echo "")
 if [ -z "$ACC_ID" ]; then
-  w "Account ID خودکار پیدا نشد؛ دستی وارد کنید (از دشبورد کلادفلر → حساب → Account ID)."
+  w "Account ID خودکار پیدا نشد؛ دستی وارد کنید (از داشبورد کلادفلر → Account ID)."
   read -r -p "Account ID: " ACC_ID
 fi
 [ -n "$ACC_ID" ] || e "Account ID لازم است."
@@ -47,7 +47,7 @@ WK="${WK:-cloud-guardian}"
 read -r -p "توکن ربات تلگرام (از @BotFather): " BOT_TOKEN
 [ -n "$BOT_TOKEN" ] || e "توکن ربات لازم است."
 
-read -r -p "شناسهٔ عددی تلگرام مدیر (عدد، از /myid): " ADMIN_ID
+read -r -p "شناسهٔ عددی تلگرام مدیر (عدد، از @userinfobot): " ADMIN_ID
 [ -n "$ADMIN_ID" ] || e "شناسهٔ مدیر لازم است."
 
 echo ""
@@ -71,7 +71,7 @@ PY
 chmod 700 "$DIR"
 chmod 600 "$CFG"
 
-b "نصب/دیپلوی روی کلادفلر (ساخت KV + همینگ + ورکر + کرون)…"
+b "نصب/دیپلوی روی کلادفلر (ساخت KV + بایندینگ + ورکر + کرون)…"
 cd "$DIR"
 python3 deploy-tool.py install || e "دیپلوی ناموفق بود."
 
