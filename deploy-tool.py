@@ -72,6 +72,8 @@ def bindings(cfg, kv_id):
         {"type": "plain_text", "name": "BOT_TOKEN", "text": cfg["bot_token"]},
         {"type": "plain_text", "name": "ADMIN_ID", "text": str(cfg["admin_id"])},
         {"type": "plain_text", "name": "CF_ACCOUNTS", "text": json.dumps(accs, ensure_ascii=False)},
+        {"type": "plain_text", "name": "WORKER_ACCOUNT_ID", "text": cfg["account_id"]},
+        {"type": "plain_text", "name": "WORKER_NAME", "text": cfg["worker"]},
     ]
 
 
