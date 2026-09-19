@@ -1,0 +1,12790 @@
+import { connect } from "cloudflare:sockets";
+
+const BOT_TOKEN = "";
+const ADMIN_ID = 0;
+
+// ============================================================
+// نسخهٔ ربات
+// ⚠️ قانون: بعد از هر تغییر در این فایل، قبل از deploy مقدار
+//    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
+//    نسخه در منوی اصلی ربات نمایش داده می‌شود.
+// ============================================================
+const BOT_VERSION = "9.00";
+
+// مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
+const ARVAN_DOMAINS_CACHE_MS = 600000;
+
+// ============================================================
+// یادداشت انتشار (Release Notes)
+// ⚠️ قانون: بعد از هر تغییر در این فایل، قبل از deploy:
+//   ۱) BOT_VERSION را یک واحد زیاد کن.
+//   ۲) برای همان نسخه اینجا قابلیت‌های جدید را بنویس.
+//   ۳) deploy کن. ربات خودش یک‌بار برای همهٔ ادمین‌ها پیام «نسخهٔ
+//      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
+// ============================================================
+const RELEASE_NOTES = {
+  "9.00": [
+    "🎉 نسخهٔ عمومی! پروژه در گیت‌هاب منتشر شد.",
+    "📢 روی /start تبلیغ (پیش‌فرض «طراحی توسط @panelSazFilterBot») نمایش داده می‌شود؛ مدیر با /promoset یا از طریق فایل promo.txt مخزن می‌تواند بدون آپدیت مشتری عوضش کند.",
+  ],
+  "8.99": [
+    "✍️ ویزارد تنظیم رله ساده شد: فقط آی‌پی را بفرستید؛ ربات خودش ساب‌دامهٔ rel را می‌سازد و گزارش می‌دهد",
+  ],
+  "8.98": [
+    "🤖 اگر آدرس رله را با آی‌پی بفرستید، ربات خودکار از اولین دامنهٔ فعال یک ساب‌دامهٔ rel.دامنه می‌سازد، رکورد A (بدون پروکسی) می‌گذارد و همان آدرسِ با دامنه را ثبت می‌کند؛ دیگر خطای 403 آی‌پی نخواهید گرفت",
+  ],
+  "8.97": [
+    "🌐 آدرس رله باید دامنه باشد نه آی‌پی (ورکر کلادفلر به آی‌پی مستقیم وصل نمی‌شود و خطای 1003 می‌دهد). راهنمای نصب و ویزاد تنظیم رله به‌روز شد؛ رلهٔ پیش‌فرض همین ربات: http://relay.aknuun.online:8788",
+  ],
+  "8.96": [
+    "🔍 تست ثبت رله دقیق‌تر شد: اول دسترسی با /ping (بدون توکن) بررسی می‌شود، بعد اعتبار توکن؛ اگر کد 403 از خودِ رله نباشد، پیام می‌دهد که احتمالاً مسیر بین ورکر و رله مسدود است",
+  ],
+  "8.95": [
+    "🔧 هنگام ثبت توکن رله، کاراکترهای نامرئیِ چسبیده (ZWNJ/علائم RTL-LTR) که موقع کپی وارد می‌شوند خودکار پاک می‌شوند تا تست 403 بی‌دلیل رخ ندهد",
+  ],
+  "8.94": [
+    "🔧 دکمهٔ «🗑 حذف تنظیمات رله» حالا همیشه در راهنمای رله نمایش داده می‌شود؛ اگر رله از متغیرهای ورکر باشد، پیام توضیحی می‌گیرید و می‌توانید رلهٔ خودتان را جایگزین ثبت کنید",
+  ],
+  "8.93": [
+    "🔥 گزارش ۲۴ ساعته بد مصرف درست شد: حالا فقط کاربرانی که طی همان روز برایشان هشدار فرستاده شده با مصرف روزانهٔ آن‌ها می‌آید (قبلاً لیست کلی پرمصرف‌ها با عددهای نامطمئن بود)",
+    "📅 مقایسهٔ «۲۴ ساعت اخیر» حالا فقط در پنجرهٔ ۲۳ تا ۳۰ ساعت انجام می‌شود؛ اگر بیس قدیمی‌تر باشد، عددی نامعتبر گزارش نمی‌شود",
+  ],
+  "8.92": [
+    "↩️ تعویض خودکار ساب فیلتر به حالت قبل برگشت: پیام تعویض هر دامنه دیگر دوباره جداگانه ارسال می‌شود",
+  ],
+  "8.91": [
+    "🔄 تعویض خودکار ساب فیلتر: پیام تعویض‌ها دیگر یکی‌یکی نمی‌آید؛ همهٔ تغییرات یکجا جمع می‌شود و در یک پیام (هر ۱۰ تغییر یا در پایان هر بررسی) با دکمهٔ بازگشت هر کدام ارسال می‌شود",
+    "🌐 ثبت پنل پاسارگارد: نمونهٔ آدرس به ساب‌دامین تغییر کرد (مثلاً sub.mypanel.com) — اگر بدون https بفرستید خودکار اضافه می‌شود",
+  ],
+  "8.90": [
+    "🐞 رفع «دستور ناشناخته» هنگام افزودن پنل پاسارگارد: ارسال نام پنل حالا درست ذخیره و ادامه می‌دهد (آدرس ← نام‌کاربری ← رمز)",
+  ],
+  "8.89": [
+    "🔧 تنظیم رله ساده شد: دیگر به دامنه/ساب نیازی نیست — آدرس با همان آی‌پی سرور ثبت می‌شود (http://آی‌پی:8788) و دستور نصب رله در راهنما هم به نسخهٔ بدون کش گیت‌هاب به‌روز شد",
+    "🌐 «چک هاست» (تعویض خودکار ساب فیلتر) حالا از رلهٔ ثبت‌شده رد می‌شود؛ اگر رله تنظیم نباشد به‌جای خطای نامفهوم، پیام راهنمای تنظیم رله نمایش داده می‌شود",
+  ],
+  "8.88": [
+    "🛰 آروان حالا از رلهٔ SSH عبور می‌کند: چون کلادفلر ورکر به API آروان دسترسی ندارد، همهٔ عملیات آروان (لیست دامنه/رکورد، ساخت، ویرایش، حذف) وقتی رله ثبت شده باشد از پروکسی رله انجام می‌شود — رله باید rev4 یا بالاتر باشد",
+  ],
+  "8.87": [
+    "⚡️ رفع کندی «➕ افزودن رکورد»: لیست دامنه‌های آروان هم مثل کلودفلر کش‌دار شد و دیگر هر بار همهٔ اکانت‌ها را با مکث از API نمی‌گیرد",
+    "🛡 اگر یکی از اکانت‌های آروان کند/معیوب باشد، بقیهٔ دامنه‌ها هنوز نمایش داده می‌شوند",
+  ],
+  "8.86": [
+    "🖥 به منوی «مانیتورها» دکمهٔ «مانیتور سرورها» اضافه شد (CPU/RAM/دیسک سرورها و آستانه‌های هشدار)",
+  ],
+  "8.85": [
+    "🏠 منوی اصلی: دکمهٔ «🖥 مانیتورها» به زیر ردیف «دیتاسنترها/سرورها» منتقل شد",
+    "🔧 بخش رلهٔ SSH: دکمهٔ «تنظیم رله» اضافه شد؛ خودت آدرس و توکن رله را در ربات ثبت می‌کنی (با تست خودکار اتصال) بدون نیاز به پیام دادن به ادمین — امکان حذف/تغییر هم دارد",
+  ],
+  "8.84": [
+    "🔧 رفع باگ مانیتور سرور: RAM و دیسک و آپ‌تایم در رلهٔ SSH به‌درستی دریافت و نمایش داده می‌شوند (پیش‌تر به‌خاطر عدم خروجی newline مقدار خالی می‌آمد)",
+    "🖥 در صفحهٔ «سرورها» دکمهٔ هر سرور خاکستری شد",
+  ],
+  "8.83": [
+    "🏠 منوی اصلی: دکمهٔ «🖥 مانیتورها» تک‌ستونه شد و «ℹ️ راهنما» و «👥 مدیریت ادمین» کنار هم با رنگ خاکستری قرار گرفتند",
+    "📖 بخش‌های راهنمای ربات بازنویسی و با منوی جدید هماهنگ شد؛ برگهٔ جداگانهٔ «ساب‌های منتخب» از راهنما حذف و توضیحش به بخش کلودفلر منتقل شد",
+    "⭐ در صفحهٔ «ساب‌های منتخب» دکمهٔ «منو» به «بازگشت» تبدیل شد و با یک لمس به صفحهٔ «☁️ کلودفلر» برمی‌گردد",
+  ],
+  "8.82": [
+    "🏠 منوی اصلی: «ساب‌های منتخب» از صفحهٔ اصلی حذف شد و «افزودن رکورد» جایش رفت؛ «مانیتورها» یک ردیف پایین‌تر آمد",
+    "☁️ کلودفلر: دکمهٔ «ساب‌های منتخب» (سبز) کنار دکمهٔ «همه اکانت‌ها» قرار گرفت و نام دکمهٔ فیلتر همه به «همه اکانت‌ها» تغییر کرد",
+    "🧭 نام دکمهٔ «مانیتور فیلتر شدن ساب» به «تعویض خودکار ساب فیلتر» تغییر کرد",
+    "🔥 متن هشدار بد مصرف به «مصرف بالا در یک ساعت (احتمال پخش لینک)» تغییر کرد",
+    "🎛 دکمهٔ «تعریف پنل پاسارگارد» دیگر قرمز نیست و رنگش طبق قانون پیش‌فرض (سبز) نمایش داده می‌شود",
+  ],
+  "8.81": [
+    "⭐ در صفحهٔ «☁️ کلودفلر» دکمهٔ «ساب‌های منتخب» به بالای لیست دامنه‌ها اضافه شد تا بدون رفتن به منو، با یک لمس به ساب‌های منتخب برسی",
+  ],
+  "8.80": [
+    "🗑 «اتصال SSH اینلاین» به‌طور کامل از ربات حذف شد (دکمه‌ها، دستورهای سریع، اجرا و تأیید y/n)",
+    "🖥 بقیهٔ امکانات سرورها (نصب نود، مانیتور، ریبوت، آپدیت) بدون تغییر باقی ماند",
+  ],
+  "8.79": [
+    "🖥 مانیتور نود پاسارگارد بازطراحی شد: توضیح کامل در بالای صفحه + وضعیت نودها مستقیم و بدون دکمه‌های اضافی",
+    "⏱ فاصلهٔ پایش خودکار هر مانیتور قابل تنظیم شد (مثلاً ۵، ۱۰، ۳۰ دقیقه)",
+    "🚫 دکمهٔ جدا «استثنا» برای خاموش‌کردن هشدار نودهای خاص",
+    "🎛 دکمه‌های مخصوص (همگام‌سازی، فاصله، استثنا، وبهوک، تست، توقف هشدار، حذف) داخل همان صفحهٔ مانیتور نود قرار گرفتند",
+    "🔙 بازگشت از «مانیتور فیلترشدن ساب» حالا به صفحهٔ «مانیتورها» برمی‌گردد",
+  ],
+  "8.78": [
+    "🎛 دکمهٔ قرمز «تعریف پنل پاسارگارد» به صفحهٔ «مانیتورها» منتقل شد",
+    "🖧 در مانیتور نود پاسارگارد، دکمهٔ هر پنل به «نودها» تغییر نام داد (وارد شدن به نودهای همان پنل)",
+  ],
+  "8.77": [
+    "🎛 «تعریف پنل پاسارگارد»: دکمهٔ جدا و قرمز در بالای «مانیتور نود پاسارگارد» برای ثبت، ویرایش و حذف پنل",
+    "✏️ ویرایش پنل: تغییر نام، آدرس، نام‌کاربری یا رمز هر پنل در یک منوی جدا",
+    "🗑 حذف پنل به «تعریف پنل پاسارگارد» منتقل شد و دکمهٔ «افزودن پنل» از صفحهٔ مانیتور نود حذف شد",
+  ],
+  "8.76": [
+    "🧾 خلاصهٔ تغییرات اخیر (از دیروز تا الآن):",
+    "🖥 سرورها: افزودن سرور ساده شد (نام و نام‌کاربر پرسیده نمی‌شود؛ نام=آی‌پی/هاست، کاربر=root) + بخش «رمزهای ذخیره‌شده» با نمایش خود رمز و انتخاب سریع هنگام افزودن",
+    "🧩 نود پاسارگارد: افزودن خودکار نود به پنل با نام و آدرس=آی‌پی، دکمهٔ «بررسی وضعیت نصب» و ثبت خودترمیم با کرون (حتی اگر اجرای ورکر وسط نصب قطع شود)",
+    "🛡 رفع باگ‌های نصب نود: گیرکردن روی apt، خطای «Port 62051 already in use» در نصب مجدد، و باگ حذف نود",
+    "🏢 هتزنر: رفع خطای «رمز منقضی / no TTY» با cloud-init، نمایش خاکستری پلن‌های ناموجود، ترجمهٔ خطاها به فارسی و برچسب پلن به شکل cx43-16G-8c(19€)",
+    "🔗 ارتباط دیتاسنتر و سرورها: سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود، ابتدا می‌پرسد نود نصب شود یا نه، بعد تست اتصال و تنظیم «رمز ۱»",
+    "⌨️ SSH اینلاین تعاملی شد: برای دستورهای خطرناک (مثل pg-node uninstall) تأیید y/n می‌گیرد",
+    "☰ دکمه‌های صفحهٔ اصلی به منوی دستورات تلگرام اضافه شدند (/menu /zones /favorites /newrecord /search /mons /providers /srv /help /admins)",
+    "🐞 رفع باگ حذف سرور اشتباهی (حذف امن بر اساس id به‌جای ایندکس)",
+  ],
+  "8.75": [
+    "🔁 ثبت خودکار نود در پنل حتی اگر اجرای ورکر وسط نصب طولانی قطع شود: هنگام شروع نصب یک کار در صف قرار می‌گیرد و کرون هر دقیقه پس از آماده‌شدن نود آن را به پنل اضافه می‌کند",
+    "📣 پس از افزودن خودکار، به ادمین‌ها اطلاع داده می‌شود",
+  ],
+  "8.74": [
+    "🧩 پیام نصب هستهٔ ویرایشی دیگر بی‌واکنش نمی‌ماند: بلافاصله «اسکریپت آغاز شد» و هر ۶ ثانیه زمان سپری‌شده نمایش داده می‌شود",
+    "🔎 دکمهٔ «بررسی وضعیت نصب» در زیرمنوی نصب نود: PG_EXIT، انتهای لاگ، وضعیت کانتینر و فایل اطلاعات را نشان می‌دهد و در صورت آماده‌بودن، افزودن به پنل پیشنهاد می‌شود",
+  ],
+  "8.73": [
+    "⌨️ SSH اینلاین حالا تعاملی شد: اگر دستور منتظر تأیید y/n باشد، ربات دکمهٔ «✅ بله، تأیید و اجرا» نشان می‌دهد یا می‌توانی کلمهٔ y را بفرستی",
+    "🧩 دستورهای تأییدی مثل «pg-node uninstall» حالا با تأیید تو درست اجرا می‌شوند (با yes | …)",
+  ],
+  "8.72": [
+    "🐞 رفع کامل خودکشی فرآیند نصب: خط pkill که با الگوی خودش مطابقت می‌کرد حذف شد؛ پاک‌سازی فقط با docker rm و systemctl انجام می‌شود",
+  ],
+  "8.71": [
+    "🐞 رفع باگ v8.70: الگوی pkill اشتباهاً خود فرآیند نصب را هم می‌کشت و لاگ خالی می‌ماند (الگو دقیق‌تر شد)",
+    "✅ پاک‌سازی کانتینر pg-node قبل از نصب حفظ شد تا خطای «Port 62051 already in use» رخ ندهد",
+  ],
+  "8.70": [
+    "🐞 رفع خطای «Port 62051 is already in use» در نصب مجدد نود: قبل از نصب، کانتینر/سرویس قبلی pg-node حذف می‌شود تا پورت‌ها آزاد شوند",
+    "🔁 حالا نصب مجدد نود روی سروری که قبلاً نصب ناقص داشته، بدون خطا انجام می‌شود",
+  ],
+  "8.69": [
+    "🧩 افزودن نود به پنل بعد از نصب هستهٔ ویرایشی حتی وقتی پایش timeout می‌خورد (اگر خلاصهٔ نصب روی سرور ساخته شده باشد)",
+    "➕ اگر افزودن خودکار انجام نشود، دکمهٔ «افزودن نود نصب‌شده به پنل» در پیام نهایی همیشه نمایش داده می‌شود",
+  ],
+  "8.68": [
+    "🐞 رفع گیرکردن «نصب نود با هستهٔ ویرایشی» روی apt-get update: قبل از نصب، DNS و تایم‌اوت apt تنظیم می‌شود و دانلود فایل‌های ترجمه (Translation-en) غیرفعال می‌گردد",
+    "⏳ اگر خروجی نصب بیش از ۹۰ ثانیه تغییر نکند، هشدار «بدون تغییر» در پیام نشان داده می‌شود",
+  ],
+  "8.67": [
+    "🐞 رفع نشدن منوی دستورات (☰): ثبت دستورات حالا در هر آپدیت بررسی می‌شود (قبلاً فقط در /start و کرون ۱۰دقیقه‌ای بود)",
+    "📋 دستورات به‌روز: menu, zones, favorites, newrecord, search, mons, providers, srv, help, admins",
+  ],
+  "8.66": [
+    "🐞 رفع باگ خطرناک حذف سرور اشتباهی: علتش off-by-one در پارس callback بود (حذف سرور اول لیست به‌جای سرور انتخابی)",
+    "🛡 حذف/تأیید حذف سرور حالا بر اساس شناسهٔ یکتا (id) انجام می‌شود نه ایندکس، تا هرگز سرور اشتباهی حذف نشود",
+  ],
+  "8.65": [
+    "☰ دکمه‌های صفحهٔ اصلی به منوی دستورات تلگرام اضافه شدند و از همه‌جای ربات در دسترس‌اند: /menu /zones /favorites /newrecord /search /mons /providers /srv /help /admins",
+    "⌨️ با زدن هر دستور، همان بخش باز می‌شود (مثلاً /srv برای سرورها یا /providers برای دیتاسنترها)",
+  ],
+  "8.64": [
+    "🐞 رفع خطای «❓ عملیات ناشناخته» هنگام حذف سرور از صفحهٔ سرور (دکمهٔ «🗑 حذف» حالا تأیید و سپس حذف می‌کند)",
+    "🏷 برچسب پلن‌های هتزنر کوتاه و خلاصه شد: مثل cx43-16G-8c(19€) (در لیست ساخت و ارتقا)",
+  ],
+  "8.63": [
+    "↩️ روش Probe برای تشخیص پلن‌های ناموجود حذف شد (همان روش قبلی برگشت)",
+    "✅ نمایش خاکستری پلن‌های ناموجود بر اساس قیمت همان لوکیشن + پیام خطای فارسی و دکمهٔ «بازگشت به انتخاب پلن» حفظ شد",
+  ],
+  "8.62": [
+    "🧊 تشخیص دقیق پلن‌های ناموجود: چون فیلدهای available/prices هتزنر قابل اعتماد نیستند، موجودبودن هر پلن واقعاً تست (probe) و نتیجه ۱۰ دقیقه کش می‌شود",
+    "✅ حالا در فالکتسن هم پلن‌های واقعاً ناموجود (مثل CAX و نسل قدیم CPX) خاکستری/غیرقابل‌کلیک می‌شوند",
+  ],
+  "8.61": [
+    "🧊 در انتخاب پلن هتزنر، پلن‌های ناموجود در لوکیشن انتخابی به‌صورت خاکستری/بی‌رنگ «🚫 ناموجود» نمایش داده می‌شوند و قابل کلیک نیستند",
+    "🇮🇷 خطاهای هتزنر به فارسی ترجمه شدند (مثل «این پلن در لوکیشن انتخاب‌شده موجود نیست»)",
+    "🔙 اگر ساخت سرور خطا بدهد، دکمهٔ «بازگشت به انتخاب پلن» و «سرورها» نمایش داده می‌شود",
+  ],
+  "8.60": [
+    "🔐 رفع خطای «Your password has expired / Password change required but no TTY available» در سرورهای هتزنر: رمز root از قبل تعیین و با cloud-init روی سرور تنظیم می‌شود (رمز ۱ یا یک رمز تصادفی)",
+    "⏳ همچنین انقضای رمز root روی سرورهای تازه غیرفعال می‌شود تا SSH و آمارگیری بدون مشکل کار کند",
+  ],
+  "8.59": [
+    "🔗 بعد از ساخت سرور در دیتاسنتر، اول پرسیده می‌شود «نود نصب شود؟»؛ با تأیید تو، تست اتصال/تنظیم رمز ۱ و نصب انجام می‌شود",
+    "⏳ دیگر بلافاصله منتظر بالا آمدن سرور نمی‌ماند؛ تا وقتی خودت تأیید نکنی پیام روی همان سؤال می‌ماند",
+  ],
+  "8.58": [
+    "🔑 در صفحهٔ «رمزهای ذخیره‌شده» خود رمز داخل دکمه نمایش داده می‌شود: رمز ۱ (xxxx)",
+    "🔗 ارتباط دیتاسنتر و سرورها: با ساخت سرور در هتزنر/لینود، خودکار با رمز root به «🖥 سرورها» اضافه می‌شود",
+    "⏳ ربات چند ثانیه‌به‌چند ثانیه اتصال SSH را تست می‌کند تا سرور بالا بیاید، رمز را روی «رمز ۱» تنظیم می‌کند و همان‌جا می‌پرسد که نود نصب شود یا نه",
+  ],
+  "8.57": [
+    "↩️ چیدمان خودکار دکمه‌ها که در ۸.۵۵ اضافه شده بود برگردانده شد؛ ردیف دکمه‌ها همان حالت قبلی خودشان است",
+    "✅ سایر تغییرات نسخه‌های ۸.۵۵ و ۸.۵۶ حفظ شد (زیرمنوی «نصب نود» در صفحهٔ سرور، رمزهای ذخیره‌شده، ساده‌سازی افزودن سرور و ردیف دیتاسنتر/سرورها)",
+  ],
+  "8.56": [
+    "🏠 در منوی اصلی، دکمه‌های «🏢 دیتاسنترها (هتزنر..)» و «🖥 سرورها» در یک ردیف قرار گرفتند",
+    "➕ افزودن سرور ساده‌تر شد: دیگر نام و نام‌کاربر پرسیده نمی‌شود؛ نام پیش‌فرض = آی‌پی/هاست و کاربر همیشه root",
+    "🔑 «رمزهای ذخیره‌شده» در بخش سرورها: چند رمز SSH را ذخیره کن و هنگام افزودن سرور با دکمه‌های رمز ۱، رمز ۲، ... سریع انتخاب کن",
+  ],
+  "8.55": [
+    "🎛 چیدمان خودکار دکمه‌ها در همهٔ صفحات: متن کوتاه → ۳/۴ ستون، متن متوسط → ۲ ستون، متن بلند → تک‌ستونه (دیگر دکمه‌های تک‌ستونهٔ بی‌دلیل نداریم)",
+    "📥 در صفحهٔ اختصاصی سرور، دکمهٔ «نصب نود» اضافه شد و هر سه گزینهٔ نصب/افزودن به پنل داخل آن جمع شدند",
+    "🎨 رنگ دکمه‌ها طبق همان قانون قبلی با تعداد ستون جدید هماهنگ می‌شود",
+  ],
+  "8.54": [
+    "🐞 رفع خطای «kv is not defined» هنگام نصب نود (KV از env.BOT_KV خوانده می‌شود)",
+    "➕ دکمهٔ «افزودن نود نصب‌شده به پنل» در صفحهٔ سرور برای افزودن دستی نودی که قبلاً روی سرور نصب شده",
+  ],
+  "8.53": [
+    "✅ افزودن خودکار نود به پنل پس از نصب (در هر دو روش نصب عادی و هستهٔ ویرایشی): آیپی، پورت سرویس، Certificate و API Key از روی سرور خوانده می‌شود",
+    "🖧 نود با نام و آدرس = آیپی سرور در پنل ثبت می‌شود؛ اگر چند پنل ثبت شده باشد، پنل مقصد را انتخاب می‌کنی",
+    "🔁 دکمهٔ «تلاش دوباره» برای افزودن به پنل در صورت خطا",
+  ],
+  "8.52": [
+    "🧩 دکمهٔ جدید «نصب نود با هستهٔ ویرایشی»: نصب خودکار pg-node به‌همراه هستهٔ xray-amd64 سفارشی روی سرور (اجرای پس‌زمینه + خروجی زنده)",
+    "📋 در پایان این نصب، Certificate و API Key و آی‌پی سرور از فایل خلاصهٔ سرور خوانده و نمایش داده می‌شود",
+    "🎛 چیدمان دکمه‌های صفحهٔ «سرورها» چندستونه شد (به‌جای تک‌ستونه)",
+  ],
+  "8.51": [
+    "💻 در «SSH اینلاین» هر پیام بعدی هم به‌عنوان دستور SSH اجرا می‌شود و دیگر دامنه/رکورد را تغییر نمی‌دهد (خروج با /cancel یا دکمهٔ «🔙 بازگشت»)",
+    "💡 اگر دستور TUI/تعاملی بفرستی (مثل nload) راهنمای نسخهٔ متنی نمایش داده می‌شود",
+  ],
+  "8.50": [
+    "🐞 رفع خطای «env is not defined» هنگام اجرای دستور SSH اینلاین در بخش سرورها (env به resolvePending پاس داده نمی‌شد)",
+  ],
+  "8.49": [
+    "🐞 رفع نمایش «undefined» در فهرست «CNAMEهای وارده» (نتیجهٔ پیمایش زون‌ها درست flatten می‌شود)",
+    "🔧 به‌روزرسانی رلهٔ SSH (rev 2): رفع خطای «Could not resolve hostname /tmp/.../pass» در اتصال با رمز عبور",
+  ],
+  "8.48": [
+    "🔗 دکمهٔ «CNAMEهای وارده» در صفحهٔ ویرایش رکورد: فهرست همهٔ دامنه‌ها/ساب‌دامین‌هایی که به این رکورد CNAME کرده‌اند (روی همهٔ اکانت‌های کلودفلر و آروان)",
+    "🎨 چیدمان جدید دکمه‌های «🗑 حذف»، «🔗 CNAMEهای وارده» و «⭐ منتخب» در یک ردیف و با رنگ آبی",
+  ],
+  "8.47": [
+    "🔧 رفع خطای «Could not resolve hostname /tmp/.../pass» در اتصال SSH با رمز عبور (باگ رله: آرگومان‌های sshpass به خود ssh داده می‌شد)",
+    "📜 نصب/آپدیت رله با یک دستور از ریپوی عمومی جدید + حفظ خودکار توکن قبلی هنگام آپدیت",
+    "🔗 ریپوی عمومی رله: github.com/Aknuun/cloud-guardian-relay",
+  ],
+  "8.46": [
+    "⏱ تایم‌اوت per-request برای رلهٔ SSH: عملیات طولانی مثل «آپدیت و آپگرید» دیگر در ۴۵ ثانیه قطع نمی‌شود (تا ~۹.۵ دقیقه)",
+    "🛡 گزارش قلابی حذف شد: اگر اجرای دستور به‌خاطر پایان مهلت ناتمام بماند، ربات صریحاً هشدار می‌دهد نه «✅ انجام شد»",
+  ],
+  "8.45": [
+    "🖥 بخش جدید «سرورها»: مدیریت سرورهای لینوکسی از طریق SSH (از طریق رلهٔ واحد)",
+    "💻 SSH اینلاین داخل چت: اجرای دستور با خروجی زنده + دستورهای سریع آماده (daeker ps، پورت‌ها، df، free و...)",
+    "📥 نصب خودکار نود پاسارگارد با اسکریپت رسمی pg-node.sh و نمایش زندهٔ خروجی نصب",
+    "📊 مانیتور سرور: CPU/RAM/دیسک/آپتایم/پهنای باند + هشدار خودکار قابل‌تنظیم با cooldown",
+    "🔄 ریبوت، آپدیت و آپگرید، مشخصات سیستم و فضای دیسک از داخل ربات",
+    "🌐 رلهٔ واحد srv-relay: یک رله برای همهٔ نیازهای SSH — اسکریپت نصب آماده در مخزن",
+  ],
+  "8.44": [
+    "رفع خالی‌بودن «کشور/شهر» در صفحهٔ مشخصات سرور هتزنر (استفاده از فیلد جدید location وقتی datacenter حذف شده)",
+  ],
+  "8.43": [
+    "رفع خطای «resource is locked» در عملیات هتزنر با تلاش مجدد خودکار",
+    "خاموش‌کردن سرور و صبر تا پایان قفل قبل از اختصاص/حذف آی‌پی",
+    "خطاها (❌) و دیالوگ‌های تأیید (⚠️) دیگر خودکار بسته/تأیید نمی‌شوند؛ فقط پیام‌های موفق (✅) خودکار برمی‌گردند",
+  ],
+  "8.42": [
+    "پیام رمز عبور سرور (ساخت/ریست/ریبیلد) دیگر خودکار بسته نمی‌شود",
+    "افزودن دکمهٔ «📋 کپی رمز» با قابلیت copy_text تلگرام + دکمهٔ بازگشت",
+    "برای هتزنر و لینود: ساخت سرور، ریست رمز و ریبیلد",
+  ],
+  "8.41": [
+    "صفحهٔ انتخاب پلن هتزنر گروه‌بندی شد (CPX/AMD، CX/Intel، CAX/ARM، CCX/Dedicated)",
+    "نمایش رم و تعداد هستهٔ CPU مقابل هر پلن",
+    "قیمت پلن‌ها فقط به یورو (€) و بدون تبدیل تومانی",
+  ],
+  "8.40": [
+    "ساخت سرور هتزنر با فیلد «location» انجام می‌شود (فیلد datacenter در API جدید حذف شده و همین باعث خطای invalid input بود)",
+    "انتخاب لوکیشن از فهرست /locations و نمایش نام شهر + کد",
+    "فیلتر پلن‌های موجود در همان لوکیشن + نمایش قیمت همان لوکیشن",
+    "ساخت آی‌پی اصلی هتزنر هم بر پایهٔ location بازنویسی شد",
+  ],
+  "8.39": [
+    "رفع خطای «invalid input in field 'datacenter'» در ساخت سرور هتزنر (ارسال id به‌صورت رشته طبق اسپک API)",
+    "اصلاح پارامترهای ریبیلد و ارتقای پلن هتزنر (image/server_type به‌صورت رشته)",
+  ],
+  "8.38": [
+    "بازگرداندن ارائه‌دهندهٔ هتزنر به بخش دیتاسنترها (بر پایهٔ ServerManagerBot)",
+    "مدیریت اکانت هتزنر + تنظیمات کلاینت (تغییر نام و توکن)",
+    "سرورها: ساخت (دیتاسنتر→پلن→ایمیج) و روشن/خاموش/ریبوت/ریست/ریست‌رمز/تغییرنام/ریبیلد/ارتقا/حذف",
+    "آی‌پی‌های اصلی (IPv4/IPv6): ساخت، اختصاص/حذف اختصاص و تغییر نام",
+    "اسنپ‌شات‌ها: ساخت/تغییر نام/حذف + نمایش حجم، سن و تعداد",
+    "نمایش قیمت ساعتی/ماهانهٔ سرور به یورو و تومان و آمار ترافیک",
+  ],
+  "8.37": [
+    "حذف کامل بخش هتزنر از دیتاسنترها (سرور/اسنپ‌شات/آی‌پی و اکانت هتزنر)",
+    "دیتاسنترها اکنون فقط لینود و آروان را نشان می‌دهد",
+  ],
+  "8.35": [
+    "بازگرداندن رلهٔ check-host به‌عنوان مسیر اصلی تعویض هاست",
+    "حذف کامل پروکسی cloudflare:sockets (از شبکهٔ کلادفلر قابل‌دسترس نبود)",
+  ],
+  "8.33": [
+    "جابه‌جایی دکمه‌های «🔥 گزارش بد مصرف پاسارگارد» و «⏰ یادآور» در منوی مانیتورها",
+    "تغییر نام دکمهٔ «مانیتور مصرف پاسارگارد» به «گزارش بد مصرف پاسارگارد»",
+  ],
+  "8.32": [
+    "🔑 استعلام خودکار انقضای دامنه‌های .ir با کلید WhoisXMLAPI (Domain Info) از داخل ربات",
+    "دکمهٔ «🔑 ثبت کلید API» در مانیتور انقضا + تست روی pcapps.ir",
+    "چیدمان دکمهٔ «🗓 مانیتور انقضای دامنه» کنار «🔥 مانیتور مصرف» در منوی مانیتورها",
+    "رفع دکمه‌های بازگشت/صفحه‌بندی مانیتور انقضا (domexpp)",
+  ],
+  "8.31": [
+    "🗓 مانیتور انقضای دامنه: استعلام .ir از whois.nic.ir و بین‌المللی از RDAP (client.rdap.org)",
+    "افزودن یک‌جای همهٔ دامنه‌های اکانت‌های کلودفلر/آروان به مانیتور انقضا با یک دکمه",
+    "نمایش باقی‌مانده (سال/ماه/روز) مقابل هر دامنه + هشدار خودکار روزانه (۶۰/۳۰/۱۴/۷/۳/۱ روز و روز انقضا)",
+    "ورود دستی تاریخ انقضا برای دامنه‌هایی که ایرنیک اطلاعات‌شان را مخفی کرده",
+  ],
+};
+
+const CF_API = "https://api.cloudflare.com/client/v4";
+const ARVAN_API = "https://napi.arvancloud.ir/cdn/4.0";
+const LINODE_API = "https://api.linode.com/v4";
+const HETZNER_API = "https://api.hetzner.cloud/v1";
+const RECORD_TYPES = ["A", "AAAA", "CNAME"];
+const PAGE_SIZE = 8;
+const RECORD_PAGE_SIZE = 18;
+const CZ_PAGE_SIZE = 12;
+const CZR_PAGE_SIZE = 16;
+const LN_PAGE_SIZE = 10;
+const HZ_PAGE_SIZE = 10;
+
+const EMPTY_BTN = { text: "\u00A0", callback_data: "noop" };
+
+let _lastSelfOrigin = "";
+
+// ============================================================
+// in-isolate micro cache — برای کاهش شدید مصرف Workers KV
+// مقادیر پرخواندنی (کانفیگ/اکانت/پنل/کش) در حافظهٔ ایزوله نگه داشته
+// می‌شوند و روی هر write باطل/به‌روز می‌شوند. TTL کوتاه = محافظت از
+// دادهٔ کهنه در صورت نوشتن توسط ایزولهٔ دیگر.
+// ============================================================
+const _mem = new Map();
+const MEM_TTL = 60000;
+
+function memSet(key, val, ttl = MEM_TTL) {
+  if (_mem.size > 800) _mem.clear();
+  _mem.set(key, { v: val, exp: Date.now() + ttl });
+}
+
+function memGet(key) {
+  const e = _mem.get(key);
+  if (!e) return undefined;
+  if (e.exp < Date.now()) {
+    _mem.delete(key);
+    return undefined;
+  }
+  return e.v;
+}
+
+function memDel(key) {
+  _mem.delete(key);
+}
+
+async function kvGetCached(kv, key, type, ttl = MEM_TTL) {
+  if (!kv) return null;
+  const hit = memGet("kv:" + key);
+  if (hit !== undefined) return hit;
+  const val = await kv.get(key, type);
+  if (val !== null && val !== undefined) memSet("kv:" + key, val, ttl);
+  return val;
+}
+
+async function kvPutCached(kv, key, value, opts, ttl = MEM_TTL) {
+  if (!kv) return;
+  await kv.put(key, value, opts);
+  try {
+    memSet("kv:" + key, JSON.parse(value), ttl);
+  } catch {
+    memSet("kv:" + key, value, ttl);
+  }
+}
+
+async function kvDeleteCached(kv, key) {
+  if (!kv) return;
+  memDel("kv:" + key);
+  await kv.delete(key);
+}
+
+function grid2(buttons) {
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    const row = [buttons[i]];
+    row.push(buttons[i + 1] || EMPTY_BTN);
+    rows.push(row);
+  }
+  return rows;
+}
+
+const SETTINGS_INFO = {
+  ssl: { label: "حالت SSL", type: "enum", values: { off: "خاموش", flexible: "انعطاف‌پذیر", full: "کامل", strict: "کامل (سخت)" } },
+  min_tls_version: { label: "حداقل نسخه TLS", type: "enum", values: { "1.0": "1.0", "1.1": "1.1", "1.2": "1.2", "1.3": "1.3" } },
+  tls_1_3: { label: "TLS 1.3", type: "bool" },
+  always_use_https: { label: "همیشه HTTPS", type: "bool" },
+  automatic_https_rewrites: { label: "بازنویسی خودکار HTTPS", type: "bool" },
+  security_level: { label: "سطح امنیت", type: "enum", values: { off: "خاموش", essentially_off: "خیلی کم", low: "کم", medium: "متوسط", high: "زیاد", under_attack: "حالت حمله" } },
+  http2: { label: "HTTP/2", type: "bool" },
+  http3: { label: "HTTP/3", type: "bool" },
+  brotli: { label: "فشرده‌سازی Brotli", type: "bool" },
+  ipv6: { label: "IPv6", type: "bool" },
+  always_online: { label: "همیشه آنلاین", type: "bool" },
+};
+
+const SSL_KEYS = ["ssl", "min_tls_version", "tls_1_3", "always_use_https", "automatic_https_rewrites"];
+const SEC_KEYS = ["security_level"];
+const PERF_KEYS = ["http2", "http3", "brotli", "ipv6", "always_online"];
+
+function groupKeysFor(setting) {
+  if (SSL_KEYS.includes(setting)) return SSL_KEYS;
+  if (SEC_KEYS.includes(setting)) return SEC_KEYS;
+  return PERF_KEYS;
+}
+
+function groupTitleFor(setting) {
+  if (SSL_KEYS.includes(setting)) return "🔒 SSL / TLS";
+  if (SEC_KEYS.includes(setting)) return "🛡 امنیت";
+  return "⚡ کارایی";
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const botToken = env.BOT_TOKEN || BOT_TOKEN;
+    const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    const kv = env.BOT_KV;
+    const url = new URL(request.url);
+
+    if (request.method === "POST" && (url.pathname.startsWith("/ndhook/") || url.pathname.startsWith("/node-hook/"))) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const token = parts[parts.length - 1] || "";
+      let payload = {};
+      try {
+        payload = await request.json();
+      } catch (e) {
+        console.error("NDHOOK_PARSE", String(e));
+      }
+      ctx.waitUntil(handleNodeEvent(token, payload, env, botToken));
+      return ok();
+    }
+
+    if (request.method !== "POST") return ok();
+
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return ok();
+    }
+
+    if (kv) ctx.waitUntil(cacheSelfUrl(kv, url.origin));
+
+    ctx.waitUntil(processUpdate(payload, env, botToken, adminId));
+    return ok();
+  },
+
+  async scheduled(event, env, ctx) {
+    const cron = event.cron || "";
+    const botToken = env.BOT_TOKEN || BOT_TOKEN;
+    const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    if (cron === "0 9 * * *") {
+      ctx.waitUntil(runSslMonitor(env));
+      ctx.waitUntil(runDomExpiryMonitor(env).catch((e) => console.error("DOMEXP", String(e))));
+    } else if (cron === "*/10 * * * *") {
+      ctx.waitUntil(runNodePoll(env));
+      ctx.waitUntil(runUsageMonitor(env).catch((e) => console.error("USAGE_MONITOR", String(e))));
+      // مانیتور منابع سرورها (CPU/RAM/دیسک) روی همین کرون با گارد فاصلهٔ داخلی (~۱۵ دقیقه)
+      ctx.waitUntil(runSrvMonitor(env, botToken, false).catch((e) => console.error("SRV_MON", String(e))));
+      // اعلان نسخهٔ جدید روی کرون ۱۰ دقیقه‌ای (نه هر دقیقه) برای کاهش بار KV
+      ctx.waitUntil(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
+      // ثبت دکمه‌های صفحهٔ اصلی در منوی دستورات تلگرام (یک‌بار برای هر نسخه)
+      ctx.waitUntil(ensureBotCommands(env, botToken, env.BOT_KV).catch(() => {}));
+    } else if (cron === "* * * * *") {
+      ctx.waitUntil(runReminders(env).catch((e) => console.error("REMIND", String(e))));
+      // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
+      ctx.waitUntil(runNodeAddPending(env).catch((e) => console.error("NODEADD", String(e))));
+    } else {
+      // host filter — روی هر کرون دیگری (مثلاً */5) اجرا می‌شود؛ لیمیت واقعی
+      // با intervalMin داخل runHostFilter کنترل می‌شود.
+      ctx.waitUntil(
+        runHostFilter(env).catch(async (e) => {
+          console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
+          try {
+            await env.BOT_KV.put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
+          } catch (x) {}
+        })
+      );
+    }
+  },
+};
+
+async function processUpdate(payload, env, botToken, adminId) {
+  const kv = env.BOT_KV;
+  // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
+  await ensureBotCommands(env, botToken, kv).catch(() => {});
+
+  let pendingTextReturn = null;
+  let lastResultMsgId = null;
+  let textChatId = null;
+
+  try {
+    if (payload.callback_query) {
+      await handleCallback(payload.callback_query, botToken, adminId, kv, env);
+      return;
+    }
+
+    if (!payload.message || !payload.message.text) return;
+
+    const chatId = payload.message.chat.id;
+    textChatId = chatId;
+    const admins = await getAdmins(kv, env);
+    if (!admins.includes(chatId)) return;
+
+    const send = async (msg, kb) => {
+      const isPerm = msg && msg.indexOf(PERM_MARK) !== -1;
+      if (isPerm) {
+        msg = msg.split(PERM_MARK).join("");
+        try {
+          await kv.put(`pretrytxt:${chatId}`, text, { expirationTtl: 900 });
+        } catch (e) {}
+        const rows = kb ? kb.slice() : [];
+        rows.push([
+          { text: "🔄 بررسی مجدد", callback_data: "permretrytxt" },
+          { text: "⬅️ بازگشت", callback_data: "menu" },
+        ]);
+        kb = rows;
+      }
+      const res = await sendMessage(botToken, chatId, msg, kb);
+      if (!isPerm && isResultText(msg)) {
+        pendingTextReturn = findReturnCb(kb, parentCb(""));
+        lastResultMsgId = res && res.result ? res.result.message_id : null;
+      } else {
+        pendingTextReturn = null;
+      }
+      return res;
+    };
+    const text = payload.message.text.trim();
+
+    if (!kv) {
+      await send("⚠️ KV با نام BOT_KV لازم است.");
+      return;
+    }
+
+    const accounts = await getAccounts(kv, env);
+    const arvanAccounts = await getArvanAccounts(kv);
+    const pending = await kv.get(`pend:${chatId}`, "json");
+
+    if (pending && !text.startsWith("/")) {
+      await resolvePending(pending, text, chatId, accounts, arvanAccounts, send, kv, botToken, env);
+      return;
+    }
+
+    if (pending) await kv.delete(`pend:${chatId}`);
+
+    const args = text.split(/\s+/);
+    const cmd = args[0].toLowerCase();
+
+    if (!text.startsWith("/") && (isIpLike(text) || isNameLike(text))) {
+      const qa = await kv.get(`qa:${chatId}`, "json");
+      if (isIpLike(text)) {
+        await kv.put(`qa:${chatId}`, JSON.stringify({ ip: text.trim() }), { expirationTtl: 3600 });
+        await sendQuickIpMenu(chatId, text.trim(), kv, accounts, send);
+      } else {
+        await quickNameSearch(text.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv);
+      }
+      return;
+    }
+
+    if (cmd === "/start" || cmd === "/menu") {
+      await ensureBotCommands(env, botToken, kv);
+      const promo = await getPromo(kv, env);
+      await send(mainMenuText() + (promo ? "\n\n" + promo : ""), mainMenuKeyboard());
+    } else if (cmd === "/myid") {
+      await send(`🆔 شناسه تلگرام شما: ${chatId}`);
+    } else if (cmd === "/promoset" || cmd === "/promoreset") {
+      const admins = await getAdmins(kv, env);
+      if (!admins.includes(chatId)) return send("⛔ فقط مدیر.");
+      if (cmd === "/promoset") {
+        const v = String(text).replace(/^\/promoset\s*/i, "").trim();
+        if (!v) return send("⚠️ متن تبلیغ را بعد از دستور بنویسید:\n/promoset طراحی توسط @example");
+        await kv.put("promo:local", v.slice(0, 180));
+        await send("✅ تبلیغ محلی روی /start تنظیم شد.");
+      } else {
+        await kv.delete("promo:local");
+        await kv.delete("promo:cache");
+        await send("✅ تبلیغ به حالت مرکزی/پیش‌فرض برگشت.");
+      }
+    } else if (cmd === "/version") {
+      await send(`🤖 نسخهٔ ربات: v${BOT_VERSION}`);
+    } else if (cmd === "/help") {
+      await send(helpText(), helpKeyboard());
+    } else if (cmd === "/cancel") {
+      await kv.delete(`qa:${chatId}`);
+      await send("✅ عملیات جاری لغو شد.", mainMenuKeyboard());
+    } else if (cmd === "/zones") {
+      await showZones(0, "all", accounts, send, kv, chatId);
+    } else if (cmd === "/favorites" || cmd === "/favs") {
+      await renderFavsScreen(kv, chatId, accounts, send);
+    } else if (cmd === "/newrecord" || cmd === "/addrec") {
+      const zones = await getAllZones(accounts, kv);
+      const arvanDomains = [];
+      for (let i = 0; i < arvanAccounts.length; i++) {
+const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+        for (const d of domains) arvanDomains.push({ domain: d.domain, acc: i });
+      }
+      const allItems = [];
+      for (const z of zones) allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
+      for (const d of arvanDomains) allItems.push({ text: `🟢 🇮🇷 ${d.domain}`, cb: `arvrec:${d.acc}:${d.domain}` });
+      if (!allItems.length) {
+        await send("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      } else {
+        const kb = [];
+        for (let i = 0; i < allItems.length; i += 2) {
+          const row = [{ text: allItems[i].text, callback_data: allItems[i].cb }];
+          if (i + 1 < allItems.length) row.push({ text: allItems[i + 1].text, callback_data: allItems[i + 1].cb });
+          else row.push(EMPTY_BTN);
+          kb.push(row);
+        }
+        kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+        await send("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
+      }
+    } else if (cmd === "/mons") {
+      await send("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", [
+        [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
+        [
+          { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
+          { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" },
+        ],
+        [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
+        [{ text: "⏰ یادآور", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (cmd === "/providers") {
+      await send("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
+        [
+          { text: "🇩🇪 هتزنر", callback_data: "hz" },
+          { text: "🟢 لینود", callback_data: "ln" },
+        ],
+        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (cmd === "/srv") {
+      await renderServersHome(send, kv, env);
+    } else if (cmd === "/admins") {
+      if (chatId !== adminId) await send("❌ فقط ادمین اصلی می‌تواند ادمین‌ها را مدیریت کند.");
+      else await renderAdmins(admins, adminId, send);
+    } else if (cmd === "/records") {
+      if (!args[1]) return showZones(0, "all", accounts, send, kv, chatId);
+      const zone = await findZone(args[1], accounts);
+      if (!zone) return send("❌ دامنه پیدا نشد.");
+      await showRecords(zone, 0, accounts, send, kv);
+    } else if (cmd === "/search") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search_any" }), { expirationTtl: 600 });
+      await send(SEARCH_PROMPT_TEXT, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (cmd === "/add") {
+      await handleAdd(args, accounts, send, kv);
+    } else if (cmd === "/edit") {
+      await handleEdit(args, accounts, send, kv);
+    } else if (cmd === "/setttl") {
+      await handleSetTtl(args, accounts, send, kv);
+    } else if (cmd === "/toggleproxy") {
+      await handleToggleProxy(args, accounts, send, kv);
+    } else if (cmd === "/delete") {
+      await handleDelete(args, accounts, send, kv);
+    } else {
+      await send("❓ دستور ناشناخته. از منو استفاده کنید.", mainMenuKeyboard());
+    }
+  } catch (err) {
+    console.error("WORKER_ERROR", err && err.stack ? err.stack : String(err));
+    try {
+      await tg(botToken, "sendMessage", {
+        chat_id: adminId,
+        text: "❌ خطای داخلی:\n" + String(err && err.message ? err.message : err).substring(0, 3000),
+      });
+    } catch (e) {
+      console.error("SEND_ERROR", String(e));
+    }
+  } finally {
+    // نمایش نتیجهٔ تغییر/تنظیم به مدت ۳ ثانیه و سپس بازگشت خودکار به صفحهٔ قبل
+    if (pendingTextReturn && lastResultMsgId && textChatId) {
+      try {
+        await sleep(3000);
+        await handleCallback(
+          { id: "autoreturn", message: { chat: { id: textChatId }, message_id: lastResultMsgId }, data: pendingTextReturn },
+          botToken,
+          adminId,
+          kv,
+          env
+        );
+      } catch (e) {
+        console.error("AUTORETURN", String(e));
+      }
+    }
+  }
+}
+
+function ok() {
+  return new Response("OK", { status: 200 });
+}
+
+function mainMenuText() {
+  return `به ربات نگهبان ابری خوش اومدی ⚙️ نسخه v${BOT_VERSION}\n\n🏠 در منوی اصلی هستید\n\nیک گزینه را انتخاب کن`;
+}
+
+const SEARCH_PROMPT_TEXT =
+  "🔍 جست‌وجو\n\n" +
+  "در هر بخش از ربات با وارد کردن آی‌پی یا دامنه، افزودن سریع یا جست‌وجو انجام می‌شود.\n\n" +
+  "آی‌پی یا دامنه یا بخشی از آن را بفرستید:";
+
+// کیبورد منوی اصلی ربات.
+// هر دکمه: text = متن روی دکمه، callback_data = شناسهٔ عملیاتی که در هندلر callback_query خوانده می‌شود.
+function mainMenuKeyboard() {
+  return [
+    // addrec: شروع ویزارد افزودن رکورد | zones: لیست دامنه‌های کلودفلر (به‌تفکیک اکانت)
+    [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
+    // search: جست‌وجوی سراسری رکورد در همهٔ اکانت‌ها (قرمز = تک‌ستونه)
+    [{ text: "🔍 جست و جو در همه", callback_data: "search", style: "danger" }],
+    // providers: انتخاب ارائه‌دهندهٔ دیتاسنتر (هتزنر/لینود/آروان) | srv: بخش سرورها (SSH/نود/مانیتور)
+    [{ text: "🏢 دیتاسنترها (هتزنر..)", callback_data: "providers" }, { text: "🖥 سرورها", callback_data: "srv" }],
+    // mons: ورود به منوی مانیتورها (تک‌ستونه، زیر ردیف دیتاسنترها/سرورها)
+    [{ text: "🖥 مانیتورها", callback_data: "mons" }],
+    // help: راهنمای بخش‌ها | admins_menu: مدیریت ادمین‌های ربات (فقط ادمین اصلی) — هر دو خاکستری
+    [
+      { text: "ℹ️ راهنما", callback_data: "help", style: "plain" },
+      { text: "👥 مدیریت ادمین", callback_data: "admins_menu", style: "plain" },
+    ],
+  ];
+}
+
+// دکمه‌های صفحهٔ اصلی به‌صورت دستورات تلگرام (منوی ☰) — از همه‌جای ربات در دسترس
+const BOT_COMMANDS = [
+  { command: "menu", description: "🏠 منوی اصلی" },
+  { command: "zones", description: "☁️ کلودفلر — دامنه‌ها" },
+  { command: "favorites", description: "⭐ ساب‌های منتخب" },
+  { command: "newrecord", description: "➕ افزودن رکورد" },
+  { command: "search", description: "🔍 جست‌وجو در همه" },
+  { command: "mons", description: "🖥 مانیتورها" },
+  { command: "providers", description: "🏢 دیتاسنترها" },
+  { command: "srv", description: "🖥 سرورها" },
+  { command: "help", description: "ℹ️ راهنما" },
+  { command: "admins", description: "👥 مدیریت ادمین" },
+];
+
+// ثبت دستورات در منوی تلگرام (یک‌بار برای هر نسخه)
+async function ensureBotCommands(env, botToken, kv) {
+  try {
+    if (!kv) return;
+    const seen = await kvGetCached(kv, "bot_cmds_ver", "json");
+    if (seen === BOT_VERSION) return;
+    await tg(botToken, "setMyCommands", { commands: BOT_COMMANDS });
+    await kvPutCached(kv, "bot_cmds_ver", JSON.stringify(BOT_VERSION));
+  } catch (e) {}
+}
+
+function helpText() {
+  return (
+    "ℹ️ راهنما\n\n" +
+    "یک بخش را انتخاب کن تا راهنمای همان بخش نمایش داده شود.\n" +
+    "برای دیدن روش «جست‌وجوی سریع» با آی‌پی/ساب‌دامنه، دکمهٔ قرمز «⚡ جای‌گذاری سریع» را بزن.\n\n" +
+    "💡 رنگ دکمه‌ها: قرمز = خطرناک · آبی = دو یا چند ستونه · سبز = تک‌ستونه یا سه‌ستونه · خاکستری = ساده"
+  );
+}
+
+const HELP_GUIDE = {
+  hqi:
+    "⚡ جای‌گذاری سریع\n\n" +
+    "در هر بخش از ربات (کلودفلر، آروان، رکوردها، مانیتورها و...) کافی است متن را در چت بفرستی؛ ربات خودش تشخیص می‌دهد و حالت «جست‌وجوی سریع» را فعال می‌کند:\n\n" +
+    "• آی‌پی بفرستی → رکوردها و دامنه‌های مرتبط با همان آی‌پی جست‌وجو می‌شوند.\n" +
+    "• ساب‌دامنه یا نام دامنه بفرستی → رکوردهای آن پیدا می‌شود و امکان ویرایش/تغییر مقدار، نوع و TTL فراهم است.\n\n" +
+    "از داخل نتایج می‌توانی ساب‌دامنه را تغییر دهی، Proxy را روشن/خاموش کنی یا مقدار را در «⭐ ساب‌های منتخب» ذخیره کنی.",
+  cf:
+    "☁️ کلودفلر\n\n" +
+    "• مشاهدهٔ دامنه‌ها به‌تفکیک اکانت + دکمهٔ «📁 همه اکانت‌ها» برای دیدن دامنه‌های همهٔ اکانت‌ها یک‌جا\n" +
+    "• دکمهٔ سبز «⭐ ساب‌های منتخب» کنار «همه اکانت‌ها» است؛ با یک لمس بدون رفتن به منو به آن می‌رسی\n" +
+    "• افزودن دامنه جدید و افزودن/حذف اکانت کلودفلر (از دکمه‌های همان صفحه)\n" +
+    "• ورود به هر دامنه: مشاهده/افزودن/ویرایش/حذف رکورد، تغییر TTL و Proxy\n" +
+    "• تنظیمات دامنه (SSL و تنظیمات دیگر)، عملیات گروهی و جست‌وجوی سریع",
+  arvan:
+    "🇮🇷 آروان کلاد\n\n" +
+    "دامنه را ابتدا از پنل آروان اضافه کن، سپس همین‌جا ساب‌دامنه/رکورد بساز و مدیریت کن.\n" +
+    "برای دیدن دامنه‌های تازه دکمهٔ «🔄 همگام‌سازی» را بزن؛ افزودن اکانت آروان هم از همان صفحه انجام می‌شود.",
+  prov:
+    "🏢 دیتاسنترها (هتزنر، لینود و آروان)\n\n" +
+    "از منوی اصلی → «🏢 دیتاسنترها» ارائه‌دهنده را انتخاب کن (هتزنر، لینود یا آروان).\n" +
+    "برای هتزنر:\n" +
+    "• اکانت‌ها: افزودن/حذف + تغییر نام و توکن کلاینت\n" +
+    "• سرورها: ساخت (دیتاسنتر→پلن→ایمیج)، روشن/خاموش/ریبوت/ریست، ریست رمز، تغییر نام، ریبیلد، ارتقای پلن و حذف\n" +
+    "• آی‌پی‌های اصلی: ساخت IPv4/IPv6، اختصاص/حذف اختصاص، تغییر نام و حذف\n" +
+    "• اسنپ‌شات‌ها: ساخت/تغییر نام/حذف + نمایش سن و حجم\n" +
+    "برای لینود:\n" +
+    "• سرورها: ساخت، روشن/خاموش/ری‌استارت/ریبوت، ریبیلد، ارتقا، ریست رمز، تغییر نام و حذف\n" +
+    "• آی‌پی‌ها (افزودن/حذف/اختصاص) و رکورد PTR\n" +
+    "• اسنپ‌شات‌ها: ساخت/تغییر نام/حذف",
+  rec:
+    "➕ افزودن رکورد\n\n" +
+    "از ردیف اول منوی اصلی یا از داخل هر دامنه، رکورد جدید را گام‌به‌گام بساز:\n" +
+    "نوع (A/AAAA/CNAME) → نام/ساب‌دامنه → مقدار/آی‌پی → TTL → Proxy.",
+  bulk:
+    "🗂 عملیات گروهی\n\n" +
+    "داخل هر دامنه دکمهٔ «🗂 گروهی» را بزن، چند ساب‌دامنه را انتخاب کن و یک‌جا:\n" +
+    "• حذف کنی\n• مقدار را تغییر دهی\n• نوع رکورد را عوض کنی\n• به «⭐ ساب‌های منتخب» اضافه کنی",
+  search:
+    "🔍 جست‌وجو\n\n" +
+    "جست‌وجوی رکورد در همهٔ اکانت‌ها بر اساس:\n" +
+    "• نام/دامنه (بخشی از نام کافی است)\n" +
+    "• آی‌پی یا بخشی از مقدار\n\n" +
+    "همچنین هرجا در چت آی‌پی یا ساب‌دامنه بفرستی، جست‌وجوی سریع فعال می‌شود.",
+  fav:
+    "⭐ ساب‌های منتخب\n\n" +
+    "آی‌پی/ساب‌های پرتکرارت را این‌جا ذخیره کن تا بعداً سریع پیدا و جای‌گذاری کنی.\n" +
+    "ورود: صفحهٔ «☁️ کلودفلر» → دکمهٔ سبز «⭐ ساب‌های منتخب» (کنار «همه اکانت‌ها»).\n" +
+    "افزودن: داخل رکوردهای یک دامنه → «🗂 گروهی» → انتخاب → «⭐ افزودن به منتخب‌ها».",
+  mons:
+    "🖥 مانیتورها\n\n" +
+    "• 🧭 تعویض خودکار ساب فیلتر: دامنه‌های هاست‌های پاسارگارد را دوره‌ای از داخل ایران بررسی می‌کند؛ اگر فیلتر شده بود دامنهٔ شماره‌دار جدید می‌سازد و خودکار جایگزین می‌کند.\n" +
+    "• 🖥 مانیتور نود پاسارگارد: هشدار قطع/وصل شدن نودهای پنل (به‌صورت رویدادی/وبهوک) + همگام‌سازی دستی.\n" +
+    "• 🔐 مانیتور SSL: هشدار نزدیک‌شدن به انقضای گواهی دامنه‌های تحت نظارت.\n" +
+    "• 🗓 مانیتور انقضای دامنه: استعلام دامنه‌های .ir از whois.nic.ir و بقیه از RDAP؛ همهٔ دامنه‌های اکانت‌ها را یک‌جا اضافه کن و باقی‌مانده (سال/ماه/روز) را ببین.\n" +
+    "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.",
+  ssl:
+    "🔐 مانیتور SSL\n\n" +
+    "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
+  srv:
+    "🖥 سرورها (SSH، نود، مانیتور)\n\n" +
+    "مدیریت سرورهای لینوکسی از طریق SSH — همهٔ اتصال‌ها از «رلهٔ واحد» عبور می‌کنند:\n\n" +
+    "• ➕ افزودن سرور: آی‌پی/هاست (+پورت) → رمز یا کلید SSH (نام پیش‌فرض = هاست، کاربر root)\n" +
+    "• 🔑 رمزهای ذخیره‌شده: چند رمز را ذخیره کن تا هنگام افزودن سرور با یک دکمه انتخاب شوند\n" +
+    "• 📥 نصب خودکار نود پاسارگارد: اسکریپت رسمی pg-node.sh با خروجی زنده اجرا می‌شود\n" +
+    "• 📊 مانیتور سرور: CPU/RAM/دیسک/آپتایم/پهنای باند + هشدار خودکار وقتی از آستانه بگذرد\n" +
+    "• 🔄 ریبوت · ⏱ آپدیت و آپگرید · ℹ️ مشخصات سیستم · 💽 فضای دیسک\n\n" +
+    "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.\n" +
+    "⚠️ اگر رله راه‌اندازی نشده باشد، ربات خودش پیام نصب رله را نشان می‌دهد.",
+  admin:
+    "👥 مدیریت ادمین\n\n" +
+    "افزودن/حذف ادمین (فقط ادمین اصلی). ادمین‌ها به همهٔ امکانات ربات دسترسی دارند.\n" +
+    "شناسهٔ عددیات را می‌توانی با /myid در ربات ببینی.",
+  help:
+    "ℹ️ راهنما\n\n" +
+    "این بخش مثل منوی اصلی چیده شده؛ روی هر قسمت بزنی راهنمای همان قسمت را می‌بینی.\n\n" +
+    "• دکمهٔ قرمز «⚡ جای‌گذاری سریع» روش جست‌وجو با فرستادن آی‌پی/ساب‌دامنه در چت است.\n" +
+    "• بقیهٔ دکمه‌ها دقیقاً معادل دکمه‌های منوی اصلی هستند.\n\n" +
+    "💡 رنگ دکمه‌ها: قرمز = خطرناک · آبی = دو یا چند ستونه · سبز = تک‌ستونه یا سه‌ستونه · خاکستری = ساده",
+};
+
+function helpGuideKb() {
+  return [
+    [
+      { text: "🔙 راهنمای بخش‌ها", callback_data: "help" },
+      { text: "🏠 منو", callback_data: "menu" },
+    ],
+  ];
+}
+
+// کیبورد راهنما؛ ساختارش مثل منوی اصلی است ولی هر دکمه یک راهنمای متنی (HELP_GUIDE) را نمایش می‌دهد.
+function helpKeyboard() {
+  return [
+    // hqi: توضیح روش «جست‌وجوی سریع» با فرستادن آی‌پی/ساب‌دامنه در چت
+    [{ text: "⚡ جای‌گذاری سریع", callback_data: "hqi", style: "danger" }],
+    // hg:rec راهنمای افزودن رکورد | hg:cf راهنمای کلودفلر
+    [
+      { text: "➕ افزودن رکورد", callback_data: "hg:rec" },
+      { text: "☁️ کلودفلر", callback_data: "hg:cf" },
+    ],
+    // hg:search: راهنمای جست‌وجوی سراسری
+    [{ text: "🔍 جست و جو در همه", callback_data: "hg:search", style: "danger" }],
+    // hg:mons: راهنمای مانیتورها (تک‌ستونه)
+    [{ text: "🖥 مانیتورها", callback_data: "hg:mons" }],
+    // hg:prov: راهنمای دیتاسنترها (هتزنر/لینود/آروان)
+    [{ text: "🏢 دیتاسنترها (هتزنر، لینود و آروان)", callback_data: "hg:prov" }],
+    // hg:srv: راهنمای سرورها (SSH/نود/مانیتور)
+    [{ text: "🖥 سرورها (SSH، نود، مانیتور)", callback_data: "hg:srv" }],
+    // hg:help راهنمای خود راهنما | hg:admin راهنمای مدیریت ادمین — هر دو خاکستری
+    [
+      { text: "ℹ️ راهنما", callback_data: "hg:help", style: "plain" },
+      { text: "👥 مدیریت ادمین", callback_data: "hg:admin", style: "plain" },
+    ],
+    // menu: بازگشت به منوی اصلی
+    [{ text: "🏠 منو", callback_data: "menu" }],
+  ];
+}
+
+function parseAccounts(env) {
+  const raw = env.CF_ACCOUNTS || "[]";
+  try {
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((a) => a && a.token) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function getAccounts(kv, env) {
+  let list = await kvGetCached(kv, "accounts", "json");
+  if (!Array.isArray(list)) {
+    list = parseAccounts(env);
+    if (list.length) await kvPutCached(kv, "accounts", JSON.stringify(list));
+  }
+  return list || [];
+}
+
+async function getAdmins(kv, env) {
+  const main = Number(env.ADMIN_ID || ADMIN_ID);
+  let list = await kvGetCached(kv, "admins", "json");
+  if (!Array.isArray(list)) list = [];
+  const set = new Set([main, ...list.map(Number)]);
+  return [...set];
+}
+
+// تبلیغ روی /start: اول مقدار محلی (KV)، بعد کش دیتای مرکزی از مخزن (قابل تغییر بدون آپدیت مشتری)، بعد env، بعد پیش‌فرض
+const PROMO_DEFAULT = "طراحی توسط @panelSazFilterBot";
+const PROMO_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/promo.txt";
+
+async function getPromo(kv, env) {
+  try {
+    const local = kv ? await kv.get("promo:local", "text") : null;
+    if (local) return local;
+    const url = (env && env.PROMO_URL) || PROMO_URL_DEFAULT;
+    if (kv) {
+      const cached = await kv.get("promo:cache", "json");
+      if (cached && cached.v && cached.t && Date.now() - cached.t < 43200000) return cached.v;
+    }
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const v = String(await res.text()).trim();
+      if (v && v.length > 0 && v.length < 200) {
+        if (kv) await kv.put("promo:cache", JSON.stringify({ t: Date.now(), v }), { expirationTtl: 86400 });
+        return v;
+      }
+    }
+  } catch (e) {
+    console.error("PROMO_ERR", String(e));
+  }
+  return (env && env.PROMO_TEXT) || PROMO_DEFAULT;
+}
+
+// اعلان نسخهٔ جدید: برای هر نسخه فقط یک‌بار به همهٔ ادمین‌ها فرستاده می‌شود.
+let _releaseAnnouncedFor = null;
+async function announceRelease(env, botToken, adminId) {
+  if (_releaseAnnouncedFor === BOT_VERSION) return;
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  let seen = null;
+  try {
+    seen = await kv.get("release_seen");
+  } catch (e) {}
+  if (seen === BOT_VERSION) {
+    _releaseAnnouncedFor = BOT_VERSION;
+    return;
+  }
+  const notes = RELEASE_NOTES[BOT_VERSION] || [];
+  const lines = [
+    `🚀 نسخهٔ جدید نگهبان ابری v${BOT_VERSION} برات اومد!`,
+    "",
+    "✨ قابلیت‌های این نسخه:",
+    ...(notes.length ? notes.map((n) => "• " + n) : ["• بهبود عملکرد و رفع باگ"]),
+  ];
+  const kb = [[{ text: "🚀 استارت", callback_data: "menu" }]];
+  const admins = await getAdmins(kv, env);
+  for (const id of admins) {
+    try {
+      await sendMessage(botToken, id, lines.join("\n"), kb);
+    } catch (e) {}
+  }
+  try {
+    await kv.put("release_seen", BOT_VERSION);
+  } catch (e) {}
+  _releaseAnnouncedFor = BOT_VERSION;
+}
+
+async function getAccountId(accounts, i) {
+  const res = await fetch(`${CF_API}/zones?per_page=1`, { headers: hdr(accounts[i].token), signal: withTimeout() });
+  const data = await res.json();
+  if (data.success && data.result && data.result.length) return data.result[0].account.id;
+  return null;
+}
+
+function hdr(token) {
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+function withTimeout(ms) {
+  try {
+    return AbortSignal.timeout(ms || 15000);
+  } catch {
+    return undefined;
+  }
+}
+
+// رنگ‌بندی دکمه‌ها:
+//   • ردیف‌های «خطرناک» (حذف/لغو/بازگشت/توقف/غیرفعال/ریست/انصراف و...) → قرمز
+//   • بقیه بر اساس تعداد دکمه در ردیف: ۱ و ۳ ستون → سبز · ۲ و ۴+ ستون → آبی
+//   • ردیف‌های «لیست داده» (دامنه/ساب‌دامنه/رکورد/آی‌پی/سرور و...) بدون رنگ
+//   • هر دکمه می‌تواند با style صریح رنگ ثابت بگیرد یا با {"style":"plain"} بی‌رنگ بماند.
+const DATA_CB = /^(z:|zf:|e:|p:|sel:|selp:|dd:|arv:|arvpage:|sr:|zsf:|ap:|cz:|ndi:|ndip:|ndx:|pnd:|favopen:|favpk:|favpsel:|favpp:|rempick:|rempage:|remdelx:|ipd:|qanz:|qana:|domexpi:)/;
+const DANGER_CB = /(^|[:_])(del|delete|dacc|daccy|darvan|darvany|pnlx|nddel|nddely|sslmdy|bulkdel|stop|suspend|cancel|revoke|reset)([:_]|$)/;
+
+function isPlaceholderBtn(b) {
+  return !b || typeof b !== "object" || b.text === "\u00A0";
+}
+function isMenuBackBtn(b) {
+  if (!b || typeof b !== "object") return false;
+  const t = String(b.text || "");
+  const cb = String(b.callback_data || "");
+  if (/🏠|🔙|⬅️/.test(t)) return true;
+  if (/بازگشت|منو/.test(t)) return true;
+  return /^(menu|back|return|permback)$/.test(cb);
+}
+function stripPlain(b) {
+  if (b && typeof b === "object" && b.style === "plain") {
+    const { style, ...rest } = b;
+    return rest;
+  }
+  return b;
+}
+function rowIsData(row) {
+  return row.some((b) => b && typeof b === "object" && DATA_CB.test(String(b.callback_data || "")));
+}
+function rowIsDanger(row) {
+  return row.some((b) => {
+    if (!b || typeof b !== "object") return false;
+    if (b.style === "danger") return true;
+    const cb = String(b.callback_data || "");
+    const t = String(b.text || "");
+    return (
+      DANGER_CB.test(cb) ||
+      /🗑|🛑|🚫/.test(t) ||
+      /حذف|لغو|انصراف|غیرفعال|توقف|ریست|بازنشانی|پاک‌کردن|بازگشت/.test(t)
+    );
+  });
+}
+function autoStyleFor(row) {
+  const n = row.filter((b) => !isPlaceholderBtn(b)).length;
+  // ۱ و ۳ ستون → سبز · ۲ و ۴+ ستون → آبی
+  return n === 2 || n >= 4 ? "primary" : "success";
+}
+function styleRow(row) {
+  if (!Array.isArray(row)) return row;
+  if (rowIsData(row)) {
+    return row.map((b) => {
+      if (isPlaceholderBtn(b)) return b;
+      if (isMenuBackBtn(b)) return { ...b, style: "danger" };
+      return stripPlain(b);
+    });
+  }
+  const auto = autoStyleFor(row);
+  return row.map((b) => {
+    if (isPlaceholderBtn(b)) return b;
+    if (isMenuBackBtn(b)) return { ...b, style: "danger" };
+    if (b.style === "plain") {
+      const { style, ...rest } = b;
+      return rest;
+    }
+    if (b.style) return b;
+    return { ...b, style: auto };
+  });
+}
+function applyBtnStyles(body) {
+  const ik = body && body.reply_markup && body.reply_markup.inline_keyboard;
+  if (!Array.isArray(ik)) return;
+  body.reply_markup.inline_keyboard = ik.map(styleRow);
+}
+
+async function tg(botToken, method, body) {
+  try {
+    applyBtnStyles(body);
+  } catch (e) {}
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: withTimeout(30000),
+  });
+  return res.json();
+}
+
+async function sendMessage(botToken, chatId, text, keyboard) {
+  const t = text.substring(0, 4000);
+  const body = { chat_id: chatId, text: t };
+  if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
+  if (t.includes("<code>")) body.parse_mode = "HTML";
+  return tg(botToken, "sendMessage", body);
+}
+
+async function editMessage(botToken, chatId, messageId, text, keyboard) {
+  const t = text.substring(0, 4000);
+  const body = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: t,
+  };
+  if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
+  if (t.includes("<code>")) body.parse_mode = "HTML";
+  return tg(botToken, "editMessageText", body);
+}
+
+async function getAllZones(accounts, kv) {
+  if (kv) {
+    const cached = await kvGetCached(kv, "cache:zones", "json", 3600000);
+    if (Array.isArray(cached)) return cached;
+  }
+  const out = [];
+  for (let i = 0; i < accounts.length; i++) {
+    const acc = accounts[i];
+    let page = 1;
+    while (true) {
+      const res = await fetch(`${CF_API}/zones?per_page=50&page=${page}`, { headers: hdr(acc.token), signal: withTimeout() });
+      const data = await res.json();
+      if (!data.success || !data.result || data.result.length === 0) break;
+      for (const z of data.result) out.push({ ...z, _acc: i, _accName: acc.name });
+      if (data.result.length < 50) break;
+      page++;
+    }
+  }
+  if (kv && out.length) await kvPutCached(kv, "cache:zones", JSON.stringify(out), { expirationTtl: 3600 }, 3600000);
+  return out;
+}
+
+async function findZone(zoneName, accounts) {
+  if (!zoneName) return null;
+  for (let i = 0; i < accounts.length; i++) {
+    const res = await fetch(`${CF_API}/zones?name=${encodeURIComponent(zoneName)}`, { headers: hdr(accounts[i].token), signal: withTimeout() });
+    const data = await res.json();
+    if (data.success && data.result && data.result.length > 0) {
+      return { ...data.result[0], _acc: i, _accName: accounts[i].name };
+    }
+  }
+  return null;
+}
+
+async function getZoneById(zoneId, accIndex, accounts) {
+  const res = await fetch(`${CF_API}/zones/${zoneId}`, { headers: hdr(accounts[accIndex].token), signal: withTimeout() });
+  const data = await res.json();
+  return data.success ? { ...data.result, _acc: accIndex, _accName: accounts[accIndex].name } : null;
+}
+
+async function getRecords(zone, accounts, kv) {
+  const cacheKey = `cache:rec:${zone.id}`;
+  if (kv) {
+    const cached = await kvGetCached(kv, cacheKey, "json", 900000);
+    if (Array.isArray(cached)) return cached;
+  }
+  const records = [];
+  let page = 1;
+  while (true) {
+    const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records?per_page=100&page=${page}`, {
+      headers: hdr(accounts[zone._acc].token),
+      signal: withTimeout(),
+    });
+    const data = await res.json();
+    if (!data.success || !data.result || data.result.length === 0) break;
+    records.push(...data.result);
+    if (data.result.length < 100) break;
+    page++;
+  }
+  if (kv) await kvPutCached(kv, cacheKey, JSON.stringify(records), { expirationTtl: 900 }, 900000);
+  return records;
+}
+
+async function invalidateCache(kv, zoneId) {
+  if (!kv) return;
+  try {
+    await kvDeleteCached(kv, "cache:zones");
+    if (zoneId) await kvDeleteCached(kv, `cache:rec:${zoneId}`);
+  } catch (e) {
+    console.error("CACHE_INV", String(e));
+  }
+}
+
+async function getSettingsMap(zone, accounts) {
+  const res = await fetch(`${CF_API}/zones/${zone.id}/settings`, { headers: hdr(accounts[zone._acc].token), signal: withTimeout() });
+  const data = await res.json();
+  const map = {};
+  if (data.success && data.result) {
+    for (const s of data.result) map[s.id] = s.value;
+  }
+  return map;
+}
+
+async function setSetting(zone, accounts, id, value) {
+  const res = await fetch(`${CF_API}/zones/${zone.id}/settings/${id}`, {
+    method: "PATCH",
+    headers: hdr(accounts[zone._acc].token),
+    body: JSON.stringify({ value }),
+    signal: withTimeout(),
+  });
+  return res.json();
+}
+
+function normalizeName(name, zoneName) {
+  if (!name) return name;
+  if (name === "@" || name === zoneName) return zoneName;
+  if (name.endsWith("." + zoneName)) return name;
+  return `${name}.${zoneName}`;
+}
+
+function makeToken() {
+  const b = new Uint8Array(6);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+// ===================== تاریخ شمسی (جلالی) + یادآور =====================
+const TEHRAN_OFFSET_MS = 3.5 * 3600 * 1000;
+const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
+
+function _div(a, b) {
+  return ~~(a / b);
+}
+function _mod(a, b) {
+  return a - ~~(a / b) * b;
+}
+function _jalCal(jy) {
+  const breaks = [-61, 9, 38, 199, 426, 686, 756, 818, 1111, 1181, 1210, 1635, 2060, 2097, 2192, 2262, 2324, 2394, 2456, 3178];
+  const bl = breaks.length;
+  const gy = jy + 621;
+  let leapJ = -14;
+  let jp = breaks[0];
+  let jm, jump, leap, leapG, march, n, i;
+  if (jy < jp || jy >= breaks[bl - 1]) throw new Error("bad jalali year");
+  for (i = 1; i < bl; i += 1) {
+    jm = breaks[i];
+    jump = jm - jp;
+    if (jy < jm) break;
+    leapJ = leapJ + _div(jump, 33) * 8 + _div(_mod(jump, 33), 4);
+    jp = jm;
+  }
+  n = jy - jp;
+  leapJ = leapJ + _div(n, 33) * 8 + _div(_mod(n, 33) + 3, 4);
+  if (_mod(jump, 33) === 4 && jump - n === 4) leapJ += 1;
+  leapG = _div(gy, 4) - _div((_div(gy, 100) + 1) * 3, 4) - 150;
+  march = 20 + leapJ - leapG;
+  if (jump - n < 6) n = n - jump + _div(jump + 4, 33) * 33;
+  leap = _mod(_mod(n + 1, 33) - 1, 4);
+  if (leap === -1) leap = 4;
+  return { leap, gy, march };
+}
+function _g2d(gy, gm, gd) {
+  let d = _div((gy + _div(gm - 8, 6) + 100100) * 1461, 4) + _div(153 * _mod(gm + 9, 12) + 2, 5) + gd - 34840408;
+  d = d - _div(_div(gy + 100100 + _div(gm - 8, 6), 100) * 3, 4) + 752;
+  return d;
+}
+function _d2g(jdn) {
+  let j = 4 * jdn + 139361631;
+  j = j + _div(_div(4 * jdn + 183187720, 146097) * 3, 4) * 4 - 3908;
+  const i = _div(_mod(j, 1461), 4) * 5 + 308;
+  const gd = _div(_mod(i, 153), 5) + 1;
+  const gm = _mod(_div(i, 153), 12) + 1;
+  const gy = _div(j, 1461) - 100100 + _div(8 - gm, 6);
+  return { gy, gm, gd };
+}
+function _j2d(jy, jm, jd) {
+  const r = _jalCal(jy);
+  return _g2d(r.gy, 3, r.march) + (jm - 1) * 31 - _div(jm, 7) * (jm - 7) + jd - 1;
+}
+function _d2j(jdn) {
+  const gy = _d2g(jdn).gy;
+  let jy = gy - 621;
+  const r = _jalCal(jy);
+  const jdn1f = _g2d(gy, 3, r.march);
+  let k = jdn - jdn1f;
+  if (k >= 0) {
+    if (k <= 185) return { jy, jm: 1 + _div(k, 31), jd: _mod(k, 31) + 1 };
+    k -= 186;
+  } else {
+    jy -= 1;
+    k += 179;
+    if (r.leap === 1) k += 1;
+  }
+  return { jy, jm: 7 + _div(k, 30), jd: _mod(k, 30) + 1 };
+}
+function toJalaali(gy, gm, gd) {
+  return _d2j(_g2d(gy, gm, gd));
+}
+function toGregorian(jy, jm, jd) {
+  return _d2g(_j2d(jy, jm, jd));
+}
+function jalaliToEpoch(jy, jm, jd, hh, mm) {
+  const g = toGregorian(jy, jm, jd);
+  return Date.UTC(g.gy, g.gm - 1, g.gd, hh, mm, 0, 0) - TEHRAN_OFFSET_MS;
+}
+function epochToJalali(ms) {
+  const d = new Date(ms + TEHRAN_OFFSET_MS);
+  return toJalaali(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+function fmtJalali(ms) {
+  const j = epochToJalali(ms);
+  const d = new Date(ms + TEHRAN_OFFSET_MS);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${j.jy}/${String(j.jm).padStart(2, "0")}/${String(j.jd).padStart(2, "0")} - ${hh}:${mm}`;
+}
+function parseFaNums(s) {
+  return String(s)
+    .replace(/[۰-۹]/g, (d) => FA_DIGITS.indexOf(d))
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+}
+function tehranMidnightEpoch() {
+  const d = new Date(Date.now() + TEHRAN_OFFSET_MS);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - TEHRAN_OFFSET_MS;
+}
+const JALALI_MONTHS = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+function persianJyNow() {
+  return epochToJalali(Date.now()).jy;
+}
+// افزودن مقدار نسبی (سال/ماه/روز) به «الان» به وقت تهران
+function addRelative(years, months, days) {
+  const base = new Date(Date.now() + TEHRAN_OFFSET_MS);
+  let y = base.getUTCFullYear() + (years || 0);
+  let m = base.getUTCMonth() + (months || 0);
+  const day = base.getUTCDate();
+  const hh = base.getUTCHours();
+  const mm = base.getUTCMinutes();
+  y += Math.floor(m / 12);
+  m = ((m % 12) + 12) % 12;
+  const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const dd = Math.min(day, dim) + (days || 0);
+  return Date.UTC(y, m, dd, hh, mm) - TEHRAN_OFFSET_MS;
+}
+function remWhenKb() {
+  return [
+    [{ text: "⏳ بعد از تایم مشخص", callback_data: "remrel" }],
+    [{ text: "📅 انتخاب تاریخ", callback_data: "remabs" }],
+    [{ text: "🔙 بازگشت", callback_data: "remnew" }],
+  ];
+}
+const REM_WHEN_TEXT = "🕒 زمان یادآور:\nیکی از دو روش را انتخاب کنید:";
+const REL_UNITS = { min: "دقیقه", hr: "ساعت", day: "روز", wk: "هفته", mon: "ماه", yr: "سال" };
+function remRelKb() {
+  return [
+    [
+      { text: "دقیقه", callback_data: "remrelu:min" },
+      { text: "ساعت", callback_data: "remrelu:hr" },
+    ],
+    [
+      { text: "روز", callback_data: "remrelu:day" },
+      { text: "هفته", callback_data: "remrelu:wk" },
+    ],
+    [
+      { text: "ماه", callback_data: "remrelu:mon" },
+      { text: "سال", callback_data: "remrelu:yr" },
+    ],
+    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }],
+  ];
+}
+function addRel(unit, n) {
+  const now = Date.now();
+  if (unit === "min") return now + n * 60000;
+  if (unit === "hr") return now + n * 3600000;
+  if (unit === "day") return now + n * 86400000;
+  if (unit === "wk") return now + n * 7 * 86400000;
+  if (unit === "mon") return addRelative(0, n, 0);
+  if (unit === "yr") return addRelative(n, 0, 0);
+  return NaN;
+}
+function remYearKb() {
+  const jy = persianJyNow();
+  return [
+    [{ text: String(jy), callback_data: `remabsy:${jy}` }, { text: String(jy + 1), callback_data: `remabsy:${jy + 1}` }],
+    [{ text: String(jy + 2), callback_data: `remabsy:${jy + 2}` }, { text: String(jy + 3), callback_data: `remabsy:${jy + 3}` }],
+    [{ text: "✍️ نوشتن دستی تاریخ", callback_data: "remabsman" }],
+    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }],
+  ];
+}
+function remMonthKb(jy) {
+  const rows = [];
+  for (let i = 0; i < 12; i += 3) {
+    rows.push(
+      JALALI_MONTHS.slice(i, i + 3).map((name, k) => ({ text: name, callback_data: `remabsm:${jy}:${i + k + 1}` }))
+    );
+  }
+  rows.push([{ text: "🔙 بازگشت", callback_data: "remabs" }]);
+  return rows;
+}
+function remPlain(s) {
+  return String(s == null ? "" : s).replace(/</g, "‹").replace(/>/g, "›");
+}
+
+async function getReminders(kv) {
+  const list = await kvGetCached(kv, "reminders", "json", 20000);
+  return Array.isArray(list) ? list : [];
+}
+async function saveReminders(kv, list) {
+  await kvPutCached(kv, "reminders", JSON.stringify(list), undefined, 20000);
+}
+async function addReminder(kv, chatId, target, text, at) {
+  const list = await getReminders(kv);
+  const r = { id: makeToken(), by: chatId, target: target || null, text: text || "", at, created: Date.now() };
+  list.push(r);
+  await saveReminders(kv, list);
+  return r;
+}
+async function getRemCfg(kv) {
+  const c = await kvGetCached(kv, "rem_cfg", "json", 300000);
+  const h = c && Number(c.leadHours);
+  return { leadHours: Number.isFinite(h) ? Math.max(1, Math.min(720, h)) : 24 };
+}
+async function saveRemCfg(kv, cfg) {
+  await kvPutCached(kv, "rem_cfg", JSON.stringify(cfg), undefined, 300000);
+}
+// ذخیرهٔ نهایی یادآور (عادی یا انقضای سرور). whenMs = زمانی که کاربر انتخاب کرده.
+async function finalizeReminder(kv, chatId, pending, whenMs, send) {
+  const prefix = "✅ یادآور ثبت شد.";
+  let extra = "";
+  let item = { id: makeToken(), by: chatId, target: pending.target || null, text: pending.text || "", at: whenMs, created: Date.now() };
+  if (pending.mode === "expiry") {
+    const lead = (await getRemCfg(kv)).leadHours;
+    const expiryAt = whenMs;
+    if (!Number.isFinite(expiryAt) || expiryAt <= Date.now()) {
+      await send("⚠️ زمان انقضا باید در آینده باشد. دوباره بفرستید:");
+      return false;
+    }
+    let at = expiryAt - lead * 3600 * 1000;
+    if (at <= Date.now()) at = Date.now() + 1000;
+    item.kind = "expiry";
+    item.expiryAt = expiryAt;
+    item.at = at;
+    extra = `\n🗓 انقضا: ${fmtJalali(expiryAt)}\n🔔 یادآوری: ${fmtJalali(at)} (${lead} ساعت قبل)`;
+  } else {
+    if (!Number.isFinite(whenMs) || whenMs <= Date.now()) {
+      await send("⚠️ زمان باید در آینده باشد. دوباره بفرستید:");
+      return false;
+    }
+    extra = `\n🕒 ${fmtJalali(whenMs)}`;
+  }
+  await kv.delete(`pend:${chatId}`);
+  const list = await getReminders(kv);
+  list.push(item);
+  await saveReminders(kv, list);
+  await send(
+    prefix +
+      extra +
+      (pending.target && pending.target.label ? `\n🎯 ${remPlain(pending.target.label)}` : "") +
+      (pending.text ? `\n📝 ${remPlain(pending.text)}` : ""),
+    [[{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🏠 منو", callback_data: "menu" }]]
+  );
+  return true;
+}
+
+// سرورها از هاست‌های همهٔ پنل‌ها (ساب‌ها) — کش‌اول، موازی، حذف تکراری، و با سقف زمانی قطعی
+// سرورها را از «نودهای» پنل‌ها می‌گیریم (کش‌شده و سریع) — حذف تکراری بر اساس آدرس.
+async function getServersPicker(kv, force) {
+  const cached = await kvGetCached(kv, "servers_picker", "json", 3600000);
+  const cachedArr = Array.isArray(cached) ? cached : [];
+  if (!force && cachedArr.length) return cachedArr;
+
+  const panels = await getPanels(kv);
+  const monitors = await getNodeMonitors(kv);
+  const out = [];
+  const seen = new Set();
+  const push = (panelName, n) => {
+    const address = String((n && n.address) || "").trim();
+    const name = String((n && n.name) || "").trim();
+    const key = address || "n:" + name;
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push({ panel_name: panelName || "", host_id: name, remark: name, ip: address, status: (n && n.status) || "" });
+  };
+
+  // ۱) از وضعیت ذخیره‌شدهٔ مانیتورهای نود (بدون درخواست شبکه)
+  for (const m of monitors) {
+    const p = panels.find((x) => x.id === m.panel_id);
+    const st = await getNodeState(kv, m.id);
+    for (const k of Object.keys(st.nodes || {})) push(p && p.name, st.nodes[k]);
+  }
+
+  // ۲) اگر چیزی نبود، مستقیم از خود پنل‌ها بخوان (موازی، با سقف زمانی)
+  if (!out.length) {
+    const live = (async () => {
+      const results = await Promise.allSettled(
+        panels.map(async (p) => {
+          const token = await panelLogin(p, 5000);
+          if (!token) return { panel: p.name, list: [] };
+          const list = await panelNodes(p, token);
+          return { panel: p.name, list };
+        })
+      );
+      for (const r of results) {
+        if (r.status !== "fulfilled") continue;
+        for (const n of r.value.list || []) push(r.value.panel, n);
+      }
+    })();
+    await Promise.race([live.catch(() => {}), new Promise((res) => setTimeout(res, 8000))]);
+  }
+
+  if (out.length) await kvPutCached(kv, "servers_picker", JSON.stringify(out), { expirationTtl: 3600 }, 3600000);
+  return out;
+}
+
+function recordLabel(r, zoneName) {
+  let name = r.name;
+  if (zoneName && name.endsWith("." + zoneName)) name = name.slice(0, -(zoneName.length + 1));
+  const typeLabel = r.type === "CNAME" ? "cn" : r.type;
+  return `${typeLabel}-${name}`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function code(s) {
+  return `<code>${escHtml(s)}</code>`;
+}
+
+// ============================================================
+// پیام مجوز توکن کلادفلر
+// وقتی خطای کلادفلر به‌خاطر کمبود مجوز توکن باشد، یک نشانگر
+// نامرئی به متن اضافه می‌شود تا لایهٔ ارسال پیام، دکمه‌های
+// «بررسی مجدد» و «بازگشت» را زیر پیام بگذارد.
+// ============================================================
+const PERM_MARK = "\u2063";
+const CF_PERM_CODES = [9109, 10000, 10001, 1010];
+
+function isPermErrors(data) {
+  const errors = Array.isArray(data) ? data : (data && data.errors) || data;
+  const arr = Array.isArray(errors) ? errors : [];
+  return arr.some((e) => e && CF_PERM_CODES.includes(Number(e.code)));
+}
+
+function cfErrText(data) {
+  const errors = Array.isArray(data) ? data : (data && data.errors) || data;
+  let out = JSON.stringify(errors, null, 2).substring(0, 3000);
+  if (isPermErrors(data)) {
+    out =
+      PERM_MARK +
+      out +
+      "\n\n🔑 دسترسی توکن کافی نیست.\n" +
+      "این بخش به مجوز بیشتری روی توکن این اکانت نیاز دارد.\n" +
+      "از پنل کلادفلر برو به: Manage Account → Account API Tokens (یا My Profile → API Tokens)\n" +
+      "→ توکن همین اکانت → Edit → مجوز لازم (مثلاً Zone → Zone Rulesets و Zone → Zone WAF) را اضافه کن، ذخیره کن و دوباره تلاش کن.";
+  }
+  return out;
+}
+
+function parentCb(data) {
+  const d = String(data || "");
+  const tok = (d.match(/[0-9a-f]{12}/) || [])[0];
+  if (/^(zssl|zsec|zperf|zrules|zro|zrp|zrr|zrt|zrd|zrdy|zra|ztog|zval|zvset|zd|zpurge|zdev|zpause|zsearch):/.test(d) && tok) return `zset:${tok}`;
+  if (/^zset:/.test(d)) return "zones";
+  if (/^e:/.test(d) && tok) return `rback:${tok}`;
+  if (/^sel/.test(d) && tok) return `rback:${tok}`;
+  if (/^acc/.test(d)) return "accounts";
+  if (/^(arv|arf)/.test(d)) return "arvan";
+  if (/^ln/.test(d)) return "providers";
+  if (/^hz/.test(d)) return "providers";
+  if (/^um/.test(d)) return "um";
+  if (/^sslm/.test(d)) return "sslm";
+  if (/^rem/.test(d)) return "rem";
+  if (/^hf/.test(d)) return "hf";
+  if (/^nd/.test(d)) return "nd";
+  if (/^domexp/.test(d)) return "domexp";
+  if (/^srv/.test(d)) return "srv";
+  return "menu";
+}
+
+// مقصد «بازگشت به صفحهٔ قبل» برای پیام‌های نتیجه: اول دکمهٔ بازگشت/منوی کیبورد
+// نتیجه، بعد والدِ همان callback، و در نهایت منوی اصلی.
+function findReturnCb(kb, fallback) {
+  try {
+    const flat = [];
+    for (const row of kb || []) {
+      for (const b of row || []) {
+        if (b && b.callback_data && b.callback_data !== "noop") flat.push(b);
+      }
+    }
+    const cbs = flat.map((b) => b.callback_data);
+    if (cbs.includes("favs") && cbs.includes("zones")) return "menu";
+    const labeledNonMenu = flat.find((b) => b.callback_data !== "menu" && isMenuBackBtn(b));
+    if (labeledNonMenu) return labeledNonMenu.callback_data;
+    const nonMenu = flat.find((b) => b.callback_data !== "menu");
+    if (nonMenu) return nonMenu.callback_data;
+    const labeled = flat.find((b) => isMenuBackBtn(b));
+    if (labeled) return labeled.callback_data;
+    if (fallback && fallback !== "menu") return fallback;
+  } catch (e) {}
+  return "menu";
+}
+
+function isResultText(t) {
+  // فقط پیام‌های موفق (✅) خودکار بسته می‌شوند؛ خطا (❌) و تأیید/هشدار (⚠️) روی صفحه می‌مانند
+  // تا کاربر بتواند بخواند یا تأیید/رد کند (جلوگیری از تأییدِ خودکارِ دیالوگ‌ها).
+  return /^\s*✅/.test(String(t || ""));
+}
+
+async function resolveIPs(name, kv) {
+  const host = String(name).toLowerCase();
+  const cacheKey = `dnscache:${host}`;
+  if (kv) {
+    const cached = await kvGetCached(kv, cacheKey, "json", 3600000);
+    if (Array.isArray(cached)) return cached;
+  }
+  let ips = [];
+  const sources = [
+    { url: "https://cloudflare-dns.com/dns-query", accept: "application/dns-json" },
+    { url: "https://dns.google/resolve", accept: "application/json" },
+  ];
+  for (const src of sources) {
+    for (const type of ["A", "AAAA"]) {
+      try {
+        const res = await fetch(`${src.url}?name=${encodeURIComponent(host)}&type=${type}`, {
+          headers: { accept: src.accept },
+          signal: withTimeout(10000),
+        });
+        const data = await res.json();
+        if (data && Array.isArray(data.Answer)) {
+          for (const a of data.Answer) {
+            if ((type === "A" && a.type === 1) || (type === "AAAA" && a.type === 28)) {
+              if (a.data) ips.push(a.data);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("DNS_RES", String(e));
+      }
+      if (ips.length > 0) break;
+    }
+    if (ips.length > 0) break;
+  }
+  if (kv && ips.length) await kvPutCached(kv, cacheKey, JSON.stringify(ips), { expirationTtl: 3600 }, 3600000);
+  return ips;
+}
+
+async function ipInfo(ip, kv) {
+  const cacheKey = `ipinfo:${ip}`;
+  if (kv) {
+    const cached = await kvGetCached(kv, cacheKey, "json", 86400000);
+    if (cached && cached.ip) return cached;
+  }
+  let info = null;
+  try {
+    const res = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}/json`, {
+      headers: { accept: "application/json" },
+      signal: withTimeout(10000),
+    });
+    const data = await res.json();
+    if (data && data.ip) info = data;
+  } catch (e) {
+    console.error("IPINFO", String(e));
+  }
+  if (kv && info) await kvPutCached(kv, cacheKey, JSON.stringify(info), { expirationTtl: 86400 }, 86400000);
+  return info;
+}
+
+function fmtIpInfo(ip, info) {
+  if (!info) return code(ip);
+  const loc = [info.city, info.country].filter(Boolean).join(", ");
+  const org = (info.org || "").replace(/^AS\d+\s*/, "");
+  const parts = [];
+  if (loc) parts.push(loc);
+  if (org) parts.push(org);
+  return parts.length ? `${code(ip)} — ${parts.join(" • ")}` : code(ip);
+}
+
+// ===================== ساب‌های منتخب / تغییر سریع / برگشت خودکار =====================
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function isIpv4(t) {
+  const s = String(t).trim();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return false;
+  return s.split(".").every((o) => Number(o) <= 255);
+}
+
+function isIpv6(t) {
+  const s = String(t).trim();
+  return s.includes(":") && /^[0-9a-fA-F:.:%]+$/.test(s);
+}
+
+function isIpLike(t) {
+  return isIpv4(t) || isIpv6(t);
+}
+
+function isNameLike(t) {
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/.test(String(t).trim());
+}
+
+async function getFavs(kv, chatId) {
+  let list = await kv.get(`favs:${chatId}`, "json");
+  return Array.isArray(list) ? list : [];
+}
+
+async function saveFavs(kv, chatId, list) {
+  await kv.put(`favs:${chatId}`, JSON.stringify(list));
+}
+
+function favExists(list, zoneId, recordId) {
+  return list.some((f) => f.zone_id === zoneId && f.record_id === recordId);
+}
+
+function favShortName(f) {
+  const zone = f.zone_name ? "." + f.zone_name : "";
+  const n = f.name || "";
+  return zone && n.endsWith(zone) ? n.slice(0, -zone.length) : n;
+}
+
+function favTypeShort(f) {
+  return f.type === "CNAME" ? "cn" : f.type;
+}
+
+async function getRecordById(acc, zoneId, recordId, accounts) {
+  const res = await fetch(`${CF_API}/zones/${zoneId}/dns_records/${recordId}`, {
+    headers: hdr(accounts[acc].token),
+    signal: withTimeout(),
+  });
+  const data = await res.json();
+  return data && data.success ? data.result : null;
+}
+
+function diffSummary(name, prev, next) {
+  let t = `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(name)}\n\n🔴 قبلی:\n${code(String(prev))}\n\n🟢 فعلی:\n${code(String(next))}`;
+  return t;
+}
+
+async function renderFavsScreen(kv, chatId, accounts, edit) {
+  const favs = await getFavs(kv, chatId);
+  const lines = ["⭐ ساب‌های منتخب\n"];
+  const kb = [];
+  if (!favs.length) {
+    lines.push(
+      "📭 هنوز سابی به منتخب‌ها اضافه نشده.",
+      "",
+      "ساب‌هایی که زیاد IP/مقدارشان را عوض می‌کنید را اینجا بگذارید تا با یک لمس در دسترس باشند.",
+      "• در صفحهٔ رکوردهای هر دامنه دکمهٔ «🗂 گروهی» را بزنید، ساب‌ها را انتخاب و «⭐ افزودن به منتخب‌ها» را بزنید.",
+      "• روی هر رکورد که باز کنید هم دکمهٔ ستاره برای افزودن/حذف دارد.",
+      "• یا از دکمهٔ «➕ افزودن ساب» زیر، دامنه و ساب را انتخاب کنید."
+    );
+  } else {
+    // favopen:<index>: باز کردن جزئیات همان ساب منتخب برای ویرایش مقدار/نوع/TTL/Proxy
+    kb.push(...grid2(favs.map((f, i) => ({ text: `${favTypeShort(f)} ${favShortName(f)} — ${f.zone_name}`, callback_data: `favopen:${i}` }))));
+    lines.push(`تعداد: ${favs.length}\nبرای باز کردن و تغییر روی هر کدام بزنید.`);
+  }
+  // favpickzone: افزودن ساب جدید (انتخاب دامنه) | favdel: حذف از منتخب‌ها | zones: بازگشت به صفحهٔ کلودفلر
+  kb.push([
+    { text: "➕ افزودن ساب", callback_data: "favpickzone" },
+    favs.length ? { text: "🗑 حذف از منتخب‌ها", callback_data: "favdel" } : EMPTY_BTN,
+    { text: "🔙 بازگشت", callback_data: "zones" },
+  ]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function fetchRecordForSession(kv, accounts, session, recordId, env) {
+  if (session.provider === "arvan") {
+    const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+    return records.find((rec) => rec.id === recordId) || null;
+  }
+  const recData = await (await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+    headers: hdr(accounts[session.acc].token),
+    signal: withTimeout(),
+  })).json();
+  return recData && recData.success ? recData.result : null;
+}
+
+async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
+  const r = await fetchRecordForSession(kv, accounts, session, recordId, env);
+  if (!r) return edit("❌ رکورد پیدا نشد.");
+  let ipBlock = "";
+  if (r.type === "CNAME") {
+    const ips = await resolveIPs(r.content, kv);
+    if (ips.length > 0) {
+      const lines = [];
+      for (let i = 0; i < ips.length; i++) {
+        const info = await ipInfo(ips[i], kv);
+        lines.push(`${i + 1}) ${fmtIpInfo(ips[i], info)}`);
+      }
+      ipBlock = `\n🌍 IP های مقصد:\n` + lines.join("\n");
+    } else {
+      ipBlock = `\n🌍 IP مقصد: یافت نشد`;
+    }
+  } else if (r.type === "A" || r.type === "AAAA") {
+    const info = await ipInfo(r.content, kv);
+    ipBlock = `\n🌍 ${fmtIpInfo(r.content, info)}`;
+  }
+  const favs = await getFavs(kv, chatId);
+  const zoneIdForFav = session.provider === "arvan" ? "arvan:" + session.domain : session.zone_id;
+  const faved = favExists(favs, zoneIdForFav, recordId);
+  const zoneName = session.provider === "arvan" ? session.domain : session.zone_name;
+  const text =
+    `✏️ ویرایش رکورد\n\n` +
+    `📛 نام: ${code(r.name)}\n` +
+    `🏷 نوع: ${code(r.type)}\n` +
+    `💡 مقدار: ${code(r.content)}\n` +
+    `⏱\u200F TTL: ${r.ttl === 1 || r.ttl === 120 ? (session.provider === "arvan" ? "پیش‌فرض" : "خودکار") : r.ttl}\n` +
+    `🌐\u200F Proxy: ${r.proxied ? "روشن" : "خاموش"}\n` +
+    `📁 دامنه: ${code(zoneName)}` +
+    ipBlock;
+  // ev: ویرایش مقدار | ct: تغییر نوع | et: تغییر TTL | ep: روشن/خاموش کردن Proxy
+  const detailKb = [
+    ...grid2([
+      { text: "✏️ تغییر مقدار", callback_data: `ev:${token}:${recordId}` },
+      { text: "🔄 تغییر نوع", callback_data: `ct:${token}:${recordId}` },
+      { text: "⏱ تغییر TTL", callback_data: `et:${token}:${recordId}` },
+      { text: "🔄 تغییر Proxy", callback_data: `ep:${token}:${recordId}` },
+    ]),
+  ];
+  // دکمه‌های لود بالانسر (فقط برای A/AAAA/CNAME) با رنگ متفاوت از دکمه‌های بالایی
+  if (lbIsLbRecord(r)) {
+    // lba: افزودن آی‌پی جدید به گروه لود بالانسر | lbs: تنظیمات وزن/وضعیت آی‌پی‌های گروه
+    detailKb.push([
+      { text: "➕ افزودن آی‌پی لود بالانسر", callback_data: `lba:${token}:${recordId}`, style: "success" },
+      { text: "⚙️ تنظیمات لود بالانسر", callback_data: `lbs:${token}:${recordId}`, style: "success" },
+    ]);
+  }
+  // d: حذف رکورد | cref: فهرست دامنه‌های CNAME‌شده به این رکورد | favtg: افزودن/حذف از ساب‌های منتخب | rback: بازگشت
+  detailKb.push([
+    { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "primary" },
+    { text: "🔗 CNAME به این", callback_data: `cref:${token}:${recordId}`, style: "primary" },
+    { text: faved ? "⭐ حذف از منتخب" : "⭐ افزودن به منتخب", callback_data: `favtg:${token}:${recordId}`, style: "primary" },
+  ]);
+  detailKb.push([{ text: "🔙 بازگشت", callback_data: backCb || `rback:${token}` }]);
+  await edit(text, detailKb);
+}
+
+async function redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env) {
+  const nav = await kv.get(`dd:${chatId}:${messageId}`, "json");
+  if (!nav) return;
+  const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
+  await renderRecordDetail(kv, accounts, edit, chatId, nav.token, nav.recordId, nav.backCb, env);
+}
+
+// ===================== CNAMEهای وارده (دامنه‌هایی که به این رکورد CNAME کرده‌اند) =====================
+// کلادفلر/آروان API جست‌وجوی معکوس CNAME ندارند؛ پس همهٔ زون‌های همهٔ اکانت‌ها
+// پیمایش می‌شوند و رکوردهای CNAMEای که مقدارشان برابر نام این رکورد است برگردانده می‌شوند.
+// نتیجه برای مدتی کوتاه در KV کش می‌شود تا کلیک‌های پشت‌سرهم سبک باشد.
+function normCnameHost(s) {
+  return String(s || "").trim().toLowerCase().replace(/\.$/, "");
+}
+
+async function mapLimit(items, limit, fn) {
+  const out = [];
+  for (let i = 0; i < items.length; i += limit) {
+    const chunk = items.slice(i, i + limit);
+    out.push(...(await Promise.all(chunk.map(fn))));
+  }
+  return out;
+}
+
+async function findCnameReferrers(kv, accounts, session, targetName, env) {
+  const target = normCnameHost(targetName);
+  const refs = [];
+  if (!target) return refs;
+  // کلودفلر: پیمایش همهٔ زون‌های همهٔ اکانت‌ها
+  let zones = [];
+  try {
+    zones = await getAllZones(accounts, kv);
+  } catch (e) {
+    zones = [];
+  }
+  const cfHits = await mapLimit(zones, 8, async (z) => {
+    let records = [];
+    try {
+      records = await getRecords(z, accounts, kv);
+    } catch (e) {
+      return [];
+    }
+    const hits = [];
+    for (const rec of records) {
+      if (String(rec.type).toUpperCase() !== "CNAME") continue;
+      if (normCnameHost(rec.content) !== target) continue;
+      hits.push({ name: rec.name, zone_name: z.name, provider: "cloudflare" });
+    }
+    return hits;
+  });
+  // mapLimit آرایه‌ای از آرایه‌ها برمی‌گرداند؛ یک سطح flatten می‌کنیم تا خودِ رکوردها بمانند.
+  refs.push(...cfHits.flat());
+  // آروان: پیمایش همهٔ دامنه‌های همهٔ اکانت‌ها
+  let arvanAccounts = [];
+  try {
+    arvanAccounts = await getArvanAccounts(kv);
+  } catch (e) {
+    arvanAccounts = [];
+  }
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    let domains = [];
+    try {
+      domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+    } catch (e) {
+      continue;
+    }
+    for (const d of domains) {
+      const dn = typeof d === "string" ? d : d && d.domain;
+      if (!dn) continue;
+      let records = [];
+      try {
+        records = await arvanGetAllRecords(arvanAccounts[i].token, dn, kv, env);
+      } catch (e) {
+        continue;
+      }
+      for (const rec of records) {
+        if (String(rec.type).toUpperCase() !== "CNAME") continue;
+        if (normCnameHost(rec.content) !== target) continue;
+        refs.push({ name: rec.name, zone_name: dn, provider: "arvan" });
+      }
+    }
+  }
+  refs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  return refs;
+}
+
+async function renderCnameReferrers(kv, accounts, edit, chatId, session, r, token, recordId, env) {
+  const target = r.name;
+  const cacheKey = `cref:list:${normCnameHost(target)}`;
+  let refs = null;
+  let err = "";
+  try {
+    refs = await kv.get(cacheKey, "json");
+    if (!Array.isArray(refs)) {
+      refs = await findCnameReferrers(kv, accounts, session, target, env);
+      await kv.put(cacheKey, JSON.stringify(refs), { expirationTtl: 180 });
+    }
+  } catch (e) {
+    err = e && e.message ? e.message : String(e);
+    refs = [];
+  }
+  const lines = ["🔗 CNAMEهای وارده", "", `🎯 رکورد: ${code(target)}`, ""];
+  if (err) {
+    lines.push("❌ خطا در بررسی دامنه‌ها:", escHtml(err));
+  } else if (!refs.length) {
+    lines.push("📭 هیچ دامنه/ساب‌دامین‌ای به این رکورد CNAME نکرده است.");
+  } else {
+    lines.push(`📊 تعداد: ${refs.length}`, "");
+    for (let i = 0; i < refs.length; i++) {
+      const f = refs[i];
+      const prov = f.provider === "arvan" ? "🇮🇷" : "☁️";
+      lines.push(`${i + 1}) ${prov} ${code(f.name)} — ${code(f.zone_name)}`);
+    }
+  }
+  // crb: بازگشت به صفحهٔ ویرایش همان رکورد
+  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `crb:${token}:${recordId}` }]]);
+}
+
+// ===================== لود بالانسر (چند رکورد A/AAAA/CNAME هم‌نام) =====================
+// یک «لود بالانسر» یعنی چند رکورد هم‌نام از نوع A/AAAA/CNAME روی همان دامنه که
+// ترافیک بین‌شان پخش می‌شود. وزن هر آی‌پی و وضعیت فعال/غیرفعال و Proxy گروهی
+// در KV نگه داشته می‌شود. غیرفعال‌کردن یک آی‌پی یعنی حذف رکوردش از DNS ولی
+// نگه‌داشتن مشخصاتش برای فعال‌سازی مجدد.
+const LB_TYPES = ["A", "AAAA", "CNAME"];
+
+function lbTypeOf(r) {
+  return String((r && r.type) || "").toUpperCase();
+}
+
+function lbIsLbRecord(r) {
+  return LB_TYPES.includes(lbTypeOf(r));
+}
+
+function lbKeyFor(session, name) {
+  const provider = session.provider === "arvan" ? "arvan" : "cf";
+  const scope = session.provider === "arvan" ? session.domain : session.zone_id;
+  return `lb:${provider}:${scope}:${name}`;
+}
+
+async function getLbCfg(kv, key) {
+  const cfg = (await kv.get(key, "json")) || {};
+  if (!cfg.weights || typeof cfg.weights !== "object") cfg.weights = {};
+  if (!Array.isArray(cfg.disabled)) cfg.disabled = [];
+  return cfg;
+}
+
+async function saveLbCfg(kv, key, cfg) {
+  await kv.put(key, JSON.stringify(cfg));
+}
+
+function lbEntriesOf(group, cfg) {
+  const entries = [];
+  for (const r of group) {
+    entries.push({ on: true, id: r.id, type: lbTypeOf(r), content: String(r.content), proxied: !!r.proxied, ttl: r.ttl, weight: cfg.weights[r.content] ?? 1 });
+  }
+  for (const d of cfg.disabled) {
+    entries.push({ on: false, id: null, type: String(d.type || "").toUpperCase(), content: String(d.content), proxied: !!d.proxied, ttl: d.ttl, weight: cfg.weights[d.content] ?? 1 });
+  }
+  entries.sort((a, b) => a.content.localeCompare(b.content));
+  return entries;
+}
+
+async function lbFetchRecords(kv, accounts, session, env) {
+  if (session.provider === "arvan") {
+    return await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+  }
+  const zone = await getZoneById(session.zone_id, session.acc, accounts);
+  if (!zone) return null;
+  return await getRecords(zone, accounts, kv);
+}
+
+async function lbGroupByName(kv, accounts, session, name, env) {
+  const records = await lbFetchRecords(kv, accounts, session, env);
+  if (!records) return { error: "❌ دامنه پیدا نشد." };
+  const group = records.filter((x) => x.name === name && lbIsLbRecord(x));
+  const key = lbKeyFor(session, name);
+  const cfg = await getLbCfg(kv, key);
+  return { session, name, group, cfg, key };
+}
+
+async function lbLoadById(kv, accounts, token, recordId, env) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return { error: "⏳ نشست منقضی شده. دوباره باز کن." };
+  const records = await lbFetchRecords(kv, accounts, session, env);
+  if (!records) return { error: "❌ دامنه پیدا نشد." };
+  const rec = records.find((x) => x.id === recordId);
+  if (!rec) return { error: "❌ رکورد پیدا نشد." };
+  if (!lbIsLbRecord(rec)) return { error: "ℹ️ لود بالانسر فقط برای رکوردهای A/AAAA/CNAME است." };
+  const ctx = await lbGroupByName(kv, accounts, session, rec.name, env);
+  if (ctx.error) return ctx;
+  ctx.rec = rec;
+  return ctx;
+}
+
+async function lbLoadByGid(kv, accounts, gid, env) {
+  const g = await kv.get(`lbg:${gid}`, "json");
+  if (!g || !g.token || !g.name) return { error: "⏳ نشست لود بالانسر منقضی شده." };
+  const session = await kv.get(`s:${g.token}`, "json");
+  if (!session) return { error: "⏳ نشست منقضی شده. دوباره باز کن." };
+  const ctx = await lbGroupByName(kv, accounts, session, g.name, env);
+  if (ctx.error) return ctx;
+  ctx.gid = gid;
+  ctx.token = g.token;
+  return ctx;
+}
+
+function lbAddHint(type) {
+  if (type === "CNAME") return "دامنهٔ مقصد (مثل target.example.com)";
+  if (type === "AAAA") return "آی‌پی IPv6";
+  return "آی‌پی IPv4";
+}
+
+async function lbPromptAdd(kv, edit, chatId, messageId, token, name, type, cancelCb) {
+  await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_add", token, name, msgId: messageId }), { expirationTtl: 600 });
+  await edit(
+    `➕ ${lbAddHint(type)} جدید برای ${code(name)} را بفرستید:\n\n🏷 نوع رکورد: ${code(type)}`,
+    [[{ text: "⬅️ انصراف", callback_data: cancelCb || "menu" }]]
+  );
+}
+
+async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
+  const ctx = await lbLoadByGid(kv, accounts, gid, env);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+  const entries = lbEntriesOf(ctx.group, ctx.cfg);
+  const enabled = entries.filter((e) => e.on).length;
+  const lines = [
+    "⚖️ تنظیمات لود بالانسر",
+    "",
+    `📛 ساب‌دامین: ${code(ctx.name)}`,
+    `🌍 آی‌پی‌ها: ${enabled} فعال از ${entries.length}`,
+    "",
+  ];
+  if (!entries.length) {
+    lines.push("📭 هنوز آی‌پی‌ای اضافه نشده. با دکمهٔ «➕ افزودن آی‌پی» اضافه کن.");
+  } else {
+    entries.forEach((e, i) => {
+      lines.push(`${i + 1}) ${e.on ? "🟢" : "🔴"} ${code(e.content)} — وزن ${e.weight}${e.on ? "" : " (غیرفعال)"}`);
+    });
+    lines.push("", "وزن و فعال/غیرفعال هر آی‌پی را از دکمه‌های زیر تغییر بده.");
+  }
+  const kb = entries.map((e, i) => [
+    { text: `⚖️ وزن ${i + 1}`, callback_data: `lbw:${gid}:${i}` },
+    { text: e.on ? "⏸ غیرفعال" : "▶️ فعال", callback_data: `lbt:${gid}:${i}` },
+  ]);
+  kb.push([{ text: "➕ افزودن آی‌پی", callback_data: `lbadd:${gid}` }]);
+  if (enabled > 0) {
+    kb.push([
+      { text: "🟠 Proxy همه روشن", callback_data: `lbp:${gid}:on` },
+      { text: "⚪️ Proxy همه خاموش", callback_data: `lbp:${gid}:off` },
+    ]);
+  }
+  kb.push([{ text: "🔙 بازگشت", callback_data: `rback:${ctx.token}` }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function lbOpenSettings(kv, accounts, edit, chatId, messageId, token, recordId, env) {
+  const ctx = await lbLoadById(kv, accounts, token, recordId, env);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+  const gid = makeToken();
+  await kv.put(`lbg:${gid}`, JSON.stringify({ token, name: ctx.name }), { expirationTtl: 86400 });
+  await kv.put(`lbn:${chatId}:${messageId}`, JSON.stringify({ gid }), { expirationTtl: 86400 });
+  await renderLbSettings(kv, accounts, edit, chatId, gid, env);
+}
+
+async function redrawLbSettingsNav(kv, accounts, botToken, chatId, messageId, env) {
+  const nav = await kv.get(`lbn:${chatId}:${messageId}`, "json");
+  if (!nav) return;
+  const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
+  await renderLbSettings(kv, accounts, edit, chatId, nav.gid, env);
+}
+
+async function redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, page, env) {
+  const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (session.provider === "arvan") {
+    const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+    if (records.length === 0) {
+      const kb = [
+        [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
+        [{ text: "🔙 بازگشت", callback_data: "arvan" }],
+      ];
+      return edit(`📭 رکوردی برای ${session.domain} باقی نمانده.`, kb);
+    }
+    await renderArvanRecords(session.domain, records, token, page || 0, edit);
+    return;
+  }
+  const zone = await getZoneById(session.zone_id, session.acc, accounts);
+  if (!zone) return edit("❌ دامنه پیدا نشد.");
+  const records = await getRecords(zone, accounts, kv);
+  if (records.length === 0) {
+    const kb = [
+      [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
+      [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
+      [{ text: "🔙 بازگشت", callback_data: "zones" }],
+    ];
+    return edit(`📭 رکوردی برای ${zone.name} باقی نمانده.`, kb);
+  }
+  await renderRecords(zone, records, token, page || 0, edit);
+}
+
+async function redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, srToken) {
+  const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
+  const stored = await kv.get(`sr:${srToken}`, "json");
+  if (!stored) return edit("⏳ نشست منقضی شده.");
+  await renderSearchResults(srToken, stored.results, stored.query, stored.field, edit);
+}
+
+async function redrawMenuNav(kv, botToken, chatId, messageId) {
+  const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
+  await edit(mainMenuText(), mainMenuKeyboard());
+}
+
+async function getArvanAccounts(kv) {
+  let list = await kvGetCached(kv, "arvan_accounts", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function arvanToken(kv, i) {
+  const list = await getArvanAccounts(kv);
+  return list[i] ? list[i].token : "";
+}
+
+async function saveArvanAccounts(kv, list) {
+  await kvPutCached(kv, "arvan_accounts", JSON.stringify(list));
+}
+
+// ===================== Linode =====================
+function lnHdr(token) {
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function lnFetch(token, path, opts = {}) {
+  const res = await fetch(LINODE_API + path, { ...opts, headers: lnHdr(token), signal: AbortSignal.timeout(20000) });
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+async function getLnAccounts(kv) {
+  let list = await kvGetCached(kv, "ln_accounts", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveLnAccounts(kv, list) {
+  await kvPutCached(kv, "ln_accounts", JSON.stringify(list));
+}
+
+function maskLnToken(t) {
+  if (!t) return "";
+  if (t.length <= 12) return t.slice(0, 6) + "…";
+  return t.slice(0, 10) + "…" + t.slice(-4);
+}
+
+async function lnGetAll(token, path) {
+  const out = [];
+  let page = 1;
+  for (;;) {
+    const sep = path.includes("?") ? "&" : "?";
+    const data = await lnFetch(token, `${path}${sep}page=${page}&page_size=500`);
+    const arr = Array.isArray(data.data) ? data.data : [];
+    out.push(...arr);
+    if (!data.pages || page >= data.pages) break;
+    page++;
+  }
+  return out;
+}
+
+function lnRegionPrice(type, region) {
+  if (!type) return {};
+  const rp = (type.region_prices || []).find((p) => p.id === region);
+  return rp || type.price || {};
+}
+
+function lnGb(mb) {
+  return Math.round(((mb || 0) / 1024) * 100) / 100;
+}
+
+function lnServerListText(s) {
+  const ip = (s.ipv4 && s.ipv4[0]) || "—";
+  const st = s.status === "running" ? "🟢" : s.status === "offline" ? "🔴" : "🟡";
+  return `${st} ${s.label} (${ip})`;
+}
+
+function lnErr(r) {
+  if (!r) return "unknown";
+  if (Array.isArray(r.errors) && r.errors.length) {
+    const m = r.errors.map((e) => e.reason || e.field || "").filter(Boolean).join("; ");
+    if (m) return m;
+  }
+  return r.error || "error";
+}
+
+function lnRandomPass() {
+  return "Ln" + makeToken() + "aA1!";
+}
+
+// ===================== Hetzner =====================
+// مدیریت اکانت‌های هتزنر و ریسورس‌های ابری روی Hetzner Cloud API v1
+// (بر اساس ServerManagerBot: سرور/اسنپ‌شات/آی‌پی اصلی + قیمت تومانی)
+function hzHdr(token) {
+  return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+}
+
+async function hzFetch(token, path, opts = {}) {
+  const res = await fetch(HETZNER_API + path, { ...opts, headers: hzHdr(token), signal: withTimeout(15000) });
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+async function getHzAccounts(kv) {
+  let list = await kvGetCached(kv, "hz_accounts", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveHzAccounts(kv, list) {
+  await kvPutCached(kv, "hz_accounts", JSON.stringify(list));
+}
+
+function maskHzToken(t) {
+  if (!t) return "";
+  if (t.length <= 12) return t.slice(0, 6) + "…";
+  return t.slice(0, 10) + "…" + t.slice(-4);
+}
+
+function hzErr(r) {
+  if (r && r.error && r.error.message) return r.error.message;
+  return "error";
+}
+
+// ترجمهٔ خطاهای رایج هتزنر به فارسی (با نگه‌داشتن متن اصلی برای عیب‌یابی)
+function hzErrFa(r) {
+  const code = r && r.error ? String(r.error.code || "") : "";
+  const msg = r && r.error ? String(r.error.message || "") : "";
+  const s = (code + " " + msg).toLowerCase();
+  const map = [
+    [/unsupported[_ ]location/, "این پلن در لوکیشن انتخاب‌شده موجود نیست."],
+    [/server_limit|server limit/, "محدودیت تعداد سرور این اکانت پر شده است."],
+    [/resource_limit_exceeded|resource limit/, "محدودیت منابع اکانت پر شده است."],
+    [/unauthorized|invalid.*token|authentication/, "توکن هتزنر نامعتبر است."],
+    [/resource_locked|locked/, "ریسورس قفل است؛ چند لحظه بعد دوباره تلاش کن."],
+    [/uniqueness_error|already exists/, "نام انتخاب‌شده تکراری است."],
+    [/invalid_input|invalid input/, "ورودی نامعتبر است."],
+    [/not_found|not found/, "موردی پیدا نشد."],
+    [/insufficient|payment|balance/, "موجودی/پرداخت اکانت کافی نیست."],
+    [/no.*ipv4|ipv4.*not available/, "آی‌پی IPv4 موجود نیست."],
+  ];
+  for (const [re, fa] of map) if (re.test(s)) return msg ? `${fa}\n(${msg})` : fa;
+  return msg || "خطای نامشخص هتزنر";
+}
+
+// درخواست به هتزنر با تلاش مجدد در صورت قفل‌بودن ریسورس (resource_locked).
+// هتزنر تا وقتی اکشن قبلی تمام نشود ریسورس را قفل می‌کند؛ چند ثانیه صبر و دوباره تلاش.
+async function hzRetry(token, path, opts = {}, tries = 4) {
+  let r;
+  for (let k = 0; k < tries; k++) {
+    r = await hzFetch(token, path, opts);
+    const code = r && r.error ? String(r.error.code || "") : "";
+    const msg = r && r.error ? String(r.error.message || "") : "";
+    if ((code === "resource_locked" || /locked/i.test(msg)) && k < tries - 1) {
+      await sleep(1500 * (k + 1));
+      continue;
+    }
+    return r;
+  }
+  return r;
+}
+
+// خاموش‌کردن سرور و صبر تا وقتی اکشن تمام و قفل باز شود (برای assign/unassign).
+async function hzEnsureOff(token, serverId, maxMs = 15000) {
+  const s0 = (await hzFetch(token, `/servers/${serverId}`)).server;
+  if (s0 && s0.status !== "off") {
+    await hzRetry(token, `/servers/${serverId}/actions/poweroff`, { method: "POST", body: "{}" });
+  }
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const s = (await hzFetch(token, `/servers/${serverId}`)).server;
+    if (s && !s.locked && s.status === "off") return true;
+    await sleep(1500);
+  }
+  return false;
+}
+
+// خواندن همهٔ صفحات یک ریسورس هتزنر (پاسخ‌ها meta.pagination دارند)
+async function hzGetAll(token, path) {
+  const out = [];
+  const sep = path.includes("?") ? "&" : "?";
+  let page = 1;
+  for (;;) {
+    const data = await hzFetch(token, `${path}${sep}per_page=50&page=${page}`);
+    const key = data && typeof data === "object" ? Object.keys(data).find((k) => Array.isArray(data[k])) : null;
+    const arr = key ? data[key] : [];
+    out.push(...arr);
+    const pg = data && data.meta && data.meta.pagination;
+    if (pg && pg.next_page) {
+      page = pg.next_page;
+      continue;
+    }
+    if (!pg && arr.length >= 50) {
+      page++;
+      continue;
+    }
+    break;
+  }
+  return out;
+}
+
+function hzGb(bytes) {
+  return Math.round(((bytes || 0) / 1024 ** 3) * 1000) / 1000;
+}
+
+function hzStatusEmoji(status) {
+  return status === "running" ? "🟢" : status === "off" ? "🔴" : "🟡";
+}
+
+// چند روز از تاریخ ساخت گذشته (معادل created_day در ServerManagerBot)
+function hzAgeDays(iso) {
+  if (!iso) return "—";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "—";
+  return Math.max(0, Math.floor((Date.now() - ms) / 86400000));
+}
+
+// نرخ یورو به تومان؛ منبع sarfe.erfjab.com (همان منبع ServerManagerBot)
+async function hzEuroRate(kv) {
+  try {
+    const cached = await kvGetCached(kv, "hz_euro_rate", "json", 6 * 3600000);
+    if (cached && Number(cached.eur1) > 0) return Number(cached.eur1);
+  } catch (e) {}
+  try {
+    const res = await fetch("https://sarfe.erfjab.com/api/prices", { signal: withTimeout(15000) });
+    const data = await res.json();
+    const rate = Number(data && data.eur1);
+    if (rate > 0) {
+      await kvPutCached(kv, "hz_euro_rate", JSON.stringify({ eur1: rate }), { expirationTtl: 6 * 3600 }, 6 * 3600000);
+      return rate;
+    }
+  } catch (e) {}
+  return null;
+}
+
+// قیمت یورویی + معادل تومانی (اگر نرخ موجود باشد)
+function hzPriceFmt(eur, euro) {
+  const v = Number(eur);
+  if (!Number.isFinite(v)) return "—";
+  const euroStr = (v < 1 ? v.toFixed(4) : v.toFixed(2)) + "€";
+  if (!euro) return euroStr;
+  return `${euroStr} [${Math.round(v * euro).toLocaleString("en-US")}T]`;
+}
+
+// تعداد اسنپ‌شات‌های ساخته‌شده از یک سرور
+function hzSnapshotCount(images, serverId) {
+  return (images || []).filter((im) => im.type === "snapshot" && im.created_from && im.created_from.id === Number(serverId)).length;
+}
+
+// شناسهٔ Primary IP (در پاسخ API هم عدد و هم شیء ممکن است باشد)
+function hzPrimaryIpId(v) {
+  if (!v) return null;
+  return typeof v === "object" ? v.id || null : v;
+}
+
+// خانوادهٔ سرور-تایپ هتزنر بر اساس پیشوند نام (مثل صفحهٔ پلن‌های خود هتزنر)
+function hzPlanFamily(name) {
+  const n = String(name || "").toLowerCase();
+  if (n.startsWith("cpx")) return "cpx";
+  if (n.startsWith("cax")) return "cax";
+  if (n.startsWith("ccx")) return "ccx";
+  if (n.startsWith("cx")) return "cx";
+  return "other";
+}
+
+// فقط قیمت یورویی (بدون معادل تومانی) برای دکمه‌های انتخاب پلن
+function hzEurOnly(eur) {
+  const v = Number(eur);
+  if (!Number.isFinite(v)) return "—";
+  return v.toFixed(2) + "€";
+}
+
+// قیمت کوتاه برای برچسب پلن: cx43-16G-8c(19€)
+function hzPriceShort(eur) {
+  const v = Number(eur);
+  if (!Number.isFinite(v)) return "—";
+  return (Number.isInteger(v) ? String(v) : v.toFixed(2)) + "€";
+}
+function hzPlanLabel(t, eur) {
+  return `${t.name}-${t.memory}G-${t.cores}c(${hzPriceShort(eur)})`;
+}
+
+// کیبورد پیام رمز عبور: دکمهٔ «کپی رمز» (copy_text) + بازگشت.
+// متن پیام با ایموجی غیر از ✅ شروع می‌شود تا گیرندهٔ «auto-return» فعال نشود.
+function passKb(pw, backCb, backLabel) {
+  return [
+    [{ text: "📋 کپی رمز", copy_text: { text: String(pw) }, style: "plain" }],
+    [{ text: backLabel || "🔙 بازگشت", callback_data: backCb }],
+  ];
+}
+function passMsg(head, pw, note) {
+  return `${head}\n\n🔑 ${code(String(pw))}\n\n${note || "📋 برای کپی رمز، روی دکمهٔ زیر بزن."}`;
+}
+
+// ===================== ArvanCloud =====================
+function arvanHdr(token) {
+  return { Authorization: `APIKEY ${token}`, "Content-Type": "application/json", Accept: "application/json" };
+}
+
+// چون کلادفلر ورکر به API آروان دسترسی ندارد (آی‌پی‌های کلادفلر رد می‌شوند)،
+// همهٔ فراخوانی‌های آروان وقتی رله ثبت شده باشد از پروکسی HTTP رله (/http) عبور می‌کنند.
+// اگر رله‌ای ثبت نشده یا پروکسی خطا بدهد، به فراخوانی مستقیم برمی‌گردیم.
+async function arvanFetch(token, path, opts = {}, timeoutMs = 30000, kv, env) {
+  let viaRelay = false;
+  try {
+    if (kv && env) {
+      const rl = await getSrvRelayCfg(kv, env);
+      if (rl && rl.url) {
+        const rprox = await fetch(rl.url.replace(/\/+$/, "") + "/http", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-SRV-Token": rl.token || "" },
+          body: JSON.stringify({
+            method: opts.method || "GET",
+            url: ARVAN_API + path,
+            headers: arvanHdr(token),
+            body: opts.body || null,
+            timeoutMs,
+          }),
+          signal: AbortSignal.timeout(Math.min(timeoutMs + 15000, 90000)),
+        });
+        if (rprox.ok) {
+          const j = await rprox.json().catch(() => ({}));
+          if (!j.error) {
+            viaRelay = true;
+            try {
+              return JSON.parse(j.body || "{}");
+            } catch {
+              return {};
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("ARVAN_RELAY_ERR", String(e));
+  }
+  if (viaRelay) return {};
+  const res = await fetch(ARVAN_API + path, { ...opts, headers: arvanHdr(token), signal: AbortSignal.timeout(timeoutMs) });
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+async function arvanGetAllDomains(token, kv, env) {
+  const out = [];
+  let page = 1;
+  while (true) {
+    const data = await arvanFetch(token, `/domains?per_page=50&page=${page}`, {}, 30000, kv, env);
+    let arr = null;
+    if (data.data && Array.isArray(data.data)) {
+      arr = data.data;
+    } else if (data.result && Array.isArray(data.result)) {
+      arr = data.result;
+    }
+    if (!arr || arr.length === 0) break;
+    for (const d of arr) {
+      const name = d.domain || d.name || d.domain_name || "";
+      if (name) out.push({ domain: name, ...d });
+    }
+    if (arr.length < 50) break;
+    page++;
+  }
+  return out;
+}
+
+// لیست دامنه‌های آروان با کش کوتاه (مثل کش دامنه‌های کلودفلر) تا دکمه‌هایی مثل «افزودن رکورد»
+// بدون مکث طولانی جواب بدهند؛ هر اکانت هم جداگانه try/catch می‌شود که یک اکانت معیوب کل را خراب نکند.
+async function getArvanDomainsCached(kv, arvanAccounts, env) {
+  if (kv) {
+    const cached = await kvGetCached(kv, "cache:arvan_domains", "json", ARVAN_DOMAINS_CACHE_MS);
+    if (Array.isArray(cached)) return cached;
+  }
+  const out = [];
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    try {
+      const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+      for (const d of domains) out.push({ domain: d.domain, acc: i });
+    } catch (e) {
+      console.error("ARVAN_DOMAINS_ERR", String(e));
+    }
+  }
+  if (kv && arvanAccounts.length) {
+    await kvPutCached(kv, "cache:arvan_domains", JSON.stringify(out), { expirationTtl: ARVAN_DOMAINS_CACHE_MS / 1000 }, ARVAN_DOMAINS_CACHE_MS);
+  }
+  return out;
+}
+
+function normalizeArvanRecord(record, domain) {
+  const rawName = record.name || "@";
+  const fullName = rawName === "@" ? domain : (rawName.endsWith("." + domain) ? rawName : rawName + "." + domain);
+  const getValue = (v) => {
+    if (Array.isArray(v) && v.length) {
+      const first = v[0];
+      if (typeof first === "object") return first.ip || first.host || first.text || first.value || first.content || "";
+      return String(first);
+    }
+    if (typeof v === "object") return v.ip || v.host || v.text || v.value || v.content || "";
+    return v != null ? String(v) : "";
+  };
+  const content = getValue(record.value) || getValue(record.values) || getValue(record.content) || getValue(record.data);
+  const type = (record.type || "A").toUpperCase();
+  return {
+    id: record.id || record.uuid || record.record_id || "",
+    type,
+    name: fullName,
+    content,
+    proxied: !!record.cloud,
+    ttl: record.ttl || 120,
+    provider: "arvan",
+    domain,
+    raw: record,
+  };
+}
+
+async function arvanGetAllRecords(token, domain, kv, env) {
+  const out = [];
+  let page = 1;
+  while (true) {
+    const data = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records?per_page=100&page=${page}`, {}, 30000, kv, env);
+    let arr = null;
+    if (data.data && Array.isArray(data.data)) {
+      arr = data.data;
+    } else if (data.result && Array.isArray(data.result)) {
+      arr = data.result;
+    } else if (data.data && typeof data.data === "object") {
+      arr = data.data.records || data.data.dns_records || data.data.items || null;
+    }
+    if (!arr || !Array.isArray(arr) || arr.length === 0) break;
+    for (const r of arr) {
+      if (typeof r === "object") {
+        const norm = normalizeArvanRecord(r, domain);
+        if (norm.id) out.push(norm);
+      }
+    }
+    if (arr.length < 100) break;
+    page++;
+  }
+  return out;
+}
+
+async function arvanUpdateRecord(token, domain, record, newContent, kv, env) {
+  const rid = record.id || record.raw?.id || record.raw?.uuid || "";
+  if (!rid) return { success: false, errors: [{ message: "Missing record id" }] };
+  const url = `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`;
+  const raw = record.raw || {};
+  const rtype = (record.type || raw.type || "A").toUpperCase();
+  const ttl = raw.ttl != null ? raw.ttl : record.ttl;
+  const cloudVal = record.proxied != null ? record.proxied : (raw.cloud || false);
+  let valuePayload = [];
+  if (rtype === "A" || rtype === "AAAA") {
+    const extra = {};
+    for (const k of Object.keys(raw)) {
+      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
+        extra[k] = raw[k];
+      }
+    }
+    extra.ip = newContent;
+    valuePayload = [extra];
+  } else if (rtype === "CNAME" || rtype === "NS") {
+    const extra = {};
+    for (const k of Object.keys(raw)) {
+      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
+        extra[k] = raw[k];
+      }
+    }
+    extra.host = newContent;
+    valuePayload = [extra];
+  } else if (rtype === "TXT") {
+    const extra = {};
+    for (const k of Object.keys(raw)) {
+      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
+        extra[k] = raw[k];
+      }
+    }
+    extra.text = newContent;
+    valuePayload = [extra];
+  } else {
+    valuePayload = [newContent];
+  }
+  const payload = {
+    type: rtype.toLowerCase(),
+    name: raw.name || record.name || "@",
+    value: valuePayload,
+    cloud: cloudVal,
+  };
+  if (ttl != null && ttl !== 0 && ttl !== "") payload.ttl = ttl;
+  if (rid) payload.id = rid;
+  let res = await arvanFetch(token, url, { method: "PUT", body: JSON.stringify(payload) }, 30000, kv, env);
+  if (res.success !== false) return res;
+  res = await arvanFetch(token, url, { method: "PATCH", body: JSON.stringify(payload) }, 30000, kv, env);
+  return res;
+}
+
+async function arvanCreateRecord(token, domain, rtype, name, content, proxied, kv, env) {
+  const shortName = name === domain ? "@" : (name.endsWith("." + domain) ? name.slice(0, -(domain.length + 1)) : name);
+  let valuePayload = [];
+  const rtypeU = rtype.toUpperCase();
+  if (rtypeU === "A" || rtypeU === "AAAA") {
+    valuePayload = [{ ip: content }];
+  } else if (rtypeU === "CNAME" || rtypeU === "NS") {
+    valuePayload = [{ host: content }];
+  } else if (rtypeU === "TXT") {
+    valuePayload = [{ text: content }];
+  } else {
+    valuePayload = [content];
+  }
+  const payload = {
+    type: rtypeU.toLowerCase(),
+    name: shortName,
+    value: valuePayload,
+    cloud: rtypeU === "A" || rtypeU === "AAAA" || rtypeU === "CNAME" ? !!proxied : false,
+  };
+  const res = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }, 30000, kv, env);
+  return res;
+}
+
+async function arvanDeleteRecord(token, domain, rid, kv, env) {
+  const res = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`, { method: "DELETE" }, 30000, kv, env);
+  return res;
+}
+
+function maskArvanToken(t) {
+  if (!t) return "";
+  if (t.length <= 12) return t.slice(0, 6) + "…";
+  return t.slice(0, 10) + "…" + t.slice(-4);
+}
+
+// ===================== SSL Monitor =====================
+async function getSslMonitors(kv) {
+  let list = await kvGetCached(kv, "ssl_monitor", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveSslMonitors(kv, list) {
+  await kvPutCached(kv, "ssl_monitor", JSON.stringify(list));
+}
+
+async function sslProbe(host, port) {
+  try {
+    const url = `https://uptimepage.dev/tools/ssl-certificate-checker/probe?host=${encodeURIComponent(host)}&port=${Number(port) || 443}`;
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: withTimeout(15000) });
+    return await res.json();
+  } catch (e) {
+    console.error("SSL_PROBE", String(e));
+    return null;
+  }
+}
+
+async function sslCheckAll(kv) {
+  const monitors = await getSslMonitors(kv);
+  const out = [];
+  for (const m of monitors) {
+    const r = await sslProbe(m.host, m.port);
+    out.push({ host: m.host, threshold: m.threshold, result: r });
+  }
+  return out;
+}
+
+function sslResultLine(item) {
+  const r = item.result;
+  if (!r) return `⚪ ${item.host} — خطا در بررسی`;
+  if (r.ok !== true) return `⚪ ${item.host} — ${r.error || "پیدا نشد"}`;
+  const emoji = r.expired ? "⛔" : r.days_remaining <= Number(item.threshold) ? "🔴" : r.days_remaining <= 10 ? "🟠" : "🟢";
+  const state = r.expired ? "منقضی شده" : `${r.days_remaining} روز مانده`;
+  return `${emoji} ${r.host} — ${state}${r.expired ? "" : ` (آستانه: ${item.threshold})`}`;
+}
+
+async function runSslMonitor(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const admins = await getAdmins(kv, env);
+  const monitors = await getSslMonitors(kv);
+  if (!monitors.length) return;
+  for (const m of monitors) {
+    const r = await sslProbe(m.host, m.port);
+    if (!r || r.ok !== true) continue;
+    const th = Number(m.threshold) || 5;
+    if (r.expired || r.days_remaining <= th) {
+      const msg =
+        `${r.expired ? "⛔ گواهی SSL منقضی شده است!" : "⚠️ گواهی SSL رو به انقضا است!"}\n\n` +
+        `🌐 ${code(r.host)}\n` +
+        `⏳ باقی‌مانده: ${code(r.days_remaining + " روز")}\n` +
+        `📅 تاریخ انقضا: ${code((r.not_after || "").slice(0, 10))}\n` +
+        `🏢 صادرکننده: ${code(r.issuer_common_name || "—")}`;
+      for (const a of admins) {
+        try {
+          await sendMessage(botToken, a, msg);
+        } catch (e) {
+          console.error("SSL_ALERT", String(e));
+        }
+      }
+    }
+  }
+}
+
+// ===================== Domain Expiry Monitor (مانیتور انقضای دامنه) =====================
+// دامنه‌های .ir → whois.nic.ir (پورت 43)؛ بقیه → RDAP (از طریق rdap.org که بر اساس bootstrap
+// IANA به سرور RDAP رجیستری درست ریدایرکت می‌کند؛ همان مسیری که client.rdap.org استفاده می‌کند).
+// نکته: ایرنیک برای خیلی از دامنه‌ها تاریخ انقضا را مخفی می‌کند («hidden by the domain holder»)
+// — در آن صورت کاربر می‌تواند تاریخ را دستی ثبت کند (pending.type = domexp_date).
+
+async function getDomExpiry(kv) {
+  let list = await kvGetCached(kv, "dom_expiry", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveDomExpiry(kv, list) {
+  await kvPutCached(kv, "dom_expiry", JSON.stringify(list));
+}
+
+function whoisServerFor(domain) {
+  const d = String(domain || "").toLowerCase();
+  if (/\.ir$/.test(d)) return "whois.nic.ir";
+  return null;
+}
+
+// استعلام whois متنی روی پورت 43 با TCP Socket API کلادفلر ورکر (cloudflare:sockets).
+async function whoisQuery(server, domain) {
+  try {
+    const socket = connect({ hostname: server, port: 43 });
+    const writer = socket.writable.getWriter();
+    await writer.write(new TextEncoder().encode(domain + "\r\n"));
+    const reader = socket.readable.getReader();
+    let out = "";
+    const dec = new TextDecoder();
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out += dec.decode(value, { stream: true });
+      if (out.length > 60000) break;
+    }
+    try {
+      await reader.cancel();
+      writer.releaseLock();
+      await socket.close();
+    } catch (e) {}
+    return out;
+  } catch (e) {
+    console.error("WHOIS_Q", server, String(e));
+    return null;
+  }
+}
+
+function parseIrWhoisExpiry(text) {
+  if (!text) return { status: "error" };
+  if (/%ERROR:101/.test(text) || /no entries found/i.test(text)) return { status: "not_found" };
+  // فرمت‌های شناخته‌شدهٔ ایرنیک: expire-date: 2026-03-01 یا expired-date (در نسخه‌های مختلف دیده شده)
+  let m = text.match(/expir[ye][d]?[\s_-]*date\s*[:=]\s*(\d{4})-(\d{2})-(\d{2})/i);
+  if (m) return { status: "ok", expiry: Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0) };
+  if (/hidden by the domain holder/i.test(text)) return { status: "hidden" };
+  if (/available for registration/i.test(text)) return { status: "available" };
+  if (/domain:\s*\S+/i.test(text)) return { status: "no_date" };
+  return { status: "error" };
+}
+
+// استعلام RDAP برای دامنه‌های بین‌المللی: rdap.org مسیر درست را از bootstrap IANA پیدا می‌کند
+// (همان رفتار client.rdap.org) و پاسخ application/rdap+json برمی‌گرداند.
+// نکته: rdap.org درخواست‌های بدون User-Agent (پیش‌فرض fetch ورکر/undici) را با 403 رد می‌کند؛
+// پس UA مرورگر می‌فرستیم. اگر ریدایرکت دستی هم لازم شد، خودمان دنبال Location می‌رویم.
+async function rdapQuery(domain) {
+  const UA = "Mozilla/5.0 (compatible; CloudGuardianBot/1.0; +https://rdap.org)";
+  try {
+    let res = await fetch(`https://rdap.org/domain/${encodeURIComponent(domain)}`, {
+      headers: { accept: "application/rdap+json", "user-agent": UA },
+      redirect: "manual",
+      signal: withTimeout(15000),
+    });
+    // rdap.org گاهی 302 به سرور رجیستری می‌دهد؛ در صورت نیاز دستی دنبالش می‌رویم
+    let hops = 0;
+    while (res.status >= 300 && res.status < 400 && res.headers.get("location") && hops < 3) {
+      const next = new URL(res.headers.get("location"), "https://rdap.org").toString();
+      res = await fetch(next, {
+        headers: { accept: "application/rdap+json", "user-agent": UA },
+        redirect: "manual",
+        signal: withTimeout(15000),
+      });
+      hops++;
+    }
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.error("RDAP_Q", String(e));
+    return null;
+  }
+}
+
+function parseRdapExpiry(data) {
+  if (!data || !Array.isArray(data.events)) return null;
+  const ev = data.events.find((e) => e && e.eventAction === "expiration");
+  if (!ev || !ev.eventDate) return null;
+  const ms = Date.parse(ev.eventDate);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// ===================== کلید API انقضای دامنه (WhoisXMLAPI) =====================
+// ایرنیک از سال ۱۴۰۱ فیلد expire-date دامنه‌های .ir را از whois عمومی حذف کرده.
+// WhoisXMLAPI Domain Info API فیلدهای حذف/مخفی‌شده را از دیتابیس تاریخی پر می‌کند.
+const DOMEXP_DEFAULT_PROVIDER = "whoisxmlapi_domaininfo";
+
+async function getDomExpCfg(kv) {
+  const c = (await kvGetCached(kv, "dom_expiry_cfg", "json")) || {};
+  return {
+    provider: c.provider || DOMEXP_DEFAULT_PROVIDER,
+    key: typeof c.key === "string" ? c.key : "",
+  };
+}
+
+async function saveDomExpCfg(kv, c) {
+  await kvPutCached(kv, "dom_expiry_cfg", JSON.stringify(c));
+}
+
+// جست‌وجوی بازگشتی تاریخ انقضا در JSON پاسخ API (با ترجیح registryData)
+function findExpiryInJson(obj) {
+  const hits = [];
+  const seen = new Set();
+  const walk = (o, path) => {
+    if (!o || typeof o !== "object" || seen.has(o)) return;
+    seen.add(o);
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      const kl = k.toLowerCase();
+      const p = path ? path + "." + kl : kl;
+      if (typeof v === "string" && /expir/.test(kl)) {
+        const ms = Date.parse(v);
+        if (Number.isFinite(ms)) hits.push({ ms, path: p });
+      } else if (v && typeof v === "object") {
+        walk(v, p);
+      }
+    }
+  };
+  walk(obj, "");
+  if (!hits.length) return null;
+  const reg = hits.find((h) => /registrydata/.test(h.path));
+  return (reg || hits[0]).ms;
+}
+
+// WhoisXMLAPI Domain Info API — https://domain-info.whoisxmlapi.com/api/v1
+async function whoisXmlDomainInfo(domain, key) {
+  const url = `https://domain-info.whoisxmlapi.com/api/v1?apiKey=${encodeURIComponent(key)}&domainName=${encodeURIComponent(domain)}`;
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: withTimeout(20000) });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {}
+    if (!res.ok || (data && data.code && Number(data.code) !== 200)) {
+      const m = (data && (data.messages || data.message)) || `HTTP ${res.status}`;
+      return { status: "api_error", message: String(m).slice(0, 220) };
+    }
+    const exp = findExpiryInJson(data);
+    if (exp) return { status: "ok", expiry: exp };
+    return { status: "no_date" };
+  } catch (e) {
+    console.error("DOMEXP_API", String(e));
+    return { status: "api_error", message: String(e && e.message ? e.message : e) };
+  }
+}
+
+// WhoisXMLAPI WHOIS API کلاسیک (پشتیبان؛ همان کلید)
+async function whoisXmlWhoisService(domain, key) {
+  const url = `https://www.whoisxmlapi.com/whoisserver/WhoisService?apiKey=${encodeURIComponent(key)}&domainName=${encodeURIComponent(domain)}&outputFormat=JSON`;
+  try {
+    const res = await fetch(url, { headers: { accept: "application/json" }, signal: withTimeout(20000) });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (e) {}
+    if (data && data.ErrorMessage) {
+      return { status: "api_error", message: String(data.ErrorMessage.msg || data.ErrorMessage.errorCode || "").slice(0, 220) };
+    }
+    const exp = findExpiryInJson(data);
+    if (exp) return { status: "ok", expiry: exp };
+    return { status: "no_date" };
+  } catch (e) {
+    return { status: "api_error", message: String(e && e.message ? e.message : e) };
+  }
+}
+
+// اگر کلید تنظیم شده باشد از API استعلام می‌کند، وگرنه null.
+async function domainExpiryViaApi(domain, env, kv) {
+  if (!kv) return null;
+  const cfg = await getDomExpCfg(kv);
+  const key = (env && env.WHOIS_API_KEY) || cfg.key || "";
+  if (!key) return null;
+  const provider = (env && env.WHOIS_API_PROVIDER) || cfg.provider || DOMEXP_DEFAULT_PROVIDER;
+  if (provider === "whoisxmlapi") return await whoisXmlWhoisService(domain, key);
+  return await whoisXmlDomainInfo(domain, key);
+}
+
+// استعلام کامل یک دامنه (بدون کش — کش توسط فراخواننده انجام می‌شود)
+async function fetchDomainExpiry(domain, env, kv) {
+  const d = String(domain || "").toLowerCase().trim();
+  if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(d)) return { status: "invalid" };
+  const ws = whoisServerFor(d);
+  if (ws) {
+    const txt = await whoisQuery(ws, d);
+    const r = parseIrWhoisExpiry(txt);
+    if (r.status === "ok") return r;
+    // .ir مخفی/بی‌تاریخ/خطا → تلاش با API (در صورت وجود کلید)
+    if (r.status === "hidden" || r.status === "no_date" || r.status === "error") {
+      const api = await domainExpiryViaApi(d, env, kv);
+      if (api && api.status === "ok") return api;
+      if (r.status === "error" && api && api.status === "api_error") return api;
+    }
+    return r;
+  }
+  const data = await rdapQuery(d);
+  const exp = parseRdapExpiry(data);
+  if (exp) return { status: "ok", expiry: exp };
+  const api = await domainExpiryViaApi(d, env, kv);
+  if (api && api.status === "ok") return api;
+  if (data) return { status: "no_date" };
+  return { status: "error" };
+}
+
+// باقی‌مانده به شکل «X سال Y ماه Z روز» بر اساس تقویم میلادی، یا «منقضی شده»
+function domExpiryRemaining(expiryMs, nowMs) {
+  const now = nowMs || Date.now();
+  if (!Number.isFinite(expiryMs)) return "؟";
+  if (expiryMs <= now) return "منقضی شده";
+  const a = new Date(now + TEHRAN_OFFSET_MS);
+  const b = new Date(expiryMs + TEHRAN_OFFSET_MS);
+  let years = b.getUTCFullYear() - a.getUTCFullYear();
+  let months = b.getUTCMonth() - a.getUTCMonth();
+  let days = b.getUTCDate() - a.getUTCDate();
+  if (days < 0) {
+    months -= 1;
+    const pm = new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), 0)); // آخرین روز ماه قبلِ انقضا
+    days += pm.getUTCDate();
+  }
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  const parts = [];
+  if (years > 0) parts.push(years + " سال");
+  if (months > 0) parts.push(months + " ماه");
+  if (days > 0 || parts.length === 0) parts.push(days + " روز");
+  return parts.join(" و ");
+}
+
+function domExpiryEmoji(item, nowMs) {
+  if (item.manual) return "✍️";
+  if (item.status === "not_found") return "❔";
+  if (item.status === "hidden" || item.status === "no_date" || item.status === "available") return "⚪";
+  if (item.status !== "ok" || !Number.isFinite(item.expiry)) return "❓";
+  const days = Math.ceil((item.expiry - (nowMs || Date.now())) / 86400000);
+  if (days < 0) return "⛔";
+  if (days <= 7) return "🔴";
+  if (days <= 30) return "🟠";
+  if (days <= 90) return "🟡";
+  return "🟢";
+}
+
+// خط خلاصهٔ هر دامنه برای لیست: «🟢 example.ir — ۱ سال و ۲ ماه و ۳ روز» (تاریخ شمسی هم)
+function domExpiryLine(item, nowMs) {
+  const emoji = domExpiryEmoji(item, nowMs);
+  let tail;
+  if (item.manual && Number.isFinite(item.expiry)) {
+    tail = domExpiryRemaining(item.expiry, nowMs);
+  } else if (item.status === "ok" && Number.isFinite(item.expiry)) {
+    tail = domExpiryRemaining(item.expiry, nowMs);
+  } else if (item.status === "hidden") {
+    tail = "تاریخ مخفی (دستی ثبت کنید)";
+  } else if (item.status === "no_date") {
+    tail = "تاریخ اعلام نشده";
+  } else if (item.status === "not_found") {
+    tail = "در ایرنیک ثبت نیست";
+  } else if (item.status === "available") {
+    tail = "آزاد / ثبت‌نشده";
+  } else if (item.status === "api_error") {
+    tail = "خطای API انقضا (کلید/اعتبار)";
+  } else {
+    tail = "خطا در استعلام";
+  }
+  return `${emoji} ${item.domain} — ${tail}`;
+}
+
+// صفحهٔ اصلی مانیتور انقضای دامنه
+async function renderDomExpiryHome(kv, edit, page) {
+  const now = Date.now();
+  const list = await getDomExpiry(kv);
+  const sorted = list
+    .slice()
+    .sort((a, b) => {
+      const av = a && Number.isFinite(a.expiry) ? a.expiry : 8640000000000000;
+      const bv = b && Number.isFinite(b.expiry) ? b.expiry : 8640000000000000;
+      return av - bv;
+    });
+  const cfg = await getDomExpCfg(kv);
+  let text = "🗓 مانیتور انقضای دامنه\n\n";
+  text += "ℹ️ دامنه‌های بین‌المللی از RDAP و دامنه‌های .ir از whois.nic.ir استعلام می‌شوند.\n";
+  text += cfg.key
+    ? "🔑 کلید API ثبت شده؛ برای دامنه‌های .ir که ایرنیک مخفی کرده، از دیتابیس تاریخی (WhoisXMLAPI) استعلام می‌شود.\n\n"
+    : "⚠️ ایرنیک تاریخ دامنه‌های .ir را حذف/مخفی کرده. برای استعلام خودکار، «🔑 ثبت کلید API» را بزن؛ وگرنه از «✍️ ورود دستی» تاریخ را ثبت کن.\n\n";
+  if (!sorted.length) {
+    text += "📭 دامنه‌ای ثبت نشده. از دکمه‌های زیر اضافه کن:\n";
+    text += "• «🌍 افزودن از اکانت‌ها»: همهٔ دامنه‌های اکانت‌های کلودفلر و آروان یک‌جا اضافه می‌شوند.\n";
+    text += "• «✍️ ورود دستی»: یک دامنه را با نام یا با تاریخ دستی ثبت کن.";
+  } else {
+    text += `📌 ${sorted.length} دامنه (مرتب بر اساس نزدیک‌ترین انقضا):\n\n`;
+    const per = 30;
+    const pages = Math.max(1, Math.ceil(sorted.length / per));
+    const p = Math.max(0, Math.min(page || 0, pages - 1));
+    for (const it of sorted.slice(p * per, p * per + per)) {
+      text += domExpiryLine(it, now) + "\n";
+      if (Number.isFinite(it.expiry)) text += `   🗓 انقضا: ${fmtJalali(it.expiry).split(" - ")[0]}\n`;
+    }
+    if (pages > 1) text += `\nصفحه ${p + 1} از ${pages}`;
+  }
+  const kb = [];
+  // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر + آروان) | domexpa: افزودن دستی نام دامنه
+  kb.push([
+    { text: "🌍 افزودن از اکانت‌ها", callback_data: "domexpall" },
+    { text: "✍️ ورود دستی", callback_data: "domexpa" },
+  ]);
+  if (sorted.length) {
+    // domexpp:<page>: صفحه‌بندی لیست | domexpd: حذف دامنه | domexpcal: ثبت/اصلاح دستی تاریخ
+    kb.push([{ text: "🗓 ثبت تاریخ دستی", callback_data: "domexpcal" }, { text: "🗑 حذف دامنه", callback_data: "domexpd" }]);
+  }
+  // domexp: استعلام دوبارهٔ همهٔ دامنه‌ها | domexpkey: تنظیمات کلید API انقضا
+  kb.push([{ text: "🔄 استعلام دوبارهٔ همه", callback_data: "domexp" }]);
+  kb.push([{ text: cfg.key ? "🔑 کلید API (ثبت‌شده ✅)" : "🔑 ثبت کلید API", callback_data: "domexpkey" }]);
+  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit(text, kb);
+}
+
+// افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر + آروان) به مانیتور انقضا
+async function domExpiryAddAll(kv, edit, env) {
+  await edit("⏳ در حال خواندن دامنه‌ها از همهٔ اکانت‌ها…");
+  const accounts = await getAccounts(kv, {});
+  const arvanAccounts = await getArvanAccounts(kv);
+  const names = [];
+  const seen = new Set();
+  const push = (n) => {
+    const d = String(n || "").toLowerCase().trim();
+    if (d && /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(d) && !seen.has(d)) {
+      seen.add(d);
+      names.push(d);
+    }
+  };
+  try {
+    const zones = await getAllZones(accounts, kv);
+    for (const z of zones) push(z.name);
+  } catch (e) {
+    console.error("DOMEXP_ALL_CF", String(e));
+  }
+  for (const a of arvanAccounts) {
+    try {
+      const ds = await arvanGetAllDomains(a.token, kv, env);
+      for (const d of ds) push(d.domain);
+    } catch (e) {
+      console.error("DOMEXP_ALL_ARV", String(e));
+    }
+  }
+  if (!names.length) {
+    return edit("📭 دامنه‌ای در اکانت‌های کلودفلر/آروان پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
+  }
+  const list = await getDomExpiry(kv);
+  let added = 0;
+  for (const d of names) {
+    if (list.some((x) => x.domain === d)) continue;
+    list.push({ domain: d, status: "pending", expiry: null, added: Date.now() });
+    added++;
+  }
+  await saveDomExpiry(kv, list);
+  if (!added) {
+    return edit(`✅ همهٔ ${names.length} دامنه از قبل در مانیتور بودند.`, [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
+  }
+  await edit(`⏳ ${added} دامنهٔ جدید اضافه شد. در حال استعلام…`);
+  await domExpiryCheckAll(kv, env);
+  await renderDomExpiryHome(kv, edit, 0);
+}
+
+// استعلام دوبارهٔ همهٔ دامنه‌ها (حداکثر ۸ دامنه به‌صورت موازی)
+async function domExpiryCheckAll(kv, env) {
+  const list = await getDomExpiry(kv);
+  const BATCH = 8;
+  for (let i = 0; i < list.length; i += BATCH) {
+    const slice = list.slice(i, i + BATCH);
+    const results = await Promise.all(
+      slice.map(async (it) => {
+        // دامنه‌های دستی که تاریخ دارند دوباره استعلام نمی‌شوند (تاریخ دستی مرجع است)
+        if (it.manual && Number.isFinite(it.expiry)) return null;
+        const r = await fetchDomainExpiry(it.domain, env, kv);
+        return { it, r };
+      })
+    );
+    for (const r of results) {
+      if (!r) continue;
+      if (r.r && r.r.status === "ok") {
+        r.it.status = "ok";
+        r.it.expiry = r.r.expiry;
+      } else if (r.r) {
+        r.it.status = r.r.status;
+        r.it.expiry = null;
+      }
+    }
+  }
+  await saveDomExpiry(kv, list);
+  return list;
+}
+
+// کرون روزانه: استعلام + هشدار در آستانه‌های ۶۰/۳۰/۱۴/۷/۳/۱ روز و روز انقضا
+const DOMEXP_ALERT_DAYS = [60, 30, 14, 7, 3, 1, 0];
+
+async function runDomExpiryMonitor(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const list = await getDomExpiry(kv);
+  const auto = list.filter((x) => !(x.manual && Number.isFinite(x.expiry)));
+  if (!list.length || !auto.length) return;
+  await domExpiryCheckAll(kv, env);
+  const fresh = await getDomExpiry(kv);
+  const admins = await getAdmins(kv, env);
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const alerts = [];
+  for (const it of fresh) {
+    if (!Number.isFinite(it.expiry)) continue;
+    const daysLeft = Math.floor((it.expiry - Date.now()) / 86400000);
+    const hit = daysLeft < 0 ? 0 : DOMEXP_ALERT_DAYS.find((d) => d === daysLeft);
+    if (hit === undefined) continue;
+    const lastAlertDay = Number(it.last_alert_day);
+    if (Number.isFinite(lastAlertDay) && lastAlertDay === daysLeft) continue;
+    it.last_alert_day = daysLeft;
+    alerts.push({ it, daysLeft });
+  }
+  if (!alerts.length) {
+    await saveDomExpiry(kv, fresh);
+    return;
+  }
+  await saveDomExpiry(kv, fresh);
+  alerts.sort((a, b) => a.daysLeft - b.daysLeft);
+  let msg = "🗓 هشدار انقضای دامنه\n\n";
+  for (const { it, daysLeft } of alerts) {
+    const st = daysLeft < 0 ? "⛔ منقضی شده!" : daysLeft === 0 ? "⛔ امروز منقضی می‌شود!" : `⚠️ ${daysLeft} روز مانده`;
+    msg += `${st}\n🌐 ${it.domain}\n🗓 انقضا: ${fmtJalali(it.expiry).split(" - ")[0]}\n\n`;
+  }
+  for (const a of admins) {
+    try {
+      await sendMessage(botToken, a, msg);
+    } catch (e) {
+      console.error("DOMEXP_ALERT", String(e));
+    }
+  }
+}
+
+// ===================== Panel / Server registry (shared with Node monitor) =====================
+const PANEL_OFFSET_MS = 3.5 * 3600 * 1000; // Asia/Tehran
+
+async function getPanels(kv) {
+  let list = await kvGetCached(kv, "panels", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function savePanels(kv, list) {
+  await kvPutCached(kv, "panels", JSON.stringify(list));
+}
+
+function chunkText(text, limit = 3800) {
+  const chunks = [];
+  let cur = "";
+  for (const line of text.split("\n")) {
+    if (cur.length + line.length + 1 > limit) {
+      chunks.push(cur);
+      cur = line;
+    } else {
+      cur = cur ? cur + "\n" + line : line;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks;
+}
+
+async function sendPanelMsg(botToken, chatId, text) {
+  for (const chunk of chunkText(text)) {
+    try {
+      await tg(botToken, "sendMessage", {
+        chat_id: chatId,
+        text: chunk,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      });
+    } catch (e) {
+      console.error("PANEL_MSG", String(e));
+    }
+  }
+}
+
+async function panelLogin(p, timeoutMs) {
+  try {
+    const res = await fetch(`${p.url.replace(/\/+$/, "")}/api/admin/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ username: p.username, password: p.password }),
+      signal: AbortSignal.timeout(timeoutMs || 20000),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.access_token) return null;
+    return data.access_token;
+  } catch (e) {
+    console.error("PANEL_LOGIN", String(e));
+    return null;
+  }
+}
+
+// ===================== Usage Monitor (فقط داخل ورکر) =====================
+// «مصرف خام»: کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند. این مانیتور
+// مستقیماً از API پنل می‌خواند (بدون سرور): هر چند دقیقه مصرف کاربرانی که در
+// بازهٔ اخیر فعال بوده‌اند (online_after؛ پنل online_at را با هر ثبت مصرف
+// به‌روز می‌کند) را اسنپ‌شات می‌گیرد و با اسنپ‌شات ~۱ ساعت و ~۲۴ ساعت قبل
+// مقایسه می‌کند. عبور از آستانهٔ ساعتی یا روزانه → پیام به ادمین.
+// سبک‌سازی: فقط کاربرانی که مصرف کل‌شان از minGb بیشتر است اسنپ‌شات می‌شوند؛
+// نمونه‌های ساعتی حذف و به‌جای آن یک «بیس روزانه» واحد نگه داشته می‌شود.
+const UM_DEFAULTS = { enabled: true, hourlyGb: 7, dailyGb: 25, cooldownH: 6, activeMin: 75, minGb: 1, report: true };
+const UM_RECENT_KEEP = 6;
+const UM_RECENT_WINDOW_MS = 70 * 60000;
+const UM_DAY_MIN_MS = 23 * 3600000;
+const UM_DAY_MAX_MS = 48 * 3600000;
+const UM_REPORT_MS = 24 * 3600000;
+const UM_REPORT_TOP = 10;
+// حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۲۰ دقیقه اجرا می‌شود)
+const UM_MIN_INTERVAL_MS = 15 * 60000;
+
+// ===================== سرورها (SSH از طریق رلهٔ واحد) =====================
+// همهٔ اتصال‌های SSH از طریق رلهٔ واحد srv-relay (روی VPS کاربر) انجام می‌شود؛
+// کلادفلر ورکر به پورت ۲۲ دسترسی ندارد و اتصال باید از یک سرور واسط عبور کند.
+// اگر SRV_RELAY_URL تنظیم نشده باشد، پیام راهنمای نصب رله نمایش داده می‌شود.
+const SRV_RELAY_HINT =
+  "⚠️ این بخش به یک رلهٔ SSH نیاز دارد که روی یک VPS اجرا شود (کلادفلر به پورت ۲۲ دسترسی ندارد).\n\n" +
+  "🛠 نصب رله روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
+  code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
+  "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
+const SRV_DEFAULTS = { cpuPct: 85, memPct: 85, diskPct: 90, enabled: true, cooldownMin: 60 };
+const SRV_MON_MIN_MS = 14 * 60000;
+const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
+
+// کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
+const RELAY_URL_KEY = "srv_relay_url";
+const RELAY_TOKEN_KEY = "srv_relay_token";
+
+// تنظیمات مؤثر رله: اول KV (ثبت‌شده توسط کاربر)، در غیر این صورت متغیرهای محیطی ورکر
+async function getSrvRelayCfg(kv, env) {
+  const kUrl = kv ? await kvGetCached(kv, RELAY_URL_KEY, "text", 15000) : null;
+  const kTok = kv ? await kvGetCached(kv, RELAY_TOKEN_KEY, "text", 15000) : null;
+  return {
+    url: (kUrl || (env && env.SRV_RELAY_URL ? String(env.SRV_RELAY_URL) : "")).replace(/\/+$/, ""),
+    token: kTok || (env && env.SRV_RELAY_TOKEN ? String(env.SRV_RELAY_TOKEN) : ""),
+  };
+}
+
+async function getRelayBase(kv, env) {
+  return (await getSrvRelayCfg(kv, env)).url;
+}
+
+// اگر آدرس رله با آی‌پی ارسال شود، ورکر کلادفلر نمی‌تواند مستقیم وصل شود (خطای 1003)؛
+// این تابع خودکار یک ساب‌دامهٔ `rel.<اولین دامنهٔ فعال>` می‌سازد و آی‌پی را روی آن می‌گذارد.
+async function ensureRelaySubdomain(ip, port, kv, env) {
+  try {
+    const accounts = await getAccounts(kv, env);
+    if (!accounts.length) return null;
+    const zones = (await getAllZones(accounts, kv)).filter((z) => z.status === "active").sort((a, b) => a.name.localeCompare(b.name));
+    if (!zones.length) return null;
+    const zone = zones[0];
+    const name = `rel.${zone.name}`;
+    const token = accounts[zone._acc].token;
+    const headers = { Authorization: "Bearer " + token };
+    const list = await fetch(`${CF_API}/zones/${zone.id}/dns_records?type=A&name=${encodeURIComponent(name)}`, { headers, signal: withTimeout() });
+    const lj = await list.json();
+    const rec = lj.success && lj.result && lj.result[0] ? lj.result[0] : null;
+    if (!rec) {
+      await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "A", name, content: ip, ttl: 120, proxied: false }),
+        signal: withTimeout(),
+      });
+    } else if (rec.content !== ip || rec.proxied) {
+      await fetch(`${CF_API}/zones/${zone.id}/dns_records/${rec.id}`, {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "A", name, content: ip, ttl: 120, proxied: false }),
+        signal: withTimeout(),
+      });
+    }
+    if (kv) {
+      try { await invalidateCache(kv, zone.id); } catch (e) {}
+    }
+    return { url: `http://${name}:${port || 8788}`, domain: name, ip };
+  } catch (e) {
+    console.error("RELAY_SUB_ERR", String(e));
+    return null;
+  }
+}
+
+// فراخوانی رله برای اجرای دستور SSH
+async function srvRelayExec(kv, env, s, command, timeoutMs) {
+  const { url: base, token } = await getSrvRelayCfg(kv, env);
+  if (!base) return { error: "no_relay" };
+  try {
+    const res = await fetch(base + "/exec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SRV-Token": token || "" },
+      body: JSON.stringify({ host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined, command, timeoutMs: timeoutMs || undefined }),
+      // fetch باید بیشتر از تایم‌اوت خود اجرا صبر کند تا پاسخ رله گم نشود
+      signal: AbortSignal.timeout((timeoutMs || 50000) + 10000),
+    });
+    if (!res.ok) return { error: `relay_http_${res.status}` };
+    return await res.json();
+  } catch (e) {
+    return { error: "relay_fetch" };
+  }
+}
+
+// فراخوانی رله برای آمار منابع
+async function srvRelayStats(kv, env, s) {
+  const { url: base, token } = await getSrvRelayCfg(kv, env);
+  if (!base) return { error: "no_relay" };
+  try {
+    const res = await fetch(base + "/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SRV-Token": token || "" },
+      body: JSON.stringify({ host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined }),
+      signal: AbortSignal.timeout(35000),
+    });
+    if (!res.ok) return { error: `relay_http_${res.status}` };
+    return await res.json();
+  } catch (e) {
+    return { error: "relay_fetch" };
+  }
+}
+
+// پروکسی HTTP از طریق رلهٔ ثبت‌شده (endpoint /http) — برای سرویس‌هایی که ورکر از
+// آی‌پی کلادفلر به آن‌ها دسترسی ندارد (مثل check-host که درخواست‌های کلادفلر را ۴۰۳ می‌کند).
+// خروجی: { status, body, parsed } یا null در هر خطا.
+async function relayProxyFetch(kv, env, method, url, headers, timeoutMs) {
+  const base = await getRelayBase(kv, env);
+  if (!base) return null;
+  const { token } = await getSrvRelayCfg(kv, env);
+  const tMs = Math.min(Math.max(Number(timeoutMs) || 30000, 3000), 120000);
+  try {
+    const res = await fetch(base + "/http", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SRV-Token": token || "" },
+      body: JSON.stringify({ method: String(method || "GET").toUpperCase(), url, headers: headers || {}, timeoutMs: tMs }),
+      signal: AbortSignal.timeout(tMs + 12000),
+    });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j || !j.status || j.status < 200 || j.status >= 300) return null;
+    let parsed = null;
+    try {
+      parsed = JSON.parse(String(j.body || ""));
+    } catch (e) {}
+    return { status: j.status, body: String(j.body || ""), parsed };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getServersList(kv) {
+  let list = await kvGetCached(kv, "srv_list", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveServersList(kv, list) {
+  await kvPutCached(kv, "srv_list", JSON.stringify(list));
+}
+
+// رمزهای ذخیره‌شدهٔ SSH: در بخش سرورها اضافه/حذف می‌شوند و هنگام افزودن سرور
+// با دکمه‌های «رمز ۱، رمز ۲، ...» قابل انتخاب‌اند.
+async function getSrvPasswords(kv) {
+  const l = await kvGetCached(kv, "srv_pw", "json");
+  return Array.isArray(l) ? l : [];
+}
+async function saveSrvPasswords(kv, list) {
+  await kvPutCached(kv, "srv_pw", JSON.stringify(list));
+}
+async function srvAuthKeyboard(kv) {
+  const pws = await getSrvPasswords(kv);
+  if (!pws.length) return null;
+  return pws.map((p, i) => [{ text: `🔑 رمز ${i + 1} (${p})`, callback_data: `srvauthpw:${i}` }]);
+}
+// نهایی‌سازی افزودن سرور: نام پیش‌فرض = هاست، کاربر پیش‌فرض = root
+async function srvCompleteAdd(kv, d, txt) {
+  const list = await getServersList(kv);
+  const item = { id: makeToken() + makeToken(), name: d.name || d.host, host: d.host, port: d.port || 22, user: d.user || "root", note: "", created: Date.now() };
+  if (txt === "-") item.auth = "agent";
+  else if (txt.includes("BEGIN") && txt.includes("PRIVATE KEY")) { item.auth = "key"; item.key = txt; }
+  else { item.auth = "pass"; item.password = txt; }
+  list.push(item);
+  await saveServersList(kv, list);
+  const authLabel = item.auth === "key" ? "🔑 کلید SSH" : item.auth === "pass" ? "🔒 رمز عبور" : "🗝 agent رله";
+  return { item, authLabel };
+}
+
+async function renderSrvPw(edit, kv) {
+  const pws = await getSrvPasswords(kv);
+  const lines = [
+    "🔑 رمزهای ذخیره‌شده",
+    "",
+    "هنگام «افزودن سرور»، این رمزها به‌صورت دکمه (رمز ۱، رمز ۲، ...) برای انتخاب سریع نشان داده می‌شوند.",
+    "",
+    pws.length ? "برای حذف، روی رمز بزنید:" : "هنوز رمزی ذخیره نشده است.",
+  ];
+  const kb = pws.map((p, i) => [{ text: `🔒 رمز ${i + 1} (${p})`, callback_data: `srvpwdel:${i}` }]);
+  kb.push([{ text: "➕ افزودن رمز", callback_data: "srvpwadd" }]);
+  kb.push([{ text: "🔙 سرورها", callback_data: "srv" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+function shQuote(s) {
+  return "'" + String(s).replace(/'/g, "'\\''") + "'";
+}
+
+function b64Encode(s) {
+  const bytes = new TextEncoder().encode(String(s));
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// cloud-init هتزنر: رمز root را روی رمز دلخواه تنظیم و انقضای رمز را غیرفعال می‌کند
+// (سرورهای هتزنر رمز root را «منقضی» می‌سازند و ورود غیرتعاملی را رد می‌کنند).
+function hzCloudInitRootPw(pw) {
+  const b = b64Encode("root:" + pw);
+  return [
+    "#cloud-config",
+    "ssh_pwauth: true",
+    "runcmd:",
+    `  - 'echo ${b} | base64 -d | chpasswd'`,
+    `  - 'chage -M 99999 -d "$(date +%F)" root'`,
+    "",
+  ].join("\n");
+}
+
+// بعد از ساخت سرور در دیتاسنتر: افزودن خودکار به «سرورها»، انتظار برای بالا آمدن سرور،
+// تنظیم رمز پیش‌فرض (رمز ۱) و پرسیدن نصب نود.
+async function srvProvisionNewServer(kv, env, edit, info) {
+  const list = await getServersList(kv);
+  const item = {
+    id: makeToken() + makeToken(),
+    name: info.host,
+    host: info.host,
+    port: 22,
+    user: "root",
+    auth: "pass",
+    password: info.password,
+    note: info.note || "",
+    created: Date.now(),
+  };
+  list.push(item);
+  await saveServersList(kv, list);
+  const idx = list.length - 1;
+  const lines = [
+    "🎉 سرور ساخته و به «🖥 سرورها» اضافه شد.",
+    `🌐 ${code(info.host)} (root)`,
+    `🔐 رمز فعلی: ${code(info.password)}`,
+    "",
+    "📥 نود پاسارگارد روی این سرور نصب شود؟",
+    "«رمز ۱» روی سرور تنظیم می‌شود، سپس نصب انجام می‌گیرد.",
+  ];
+  const kb = [
+    [
+      { text: "📥 نصب خودکار نود", callback_data: `srvprovision:${idx}:auto` },
+      { text: "🧩 نصب با هستهٔ ویرایشی", callback_data: `srvprovision:${idx}:core` },
+    ],
+    [
+      { text: "❌ بعداً", callback_data: `srvopen:${idx}` },
+      { text: "🖥 سرورها", callback_data: "srv" },
+    ],
+  ];
+  await edit(lines.join("\n"), kb);
+  return idx;
+}
+
+// تست اتصال تا بالا آمدن سرور و تنظیم «رمز ۱» (بعد از تأیید کاربر)
+async function srvPrepServer(kv, env, edit, idx, s) {
+  const pw1 = (await getSrvPasswords(kv))[0] || "";
+  const base = `🖧 ${code(s.host)} (root)`;
+  await edit(base + "\n\n⏳ در انتظار بالا آمدن سرور و تست اتصال…");
+  let ready = false;
+  const max = 10;
+  for (let attempt = 1; attempt <= max; attempt++) {
+    const t = await srvRelayExec(kv, env, { ...s, _idx: idx }, "echo PG_READY", 15000);
+    if (t && !t.error && String(t.out || "").includes("PG_READY")) { ready = true; break; }
+    if (attempt < max) {
+      await edit(base + `\n\n⏳ در انتظار بالا آمدن سرور… (تلاش ${attempt}/${max})`);
+      await sleep(5000);
+    }
+  }
+  let pwNote = "";
+  if (ready && pw1 && pw1 !== s.password) {
+    const ch = await srvRelayExec(kv, env, { ...s, _idx: idx }, `echo ${shQuote("root:" + pw1)} | chpasswd`, 20000);
+    if (ch && !ch.error) {
+      const l2 = await getServersList(kv);
+      if (l2[idx]) { l2[idx].password = pw1; await saveServersList(kv, l2); }
+      pwNote = "\n🔐 رمز به «رمز ۱» تغییر یافت.";
+    } else {
+      pwNote = `\n⚠️ تغییر رمز به «رمز ۱» انجام نشد (${ch && ch.error ? ch.error : "خطای نامشخص"}).`;
+    }
+  } else if (ready && !pw1) {
+    pwNote = "\nℹ️ رمز ذخیره‌شده‌ای نداری؛ همان رمز فعلی نگه داشته شد.";
+  }
+  return { ready, pwNote };
+}
+
+async function getSrvMonCfg(kv) {
+  const c = (await kvGetCached(kv, "srv_mon_cfg", "json")) || {};
+  return { ...SRV_DEFAULTS, ...c };
+}
+
+async function saveSrvMonCfg(kv, c) {
+  await kvPutCached(kv, "srv_mon_cfg", JSON.stringify(c));
+}
+
+function srvListBtn(list) {
+  return list.map((s, i) => [{ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }]);
+}
+
+async function renderServersHome(edit, kv, env) {
+  const list = await getServersList(kv);
+  const lines = [
+    "🖥 سرورها",
+    "",
+    "مدیریت سرورهای لینوکسی از طریق SSH:\n• نصب خودکار نود پاسارگارد\n• نصب نود با هستهٔ ویرایشی (xray سفارشی)\n• مانیتور CPU / RAM / دیسک / پهنای باند\n\n",
+  ];
+  if (list.length) lines.push(`🖧 سرورهای ثبت‌شده (${list.length}): روی هرکدام بزنید:`);
+  const kb = [];
+  // سرورها دوتایی در هر ردیف (به‌جای تک‌ستونه) — رنگ خاکستری
+  const srvBtns = list.map((s, i) => ({ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }));
+  for (let i = 0; i < srvBtns.length; i += 2) kb.push(srvBtns.slice(i, i + 2));
+  kb.push([
+    { text: "➕ افزودن سرور", callback_data: "srvadd" },
+    ...(list.length ? [{ text: "🗑 حذف سرور", callback_data: "srvdel" }] : []),
+  ]);
+  kb.push([
+    { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
+    { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
+  ]);
+  kb.push([{ text: "ℹ️ راهنمای رله", callback_data: "srvrelayhelp" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function renderSrvDetail(edit, kv, env, idx) {
+  const list = await getServersList(kv);
+  const s = list[idx];
+  if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+  const lines = [
+    `🖧 ${escHtml(s.name)}`,
+    `🌐 ${code(s.host + ":" + (s.port || 22))}  (${escHtml(s.user || "root")})`,
+    `🔐 ${s.auth === "key" ? "🔑 کلید SSH" : "🔒 رمز عبور"}`,
+    s.note ? "📝 " + escHtml(s.note) : "",
+    "",
+    "یک عملیات را انتخاب کنید:",
+  ].filter(Boolean);
+  const kb = [
+    [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${idx}` }],
+    [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+    [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
+    [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
+    [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}` }],
+    [{ text: "🔙 سرورها", callback_data: "srv" }],
+  ];
+  await edit(lines.join("\n"), kb);
+}
+
+function srvStatsText(s, st) {
+  if (!st || st.error) return `❌ خطا در دریافت آمار: ${st && st.error ? st.error : "نامشخص"}`;
+  const upD = Math.floor((st.uptimeS || 0) / 86400);
+  const upH = Math.floor(((st.uptimeS || 0) % 86400) / 3600);
+  const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
+  const fmtGb = (mb) => (mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB");
+  const lines = [
+    `📊 مانیتور سرور «${escHtml(s.name)}»`,
+    `🖥 ${escHtml(st.sys || s.host)}`,
+    `⏱ آپتایم: ${upD} روز و ${upH} ساعت`,
+    `⚙️ CPU: ${st.cpu.pct}% از ${st.cpu.cores} هسته (لود ${st.cpu.load})`,
+    `🧠 RAM: ${fmtGb(st.mem.usedMb)} از ${fmtGb(st.mem.totalMb)} (${memPct}%)`,
+    st.swap.totalMb ? `💾 Swap: ${fmtGb(st.swap.usedMb)} از ${fmtGb(st.swap.totalMb)}` : "",
+    `🗄 دیسک: ${st.disk.used} از ${st.disk.total} (${st.disk.pct}) — آزاد ${st.disk.avail}`,
+  ];
+  let totalRx = 0, totalTx = 0;
+  for (const n of st.net || []) { totalRx += n.rx; totalTx += n.tx; }
+  if (totalRx || totalTx) {
+    lines.push(`📥 دانلود کل: ${(totalRx / 1024 ** 3).toFixed(2)} GB`);
+    lines.push(`📤 آپلود کل: ${(totalTx / 1024 ** 3).toFixed(2)} GB`);
+  }
+  if (st.pg && st.pg.length) {
+    lines.push("", "🐳 کانتینرهای فعال:");
+    for (const c of st.pg.slice(0, 8)) lines.push("  • " + escHtml(c.replace(/\|/g, " — ")));
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+async function renderSrvMonCfg(edit, kv) {
+  const cfg = await getSrvMonCfg(kv);
+  const lines = [
+    "📊 مانیتور سرورها",
+    "",
+    `وضعیت: ${cfg.enabled ? "▶️ فعال" : "⏸ متوقف"}`,
+    "",
+    "هشدار خودکار وقتی:",
+    `• CPU بیش از ${cfg.cpuPct}% برود`,
+    `• RAM بیش از ${cfg.memPct}% برود`,
+    `• دیسک بیش از ${cfg.diskPct}% پر شود`,
+    `⏱ حداقل فاصلهٔ تکرار هشدار: ${cfg.cooldownMin} دقیقه`,
+    "",
+    "برای تغییر هر آستانه، روی آن بزنید.",
+  ];
+  const kb = [
+    [{ text: cfg.enabled ? "⏸ توقف هشدار" : "▶️ فعال‌سازی", callback_data: "srvmontg" }],
+    [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
+    [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
+    [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
+    [{ text: "🔙 سرورها", callback_data: "srv" }],
+  ];
+  await edit(lines.join("\n"), kb);
+}
+
+// اجرای مانیتور سرورها (از کرون */10 + دکمهٔ دستی)
+async function runSrvMonitor(env, botToken, manual) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const cfg = await getSrvMonCfg(kv);
+  if (!cfg.enabled && !manual) return;
+  const list = await getServersList(kv);
+  if (!list.length) return;
+  if (!manual) {
+    const last = Number((await kv.get("srv_mon_last")) || 0);
+    if (last && Date.now() - last < SRV_MON_MIN_MS) return;
+    await kv.put("srv_mon_last", String(Date.now()));
+  }
+  const admins = await getAdmins(kv, env);
+  const alerts = [];
+  const okSummaries = [];
+  for (const s of list) {
+    const st = await srvRelayStats(kv, env, s);
+    if (st.error) {
+      alerts.push(`🔴 ${escHtml(s.name)} — خطای اتصال SSH (${st.error})`);
+      continue;
+    }
+    const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
+    const diskPct = parseInt(String(st.disk.pct), 10) || 0;
+    const cpuPct = st.cpu.pct || 0;
+    const issues = [];
+    if (cpuPct >= cfg.cpuPct) issues.push(`CPU ${cpuPct}%`);
+    if (memPct >= cfg.memPct) issues.push(`RAM ${memPct}%`);
+    if (diskPct >= cfg.diskPct) issues.push(`دیسک ${diskPct}%`);
+    if (issues.length) {
+      // گارد cooldown: برای هر سرور فقط یک هشدار در بازهٔ تعیین‌شده
+      const coolKey = `srv_cool:${s.id || s.host}`;
+      const lastAlert = Number((await kv.get(coolKey)) || 0);
+      if (manual || !lastAlert || Date.now() - lastAlert > cfg.cooldownMin * 60000) {
+        await kv.put(coolKey, String(Date.now()), { expirationTtl: Math.max(3600, cfg.cooldownMin * 120) });
+        alerts.push(`⚠️ ${escHtml(s.name)} — ${issues.join(" · ")}`);
+      }
+    } else {
+      okSummaries.push(`🟢 ${escHtml(s.name)} — CPU ${cpuPct}% · RAM ${memPct}% · دیسک ${diskPct}%`);
+    }
+  }
+  if (!alerts.length && !manual) return;
+  let msg = "📊 گزارش مانیتور سرورها\n\n";
+  if (alerts.length) msg += alerts.join("\n") + "\n";
+  if (manual && okSummaries.length) msg += (alerts.length ? "\n" : "") + okSummaries.join("\n");
+  if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
+  const kb = [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }], [{ text: "🏠 منو", callback_data: "menu" }]];
+  for (const a of admins) {
+    try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
+  }
+}
+
+// نصب خودکار نود پاسارگارد — خروجی زنده با ویرایش پیام
+async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
+  const { url: base, token: relayToken } = await getSrvRelayCfg(kv, env);
+  if (!base) {
+    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: "srv" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+    return;
+  }
+  const sent = await sendMessage(botToken, chatId, "📥 شروع نصب نود پاسارگارد…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت نصب…");
+  const msgId = sent && sent.result ? sent.result.message_id : null;
+  try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+  const CMD = 'sudo bash -c "$(curl -sL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh)" @ install -y';
+  try {
+    const res = await fetch(base + "/install-node", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SRV-Token": relayToken || "" },
+      body: JSON.stringify({ host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined }),
+      signal: AbortSignal.timeout(500000),
+    });
+    if (!res.ok || !res.body) {
+      const errTxt = `❌ خطا در اتصال به رله (${res.status})`;
+      if (msgId) await editMessage(botToken, chatId, msgId, errTxt, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${s._idx}` }]]);
+      return;
+    }
+    // خواندن استریم NDJSON و به‌روزرسانی پیام با آخرین خروجی
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    let tail = "";
+    let lastEdit = 0;
+    const editEvery = 4000;
+    let done = null;
+    while (true) {
+      const { value, done: rd } = await reader.read();
+      if (rd) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line);
+          if (ev.t === "out" && ev.d) tail = (tail + ev.d).slice(-3500);
+          else if (ev.t === "done") done = ev;
+        } catch (e) {}
+      }
+      if (msgId && Date.now() - lastEdit > editEvery && !done) {
+        lastEdit = Date.now();
+        const txt = "📥 نصب نود پاسارگارد…\n\n📄 آخرین خروجی:\n" + code(tail.slice(-1200));
+        try { await editMessage(botToken, chatId, msgId, txt.substring(0, 4000)); } catch (e) {}
+      }
+    }
+    const ok = done && done.ok;
+    const finalTail = (done && done.tail ? done.tail : tail).slice(-1800);
+    let txt =
+      (ok ? "✅ نصب نود پاسارگارد کامل شد." : "⚠️ نصب تمام شد (کد خروج: " + (done ? done.code : "?") + ").") +
+      "\n\n📄 انتهای خروجی:\n" + code(finalTail);
+    let addKb = [];
+    if (ok) {
+      const add = await srvFinishNodeInstall(env.BOT_KV, env, s, txt);
+      txt = add.txt;
+      addKb = add.addKb;
+    }
+    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [...addKb, [{ text: "🖥 سرورها", callback_data: `srvopen:${s._idx}` }]]);
+  } catch (e) {
+    const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
+    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+  }
+}
+
+// 🧩 نصب نود با هستهٔ ویرایشی (pg-node + هستهٔ xray-amd64 سفارشی)
+// روی سرور به‌صورت پس‌زمینه اجرا می‌شود و ربات هر چند ثانیه خروجی را می‌خواند؛
+// این‌طور محدودیت ~۸ دقیقه‌ای رلهٔ SSH دور زده می‌شود.
+const CORE_INSTALL_URL = "https://raw.githubusercontent.com/Aknuun/pg-node-deploy/main/bootstrap.sh";
+async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
+  const { url: base } = await getSrvRelayCfg(kv, env);
+  if (!base) {
+    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: "srv" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+    return;
+  }
+  const sent = await sendMessage(botToken, chatId, "🧩 شروع نصب نود با هستهٔ ویرایشی…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت…");
+  const msgId = sent && sent.result ? sent.result.message_id : null;
+  const idx = s._idx;
+  try {
+    // قبل از اجرای اسکریپت: تنظیم DNS و تایم‌اوت apt تا apt-get update روی سرور گیر نکند
+    const prepScript =
+      "#!/bin/bash\n" +
+      "chattr -i /etc/resolv.conf 2>/dev/null || true\n" +
+      "printf 'nameserver 94.140.14.15\\nnameserver 1.1.1.1\\noptions edns0 trust-ad\\n' > /etc/resolv.conf 2>/dev/null || true\n" +
+      "printf 'Acquire::http::Timeout \"15\";\\nAcquire::https::Timeout \"15\";\\nAcquire::Retries \"2\";\\nAcquire::ForceIPv4 \"true\";\\nAcquire::Languages \"none\";\\n' > /etc/apt/apt.conf.d/99cg-timeouts 2>/dev/null || true\n" +
+      // نصب قبلی/نیمه‌کاره ممکن است کانتینر pg-node را روی پورت‌ها نگه دارد و نصب جدید را خراب کند
+      "docker rm -f node pg-node 2>/dev/null || true\n" +
+      "docker ps -aq --filter 'name=node' 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true\n" +
+      "systemctl stop pg-node 2>/dev/null || true\n" +
+      "sleep 1\n";
+    const prepB64 = b64Encode(prepScript);
+    const inner =
+      "echo " + prepB64 + " | base64 -d | bash; " +
+      "curl -fsSL " + CORE_INSTALL_URL + " -o /tmp/pg-node-bootstrap.sh && bash /tmp/pg-node-bootstrap.sh; echo PG_EXIT=$?";
+    const launch =
+      "rm -f /tmp/pg-node-install.log /tmp/pg-node-bootstrap.sh; " +
+      "( command -v setsid >/dev/null 2>&1 && setsid -f bash -c '" + inner + "' || nohup bash -c '" + inner + "' ) " +
+      ">/tmp/pg-node-install.log 2>&1 </dev/null & echo STARTED";
+    const start = await srvRelayExec(kv, env, s, launch, 30000);
+    if (start.error) {
+      const txt = "❌ خطا در شروع نصب: " + start.error;
+      if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]]);
+      return;
+    }
+    const startedAt = Date.now();
+    // ثبت در صف «افزودن خودکار به پنل» تا حتی اگر اجرای ورکر قطع شد، کرون آن را اضافه کند
+    try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+    if (msgId) {
+      try { await editMessage(botToken, chatId, msgId, `🧩 نصب نود با هستهٔ ویرایشی…\n\n⏳ اسکریپت آغاز شد؛ در حال خواندن خروجی…\n(سرور: ${escHtml(s.name)})`); } catch (e) {}
+    }
+    let lastEdit = 0;
+    let tail = "";
+    let exitCode = null;
+    let lastChangeAt = Date.now();
+    let prevTail = "";
+    const deadline = Date.now() + 20 * 60000;
+    while (Date.now() < deadline) {
+      await sleep(6000);
+      const poll = await srvRelayExec(kv, env, s, "tail -c 1800 /tmp/pg-node-install.log 2>/dev/null; echo; grep -o 'PG_EXIT=[0-9]*' /tmp/pg-node-install.log 2>/dev/null | tail -n1", 25000);
+      if (poll.error) continue;
+      tail = String(poll.out || "");
+      const m = tail.match(/PG_EXIT=(\d+)/);
+      if (m) { exitCode = Number(m[1]); break; }
+      if (tail !== prevTail) { prevTail = tail; lastChangeAt = Date.now(); }
+      if (msgId && Date.now() - lastEdit > 6000) {
+        lastEdit = Date.now();
+        const stalled = Date.now() - lastChangeAt > 90000;
+        const elapsed = Math.round((Date.now() - startedAt) / 1000);
+        const shown = tail.slice(-1100).trim() || "(هنوز خروجی‌ای ثبت نشده…)";
+        const txt = `🧩 نصب نود با هستهٔ ویرایشی…\n\n📄 آخرین خروجی (${elapsed} ثانیه):\n` + code(shown) +
+          (stalled ? "\n\n⚠️ بیش از ۹۰ ثانیه بدون تغییر؛ ممکن است نصب کند/متوقف باشد. تا پایان مهلت منتظر می‌مانم…" : "");
+        try { await editMessage(botToken, chatId, msgId, txt.substring(0, 4000)); } catch (e) {}
+      }
+    }
+    // خواندن خلاصهٔ نهایی (Certificate + API Key + IP) که اسکریپت روی سرور ذخیره کرده
+    let info = "";
+    const got = await srvRelayExec(kv, env, s, "cat /root/pg-node-info.txt 2>/dev/null || sudo -n cat /root/pg-node-info.txt 2>/dev/null || true", 20000);
+    if (got && !got.error && got.out) info = String(got.out);
+    const head = exitCode === 0
+      ? "✅ نصب نود با هستهٔ ویرایشی کامل شد."
+      : (exitCode === null
+        ? "⏱ زمان پایش تمام شد؛ نصب ممکن است هنوز در حال اجرا باشد."
+        : "⚠️ نصب تمام شد (کد خروج: " + exitCode + ").");
+    let body = info
+      ? "📋 خلاصهٔ نصب:\n" + code(info.slice(0, 3300))
+      : "📄 انتهای خروجی:\n" + code(tail.slice(-1500));
+    let txt = head + "\n\n" + body;
+    let addKb = [];
+    // اگر نصب موفق بود یا خروجیِ خلاصه روی سرور موجود بود (حتی وقتی پایش timeout خورد)،
+    // نود را خودکار به پنل اضافه کن. در غیر این صورت دکمهٔ افزودن دستی بگذار.
+    const infoLooksDone = /PasarGuard node installed|INSTALL DONE|API Key\s*:/i.test(info);
+    if (exitCode === 0 || (exitCode === null && infoLooksDone)) {
+      const add = await srvFinishNodeInstall(env.BOT_KV, env, s, txt);
+      txt = add.txt;
+      addKb = add.addKb;
+    }
+    if (!addKb.length) {
+      addKb = [[{ text: "➕ افزودن نود نصب‌شده به پنل", callback_data: `srvpaneladd:${idx}` }]];
+    }
+    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [
+      ...addKb,
+      [{ text: "📊 مانیتور", callback_data: `srvstats:${idx}` }],
+      [{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }],
+    ]);
+  } catch (e) {
+    const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
+    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]]);
+  }
+}
+
+// ===================== افزودن خودکار نود به پنل پاسارگارد =====================
+// بعد از نصب نود روی سرور (هر دو روش نصب)، آیپی/پورت سرویس/API Key و Certificate
+// از روی سرور خوانده میشود و نود با نام = آیپی در پنل ثبت میگردد.
+const SRV_NODE_INFO_CMD = `
+ENV_FILE=/opt/pg-node/.env; CERT_FILE=/var/lib/pg-node/certs/ssl_cert.pem
+IP=$(curl -4 -s --fail --max-time 5 ifconfig.io 2>/dev/null || curl -6 -s --fail --max-time 5 ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
+PORT=$(grep -E '^[[:space:]]*SERVICE_PORT[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -dc '0-9')
+APIKEY=$(grep -E '^[[:space:]]*API_KEY[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d ' "')
+echo "PGIP=$IP"
+echo "PGPORT=$PORT"
+echo "PGAPIKEY=$APIKEY"
+echo "PGBEGIN"
+( sudo -n cat "$CERT_FILE" 2>/dev/null || cat "$CERT_FILE" 2>/dev/null )
+echo "PGEND"
+`.trim();
+
+function srvParseNodeInfo(out) {
+  const g = (re) => { const m = String(out || "").match(re); return m ? m[1].trim() : ""; };
+  const ip = g(/^PGIP=(.*)$/m);
+  const port = g(/^PGPORT=(.*)$/m);
+  const apiKey = g(/^PGAPIKEY=(.*)$/m);
+  const cm = String(out || "").match(/PGBEGIN\s*\r?\n([\s\S]*?)\r?\nPGEND/);
+  const cert = cm ? cm[1].trim() : "";
+  if (!ip || !port || !apiKey || !cert) return { error: "اطلاعات نود روی سرور پیدا نشد (نصب کامل نشده؟)" };
+  return { ip, port: Number(port) || port, apiKey, cert };
+}
+
+async function srvReadNodeInfo(kv, env, s) {
+  const r = await srvRelayExec(kv, env, s, SRV_NODE_INFO_CMD, 45000);
+  if (!r || r.error) return { error: (r && r.error) || "relay" };
+  return srvParseNodeInfo(r.out);
+}
+
+// شناسهٔ اولین Core Config پنل (برای ساخت نود لازم است)
+async function pgPanelFirstCoreId(panel, token) {
+  try {
+    const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/cores`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: withTimeout(15000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const arr = Array.isArray(data) ? data : (data && (data.cores || data.configs)) || [];
+      if (arr.length && arr[0] && arr[0].id != null) return Number(arr[0].id);
+    }
+  } catch (e) {}
+  return 1;
+}
+
+// ثبت نود در پنل پاسارگارد: نام = آیپی، آدرس = آیپی، پورت = پورت سرویس، server_ca = Certificate
+async function pgPanelAddNode(panel, info) {
+  try {
+    const token = await panelLogin(panel);
+    if (!token) return { error: "ورود به پنل ناموفق بود؛ نام‌کاربری/رمز را بررسی کنید." };
+    const base = panel.url.replace(/\/+$/, "");
+    const coreId = await pgPanelFirstCoreId(panel, token);
+    const payload = {
+      name: info.ip,
+      address: info.ip,
+      port: Number(info.port) || 62050,
+      usage_coefficient: 1,
+      connection_type: "grpc",
+      keep_alive: 60,
+      core_config_id: coreId,
+      server_ca: info.cert,
+      api_key: info.apiKey,
+    };
+    const post = async (body) => {
+      const res = await fetch(`${base}/api/node`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: withTimeout(20000),
+      });
+      let data = null;
+      try { data = await res.json(); } catch (e) {}
+      return { res, data };
+    };
+    let { res, data } = await post(payload);
+    // سازگاری با نسخه‌های قدیمی‌تر پنل (پاسارگارد قدیمی/مرزبان) که به‌جای server_ca فیلد certificate را می‌گیرند
+    if (!res.ok && (res.status === 422 || JSON.stringify(data || {}).includes("server_ca"))) {
+      const alt = { ...payload, certificate: payload.server_ca };
+      delete alt.server_ca;
+      ({ res, data } = await post(alt));
+    }
+    if (!res.ok) {
+      const detail = data && (data.detail || data.message);
+      const msg = Array.isArray(detail)
+        ? detail.map((d) => (d && d.msg) || JSON.stringify(d)).join("؛ ")
+        : (detail || `HTTP ${res.status}`);
+      return { error: `خطای پنل (${res.status}): ${msg}` };
+    }
+    return { node: data };
+  } catch (e) {
+    return { error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// بعد از نصب موفق: خواندن اطلاعات نود و افزودن آن به پنل
+// خروجی: { txt, addKb } که addKb ردیف‌دکمه‌های افزودن/تلاش دوباره است.
+async function srvFinishNodeInstall(kv, env, s, baseTxt) {
+  const info = await srvReadNodeInfo(kv, env, s);
+  if (info.error) {
+    return { txt: baseTxt + `\n\nℹ️ افزودن خودکار به پنل انجام نشد: ${escHtml(info.error)}`, addKb: [] };
+  }
+  const panels = await getPanels(kv);
+  if (!panels.length) {
+    return { txt: baseTxt + "\n\nℹ️ برای افزودن خودکار نود به پنل، ابتدا از «🖥 مانیتور نود پاسارگارد» یک پنل ثبت کن.", addKb: [] };
+  }
+  const tok = makeToken() + makeToken();
+  await kv.put(`ndadd:${tok}`, JSON.stringify({ info, srvIdx: s._idx, srvName: s.name }), { expirationTtl: 3600 });
+  const head = `\n\n🖧 نود: ${code(info.ip)} · پورت: ${code(String(info.port))}`;
+  if (panels.length === 1) {
+    const r = await pgPanelAddNode(panels[0], info);
+    if (r.error) {
+      return {
+        txt: baseTxt + head + `\n⚠️ افزودن به پنل «${escHtml(panels[0].name)}» انجام نشد: ${escHtml(r.error)}`,
+        addKb: [[{ text: "➕ افزودن به پنل", callback_data: `ndadd:${tok}:${panels[0].id}` }]],
+      };
+    }
+    return { txt: baseTxt + head + `\n✅ نود با نام و آدرس ${code(info.ip)} به پنل «${escHtml(panels[0].name)}» اضافه شد.`, addKb: [] };
+  }
+  return {
+    txt: baseTxt + head + "\n➕ پنل مقصد را برای ثبت این نود انتخاب کن:",
+    addKb: panels.map((p) => [{ text: `➕ افزودن به «${p.name}»`, callback_data: `ndadd:${tok}:${p.id}` }]),
+  };
+}
+
+// ===== ثبت خودکار نود در پنل (کرون هر دقیقه) =====
+// اگر نصب طول بکشد و اجرای ورکر قطع شود، این تابع پس از آماده‌شدن نود، آن را به پنل اضافه می‌کند.
+async function pgPanelHasNode(p, token, ip) {
+  try {
+    const base = p.url.replace(/\/+$/, "");
+    const res = await fetch(`${base}/api/nodes`, { headers: { Authorization: `Bearer ${token}` }, signal: withTimeout(15000) });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const arr = Array.isArray(data) ? data : (data.nodes || data.items || []);
+    return arr.some((n) => n && (n.address === ip || n.name === ip));
+  } catch (e) {
+    return false;
+  }
+}
+
+async function runNodeAddPending(env) {
+  const kv = env.BOT_KV;
+  if (!kv || !(await getRelayBase(kv, env))) return;
+  let keys = [];
+  try {
+    const r = await kv.list({ prefix: "nodeadd:", limit: 10 });
+    keys = (r.keys || []).map((k) => k.name);
+  } catch (e) {
+    return;
+  }
+  if (!keys.length) return;
+  const panels = await getPanels(kv);
+  if (!panels.length) return;
+  const srvList = await getServersList(kv);
+  for (const key of keys) {
+    const rec = await kv.get(key, "json");
+    if (!rec || !rec.host) { await kv.delete(key); continue; }
+    const s = srvList.find((x) => x.host === rec.host);
+    if (!s) { await kv.delete(key); continue; }
+    const info = await srvReadNodeInfo(kv, env, s);
+    if (info.error) continue; // هنوز آماده نیست
+    const tokens = [];
+    let exists = false;
+    for (const p of panels) {
+      const token = await panelLogin(p);
+      tokens.push(token);
+      if (token && (await pgPanelHasNode(p, token, info.ip))) exists = true;
+    }
+    if (!exists) {
+      for (let pi = 0; pi < panels.length; pi++) {
+        if (!tokens[pi]) continue;
+        const r = await pgPanelAddNode(panels[pi], info);
+        if (!r.error) break;
+      }
+      try {
+        const admins = await getAdmins(kv, env);
+        for (const a of admins) {
+          await sendMessage(env.BOT_TOKEN || BOT_TOKEN, a, `✅ نود «${info.ip}» (پورت ${info.port}) به‌صورت خودکار به پنل اضافه/به‌روزرسانی شد.`);
+        }
+      } catch (e) {}
+    }
+    await kv.delete(key);
+  }
+}
+
+async function getUmCfg(kv) {
+  const c = (await kvGetCached(kv, "usage_monitor_cfg", "json")) || {};
+  return { ...UM_DEFAULTS, ...c };
+}
+
+async function saveUmCfg(kv, c) {
+  await kvPutCached(kv, "usage_monitor_cfg", JSON.stringify(c));
+}
+
+// ثبت رویداد هشدار در لاگ (برای گزارش روزانهٔ اخطارشده‌ها)
+async function umAlertLogPush(kv, e) {
+  let log = await kvGetCached(kv, "um_alerts_log", "json", 30000);
+  if (!Array.isArray(log)) log = [];
+  log.push(e);
+  const cutoff = Date.now() - 3 * 24 * 3600000;
+  log = log.filter((x) => x.t && x.t >= cutoff);
+  if (log.length > 2000) log = log.slice(-2000);
+  await kvPutCached(kv, "um_alerts_log", JSON.stringify(log));
+}
+
+// رویدادهای هشدار در بازهٔ اخیر (برای گزارش)
+async function umAlertLogRecent(kv, withinMs) {
+  let log = await kvGetCached(kv, "um_alerts_log", "json", 30000);
+  if (!Array.isArray(log)) return [];
+  const cutoff = Date.now() - (withinMs || 24 * 3600000);
+  return log.filter((x) => x.t && x.t >= cutoff);
+}
+
+// همهٔ کاربرانی که online_at آن‌ها بعد از sinceIso است = در بازهٔ اخیر مصرف داشته‌اند
+async function panelUsersSince(p, token, sinceIso) {
+  const base = p.url.replace(/\/+$/, "");
+  const out = [];
+  let offset = 0;
+  const limit = 5000;
+  for (let i = 0; i < 6; i++) {
+    const url = `${base}/api/users?online_after=${encodeURIComponent(sinceIso)}&limit=${limit}&offset=${offset}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: withTimeout(25000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const arr = Array.isArray(data.users) ? data.users : [];
+    for (const u of arr) {
+      const owner = u.admin && typeof u.admin === "object" ? (u.admin.username || "-") : (u.admin || "-");
+      out.push({ id: String(u.id), username: u.username || String(u.id), used: Number(u.used_traffic || 0), owner });
+    }
+    offset += arr.length;
+    const total = Number(data.total || 0);
+    if (!arr.length || offset >= total) break;
+  }
+  return out;
+}
+
+function umFindSample(samples, targetMs, maxDiffMs) {
+  let best = null;
+  let bestDiff = Infinity;
+  for (const s of samples) {
+    const d = Math.abs(s.t - targetMs);
+    if (d < bestDiff && d <= maxDiffMs) {
+      bestDiff = d;
+      best = s;
+    }
+  }
+  return best;
+}
+
+// الگوی مصرف از روی نمونه‌های اخیر: اگر در چند بازهٔ متوالی مصرف داشته باشد
+// «پیوسته» (نشانهٔ پخش لینک) وگرنه «جهشی» است.
+function umPattern(recent, userId) {
+  const vals = [];
+  for (const s of recent) {
+    const v = s && s.u ? s.u[userId] : null;
+    if (v != null) vals.push(Number(v));
+  }
+  if (vals.length < 3) return { active: 0, flat: false };
+  let active = 0;
+  for (let i = 1; i < vals.length; i++) {
+    if (vals[i] - vals[i - 1] > 0) active++;
+  }
+  return { active, flat: active >= Math.min(4, vals.length - 1) };
+}
+
+async function runUsageMonitor(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+  const cfg = await getUmCfg(kv);
+  if (!cfg.enabled) return;
+  const panels = await getPanels(kv);
+  if (!panels.length) return;
+
+  const now = Date.now();
+  // گارد فاصله: از اجرای پشت‌سرهم روی کرون‌های نزدیک جلوگیری می‌کند (کاهش بار پنل/KV)
+  const umLast = Number((await kv.get("um_last_run")) || 0);
+  if (umLast && now - umLast < UM_MIN_INTERVAL_MS) return;
+  await kv.put("um_last_run", String(now));
+
+  const sinceIso = new Date(now - cfg.activeMin * 60000).toISOString();
+  const hourTh = Math.max(0, Number(cfg.hourlyGb) || 0) * 1024 ** 3;
+  const dayTh = Math.max(0, Number(cfg.dailyGb) || 0) * 1024 ** 3;
+  const cooldownMs = Math.max(0, Number(cfg.cooldownH) || 0) * 3600000;
+  const minBytes = Math.max(0, Number(cfg.minGb) || 0) * 1024 ** 3;
+
+  const reportTs = Number((await kv.get("um_report_ts")) || 0);
+  const reportDue = cfg.report && reportTs > 0 && now - reportTs >= UM_REPORT_MS;
+
+  for (const p of panels) {
+    const key = `um:${p.id}`;
+    try {
+      const token = await panelLogin(p);
+      if (!token) continue;
+      const users = await panelUsersSince(p, token, sinceIso);
+      if (!users.length) continue;
+
+      const st = (await kv.get(key, "json")) || {};
+      const recent = Array.isArray(st.recent) ? st.recent : [];
+      const cool = st.cool && typeof st.cool === "object" ? st.cool : {};
+
+      // بیس روزانه (سازگاری با ساختار قدیمی hourly؛ دیگر نوشته نمی‌شود)
+      let day = st.day && typeof st.day === "object" ? st.day : null;
+      if (!day && Array.isArray(st.hourly)) {
+        const old = umFindSample(st.hourly, now - 24 * 3600000, 4 * 3600000);
+        if (old && old.u) day = { t: old.t, u: old.u };
+      }
+      const dayAge = day ? now - Number(day.t || 0) : 0;
+      // پنجرهٔ معتبر برای «۲۴ ساعت اخیر»: حداقل ۲۳ ساعت، حداکثر ۳۰ ساعت
+      // (بیشتر از آن یعنی بیس قدیمی است و مقایسه درست نیست؛ استفاده نمی‌شود)
+      const dayReady = day && dayAge >= UM_DAY_MIN_MS && dayAge <= 30 * 3600000;
+
+      // سبک‌سازی: فقط کاربران بالای آستانهٔ حداقلی در اسنپ‌شات ذخیره می‌شوند
+      const cur = {};
+      for (const u of users) {
+        if (minBytes && u.used < minBytes) continue;
+        cur[u.id] = u.used;
+      }
+
+      const hourOld = umFindSample(recent, now - 60 * 60000, 35 * 60000);
+
+      const alerts = [];
+      for (const u of users) {
+        let best = null;
+        if (hourOld && hourOld.u[u.id] != null) {
+          const d = u.used - Number(hourOld.u[u.id]);
+          if (d > 0 && d >= hourTh) best = { gb: d / 1024 ** 3, label: "ساعت اخیر" };
+        }
+        if (dayReady && day.u[u.id] != null) {
+          const d = u.used - Number(day.u[u.id]);
+          if (d > 0 && d >= dayTh) {
+            const gb = d / 1024 ** 3;
+            if (!best || gb > best.gb) best = { gb, label: "۲۴ ساعت اخیر" };
+          }
+        }
+        if (!best) continue;
+        const last = Number(cool[u.id] || 0);
+        if (cooldownMs && now - last < cooldownMs) continue;
+        cool[u.id] = now;
+        const pat = umPattern(recent, u.id);
+        await umAlertLogPush(kv, { t: now, panel: p.name, username: u.username, owner: u.owner, gb: best.gb, label: best.label });
+        alerts.push({ username: u.username, owner: u.owner, gb: best.gb, label: best.label, flat: pat.flat });
+      }
+
+      if (alerts.length) {
+        alerts.sort((a, b) => b.gb - a.gb);
+        const shown = alerts.slice(0, 30);
+        const lines = [`🚨 مصرف بالا در یک ساعت (احتمال پخش لینک)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
+        for (const a of shown) {
+          lines.push(`▪️ ${code(a.username)} — ${a.gb.toFixed(1)} GB (${a.label})`);
+          lines.push(`   ادمین: ${escHtml(a.owner)} • ${a.flat ? "مصرف پیوسته 🔁" : "مصرف جهشی ⚡"}`);
+        }
+        if (alerts.length > shown.length) lines.push(`… و ${alerts.length - shown.length} کاربر دیگر`);
+        await sendMessage(botToken, adminId, lines.join("\n"), null).catch(() => {});
+      }
+
+      recent.push({ t: now, u: cur });
+      st.recent = recent.filter((s) => now - s.t <= UM_RECENT_WINDOW_MS).slice(-UM_RECENT_KEEP);
+
+      if (!day || dayReady || dayAge > UM_DAY_MAX_MS) st.day = { t: now, u: cur };
+      else st.day = day;
+      delete st.hourly;
+
+      for (const id of Object.keys(cool)) {
+        if (now - Number(cool[id] || 0) > 3 * 24 * 3600000) delete cool[id];
+      }
+      st.cool = cool;
+
+      await kvPutCached(kv, key, JSON.stringify(st));
+    } catch (e) {
+      console.error("USAGE_MONITOR", p.id, String(e));
+    }
+  }
+
+  if (reportDue) {
+    // گزارش روزانه: فقط کاربرانی که طی ۲۴ ساعت اخیر برایشان هشدار فرستاده‌ایم
+    const warned = await umAlertLogRecent(kv, UM_REPORT_MS);
+    if (warned.length) {
+      const byUser = new Map();
+      for (const w of warned) {
+        const g = Number(w.gb) || 0;
+        const prev = byUser.get(w.username);
+        const isDay = w.label === "۲۴ ساعت اخیر";
+        if (!prev) {
+          byUser.set(w.username, { username: w.username, owner: w.owner || "—", panel: w.panel || "—", gb: g, label: w.label || "" });
+        } else if (isDay) {
+          prev.gb = g;
+          prev.label = w.label;
+          prev.owner = w.owner || prev.owner;
+          prev.panel = w.panel || prev.panel;
+        } else if (g > prev.gb && prev.label !== "۲۴ ساعت اخیر") {
+          prev.gb = g;
+          prev.label = w.label;
+        }
+      }
+      const arr = [...byUser.values()].sort((a, b) => b.gb - a.gb);
+      const shown = arr.slice(0, UM_REPORT_TOP);
+      const lines = [`📊 گزارش پرمصرف‌های اخطارشده (۲۴ ساعت اخیر)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
+      let i = 1;
+      for (const t of shown) {
+        lines.push(`${i++}. ${code(t.username)} — ${t.gb.toFixed(1)} GB (${t.label})`);
+        lines.push(`   ادمین: ${escHtml(t.owner)} • 🖥 ${escHtml(t.panel)}`);
+      }
+      if (arr.length > shown.length) lines.push(`… و ${arr.length - shown.length} کاربر دیگر`);
+      await sendMessage(botToken, adminId, lines.join("\n"), null).catch(() => {});
+    }
+    await kv.put("um_report_ts", String(now));
+  } else if (!reportTs) {
+    await kv.put("um_report_ts", String(now));
+  }
+}
+
+function umCfgText(cfg) {
+  return [
+    "🔥 گزارش بد مصرف پاسارگارد",
+    "",
+    "کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند را پیدا می‌کند.",
+    "هر ۱۰ دقیقه از API پنل خوانده و با مصرف ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌شود.",
+    "الگوی مصرف هر هشدار (پیوسته/جهشی) هم مشخص می‌شود.",
+    "",
+    `وضعیت: ${cfg.enabled ? "روشن ✅" : "خاموش ❌"}`,
+    `⏱ آستانهٔ ساعتی: ${cfg.hourlyGb} GB`,
+    `📅 آستانهٔ روزانه: ${cfg.dailyGb} GB`,
+    `🔁 فاصلهٔ تکرار هشدار هر کاربر: ${cfg.cooldownH} ساعت`,
+    // minGb: کاربرانی که مصرف کل‌شان کمتر از این مقدار است در اسنپ‌شات ذخیره نمی‌شوند (سبک‌سازی KV)
+    `🧮 حداقل مصرف برای اسنپ‌شات: ${cfg.minGb} GB`,
+    `📊 گزارش روزانهٔ اخطارشده‌ها: ${cfg.report ? "روشن ✅" : "خاموش ❌"}`,
+    "",
+    "هشدار فقط برای ادمین ارسال می‌شود. گزارش روزانه فقط کاربرانی را نشان می‌دهد که در همان روز برایشان هشدار فرستاده شده است.",
+  ].join("\n");
+}
+
+// کیبورد تنظیمات «مانیتور مصرف پاسارگارد».
+// هر دکمه یک فیلد تنظیمات را ویرایش/تغییر می‌دهد؛ مقدار فعلی داخل متن دکمه نشان داده می‌شود.
+function umCfgKeyboard(cfg) {
+  return [
+    // um:toggle: روشن/خاموش کردن کل مانیتور مصرف (هشدارها و اسنپ‌شات‌گیری متوقف/شروع می‌شود)
+    [{ text: cfg.enabled ? "⏸ خاموش کن" : "▶️ روشن کن", callback_data: "um:toggle" }],
+    // um:h: تعیین آستانهٔ مصرف ساعتی (GB) برای هشدار | um:d: تعیین آستانهٔ مصرف روزانه (GB)
+    [
+      { text: `⏱ ساعتی: ${cfg.hourlyGb}GB`, callback_data: "um:h" },
+      { text: `📅 روزانه: ${cfg.dailyGb}GB`, callback_data: "um:d" },
+    ],
+    // um:c: فاصلهٔ زمانی (ساعت) تا ارسال دوبارهٔ هشدار برای همان کاربر (ضد اسپم)
+    [{ text: `🔁 فاصلهٔ هشدار: ${cfg.cooldownH}h`, callback_data: "um:c" }],
+    // um:min: حداقل مصرف کل (GB) کاربر تا وارد اسنپ‌شات شود (سبک‌سازی؛ ۰ = بدون فیلتر)
+    // um:report: روشن/خاموش کردن گزارش روزانه (هر ۲۴ ساعت) پرمصرف‌های اخطارشده
+    [
+      { text: `🧮 حداقل اسنپ‌شات: ${cfg.minGb}GB`, callback_data: "um:min" },
+      { text: cfg.report ? "📊 گزارش: روشن" : "📊 گزارش: خاموش", callback_data: "um:report" },
+    ],
+    // mons: بازگشت به منوی مانیتورها | menu: بازگشت به منوی اصلی
+    [{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 منو", callback_data: "menu" }],
+  ];
+}
+
+// ===================== Node Monitor (push / webhook) =====================
+const NODE_DOWN_STATES = ["connected", "up", "online", "running", "healthy"];
+const NODE_OFF_STATES = ["error", "down", "offline", "stopped", "unreachable", "off"];
+const NODE_MID_STATES = ["connecting", "connecting_to_server", "restarting", "starting"];
+
+async function getNodeMonitors(kv) {
+  let list = await kvGetCached(kv, "node_monitors", "json");
+  if (!Array.isArray(list)) list = [];
+  return list;
+}
+
+async function saveNodeMonitors(kv, list) {
+  await kvPutCached(kv, "node_monitors", JSON.stringify(list));
+}
+
+async function getNodeState(kv, id) {
+  const s = await kvGetCached(kv, `ndst:${id}`, "json");
+  if (s && s.nodes && typeof s.nodes === "object") return JSON.parse(JSON.stringify(s));
+  return { nodes: {}, ts: null };
+}
+
+function _nodeSig(s) {
+  if (!s || !s.nodes) return "";
+  return Object.keys(s.nodes)
+    .sort()
+    .map((k) => k + ":" + s.nodes[k].status)
+    .join("|");
+}
+
+async function saveNodeState(kv, id, s) {
+  const key = `ndst:${id}`;
+  const prev = memGet("kv:" + key);
+  // فقط وقتی وضعیت نودها واقعاً تغییر کرده بنویس (صرفه‌جویی در write).
+  if (prev && _nodeSig(prev) === _nodeSig(s)) return;
+  await kvPutCached(kv, key, JSON.stringify(s));
+}
+
+async function cacheSelfUrl(kv, origin) {
+  if (!kv || !origin) return;
+  if (origin === _lastSelfOrigin) return;
+  _lastSelfOrigin = origin;
+  try {
+    const cur = await kvGetCached(kv, "self_url", undefined, 3600000);
+    if (!cur) await kvPutCached(kv, "self_url", origin, undefined, 3600000);
+  } catch (e) {
+    console.error("SELF_URL", String(e));
+  }
+}
+
+async function selfUrlBase(env, kv) {
+  if (env.WORKER_URL) return String(env.WORKER_URL).replace(/\/+$/, "");
+  if (kv) {
+    const cur = await kvGetCached(kv, "self_url", undefined, 3600000);
+    if (cur) return cur;
+  }
+  return "";
+}
+
+function nodeStatusDir(st) {
+  const s = String(st || "").toLowerCase();
+  if (NODE_DOWN_STATES.includes(s)) return "up";
+  if (NODE_OFF_STATES.includes(s)) return "down";
+  return "mid";
+}
+
+function nodeStatusEmoji(st) {
+  const d = nodeStatusDir(st);
+  if (d === "up") return "🟢";
+  if (d === "down") return "🔴";
+  const s = String(st || "").toLowerCase();
+  return s === "disabled" ? "⚪" : "🟡";
+}
+
+function nodeStatusLabel(st) {
+  const s = String(st || "").toLowerCase();
+  if (NODE_DOWN_STATES.includes(s)) return "آنلاین";
+  if (NODE_OFF_STATES.includes(s)) return "قطع";
+  if (NODE_MID_STATES.includes(s)) return "در حال اتصال";
+  if (s === "disabled") return "غیرفعال";
+  if (!s || s === "unknown") return "نامشخص";
+  return String(st);
+}
+
+function ndFmtTs(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(new Date(iso).getTime() + PANEL_OFFSET_MS);
+    return d.toISOString().replace("T", " ").slice(0, 16);
+  } catch (e) {
+    return "";
+  }
+}
+
+async function panelNodes(p, token) {
+  const base = p.url.replace(/\/+$/, "");
+  const res = await fetch(`${base}/api/nodes`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: withTimeout(15000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  let arr = Array.isArray(data) ? data : (data && (data.nodes || data.items || data.result)) || [];
+  const out = [];
+  for (const n of arr) {
+    if (!n) continue;
+    out.push({
+      name: String(n.name || n.node_name || n.id || ""),
+      status: String(n.status || n.node_status || "unknown"),
+      address: n.address || null,
+      port: n.port || null,
+      version: n.xray_version || n.version || null,
+      reason: n.message || n.error || n.status_message || null,
+      updated: n.updated_at || n.last_status_change || null,
+    });
+  }
+  return out;
+}
+
+async function nodeSyncFromPanel(m, kv) {
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => p.id === m.panel_id);
+  if (!panel) return { error: "پنل مرتبط پیدا نشد (احتمالاً از لیست پنل‌ها حذف شده)." };
+  const token = await panelLogin(panel);
+  if (!token) return { error: "ورود به پنل ناموفق؛ نام‌کاربری/رمز را در «ثبت پنل» بررسی کنید." };
+  let list;
+  try {
+    list = await panelNodes(panel, token);
+  } catch (e) {
+    return { error: `خطا در خواندن نودها: ${e && e.message ? e.message : e}` };
+  }
+  const st = await getNodeState(kv, m.id);
+  const now = new Date().toISOString();
+  for (const n of list) {
+    const prev = st.nodes[n.name];
+    st.nodes[n.name] = {
+      name: n.name,
+      status: n.status,
+      address: n.address,
+      version: n.version,
+      reason: n.reason || null,
+      ts: now,
+      first_seen: (prev && prev.first_seen) || now,
+    };
+  }
+  st.ts = now;
+  await saveNodeState(kv, m.id, st);
+  return { nodes: list };
+}
+
+async function runNodePoll(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  try {
+    const panels = await getPanels(kv);
+    const monitors = await getNodeMonitors(kv);
+    if (!panels.length || !monitors.length) return;
+    const admins = await getAdmins(kv, env);
+    const now = new Date().toISOString();
+    // کش توکن در همان اجرا: اگر چند مانیتور روی یک پنل باشند، لاگین تکرار نمی‌شود
+    const tokenCache = {};
+    let monitorsDirty = false;
+    for (const m of monitors) {
+      if (m.enabled === false) continue;
+      // فاصلهٔ پایش قابل تنظیم (کرون): اگر هنوز نوبت پایش نرسیده، رد شو
+      const intervalMin = Math.max(5, Number(m.intervalMin) || 10);
+      if (m.last_poll_ts) {
+        const elapsedMin = (Date.now() - new Date(m.last_poll_ts).getTime()) / 60000;
+        if (elapsedMin < intervalMin) continue;
+      }
+      const panel = panels.find((p) => p.id === m.panel_id);
+      if (!panel) continue;
+      let token = tokenCache[panel.id];
+      if (token === undefined) {
+        token = await panelLogin(panel);
+        tokenCache[panel.id] = token;
+      }
+      if (!token) continue;
+      let list;
+      try {
+        list = await panelNodes(panel, token);
+      } catch (e) {
+        console.error("NDPOLL_FETCH", e && e.message ? e.message : String(e));
+        continue;
+      }
+      const st = await getNodeState(kv, m.id);
+      const panelName = (panel && panel.name) || m.name;
+      for (const n of list) {
+        const name = String(n.name || "");
+        if (!name) continue;
+        const prev = st.nodes[name];
+        const dir = nodeStatusDir(n.status);
+        if (prev && (dir === "up" || dir === "down")) {
+          const prevDir = nodeStatusDir(prev.status);
+          if (prevDir && prevDir !== dir && !(m.excluded || []).includes(name)) {
+            const ts = ndFmtTs(now);
+            const msg =
+              dir === "down"
+                ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? escHtml(String(n.reason)) : "—"}`
+                : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
+            for (const a of admins) await sendPanelMsg(botToken, a, msg);
+          }
+        }
+        st.nodes[name] = {
+          name,
+          status: n.status,
+          address: n.address,
+          version: n.version,
+          reason: n.reason || null,
+          ts: now,
+          first_seen: (prev && prev.first_seen) || now,
+        };
+      }
+      st.ts = now;
+      await saveNodeState(kv, m.id, st);
+      m.last_poll_ts = now;
+      monitorsDirty = true;
+    }
+    if (monitorsDirty) await saveNodeMonitors(kv, monitors);
+  } catch (e) {
+    console.error("NDPOLL", e && e.stack ? e.stack : String(e));
+  }
+}
+
+// صفحهٔ اصلی «مانیتور نود پاسارگارد»: توضیح + وضعیت مستقیم نودهای همهٔ پنل‌ها + دکمه‌های مخصوص.
+async function renderNodeHome(edit, kv) {
+  const panels = await getPanels(kv);
+  const monitors = await getNodeMonitors(kv);
+  const lines = ["🖥 مانیتور نود پاسارگارد\n"];
+  lines.push(
+    "توضیح: هر پنل پاسارگاردی را ثبت کن و برایش «مانیتور نود» بساز؛ سپس همین‌جا وضعیت همهٔ نودها را مستقیم می‌بینی. اگر نودی قطع یا دوباره وصل شود، فوری به همهٔ ادمین‌ها خبر داده می‌شود.\n" +
+      "پایش خودکار با فاصلهٔ قابل تنظیم (⏱) انجام می‌شود و با وبهوک هم کاملاً رویدادمحور است. نودهای دلخواه را می‌توانی «استثنا» کنی تا هشدار نگیرند.\n"
+  );
+  const kb = [];
+  if (!panels.length) {
+    lines.push(
+      "📭 هنوز پنلی ثبت نشده.\n\n" +
+        "ابتدا از «🖥 مانیتورها» با دکمهٔ «🎛 تعریف پنل پاسارگارد» پنل خود را ثبت کنید، سپس برای همان پنل یک «مانیتور نود» بسازید تا قطع/وصل شدن نودهای آن به شما هشدار داده شود.\n"
+    );
+    kb.push([{ text: "🖥 برو به تعریف پنل پاسارگارد", callback_data: "pndef" }]);
+  } else {
+    for (let i = 0; i < panels.length; i++) {
+      const p = panels[i];
+      const m = monitors.find((x) => x.panel_id === p.id);
+      lines.push("");
+      lines.push(`│ ${i + 1}) ${escHtml(p.name)} — ${escHtml(p.url)}`);
+      if (!m) {
+        lines.push("📭 «مانیتور نود» برای این پنل ساخته نشده.");
+        // nda:<panelId>: ساخت مانیتور نود برای همین پنل
+        kb.push([{ text: `➕ ساخت مانیتور نود «${p.name}»`, callback_data: `nda:${p.id}` }]);
+        continue;
+      }
+      const mi = monitors.indexOf(m);
+      const st = await getNodeState(kv, m.id);
+      const names = sortedNodeNames(st);
+      if (!names.length) {
+        lines.push("📭 هنوز وضعیتی ثبت نشده — «🔄 همگام‌سازی» را بزنید یا وبهوک را وصل کنید.");
+      } else {
+        let on = 0;
+        let off = 0;
+        for (const nm of names) {
+          const d = nodeStatusDir(st.nodes[nm].status);
+          if (d === "up") on++;
+          else if (d === "down") off++;
+        }
+        lines.push("   " + names.map((nm) => `${nodeStatusEmoji(st.nodes[nm].status)} ${nm.length > 15 ? nm.substring(0, 14) + "…" : nm}`).join(" · "));
+        lines.push(`   ${names.length} نود — ${on} آنلاین / ${off} قطع`);
+      }
+      if (st.ts) lines.push("   🕐 آخرین به‌روزرسانی: " + ndFmtTs(st.ts));
+      if (m.enabled === false) lines.push("   ⏸ هشدار این پنل متوقف است");
+      const excCount = (m.excluded || []).length;
+      // دکمه‌های مخصوص هر پنل: همگام‌سازی | فاصلهٔ پایش (کرون) | استثنا
+      kb.push([
+        { text: "🔄 همگام‌سازی", callback_data: `ndsync:${mi}` },
+        { text: `⏱ فاصله: ${m.intervalMin || 10} دقیقه`, callback_data: `ndint:${mi}` },
+        { text: `🚫 استثنا${excCount ? ` (${excCount})` : ""}`, callback_data: `ndexc:${mi}` },
+      ]);
+      // توقف/فعال‌سازی هشدار | وبهوک | تست | حذف مانیتور
+      kb.push([
+        { text: m.enabled === false ? "▶️ فعال‌سازی هشدار" : "⏸ توقف هشدار", callback_data: `ndtg:${mi}` },
+        { text: "🔗 وبهوک", callback_data: `ndhook:${mi}` },
+        { text: "🧪 تست", callback_data: `ndtest:${mi}` },
+        { text: "🗑 حذف", callback_data: `nddel:${mi}` },
+      ]);
+    }
+  }
+  const outKb = kb;
+  if (panels.length && panels.some((p) => !monitors.some((x) => x.panel_id === p.id))) {
+    // nda: ساخت مانیتور نود برای پنلی که هنوز مانیتور ندارد
+    outKb.push([{ text: "➕ ساخت مانیتور نود", callback_data: "nda" }]);
+  }
+  // mons: بازگشت به صفحهٔ مانیتورها | menu: منوی اصلی | ndhelp: راهنما
+  outKb.push([{ text: "🔙 بازگشت به مانیتورها", callback_data: "mons" }, { text: "🏠 منو", callback_data: "menu" }]);
+  outKb.push([{ text: "ℹ️ راهنما", callback_data: "ndhelp" }]);
+  await edit(lines.join("\n"), outKb);
+}
+
+// صفحهٔ «استثنا» نودهای یک مانیتور: روشن/خاموش‌کردن هشدار برای هر نود.
+async function renderNodeExclusions(edit, kv, mi) {
+  const monitors = await getNodeMonitors(kv);
+  const m = monitors[mi];
+  if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+  const panels = await getPanels(kv);
+  const p = panels.find((x) => x.id === m.panel_id);
+  const st = await getNodeState(kv, m.id);
+  const lines = [
+    "🚫 استثناهای «" + (p ? escHtml(p.name) : escHtml(m.name || "")) + "»",
+    "",
+    "✅ = استثنا (این نود هشدار نمی‌گیرد) · 🚫 = هشدار فعال",
+    "",
+    "🖧 نودها (" + Object.keys(st.nodes).length + "):",
+  ];
+  const kb = nodeButtonRows(mi, m, st);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+function sortedNodeNames(st) {
+  return Object.keys(st.nodes).sort((a, b) => nodeStatusDir(st.nodes[a].status).localeCompare(nodeStatusDir(st.nodes[b].status)));
+}
+
+// ساخت یک ردیف دکمه برای هر نود:
+//   دکمهٔ نام نود (ndi) → نمایش جزئیات/علت قطعی همان نود
+//   دکمهٔ 🌐 (ndip)     → نمایش آی‌پی همان نود
+//   دکمهٔ 🚫/✅ (ndx)    → افزودن/حذف نود از استثناها (خاموش‌کردن هشدار همان نود)
+function nodeButtonRows(mi, m, st) {
+  const names = sortedNodeNames(st);
+  const exc = new Set(m.excluded || []);
+  const rows = [];
+  names.forEach((nm, ni) => {
+    const nd = st.nodes[nm];
+    const short = nm.length > 16 ? nm.substring(0, 15) + "…" : nm;
+    rows.push([
+      { text: `${nodeStatusEmoji(nd.status)} ${short}`, callback_data: `ndi:${mi}:${ni}` },
+      { text: "🌐", callback_data: `ndip:${mi}:${ni}` },
+      { text: exc.has(nm) ? "✅" : "🚫", callback_data: `ndx:${mi}:${ni}` },
+    ]);
+  });
+  return rows;
+}
+
+async function renderPanelDetail(panels, monitors, idx, edit, kv) {
+  const p = panels[idx];
+  if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+  const m = monitors.find((x) => x.panel_id === p.id);
+  const lines = ["🖥 پنل «" + escHtml(p.name) + "»"];
+  lines.push("🌐 " + code(p.url));
+  lines.push("👤 " + code(p.username || "—"));
+  lines.push("");
+  let st = { nodes: {} };
+  if (!m) {
+    lines.push("📭 هنوز «مانیتور نود» برای این پنل ساخته نشده.");
+    lines.push("بعد از ساخت، قطع/وصل شدن نودهای پنل به‌صورت رویداد (وبهوک) به شما هشدار داده می‌شود.");
+  } else {
+    lines.push("🧠 مانیتور نود: " + (m.enabled === false ? "⏸ متوقف" : "▶️ فعال"));
+    st = await getNodeState(kv, m.id);
+    if (st.ts) lines.push(`🕐 آخرین به‌روزرسانی: ${ndFmtTs(st.ts)}`);
+    const names = sortedNodeNames(st);
+    if (!names.length) {
+      lines.push("", "📭 هنوز وضعیتی ثبت نشده.", "• دکمه «🔄 همگام‌سازی با پنل» را بزنید یا وب‌هوک را وصل کنید.");
+    } else {
+      lines.push("", `🖧 نودها (${names.length}): روی دکمهٔ هر نود بزنید · 🌐 = آی‌پی · 🚫/✅ = استثنا`);
+    }
+  }
+  const kb = [];
+  if (m) {
+    const mi = monitors.indexOf(m);
+    // ndsync: خواندن دستی وضعیت نودها از API پنل و به‌روزرسانی ذخیره‌شده
+    kb.push([{ text: "🔄 همگام‌سازی با پنل", callback_data: `ndsync:${mi}` }]);
+    // ndtg: فعال/غیرفعال کردن ارسال هشدارهای این پنل
+    kb.push([{ text: m.enabled === false ? "▶️ فعال‌سازی هشدار" : "⏸ توقف هشدار", callback_data: `ndtg:${mi}` }]);
+    // ndhook: نمایش آدرس/توکن وب‌هوک | ndtest: ارسال یک هشدار آزمایشی برای تست
+    kb.push([{ text: "🔗 وب‌هوک", callback_data: `ndhook:${mi}` }, { text: "🧪 هشدار آزمایشی", callback_data: `ndtest:${mi}` }]);
+    kb.push(...nodeButtonRows(mi, m, st));
+    // nddel: حذف مانیتور نود این پنل (با تأیید)
+    kb.push([{ text: "🗑 حذف مانیتور نود", callback_data: `nddel:${mi}` }]);
+  } else {
+    // nda:<panelId>: ساخت مانیتور نود برای همین پنل
+    kb.push([{ text: "➕ ساخت مانیتور نود", callback_data: `nda:${p.id}` }]);
+  }
+  // pnlx: حذف کل پنل (همراه با مانیتور متصل)
+  kb.push([{ text: "🗑 حذف پنل", callback_data: `pnlx:${idx}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function renderNodeMonitor(monitors, idx, edit, kv) {
+  const m = monitors[idx];
+  if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => p.id === m.panel_id);
+  const st = await getNodeState(kv, m.id);
+  const lines = ["🖥 مانیتور نود «" + escHtml(m.name) + "»", "وضعیت: " + (m.enabled === false ? "⏸ متوقف" : "▶️ فعال")];
+  if (panel) lines.push(`🧠 پنل مرتبط: ${escHtml(panel.name)}`);
+  if (st.ts) lines.push(`🕐 آخرین به‌روزرسانی: ${ndFmtTs(st.ts)}`);
+  const names = sortedNodeNames(st);
+  if (!names.length) {
+    lines.push("", "📭 هنوز وضعیتی ثبت نشده.", "• دکمه «🔄 همگام‌سازی با پنل» را بزنید یا وب‌هوک را وصل کنید.");
+  } else {
+    lines.push("", `🖧 نودها (${names.length}): روی دکمهٔ هر نود بزنید · 🌐 = آی‌پی · 🚫/✅ = استثنا`);
+  }
+  const kb = [
+    // ndsync: همگام‌سازی دستی نودها با پنل | ndtg: توقف/فعال‌سازی هشدار
+    [{ text: "🔄 همگام‌سازی با پنل", callback_data: `ndsync:${idx}` }],
+    [{ text: m.enabled === false ? "▶️ فعال‌سازی هشدار" : "⏸ توقف هشدار", callback_data: `ndtg:${idx}` }],
+    // ndhook: آدرس وب‌هوک | ndtest: هشدار آزمایشی
+    [{ text: "🔗 وب‌هوک", callback_data: `ndhook:${idx}` }, { text: "🧪 هشدار آزمایشی", callback_data: `ndtest:${idx}` }],
+    ...nodeButtonRows(idx, m, st),
+    // nddel: حذف این مانیتور نود
+    [{ text: "🗑 حذف", callback_data: `nddel:${idx}` }],
+    [{ text: "🔙 بازگشت", callback_data: "nd" }],
+  ];
+  await edit(lines.join("\n"), kb);
+}
+
+async function handleNodeEvent(token, payload, env, botToken) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  try {
+    const monitors = await getNodeMonitors(kv);
+    const m = monitors.find((x) => x.token === token);
+    if (!m) return;
+    const nodeName = String(payload.node || payload.name || "").trim();
+    if (!nodeName) return;
+    const panels = await getPanels(kv);
+    const panel = panels.find((p) => p.id === m.panel_id);
+    const rawStatus = String(payload.status || "").toLowerCase();
+    const rawEvent = String(payload.event || "").toLowerCase();
+    const reason = payload.reason || payload.message || payload.error || "";
+    let dir = null;
+    if (
+      ["down", "disconnect", "disconnected", "offline", "stopped", "node_down"].includes(rawEvent) ||
+      NODE_OFF_STATES.includes(rawStatus)
+    ) {
+      dir = "down";
+    } else if (
+      ["up", "connect", "connected", "online", "running", "node_up"].includes(rawEvent) ||
+      NODE_DOWN_STATES.includes(rawStatus)
+    ) {
+      dir = "up";
+    }
+    if (!dir) return;
+    const st = await getNodeState(kv, m.id);
+    const cur = st.nodes[nodeName];
+    if (cur && cur.status === dir) return;
+    st.nodes[nodeName] = {
+      name: nodeName,
+      status: dir,
+      reason: reason ? String(reason) : null,
+      ts: new Date().toISOString(),
+      first_seen: (cur && cur.first_seen) || new Date().toISOString(),
+    };
+    st.ts = st.nodes[nodeName].ts;
+    await saveNodeState(kv, m.id, st);
+    if (m.enabled === false) return;
+    if ((m.excluded || []).includes(nodeName)) return;
+    const admins = await getAdmins(kv, env);
+    const panelName = (panel && panel.name) || m.name;
+    const ts = ndFmtTs(st.nodes[nodeName].ts);
+    const msg =
+      (dir === "down"
+        ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${reason ? escHtml(String(reason)) : "—"}`
+        : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران${reason ? `\nℹ️ ${escHtml(String(reason))}` : ""}`);
+    for (const a of admins) await sendPanelMsg(botToken, a, msg);
+  } catch (e) {
+    console.error("NDHOOK", e && e.stack ? e.stack : String(e));
+  }
+}
+
+function duplicateLabels(records, zoneName) {
+  const counts = {};
+  for (const r of records) counts[r.name] = (counts[r.name] || 0) + 1;
+  const seen = {};
+  const out = {};
+  for (const r of records) {
+    let label = recordLabel(r, zoneName);
+    if (counts[r.name] > 1) {
+      seen[r.name] = (seen[r.name] || 0) + 1;
+      label = `${seen[r.name]}. ${label}`;
+    }
+    out[r.id] = label;
+  }
+  return out;
+}
+
+function maskToken(t) {
+  if (!t) return "";
+  if (t.length <= 12) return t.slice(0, 6) + "…";
+  return t.slice(0, 10) + "…" + t.slice(-4);
+}
+
+const ZONE_PAGE_SIZE = 16;
+
+async function showZones(page, filter, accounts, send, kv, chatId) {
+  const all = await getAllZones(accounts, kv);
+  if (all.length === 0) {
+    await send("☁️ کلودفلر\n\n📭 هیچ دامنه‌ای یافت نشد.\nیک اکانت کلودفلر با دسترسی Zone Read اضافه کنید یا دامنه جدید بسازید.", [
+      [
+        { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
+        { text: "👤 افزودن اکانت کلودفلر", callback_data: "accadd" },
+      ],
+      [{ text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  const flt = filter === undefined ? "all" : String(filter);
+  const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
+
+  const pages = Math.ceil(zones.length / ZONE_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  if (chatId) await kv.put(`zctx:${chatId}`, JSON.stringify({ filter: flt, page }), { expirationTtl: 86400 });
+
+  const slice = zones.slice(page * ZONE_PAGE_SIZE, page * ZONE_PAGE_SIZE + ZONE_PAGE_SIZE);
+
+  const keyboard = [];
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2; j++) {
+      if (j < slice.length) {
+        const z = slice[j];
+        // z:<acc>:<zoneId>: ورود به دامنه و نمایش/ویرایش رکوردهای آن
+        row.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ${z.name}`, callback_data: `z:${z._acc}:${z.id}` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    keyboard.push(row);
+  }
+
+  // favs: دسترسی سریع به ساب‌های منتخب (سبز) | zf:all:0: نمایش دامنه‌های همهٔ اکانت‌ها
+  keyboard.push([
+    { text: "⭐ ساب‌های منتخب", callback_data: "favs", style: "success" },
+    { text: flt === "all" ? "📁 ✅ همه اکانت‌ها" : "📁 همه اکانت‌ها", callback_data: `zf:all:0` },
+  ]);
+
+  for (let i = 0; i < accounts.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3; j++) {
+      if (j < accounts.length) {
+        const a = accounts[j];
+        // zf:<accIndex>:0: فیلتر دامنه‌ها بر اساس همین اکانت
+        row.push({ text: flt === String(j) ? `👤 ✅ ${a.name}` : `👤 ${a.name}`, callback_data: `zf:${j}:0` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    keyboard.push(row);
+  }
+
+  // addzone: ساخت دامنهٔ جدید در کلودفلر | accadd: افزودن اکانت کلودفلر جدید (توکن)
+  keyboard.push([
+    { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
+    { text: "👤 افزودن اکانت کلودفلر", callback_data: "accadd" },
+  ]);
+
+  // zf:<filter>:<page>: صفحه‌بندی لیست دامنه‌ها | menu: بازگشت به منوی اصلی
+  const nav = [];
+  if (page > 0) nav.push({ text: "⬅️", callback_data: `zf:${flt}:${page - 1}` });
+  else nav.push(EMPTY_BTN);
+  nav.push({ text: "🔙 بازگشت", callback_data: "menu" });
+  if (page < pages - 1) nav.push({ text: "➡️", callback_data: `zf:${flt}:${page + 1}` });
+  else nav.push(EMPTY_BTN);
+  keyboard.push(nav);
+
+  const label = flt === "all" ? "همه اکانت‌ها" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
+  let title = `☁️ کلودفلر — ${label}`;
+  if (pages > 1) title += ` — صفحه ${page + 1} از ${pages}`;
+  await send(title, keyboard);
+}
+
+async function showRecords(zone, page, accounts, send, kv) {
+  const records = await getRecords(zone, accounts, kv);
+  const token = makeToken();
+  await kv.put(
+    `s:${token}`,
+    JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: zone._acc, page: page || 0, zback: "zones" }),
+    { expirationTtl: 86400 }
+  );
+
+  if (records.length === 0) {
+    // addz: افزودن رکورد به دامنه | zset: تنظیمات دامنه (SSL و...) | zones: بازگشت
+    const keyboard = [
+      [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
+      [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
+      [{ text: "🔙 بازگشت", callback_data: "zones" }],
+    ];
+    await send(`📭 رکوردی برای ${zone.name} یافت نشد.`, keyboard);
+    return;
+  }
+
+  await renderRecords(zone, records, token, page, send, undefined, "zones");
+}
+
+async function renderRecords(zone, records, token, page, send, selected, backCb) {
+  const pages = Math.ceil(records.length / RECORD_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+
+  const slice = records.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
+  const selSet = new Set(selected || []);
+  const labels = duplicateLabels(records, zone.name);
+
+  const keyboard = [];
+  for (let i = 0; i < slice.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3; j++) {
+      if (j < slice.length) {
+        const r = slice[j];
+        const mark = selSet.has(r.id) ? "✅" : "⬜";
+        // sel: در حالت انتخاب گروهی، رکورد را تیک/انتخاب می‌کند | e: در حالت عادی، جزئیات رکورد را باز می‌کند
+        const cbData = selected !== undefined ? `sel:${token}:${r.id}` : `e:${token}:${r.id}`;
+        row.push({ text: `${selected !== undefined ? mark + " " : ""}${labels[r.id]}`, callback_data: cbData });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    keyboard.push(row);
+  }
+
+  if (selected !== undefined) {
+    // حالت انتخاب گروهی: عملیات روی چند رکورد انتخاب‌شده
+    if (selSet.size > 0) {
+      // bulkdel: حذف گروهی | bulkedit: تغییر مقدار گروهی
+      keyboard.push([
+        { text: "🗑 حذف انتخاب‌ها", callback_data: `bulkdel:${token}` },
+        { text: "✏️ تغییر مقدار", callback_data: `bulkedit:${token}` },
+      ]);
+      // bulktype: تغییر نوع گروهی | seldone: خروج از حالت انتخاب
+      keyboard.push([
+        { text: "🔄 تغییر نوع", callback_data: `bulktype:${token}` },
+        { text: "❌ لغو انتخاب", callback_data: `seldone:${token}` },
+      ]);
+      // favsel: افزودن رکوردهای انتخاب‌شده به ساب‌های منتخب
+      keyboard.push([{ text: "⭐ افزودن به منتخب‌ها", callback_data: `favsel:${token}` }]);
+    } else {
+      keyboard.push([{ text: "❌ لغو انتخاب", callback_data: `seldone:${token}` }]);
+    }
+  } else {
+    // zset: تنظیمات دامنه | selmode: ورود به حالت انتخاب گروهی | addz: افزودن رکورد | zsearch: جست‌وجو در رکوردهای همین دامنه
+    keyboard.push([
+      { text: "⚙️ تنظیمات", callback_data: `zset:${token}` },
+      { text: "🗂 گروهی", callback_data: `selmode:${token}` },
+      { text: "➕ افزودن", callback_data: `addz:${token}` },
+      { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
+    ]);
+  }
+
+  // selp/p: صفحه‌بندی لیست (در حالت انتخاب گروهی از selp و در حالت عادی از p استفاده می‌شود)
+  const nav = [];
+  if (selected !== undefined) {
+    nav.push(page > 0 ? { text: "◀️", callback_data: `selp:${token}:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `selp:${token}:${page + 1}` } : EMPTY_BTN);
+  } else {
+    nav.push(page > 0 ? { text: "◀️", callback_data: `p:${token}:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: "🔙 بازگشت", callback_data: backCb || "zones" });
+    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `p:${token}:${page + 1}` } : EMPTY_BTN);
+  }
+  keyboard.push(nav);
+
+  const title = selected !== undefined
+    ? `🗂 ${zone.name} — ${selSet.size} انتخاب شده`
+    : `📋 ${zone.name}` + (pages > 1 ? ` — صفحه ${page + 1} از ${pages}` : "");
+  await send(title, keyboard);
+}
+
+async function showArvanDomains(page, arvanAccounts, edit, kv, env) {
+  if (!arvanAccounts.length) {
+    await edit("🇮🇷 آروان کلاد\n\n📭 اکانتی ثبت نشده. با دکمهٔ زیر اضافه کنید.", [
+      [{ text: "➕ افزودن اکانت آروان", callback_data: "arvanaccadd" }],
+      [{ text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+  const items = [];
+  let err = "";
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    try {
+      const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+      for (const d of domains) items.push({ domain: d.domain, acc: i, name: arvanAccounts[i].name });
+    } catch (e) {
+      err = e && e.message ? e.message : String(e);
+    }
+  }
+  if (!items.length) {
+    await edit(
+      "🇮🇷 آروان کلاد\n\n📭 دامنه‌ای در اکانت‌های آروان پیدا نشد." +
+        (err ? "\n⚠️ خطا: " + escHtml(err) : "") +
+        "\n\nℹ️ ساخت دامنه در آروان از طریق API امکان‌پذیر نیست؛ باید از پنل آروان اضافه شود. پس از افزودن، دکمهٔ «🔄 همگام‌سازی» را بزن (سپس ساخت ساب‌دامنه/رکورد از همین ربات انجام می‌شود).",
+      [
+        // url: باز کردن پنل آروان برای افزودن دامنه (ساخت دامنه از API ممکن نیست)
+        [{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }],
+        // arvnsync: همگام‌سازی دوبارهٔ لیست دامنه‌ها از آروان
+        [{ text: "🔄 همگام‌سازی", callback_data: "arvnsync" }],
+        // arvanaccadd: افزودن اکانت آروان | menu: منوی اصلی
+        [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }, { text: "🏠 منو", callback_data: "menu" }],
+      ]
+    );
+    return;
+  }
+  const per = CZ_PAGE_SIZE;
+  const pages = Math.max(1, Math.ceil(items.length / per));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = items.slice(page * per, page * per + per);
+  const lines = ["🇮🇷 آروان کلاد — دامنه‌ها (" + items.length + ")", ""];
+  const kb = [];
+  // arv:<accIndex>:<domain>: ورود به دامنه و مدیریت رکوردهای آن
+  for (const it of slice) kb.push([{ text: `🔍 ${it.domain}`, callback_data: `arv:${it.acc}:${it.domain}` }]);
+  if (pages > 1) {
+    // arvpage:<page>: صفحه‌بندی لیست دامنه‌های آروان
+    kb.push([
+      { text: "⬅️", callback_data: `arvpage:${page - 1}` },
+      { text: `${page + 1}/${pages}`, callback_data: "noop" },
+      { text: "➡️", callback_data: `arvpage:${page + 1}` },
+    ]);
+  }
+  // arvnsync: همگام‌سازی دوباره | arvanaccadd: افزودن اکانت آروان
+  kb.push([
+    { text: "🔄 همگام‌سازی", callback_data: "arvnsync" },
+    { text: "➕ افزودن اکانت", callback_data: "arvanaccadd" },
+  ]);
+  kb.push([{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function showArvanRecords(domain, accIdx, token, arvanAccounts, edit, kv, env) {
+  const token_val = arvanAccounts[accIdx].token;
+  const records = await arvanGetAllRecords(token_val, domain, kv, env);
+  await kv.put(
+    `s:${token}`,
+    JSON.stringify({ domain, acc: accIdx, provider: "arvan" }),
+    { expirationTtl: 86400 }
+  );
+  if (records.length === 0) {
+    await edit(
+      `📭 رکوردی برای ${domain} یافت نشد.`,
+      [
+        [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
+        [{ text: "🔙 بازگشت", callback_data: "arvan" }],
+      ]
+    );
+    return;
+  }
+  await renderArvanRecords(domain, records, token, 0, edit);
+}
+
+async function renderArvanRecords(domain, records, token, page, edit, backCb) {
+  const pages = Math.ceil(records.length / RECORD_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = records.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
+  const labels = {};
+  const counts = {};
+  for (const r of records) {
+    counts[r.name] = (counts[r.name] || 0) + 1;
+  }
+  const seen = {};
+  for (const r of records) {
+    if (counts[r.name] > 1) {
+      seen[r.name] = (seen[r.name] || 0) + 1;
+      labels[r.id] = `${seen[r.name]}. ${r.type}-${r.name}`;
+    } else {
+      labels[r.id] = `${r.type}-${r.name}`;
+    }
+  }
+  const keyboard = [];
+  for (let i = 0; i < slice.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3; j++) {
+      if (j < slice.length) {
+        const r = slice[j];
+        row.push({ text: labels[r.id], callback_data: `e:${token}:${r.id}` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    keyboard.push(row);
+  }
+  keyboard.push([
+    { text: "➕ افزودن", callback_data: `addz:${token}` },
+    { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
+  ]);
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `ap:${token}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: "🔙 بازگشت", callback_data: backCb || "arvan" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `ap:${token}:${page + 1}` } : EMPTY_BTN);
+  keyboard.push(nav);
+  await edit(`📋 ${domain} — صفحه ${page + 1} از ${pages}`, keyboard);
+}
+
+async function renderSettingsGroup(token, session, accounts, edit, title, keys) {
+  const zone = await getZoneById(session.zone_id, session.acc, accounts);
+  const map = await getSettingsMap(zone, accounts);
+  const buttons = [];
+  for (const k of keys) {
+    const info = SETTINGS_INFO[k];
+    const cur = map[k];
+    if (info.type === "bool") {
+      const on = cur === "on";
+      buttons.push({ text: `${on ? "✅" : "❌"} ${info.label}`, callback_data: `ztog:${token}:${k}` });
+    } else {
+      buttons.push({ text: `🔧 ${info.label}: ${info.values[cur] || cur}`, callback_data: `zval:${token}:${k}` });
+    }
+  }
+  const keyboard = grid2(buttons);
+  keyboard.push([{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }]);
+  await edit(`${title} — ${zone.name}:\n\nبرای تغییر روی هر گزینه کلیک کنید:`, keyboard);
+}
+
+async function renderAdmins(admins, mainAdmin, send) {
+  let text = "👥 ادمین‌های ربات:\n\n";
+  admins.forEach((id, i) => {
+    text += `${i + 1}) ${id}${id === mainAdmin ? " — 👑 اصلی" : ""}\n`;
+  });
+  // adminadd: افزودن ادمین با شناسهٔ عددی | admindel: حذف ادمین | menu: منوی اصلی
+  const keyboard = [
+    [{ text: "➕ افزودن ادمین", callback_data: "adminadd" }],
+    [{ text: "🗑 حذف ادمین", callback_data: "admindel" }],
+    [{ text: "🏠 منو", callback_data: "menu" }],
+  ];
+  await send(text, keyboard);
+}
+
+async function showAccounts(accounts, arvanAccounts, send) {
+  let text = "";
+  const keyboard = [];
+  if (accounts.length > 0) {
+    text += "👤 اکانت‌های کلودفلر:\n\n";
+    accounts.forEach((a, i) => {
+      text += `${i + 1}) ${a.name}\n   توکن: ${maskToken(a.token)}\n\n`;
+    });
+  } else {
+    text += "👤 کلودفلر: هیچ اکانتی ثبت نشده\n\n";
+  }
+  if (arvanAccounts.length > 0) {
+    text += "🇮🇷 اکانت‌های آروان کلاد:\n\n";
+    arvanAccounts.forEach((a, i) => {
+      text += `${i + 1}) ${a.name}\n   کلید: ${maskArvanToken(a.token)}\n\n`;
+    });
+  } else {
+    text += "🇮🇷 آروان کلاد: هیچ اکانتی ثبت نشده\n\n";
+  }
+  // accadd: افزودن اکانت کلودفلر | arvanaccadd: افزودن اکانت آروان | accdel: حذف اکانت | menu: منوی اصلی
+  keyboard.push([{ text: "➕ افزودن اکانت کلودفلر", callback_data: "accadd" }]);
+  keyboard.push([{ text: "➕ افزودن اکانت آروان", callback_data: "arvanaccadd" }]);
+  if (accounts.length > 0 || arvanAccounts.length > 0) {
+    keyboard.push([{ text: "🗑 حذف اکانت", callback_data: "accdel" }]);
+  }
+  keyboard.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await send(text, keyboard);
+}
+
+async function handleAdd(args, accounts, send, kv) {
+  const [, zoneName, type, name, content, ttlArg, proxyArg] = args;
+  if (!zoneName || !type || !name || !content) {
+    await send("⚠️ استفاده: /add <دامنه> <نوع> <نام> <مقدار> [ttl] [proxy]\nمثال: /add example.com A www 1.2.3.4 true");
+    return;
+  }
+  const typeUp = type.toUpperCase();
+  if (!RECORD_TYPES.includes(typeUp)) {
+    await send("❌ نوع رکورد باید A، AAAA یا CNAME باشد.");
+    return;
+  }
+  const zone = await findZone(zoneName, accounts);
+  if (!zone) return send("❌ دامنه پیدا نشد.");
+
+  const ttl = ttlArg ? Number(ttlArg) : 1;
+  const proxied = proxyArg ? proxyArg.toLowerCase() === "true" : false;
+  const fullName = normalizeName(name, zone.name);
+
+  const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+    method: "POST",
+    headers: hdr(accounts[zone._acc].token),
+    body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: ttl || 1, proxied }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    await invalidateCache(kv, zone.id);
+    await send(
+      `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار | Proxy: ${data.result.proxied ? "روشن" : "خاموش"}`,
+      [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]
+    );
+  } else {
+    await send("❌ خطا از کلودفلر:\n" + cfErrText(data));
+  }
+}
+
+async function findRecord(zone, type, name, accounts) {
+  const fullName = normalizeName(name, zone.name);
+  const res = await fetch(
+    `${CF_API}/zones/${zone.id}/dns_records?type=${type.toUpperCase()}&name=${encodeURIComponent(fullName)}`,
+    { headers: hdr(accounts[zone._acc].token) }
+  );
+  const data = await res.json();
+  if (!data.success || !data.result || data.result.length === 0) return null;
+  return data.result[0];
+}
+
+async function handleEdit(args, accounts, send, kv) {
+  const [, zoneName, type, name, content] = args;
+  if (!zoneName || !type || !name || !content) {
+    await send("⚠️ استفاده: /edit <دامنه> <نوع> <نام> <مقدار جدید>");
+    return;
+  }
+  const zone = await findZone(zoneName, accounts);
+  if (!zone) return send("❌ دامنه پیدا نشد.");
+  const record = await findRecord(zone, type, name, accounts);
+  if (!record) return send("❌ رکورد پیدا نشد.");
+
+  const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
+    method: "PATCH",
+    headers: hdr(accounts[zone._acc].token),
+    body: JSON.stringify({ content }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    await invalidateCache(kv, zone.id);
+    await send(`✅ مقدار ${code(record.name)} به ${code(content)} تغییر کرد.`);
+  } else {
+    await send("❌ خطا:\n" + cfErrText(data));
+  }
+}
+
+async function handleSetTtl(args, accounts, send, kv) {
+  const [, zoneName, type, name, ttlArg] = args;
+  if (!zoneName || !type || !name || !ttlArg) {
+    await send("⚠️ استفاده: /setttl <دامنه> <نوع> <نام> <ttl>\n(ttl=1 یعنی خودکار)");
+    return;
+  }
+  const zone = await findZone(zoneName, accounts);
+  if (!zone) return send("❌ دامنه پیدا نشد.");
+  const record = await findRecord(zone, type, name, accounts);
+  if (!record) return send("❌ رکورد پیدا نشد.");
+
+  const ttl = Number(ttlArg);
+  const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
+    method: "PATCH",
+    headers: hdr(accounts[zone._acc].token),
+    body: JSON.stringify({ ttl: ttl || 1 }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    await invalidateCache(kv, zone.id);
+    await send(`✅ TTL رکورد ${code(record.name)} به ${data.result.ttl === 1 ? "خودکار" : data.result.ttl} تغییر کرد.`);
+  } else {
+    await send("❌ خطا:\n" + cfErrText(data));
+  }
+}
+
+async function handleToggleProxy(args, accounts, send, kv) {
+  const [, zoneName, type, name] = args;
+  if (!zoneName || !type || !name) {
+    await send("⚠️ استفاده: /toggleproxy <دامنه> <نوع> <نام>");
+    return;
+  }
+  const zone = await findZone(zoneName, accounts);
+  if (!zone) return send("❌ دامنه پیدا نشد.");
+  const record = await findRecord(zone, type, name, accounts);
+  if (!record) return send("❌ رکورد پیدا نشد.");
+
+  const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
+    method: "PATCH",
+    headers: hdr(accounts[zone._acc].token),
+    body: JSON.stringify({ proxied: !record.proxied }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    await invalidateCache(kv, zone.id);
+    await send(`✅ Proxy رکورد ${code(record.name)} ${data.result.proxied ? "روشن" : "خاموش"} شد.`);
+  } else {
+    await send("❌ خطا:\n" + cfErrText(data));
+  }
+}
+
+async function handleDelete(args, accounts, send, kv) {
+  const [, zoneName, type, name] = args;
+  if (!zoneName || !type || !name) {
+    await send("⚠️ استفاده: /delete <دامنه> <نوع> <نام>");
+    return;
+  }
+  const zone = await findZone(zoneName, accounts);
+  if (!zone) return send("❌ دامنه پیدا نشد.");
+  const record = await findRecord(zone, type, name, accounts);
+  if (!record) return send("❌ رکورد پیدا نشد.");
+
+  const del = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
+    method: "DELETE",
+    headers: hdr(accounts[zone._acc].token),
+  });
+  const delData = await del.json();
+  if (delData.success) {
+    await invalidateCache(kv, zone.id);
+    await send(`✅ رکورد ${record.type}-${code(record.name)} حذف شد.`);
+  } else {
+    await send("❌ خطا در حذف:\n" + cfErrText(delData));
+  }
+}
+
+async function searchRecords(accounts, field, query, zoneFilter, kv) {
+  const results = [];
+  const zones = zoneFilter ? [zoneFilter] : await getAllZones(accounts, kv);
+  const q = query.toLowerCase();
+  for (const zone of zones) {
+    const records = await getRecords(zone, accounts, kv);
+    for (const r of records) {
+      const hay = (field === "name" ? r.name : r.content) || "";
+      if (hay.toLowerCase().includes(q)) {
+        results.push({ acc: zone._acc, zone_id: zone.id, zone_name: zone.name, record: r });
+      }
+    }
+  }
+  return results;
+}
+
+async function renderSearchResults(token, results, query, field, send) {
+  if (results.length === 0) {
+    await send(`🔍 نتیجه‌ای برای «${query}» پیدا نشد.`, [
+      [{ text: "🔍 جستجوی جدید", callback_data: "search" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+  const slice = results.slice(0, PAGE_SIZE);
+  let text = `🔍 نتایج جستجوی «${escHtml(query)}» (${results.length} مورد):\n\n`;
+  slice.forEach((res, i) => {
+    text +=
+      `${i + 1}) ${res.record.type}-${code(res.record.name)}\n` +
+      `   → ${code(res.record.content)}\n` +
+      `   دامنه: ${code(res.zone_name)}\n\n`;
+  });
+
+  // se:<token>:<index> باز کردن/ویرایش رکورد نتیجه | sd:<token>:<index> حذف آن رکورد
+  const keyboard = slice.map((res, i) => [
+    { text: `✏️ ${res.record.type}-${res.record.name}`, callback_data: `se:${token}:${i}` },
+    { text: "🗑", callback_data: `sd:${token}:${i}` },
+  ]);
+  keyboard.push([{ text: "🔍 جستجوی جدید", callback_data: "search" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await send(text, keyboard);
+}
+
+async function addRecordFromPending(pending, content, accounts, kv, chatId, send) {
+  await kv.delete(`pend:${chatId}`);
+  if (pending.provider === "arvan") {
+    const domain = pending.domain;
+    const acc = { token: await arvanToken(kv, pending.acc) };
+    const res = await arvanCreateRecord(acc.token, domain, pending.rtype, pending.name, content, false, kv, env);
+    if (res.success !== false) {
+      await send(
+        `✅ رکورد ساخته شد:\n${pending.rtype}-${pending.name} → ${code(content)}\n${domain}`,
+        [[{ text: "🇮🇷 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else {
+      await send("❌ خطا:\n" + cfErrText(res));
+    }
+    return;
+  }
+  const fullName = normalizeName(pending.name, pending.zone_name);
+  const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
+    method: "POST",
+    headers: hdr(accounts[pending.acc].token),
+    body: JSON.stringify({ type: pending.rtype, name: fullName, content, ttl: 1, proxied: false }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    await invalidateCache(kv, pending.zone_id);
+    await send(
+      `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار`,
+      [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]
+    );
+  } else {
+    await send("❌ خطا:\n" + cfErrText(data));
+  }
+}
+
+async function cnameTargetPickerData(accounts, kv, name, page = 0) {
+  const zones = await getAllZones(accounts, kv);
+  const pages = Math.ceil(zones.length / CZ_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = zones.slice(page * CZ_PAGE_SIZE, page * CZ_PAGE_SIZE + CZ_PAGE_SIZE);
+  const kb = grid2(
+    slice.map((z) => ({ text: `📁 ${z.name}`, callback_data: `cz:${z._acc}:${z.id}` }))
+  );
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `czp:${name}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `czp:${name}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "⌨️ ورود دستی دامنه", callback_data: "czman" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  return {
+    text: `🔤 نام «${code(name)}» ثبت شد.\n\nبرای مقدار CNAME:\n• یک دامنه را انتخاب کنید تا ساب‌دامنه‌هایش را ببینید\n• یا مقدار را مستقیم تایپ کنید:`,
+    kb,
+  };
+}
+
+async function resolvePending(pending, value, chatId, accounts, arvanAccounts, send, kv, botToken, env) {
+  const type = pending.type;
+  const txt = value.trim();
+
+  if (type === "hf_gptoken") {
+    await kv.delete(`pend:${chatId}`);
+    const cfg = await getHostFilterCfg(kv);
+    cfg.gpToken = txt === "-" ? "" : txt;
+    await saveHostFilterCfg(kv, cfg);
+    await send(cfg.gpToken ? "✅ توکن Globalping ذخیره شد." : "🗑 توکن Globalping حذف شد.", [[{ text: "⚙️ تنظیمات", callback_data: "hfset" }]]);
+    return;
+  }
+
+  if (type === "hf_set") {
+    await kv.delete(`pend:${chatId}`);
+    const key = pending.key;
+    const cfg = await getHostFilterCfg(kv);
+    const n = Number(txt);
+    const limits = { interval: [1, 1440], cities: [1, cfg.citiesSel.length], maxok: [0, 3], probes: [1, 50], minfail: [1, 50], batch: [1, 60], maxchanges: [1, 20], backupkeep: [1, 10], recheck: [0, 3], recheckmin: [1, 60] };
+    const lim = limits[key];
+    if (!lim || !Number.isInteger(n) || n < lim[0] || n > lim[1]) {
+      await send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "🔙 تنظیمات", callback_data: "hfset" }]]);
+      return;
+    }
+    if (key === "interval") cfg.intervalMin = n;
+    else if (key === "cities") cfg.cities = Math.min(n, cfg.citiesSel.length);
+    else if (key === "maxok") cfg.maxOk = n;
+    else if (key === "probes") cfg.probes = n;
+    else if (key === "minfail") cfg.minFail = n;
+    else if (key === "batch") cfg.batch = n;
+    else if (key === "maxchanges") cfg.maxChanges = n;
+    else if (key === "backupkeep") cfg.backupKeep = n;
+    else if (key === "recheck") cfg.recheckCount = n;
+    else if (key === "recheckmin") cfg.recheckMin = n;
+    await saveHostFilterCfg(kv, cfg);
+    await send("✅ ذخیره شد.", [[{ text: "⚙️ تنظیمات", callback_data: "hfset" }]]);
+    return;
+  }
+
+  if (type === "admin_add") {
+    await kv.delete(`pend:${chatId}`);
+    const id = Number(txt);
+    if (!Number.isInteger(id) || id <= 0) {
+      await send("❌ شناسه عددی معتبر نیست. دوباره از منوی ادمین‌ها تلاش کنید.");
+      return;
+    }
+    let list = (await kv.get("admins", "json")) || [];
+    list = list.map(Number);
+    if (!list.includes(id)) list.push(id);
+    await kvPutCached(kv, "admins", JSON.stringify(list));
+    await send(`✅ ادمین ${id} اضافه شد.`, [
+      [{ text: "👥 ادمین‌ها", callback_data: "admins_menu" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  if (type === "addzone_name") {
+    await kv.delete(`pend:${chatId}`);
+    const name = txt.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(name)) {
+      await send("❌ نام دامنه معتبر نیست. دوباره از منو تلاش کنید.");
+      return;
+    }
+    const acc = accounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    const accountId = await getAccountId(accounts, pending.acc);
+    if (!accountId) return send("❌ نمی‌توان شناسه اکانت را پیدا کرد. مطمئن شوید اکانت حداقل یک دامنه دارد.");
+    const res = await fetch(`${CF_API}/zones`, {
+      method: "POST",
+      headers: hdr(acc.token),
+      body: JSON.stringify({ name, account: { id: accountId }, type: "full" }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      await invalidateCache(kv, null);
+      await send(
+        `✅ دامنه «${name}» با موفقیت در اکانت «${acc.name}» ثبت شد!\n\n` +
+        `برای فعال‌سازی، این NS ها را در رجیسترار دامنه تنظیم کنید:\n${(data.result.name_servers || []).join("\n")}`,
+        [[{ text: "📋 دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else {
+      await send("❌ خطا در ثبت دامنه:\n" + cfErrText(data));
+    }
+    return;
+  }
+
+  if (type === "bulk_edit") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[pending.acc].token),
+        body: JSON.stringify({ content: txt }),
+      });
+      const d = await res.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    const summary = `✅ تغییر یافت\n\nمقدار ${okCount} از ${pending.ids.length} رکورد با موفقیت به:\n${code(txt)}\nبه‌روزرسانی شد.`;
+    if (pending.msgId) {
+      await editMessage(botToken, chatId, pending.msgId, summary, []);
+      await sleep(2000);
+      await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
+    } else {
+      await send(summary, [
+        [{ text: "📋 دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    }
+    return;
+  }
+
+  if (type === "bulk_type") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[pending.acc].token),
+        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
+      });
+      const d = await res.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    const summary = `✅ تغییر یافت\n\nنوع ${okCount} از ${pending.ids.length} رکورد به ${pending.new_type} تغییر کرد.`;
+    if (pending.msgId) {
+      await editMessage(botToken, chatId, pending.msgId, summary, []);
+      await sleep(2000);
+      await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
+    } else {
+      await send(summary, [
+        [{ text: "📋 دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    }
+    return;
+  }
+
+  if (type === "acc_name") {
+    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "acc_token", name: txt }), { expirationTtl: 600 });
+    await send(`🔑 حالا API Token اکانت «${txt}» را بفرستید:`);
+    return;
+  }
+
+  if (type === "acc_token") {
+    await kv.delete(`pend:${chatId}`);
+    const token = txt;
+    const res = await fetch(`${CF_API}/zones?per_page=1`, { headers: hdr(token) });
+    const data = await res.json();
+    if (!data.success) {
+      await send("❌ توکن نامعتبر است یا دسترسی Zone Read ندارد.", mainMenuKeyboard());
+      return;
+    }
+    accounts.push({ name: pending.name, token });
+    await kvPutCached(kv, "accounts", JSON.stringify(accounts));
+    await invalidateCache(kv, null);
+    await send(`✅ اکانت «${pending.name}» اضافه شد.`, [
+      [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "📋 دامنه‌ها", callback_data: "zones" }],
+    ]);
+    return;
+  }
+
+  if (type === "arvan_acc_name") {
+    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_token", name: txt }), { expirationTtl: 600 });
+    await send(`🔑 حالا API Key اکانت آروان «${txt}» را بفرستید:`);
+    return;
+  }
+
+  if (type === "arvan_acc_token") {
+    await kv.delete(`pend:${chatId}`);
+    const token = txt;
+    arvanAccounts.push({ name: pending.name, token });
+    await kvPutCached(kv, "arvan_accounts", JSON.stringify(arvanAccounts));
+    await send(`✅ اکانت آروان «${pending.name}» اضافه شد.\n\n⚠️ در صورت خطا، کلید از تنظیمات اصلاح شود.`, [
+      [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🇮🇷 آروان", callback_data: "arvan" }],
+    ]);
+    return;
+  }
+
+  if (type === "ar_name") {
+    if (!txt) return send("⚠️ نام رکورد معتبر نیست.");
+    await kv.put(
+      `pend:${chatId}`,
+      JSON.stringify({ ...pending, type: "ar_content", name: txt }),
+      { expirationTtl: 600 }
+    );
+    if (pending.rtype === "CNAME") {
+      const { text, kb } = await cnameTargetPickerData(accounts, kv, txt);
+      await send(text, kb);
+    } else {
+      await send("🔤 حالا مقدار IP رکورد را بفرستید:");
+    }
+    return;
+  }
+
+  if (type === "ar_content") {
+    await addRecordFromPending(pending, txt, accounts, kv, chatId, send);
+    return;
+  }
+
+  // دریافت مقدار عددیِ فیلدهای تنظیمات مانیتور مصرف (که با دکمه‌های um:h/um:d/um:c/um:min شروع شده بود)
+  if (type === "um_hourly" || type === "um_daily" || type === "um_cool" || type === "um_min") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(txt);
+    if (!Number.isFinite(n) || n < 0 || n > 100000) return send("❌ عدد نامعتبر است.");
+    const cfg = await getUmCfg(kv);
+    // um_hourly→آستانهٔ ساعتی | um_daily→آستانهٔ روزانه | um_min→حداقل مصرف اسنپ‌شات | um_cool→فاصلهٔ هشدار
+    if (type === "um_hourly") cfg.hourlyGb = n;
+    else if (type === "um_daily") cfg.dailyGb = n;
+    else if (type === "um_min") cfg.minGb = n;
+    else cfg.cooldownH = n;
+    await saveUmCfg(kv, cfg);
+    await send("✅ ذخیره شد.", [[{ text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }]]);
+    return;
+  }
+
+  // ===================== سرورها (SSH) =====================
+  if (type === "srv_add") {
+    // ویزارد افزودن سرور: host → auth (نام پیش‌فرض = هاست، کاربر همیشه root)
+    await kv.delete(`pend:${chatId}`);
+    if (pending.step === "name") {
+      // سازگاری با پن‌های قدیمی: نام را نادیده بگیر و مستقیم برو سراغ هاست
+      const name = txt.substring(0, 60);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: { name } }), { expirationTtl: 900 });
+      return send("🌐 هاست یا آی‌پی سرور را بفرستید (پورت غیرپیش‌فرض را با : اضافه کنید، مثل 1.2.3.4:2222):");
+    }
+    if (pending.step === "host") {
+      let host = txt.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      let port = 22;
+      const m = host.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
+      if (m) { host = m[1]; port = Number(m[2]); }
+      if (!/^[A-Za-z0-9._\-\[\]:]+$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) {
+        return send("❌ هاست/پورت معتبر نیست. دوباره بفرستید:");
+      }
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "auth", d: { ...pending.d, host, port, user: "root", name: pending.d.name || host } }), { expirationTtl: 900 });
+      return send(`🔐 احراز هویت برای ${host}:${port}
+
+• رمز عبور را بفرستید، یا
+• کلید خصوصی را بفرستید (با -----BEGIN شروع می‌شود)، یا
+• - بفرستید تا از agent/کلید پیش‌فرض رله استفاده شود`, await srvAuthKeyboard(kv));
+    }
+    if (pending.step === "user") {
+      // سازگاری با پن‌های قدیمی: کاربر همیشه root
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "auth", d: { ...pending.d, user: "root" } }), { expirationTtl: 900 });
+      return send(`🔐 احراز هویت: رمز عبور، کلید خصوصی، یا - برای agent رله را بفرستید.`, await srvAuthKeyboard(kv));
+    }
+    if (pending.step === "auth") {
+      const { item, authLabel } = await srvCompleteAdd(kv, pending.d, txt);
+      await send(
+        `✅ سرور «${escHtml(item.name)}» اضافه شد.
+🌐 ${code(item.host + ":" + item.port)} (${item.user})
+🔐 ${authLabel}` +
+        (item.auth === "agent" ? "\n\n⚠️ حالت agent فقط وقتی کار می‌کند که روی رله برای کاربر root کلید/agent تنظیم شده باشد." : ""),
+        [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 منو", callback_data: "menu" }]]
+      );
+      return;
+    }
+  }
+
+  if (type === "srv_relay_set") {
+    // ثبت/تغییر رلهٔ SSH توسط خود کاربر: آدرس → توکن → تست اتصال
+    if (pending.step === "url") {
+      let u = String(txt || "").trim().replace(/\/+$/, "");
+      if (!/^https?:\/\/.+/i.test(u)) {
+        return send("❌ آدرس باید با http:// یا https:// شروع شود. دوباره بفرستید:\n(مثلاً http://آی‌پی‌سرور:8788)");
+      }
+      // اگر آدرس با آی‌پی فرستاده شد (ورکر به آی‌پی وصل نمی‌شود)، خودکار ساب‌دامه می‌سازیم
+      const ipM = /^https?:\/\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d+))?([\/?#]|$)/i.exec(u);
+      if (ipM) {
+        const sub = await ensureRelaySubdomain(ipM[1], Number(ipM[2]) || 8788, kv, env);
+        if (!sub) {
+          return send("⚠️ آدرس را با آی‌پی فرستادید ولی برای ساخت خودکار ساب‌دامه دسترسی‌ای به دامنهٔ فعال نداریم.\n\nیا یک آدرس دامنه بفرستید (مثل http://relay.example.com:8788)، یا دسترسی DNS حساب کلادفلر را بررسی کنید.", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+        }
+        u = sub.url;
+        await send(`✅ چون آدرس با آی‌پی بود، خودکار این رکورد را ساختم:\n${code(sub.domain)} → ${code(sub.ip)} (بدون پروکسی)\nاز این آدرس استفاده می‌شود: ${code(u)}`);
+      }
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "token", url: u }), { expirationTtl: 900 });
+      return send("🔑 توکن رله را بفرستید (همان X-SRV-Token که بعد از نصب رله در خروجی نمایش داده می‌شود):");
+    }
+    if (pending.step === "token") {
+      const u = String(pending.url || "").replace(/\/+$/, "");
+      // پاک‌سازی کاراکترهای نامرئی (مثل ZWNJ/علامت RTL-LTR) که موقع کپی به توکن می‌چسبند
+      let tok = String(txt || "").replace(/[\u200B-\u200D\u200E\u200F\u061C\uFEFF\u2060-\u206F\u00AD]/g, "").trim();
+      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+      // ۱) اول بررسی سادگیِ دسترسی به رله با /ping (بدون توکن)
+      let ping;
+      try {
+        ping = await fetch(u + "/ping", { signal: AbortSignal.timeout(10000) });
+      } catch (e) {
+        return send("❌ اتصال به رله برقرار نشد: " + String(e && e.message ? e.message : e).slice(0, 140) + "\n\nآدرس رله و بازبودن پورت 8788 روی فایروال سرور را بررسی کنید.", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+      }
+      if (!ping.ok) {
+        let pb = "";
+        try { pb = String((await ping.text()) || "").slice(0, 120); } catch (e2) {}
+        return send(`❌ رله دسترسی‌پذیر نیست (پاسخ ${ping.status}). ${pb}`, [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+      }
+      // ۲) تست اعتبار توکن روی /stats (با host ساختگی؛ پاسخ 200 یعنی توکن درست است)
+      let res;
+      try {
+        res = await fetch(u + "/stats", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-SRV-Token": tok },
+          body: JSON.stringify({ host: "relay-selftest.invalid", port: 22, user: "root" }),
+          signal: AbortSignal.timeout(20000),
+        });
+      } catch (e) {
+        return send("❌ اتصال به رله در حین تست توکن قطع شد: " + String(e && e.message ? e.message : e).slice(0, 140), [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+      }
+      if (res.status === 403) {
+        let isRelay = false;
+        try { isRelay = /forbidden/i.test(String((await res.text()) || "")); } catch (e3) {}
+        if (isRelay) {
+          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+        }
+        return send("❌ رله کد 403 برگرداند اما نتوانستیم مطمئن شویم این پاسخ از خودِ رله است (شاید مسیر بین ورکر و رله مسدود شده). دوباره تلاش کنید:", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+      }
+      if (!res.ok) {
+        return send(`❌ رله پاسخ درست نداد (HTTP ${res.status}). آدرس را بررسی کنید.`, [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
+      }
+      await kvPutCached(kv, RELAY_URL_KEY, u);
+      await kvPutCached(kv, RELAY_TOKEN_KEY, tok);
+      return send(`✅ رله ثبت شد و اتصال با موفقیت تست شد.\n🌐 ${code(u)}\n🔑 توکن: ذخیره شد`, [
+        [{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }, { text: "🖥 سرورها", callback_data: "srv" }],
+      ]);
+    }
+  }
+
+  if (type === "srv_pw_add") {
+    await kv.delete(`pend:${chatId}`);
+    const pw = String(txt || "").trim();
+    if (!pw) return send("❌ رمز خالی است. دوباره بفرستید:");
+    const list = await getSrvPasswords(kv);
+    list.push(pw);
+    await saveSrvPasswords(kv, list);
+    return send(`✅ رمز ذخیره شد (${list.length} رمز).`, [
+      [{ text: "🔑 رمزهای ذخیرهشده", callback_data: "srvpw" }, { text: "🖥 سرورها", callback_data: "srv" }],
+    ]);
+  }
+
+  if (type === "srv_edit") {
+    await kv.delete(`pend:${chatId}`);
+    const list = await getServersList(kv);
+    const s = list[pending.srv];
+    if (!s) return send("❌ سرور پیدا نشد.");
+    const f = pending.field;
+    if (f === "name") {
+      const name = txt.substring(0, 60);
+      if (name.length < 2) return send("❌ نام کوتاه است.");
+      s.name = name;
+    } else if (f === "host") {
+      let host = txt.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      let port = s.port || 22;
+      const m = host.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
+      if (m) { host = m[1]; port = Number(m[2]); }
+      if (!/^[A-Za-z0-9._\-\[\]:]+$/.test(host)) return send("❌ هاست معتبر نیست.");
+      s.host = host; s.port = port;
+    } else if (f === "user") {
+      s.user = txt === "-" ? "root" : txt;
+    } else if (f === "auth") {
+      if (txt !== "-") {
+        if (txt.includes("BEGIN") && txt.includes("PRIVATE KEY")) { s.auth = "key"; s.key = txt; delete s.password; }
+        else { s.auth = "pass"; s.password = txt; delete s.key; }
+      }
+    } else if (f === "note") {
+      s.note = txt === "-" ? "" : txt.substring(0, 200);
+    }
+    await saveServersList(kv, list);
+    await send("✅ ذخیره شد.", [[{ text: "🔙 بازگشت", callback_data: `srvopen:${pending.srv}` }]]);
+    return;
+  }
+
+  if (type === "srv_monh") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(parseFaNums(txt));
+    const cfg = await getSrvMonCfg(kv);
+    const lims = { cpu: [1, 100], mem: [1, 100], disk: [1, 100], cool: [5, 1440] };
+    const lim = lims[pending.field];
+    if (!lim || !Number.isFinite(n) || n < lim[0] || n > lim[1]) {
+      return send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "⚙️ مانیتور سرورها", callback_data: "srvmon" }]]);
+    }
+    if (pending.field === "cpu") cfg.cpuPct = n;
+    else if (pending.field === "mem") cfg.memPct = n;
+    else if (pending.field === "disk") cfg.diskPct = n;
+    else cfg.cooldownMin = n;
+    await saveSrvMonCfg(kv, cfg);
+    await send("✅ ذخیره شد.", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
+    return;
+  }
+
+  if (type === "lb_add") {
+    await kv.delete(`pend:${chatId}`);
+    const session = await kv.get(`s:${pending.token}`, "json");
+    if (!session) return send("⏳ نشست منقضی شده. دوباره باز کن.");
+    const ctx = await lbGroupByName(kv, accounts, session, pending.name, env);
+    if (ctx.error) return send(ctx.error);
+    const type0 = ctx.group.length ? lbTypeOf(ctx.group[0]) : (ctx.cfg.disabled[0] ? String(ctx.cfg.disabled[0].type).toUpperCase() : "A");
+    const val = txt;
+    if (type0 === "A" && !isIpv4(val)) return send("❌ آی‌پی IPv4 معتبر نیست. دوباره از صفحهٔ لود بالانسر تلاش کن.");
+    if (type0 === "AAAA" && !isIpv6(val)) return send("❌ آی‌پی IPv6 معتبر نیست. دوباره از صفحهٔ لود بالانسر تلاش کن.");
+    if (type0 === "CNAME" && !isNameLike(val)) return send("❌ دامنهٔ مقصد معتبر نیست. دوباره از صفحهٔ لود بالانسر تلاش کن.");
+    if (ctx.group.some((g) => String(g.content) === val) || ctx.cfg.disabled.some((d) => String(d.content) === val)) {
+      return send("ℹ️ این مقدار از قبل در لود بالانسر این ساب‌دامین هست.");
+    }
+    const ref = ctx.group[0] || {};
+    const proxied = ref.proxied != null ? !!ref.proxied : false;
+    const ttl = ref.ttl || 1;
+    let ok = false;
+    let errText = "";
+    if (session.provider === "arvan") {
+      const res = await arvanCreateRecord(await arvanToken(kv, session.acc), session.domain, type0, pending.name, val, proxied, kv, env);
+      ok = res.success !== false;
+      if (!ok) errText = cfErrText(res);
+    } else {
+      const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records`, {
+        method: "POST",
+        headers: hdr(accounts[session.acc].token),
+        body: JSON.stringify({ type: type0, name: pending.name, content: val, ttl, proxied }),
+        signal: withTimeout(),
+      });
+      const data = await res.json();
+      ok = !!data.success;
+      if (!ok) errText = cfErrText(data);
+      if (ok) await invalidateCache(kv, session.zone_id);
+    }
+    if (!ok) return send("❌ خطا در افزودن آی‌پی:\n" + errText);
+    await send(`✅ آی‌پی لود بالانسر اضافه شد:\n${code(pending.name)} → ${code(val)}`);
+    if (pending.msgId) {
+      const hasLb = await kv.get(`lbn:${chatId}:${pending.msgId}`, "json");
+      if (hasLb) await redrawLbSettingsNav(kv, accounts, botToken, chatId, pending.msgId, env);
+      else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+    }
+    return;
+  }
+
+  if (type === "lb_weight") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(txt);
+    if (!Number.isFinite(n) || n < 0 || n > 100000) return send("❌ وزن باید عددی بین ۰ تا ۱۰۰۰۰۰ باشد.");
+    const g = await kv.get(`lbg:${pending.gid}`, "json");
+    if (!g) return send("⏳ نشست لود بالانسر منقضی شده.");
+    const session = await kv.get(`s:${g.token}`, "json");
+    if (!session) return send("⏳ نشست منقضی شده.");
+    const ctx = await lbGroupByName(kv, accounts, session, g.name, env);
+    if (ctx.error) return send(ctx.error);
+    const e = lbEntriesOf(ctx.group, ctx.cfg)[pending.idx];
+    if (!e) return send("❌ مورد پیدا نشد.");
+    ctx.cfg.weights[e.content] = n;
+    await saveLbCfg(kv, ctx.key, ctx.cfg);
+    await send(`✅ وزن ${code(e.content)} روی ${n} تنظیم شد.`);
+    if (pending.msgId) await redrawLbSettingsNav(kv, accounts, botToken, chatId, pending.msgId, env);
+    return;
+  }
+
+  if (type === "edit_value" || type === "edit_ttl") {
+    await kv.delete(`pend:${chatId}`);
+    if (pending.provider === "arvan") {
+      const records = await arvanGetAllRecords(arvanAccounts[pending.acc].token, pending.domain, kv, env);
+      const prev = records.find((r) => r.id === pending.record_id);
+      if (!prev) {
+        await send("❌ رکورد پیدا نشد.");
+        return;
+      }
+      if (type === "edit_ttl") {
+        await send("⚠️ تغییر TTL در آروان کلاد به صورت مستقیم پشتیبانی نمی‌شود.");
+        return;
+      }
+      prev.content = txt;
+      const res = await arvanUpdateRecord(arvanAccounts[pending.acc].token, pending.domain, prev, txt, kv, env);
+      if (res.success !== false) {
+        const summary = diffSummary(prev.name, prev.content, txt);
+        if (pending.msgId) {
+          await editMessage(botToken, chatId, pending.msgId, summary, []);
+          await sleep(2000);
+          await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+        } else {
+          await send(summary, [[{ text: "🇮🇷 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]]);
+        }
+      } else {
+        await send("❌ خطا:\n" + cfErrText(res));
+      }
+      return;
+    }
+    const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    const body = {};
+    if (type === "edit_ttl") body.ttl = Number(txt) || 1;
+    else {
+      body.content = txt;
+      if (pending.type === "edit_value" && prev) {
+        const isIp = isIpv4(txt) || isIpv6(txt);
+        if (prev.type === "A" && !isIp) {
+          await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
+            method: "DELETE",
+            headers: hdr(accounts[pending.acc].token),
+            signal: withTimeout(),
+          });
+          const newRes = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
+            method: "POST",
+            headers: hdr(accounts[pending.acc].token),
+            body: JSON.stringify({ type: "CNAME", name: prev.name, content: txt, ttl: 1, proxied: prev.proxied || false }),
+            signal: withTimeout(),
+          });
+          const newData = await newRes.json();
+          if (newData.success) {
+            await invalidateCache(kv, pending.zone_id);
+            if (pending.msgId) {
+              await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, []);
+              await sleep(2000);
+              if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
+              else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+            } else {
+              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
+            }
+            return;
+          } else {
+            await send("❌ خطا در ساخت رکورد CNAME:\n" + cfErrText(newData));
+            return;
+          }
+        } else if (prev.type === "CNAME" && isIp) {
+          await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
+            method: "DELETE",
+            headers: hdr(accounts[pending.acc].token),
+            signal: withTimeout(),
+          });
+          const newRes = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
+            method: "POST",
+            headers: hdr(accounts[pending.acc].token),
+            body: JSON.stringify({ type: "A", name: prev.name, content: txt, ttl: 1, proxied: false }),
+            signal: withTimeout(),
+          });
+          const newData = await newRes.json();
+          if (newData.success) {
+            await invalidateCache(kv, pending.zone_id);
+            if (pending.msgId) {
+              await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, []);
+              await sleep(2000);
+              if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
+              else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+            } else {
+              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
+            }
+            return;
+          } else {
+            await send("❌ خطا در ساخت رکورد A:\n" + cfErrText(newData));
+            return;
+          }
+        }
+      }
+    }
+
+    const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
+      method: "PATCH",
+      headers: hdr(accounts[pending.acc].token),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) {
+      await invalidateCache(kv, pending.zone_id);
+      const r = data.result;
+      if (pending.srToken) {
+        const sr = await kv.get(`sr:${pending.srToken}`, "json");
+        if (sr && Array.isArray(sr.results)) {
+          for (const it of sr.results) {
+            if (it.zone_id === pending.zone_id && it.record && it.record.id === pending.record_id) {
+              it.record.content = data.result.content;
+              it.record.type = data.result.type;
+              it.record.ttl = data.result.ttl;
+              it.record.proxied = data.result.proxied;
+            }
+          }
+          await kv.put(`sr:${pending.srToken}`, JSON.stringify(sr), { expirationTtl: 3600 });
+        }
+      }
+      let summary;
+      if (type === "edit_ttl") {        const pv = prev && prev.ttl ? (prev.ttl === 1 ? "خودکار" : String(prev.ttl)) : "—";
+        const nv = r.ttl === 1 ? "خودکار" : String(r.ttl);
+        summary = `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(r.name)}\n\n🔴 TTL قبلی:\n${code(pv)}\n\n🟢 TTL فعلی:\n${code(nv)}`;
+      } else {
+        summary = diffSummary(r.name, prev && prev.content ? prev.content : "—", r.content);
+      }
+      if (pending.msgId) {
+        await editMessage(botToken, chatId, pending.msgId, summary, []);
+        await sleep(2000);
+        if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
+        else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+      } else {
+        await send(summary, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      }
+    } else {
+      await send("❌ خطا:\n" + cfErrText(data));
+    }
+    return;
+  }
+
+  if (type === "change_type") {
+    const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    await kv.delete(`pend:${chatId}`);
+    const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
+      method: "PATCH",
+      headers: hdr(accounts[pending.acc].token),
+      body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      await invalidateCache(kv, pending.zone_id);
+      const r = data.result;
+      if (pending.srToken) {
+        const sr = await kv.get(`sr:${pending.srToken}`, "json");
+        if (sr && Array.isArray(sr.results)) {
+          for (const it of sr.results) {
+            if (it.zone_id === pending.zone_id && it.record && it.record.id === pending.record_id) {
+              it.record.content = data.result.content;
+              it.record.type = data.result.type;
+              it.record.ttl = data.result.ttl;
+              it.record.proxied = data.result.proxied;
+            }
+          }
+          await kv.put(`sr:${pending.srToken}`, JSON.stringify(sr), { expirationTtl: 3600 });
+        }
+      }
+      const summary =
+        `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(r.name)}\n\n` +
+        `🔴 قبلی (${prev ? prev.type : "?"}):\n${code(prev ? prev.content : "—")}\n\n` +
+        `🟢 فعلی (${r.type}):\n${code(r.content)}`;
+      if (pending.msgId) {
+        await editMessage(botToken, chatId, pending.msgId, summary, []);
+        await sleep(2000);
+        if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
+        else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
+      } else {
+        await send(summary, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      }
+    } else {
+      await send("❌ خطا:\n" + cfErrText(data));
+    }
+    return;
+  }
+
+  if (type === "bulk_del") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const del = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "DELETE",
+        headers: hdr(accounts[pending.acc].token),
+        signal: withTimeout(),
+      });
+      const d = await del.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    await send(`✅ ${okCount} از ${pending.ids.length} رکورد حذف شد.`, [[{ text: "🗂 عملیات گروهی", callback_data: "bulk_main" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "bulk_edit") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[pending.acc].token),
+        body: JSON.stringify({ content: txt }),
+      });
+      const d = await res.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    await send(`✅ ${okCount} از ${pending.ids.length} رکورد به مقدار جدید تغییر کرد.`, [[{ text: "🗂 عملیات گروهی", callback_data: "bulk_main" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "bulk_type") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[pending.acc].token),
+        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
+      });
+      const d = await res.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    await send(`✅ ${okCount} از ${pending.ids.length} رکورد به نوع ${pending.new_type} تغییر کرد.`, [[{ text: "🗂 عملیات گروهی", callback_data: "bulk_main" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "bulk_type_convert") {
+    await kv.delete(`pend:${chatId}`);
+    let okCount = 0;
+    for (const id of pending.ids) {
+      const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[pending.acc].token),
+        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
+      });
+      const d = await res.json();
+      if (d.success) okCount++;
+    }
+    await invalidateCache(kv, pending.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    await send(`✅ ${okCount} از ${pending.ids.length} رکورد به نوع ${pending.new_type} تغییر کرد.`, [[{ text: "🗂 عملیات گروهی", callback_data: "bulk_main" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "qa_search") {
+    await kv.delete(`pend:${chatId}`);
+    if (isIpLike(txt.trim())) {
+      await kv.put(`qa:${chatId}`, JSON.stringify({ ip: txt.trim() }), { expirationTtl: 3600 });
+      await sendQuickIpMenu(chatId, txt.trim(), kv, accounts, send);
+      return;
+    }
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    await quickNameSearch(txt.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv);
+    return;
+  }
+
+  if (type === "qa_value") {
+    await kv.delete(`pend:${chatId}`);
+    const ip = txt.trim();
+    if (!isIpLike(ip)) {
+      if (pending.msgId) {
+        await editMessage(botToken, chatId, pending.msgId, "❌ این مقدار IP نیست. یک IPv4 یا IPv6 معتبر بفرستید:", [[{ text: "❌ لغو", callback_data: "qacancel" }]]);
+      } else {
+        await send("❌ این مقدار IP نیست. یک IPv4 یا IPv6 معتبر بفرستید.");
+      }
+      return;
+    }
+    await kv.put(
+      `qa:${chatId}`,
+      JSON.stringify({ ip, zone_id: pending.zone_id, zone_name: pending.zone_name, acc: pending.acc, record_id: pending.record_id }),
+      { expirationTtl: 3600 }
+    );
+    if (pending.msgId) {
+      await showQaConfirm({ kv, chatId, messageId: pending.msgId, accounts, botToken, edit: (t, kb) => editMessage(botToken, chatId, pending.msgId, t, kb) });
+    } else {
+      const rec = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+      await send(
+        `⚡ ${code(rec ? rec.name : "؟")} — ${code(rec ? rec.content : "؟")} → ${code(ip)}\n\n` +
+          `برای تأیید، /cancel بزنید یا دوباره IP را بفرستید.`,
+        [[{ text: "✅ تأیید", callback_data: "qaok" }, { text: "❌ لغو", callback_data: "qacancel" }]]
+      );
+    }
+    return;
+  }
+
+  if (type === "qan_name") {
+    const name = txt.trim();
+    if (!name || /\s/.test(name)) {
+      return send("⚠️ نام ساب معتبر نیست. یک نام بدون فاصله بفرستید (مثلاً test یا @).");
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ ...pending, type: "qan_confirm", name }), { expirationTtl: 600 });
+    const rtype = isIpv6(pending.ip) ? "AAAA" : "A";
+    const zoneName = pending.provider === "arvan" ? pending.domain : pending.zone_name;
+    const text =
+      `➕ تأیید ساخت ساب\n\n` +
+      `📛 نام: ${code(name)}\n` +
+      `📁 دامنه: ${code(zoneName)}\n` +
+      `🌐 آیپی: ${code(pending.ip)}\n` +
+      `🏷 نوع: ${code(rtype)}\n\n` +
+      `ساخته شود؟`;
+    const kb = [[{ text: "✅ تأیید و ساخت", callback_data: "qanok" }, { text: "❌ لغو", callback_data: "qacancel" }]];
+    if (pending.msgId) return editMessage(botToken, chatId, pending.msgId, text, kb);
+    return send(text, kb);
+  }
+
+  if (type === "search") {
+    await kv.delete(`pend:${chatId}`);
+    const results = await searchRecords(accounts, pending.field, txt, null, kv);
+    const token = makeToken();
+    await kv.put(
+      `sr:${token}`,
+      JSON.stringify({ field: pending.field, query: txt, results }),
+      { expirationTtl: 3600 }
+    );
+    await renderSearchResults(token, results, txt, pending.field, send);
+    return;
+  }
+
+  if (type === "search_any") {
+    await kv.delete(`pend:${chatId}`);
+    const q = txt.trim();
+    if (!q) return send("⚠️ مقداری برای جست‌وجو وارد کنید.");
+    const byName = await searchRecords(accounts, "name", q, null, kv);
+    const byContent = await searchRecords(accounts, "content", q, null, kv);
+    const seen = new Set();
+    const results = [];
+    for (const r of byName.concat(byContent)) {
+      const key = `${r.zone_id}:${r.record.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push(r);
+    }
+    const token = makeToken();
+    await kv.put(
+      `sr:${token}`,
+      JSON.stringify({ field: "any", query: q, results }),
+      { expirationTtl: 3600 }
+    );
+    await renderSearchResults(token, results, q, "any", send);
+    return;
+  }
+
+  if (type === "search_zone") {
+    await kv.delete(`pend:${chatId}`);
+    let results = [];
+    if (pending.provider === "arvan") {
+      const records = await arvanGetAllRecords(await arvanToken(kv, pending.acc), pending.domain, kv, env);
+      const q = txt.toLowerCase();
+      for (const r of records) {
+        const hay = pending.field === "name" ? r.name : r.content;
+        if (hay.toLowerCase().includes(q)) {
+          results.push({ zone_id: "arvan:" + pending.domain, zone_name: pending.domain, record: r, acc: pending.acc, provider: "arvan", domain: pending.domain });
+        }
+      }
+    } else {
+      const zone = await getZoneById(pending.zone_id, pending.acc, accounts);
+      results = await searchRecords(accounts, pending.field, txt, zone, kv);
+      for (const r of results) {
+        r.provider = "cloudflare";
+      }
+    }
+    const token = makeToken();
+    await kv.put(
+      `sr:${token}`,
+      JSON.stringify({ field: pending.field, query: txt, results }),
+      { expirationTtl: 3600 }
+    );
+    await renderSearchResults(token, results, txt, pending.field, send);
+    return;
+  }
+
+  if (type === "p_name") {
+    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_url", name: txt }), { expirationTtl: 600 });
+    await send("🌐 آدرس پنل را بفرستید (مثلاً https://sub.mypanel.com):");
+    return;
+  }
+
+  if (type === "p_url") {
+    const raw = String(txt || "").trim().replace(/\/+$/, "");
+    const hasScheme = /^https?:\/\//i.test(raw);
+    const url = (hasScheme ? "" : "https://") + raw.replace(/^https?:\/\//i, "");
+    if (!/^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9.\-_]*/.test(url)) return send("❌ آدرس معتبر نیست. دوباره بفرستید:\n(مثلاً sub.mypanel.com یا https://sub.mypanel.com)");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_user", name: pending.name, url }), { expirationTtl: 600 });
+    await send("👤 نام‌کاربری ادمین پنل را بفرستید:");
+    return;
+  }
+
+  if (type === "p_user") {
+    if (!txt) return send("⚠️ نام‌کاربری معتبر وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_pass", name: pending.name, url: pending.url, username: txt }), { expirationTtl: 600 });
+    await send("🔑 رمز عبور ادمین پنل را بفرستید (این پیام از چت حذف نمی‌شود ولی فقط در KV ذخیره می‌شود):");
+    return;
+  }
+
+  if (type === "p_pass") {
+    await kv.delete(`pend:${chatId}`);
+    const panels = await getPanels(kv);
+    panels.push({ id: makeToken(), name: pending.name, url: pending.url, username: pending.username, password: txt, enabled: true, last_error: null });
+    await savePanels(kv, panels);
+    await send(`✅ پنل «${pending.name}» ثبت شد.`, [
+      [{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  // ===================== ویرایش پنل پاسارگارد =====================
+  if (type === "p_ename" || type === "p_eurl" || type === "p_euser" || type === "p_epass") {
+    const panels = await getPanels(kv);
+    const p = panels[pending.idx];
+    if (!p) {
+      await kv.delete(`pend:${chatId}`);
+      return send("❌ پنل پیدا نشد (احتمالاً حذف شده).", [[{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }]]);
+    }
+    if (type === "p_ename") {
+      if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+      p.name = txt;
+    } else if (type === "p_eurl") {
+      const url = txt.replace(/\/+$/, "");
+      if (!/^https?:\/\//.test(url)) return send("❌ آدرس باید با http:// یا https:// شروع شود. دوباره بفرستید:");
+      p.url = url;
+    } else if (type === "p_euser") {
+      if (!txt) return send("⚠️ نام‌کاربری معتبری وارد کنید.");
+      p.username = txt;
+    } else if (type === "p_epass") {
+      if (!txt) return send("⚠️ رمز معتبری وارد کنید.");
+      p.password = txt;
+    }
+    await savePanels(kv, panels);
+    await kv.delete(`pend:${chatId}`);
+    await send(`✅ پنل «${p.name}» به‌روزرسانی شد.`, [
+      [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }, { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }],
+    ]);
+    return;
+  }
+
+  // فاصلهٔ پایش خودکار نودها (کرون قابل تنظیم هر مانیتور)
+  if (type === "p_interval") {
+    const val = Math.round(Number(String(txt).trim()));
+    if (!val || val < 5 || val > 1440) return send("⚠️ عددی بین ۵ تا ۱۴۴۰ دقیقه بفرستید.");
+    const monitors = await getNodeMonitors(kv);
+    const m = monitors[pending.mi];
+    if (!m) {
+      await kv.delete(`pend:${chatId}`);
+      return send("❌ مانیتور پیدا نشد (احتمالاً حذف شده).");
+    }
+    m.intervalMin = val;
+    await saveNodeMonitors(kv, monitors);
+    await kv.delete(`pend:${chatId}`);
+    await send(`✅ فاصلهٔ پایش نودها برای «${m.name || ""}» به ${val} دقیقه تغییر کرد.`, [
+      [{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }],
+    ]);
+    return;
+  }
+
+  // ===================== SSL Monitor =====================
+  if (type === "ssl_host") {
+    const host = txt.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) {
+      await send("❌ نام دامنه معتبر نیست. دوباره بفرستید:");
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ssl_thr", host }), { expirationTtl: 600 });
+    await send(`🔐 «${host}» ثبت شد.\n\nچند روز قبل از انقضا هشدار بدهم؟ (پیش‌فرض ۵ — یک عدد بفرستید):`);
+    return;
+  }
+
+  if (type === "ssl_thr") {
+    await kv.delete(`pend:${chatId}`);
+    let threshold = Number(txt);
+    if (!Number.isInteger(threshold) || threshold <= 0) threshold = 5;
+    const monitors = await getSslMonitors(kv);
+    if (monitors.some((m) => m.host === pending.host)) {
+      await send("❌ این دامنه از قبل در نظارت است.", [[{ text: "🔐 مانیتور SSL", callback_data: "sslm" }]]);
+      return;
+    }
+    monitors.push({ host: pending.host, port: 443, threshold });
+    await saveSslMonitors(kv, monitors);
+    await send(`✅ «${pending.host}» با آستانه ${threshold} روز به نظارت اضافه شد.`, [
+      [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  // ===================== Domain Expiry Monitor =====================
+  if (type === "domexp_domain") {
+    const domain = txt.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
+    if (!/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(domain)) {
+      await send("❌ نام دامنه معتبر نیست. دوباره بفرستید (مثلاً example.ir):");
+      return;
+    }
+    const list = await getDomExpiry(kv);
+    if (list.some((x) => x.domain === domain)) {
+      await send("❌ این دامنه از قبل در مانیتور هست.", [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]);
+      return;
+    }
+    await kv.delete(`pend:${chatId}`);
+    await send("⏳ در حال استعلام انقضای دامنه…");
+    const r = await fetchDomainExpiry(domain, null, kv);
+    if (r.status === "ok") {
+      list.push({ domain, status: "ok", expiry: r.expiry, added: Date.now() });
+      await saveDomExpiry(kv, list);
+      await send(
+        `✅ ${code(domain)} به مانیتور اضافه شد.\n🗓 انقضا: ${fmtJalali(r.expiry).split(" - ")[0]}\n⏳ باقی‌مانده: ${domExpiryRemaining(r.expiry)}`,
+        [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }, { text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else {
+      list.push({ domain, status: r.status, expiry: null, added: Date.now() });
+      await saveDomExpiry(kv, list);
+      const reason =
+        r.status === "hidden"
+          ? "ایرنیک تاریخ این دامنه را مخفی کرده. برای استعلام خودکار «🔑 ثبت کلید API» را بزن."
+          : r.status === "not_found"
+            ? "دامنه در ایرنیک ثبت نیست."
+            : r.status === "available"
+              ? "دامنه آزاد/ثبت‌نشده است."
+              : r.status === "api_error"
+                ? "خطای API: " + String(r.message || "کلید/اعتبار را بررسی کن.")
+                : "استعلام ناموفق بود؛ بعداً با «🔄 استعلام دوبارهٔ همه» امتحان کن.";
+      await send(
+        `➕ ${code(domain)} اضافه شد، اما تاریخ انقضا پیدا نشد.\nℹ️ ${reason}\n\n` +
+          "از دکمهٔ «🗓 ثبت تاریخ دستی» می‌توانی تاریخ را خودت وارد کنی.",
+        [[{ text: "🗓 ثبت تاریخ دستی", callback_data: "domexpcal" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]
+      );
+    }
+    return;
+  }
+
+  if (type === "domexp_date") {
+    const s = parseFaNums(txt).trim();
+    const m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+    if (!m) {
+      await send("❌ قالب درست نیست. مثال: 1405/06/20");
+      return;
+    }
+    const jy = Number(m[1]);
+    const jm = Number(m[2]);
+    const jd = Number(m[3]);
+    if (jm < 1 || jm > 12 || jd < 1 || jd > 31) {
+      await send("❌ تاریخ نامعتبر است. دوباره بفرستید (مثلاً 1405/06/20):");
+      return;
+    }
+    let expiry;
+    try {
+      expiry = jalaliToEpoch(jy, jm, jd, 12, 0);
+    } catch (e) {
+      await send("❌ تاریخ نامعتبر است. دوباره بفرستید:");
+      return;
+    }
+    if (expiry <= Date.now()) {
+      await send("⚠️ این تاریخ گذشته است. تاریخ انقضای آینده را بفرستید:");
+      return;
+    }
+    await kv.delete(`pend:${chatId}`);
+    const list = await getDomExpiry(kv);
+    const item = list.find((x) => x.domain === pending.domain);
+    if (!item) {
+      await send("❌ دامنه در مانیتور پیدا نشد.", [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]);
+      return;
+    }
+    item.manual = true;
+    item.status = "ok";
+    item.expiry = expiry;
+    item.last_alert_day = null;
+    await saveDomExpiry(kv, list);
+    await send(
+      `✅ تاریخ انقضای ${code(pending.domain)} ثبت شد.\n🗓 انقضا: ${fmtJalali(expiry).split(" - ")[0]}\n⏳ باقی‌مانده: ${domExpiryRemaining(expiry)}`,
+      [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }, { text: "🏠 منو", callback_data: "menu" }]]
+    );
+    return;
+  }
+
+  if (type === "domexp_key") {
+    const key = txt.trim();
+    await kv.delete(`pend:${chatId}`);
+    if (!key || key === "-") {
+      await saveDomExpCfg(kv, { provider: DOMEXP_DEFAULT_PROVIDER, key: "" });
+      await send("🗑 کلید API حذف شد.", [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]);
+      return;
+    }
+    const cfg = await getDomExpCfg(kv);
+    cfg.key = key;
+    await saveDomExpCfg(kv, cfg);
+    await send("⏳ کلید ذخیره شد. در حال تست روی pcapps.ir…");
+    const r = await whoisXmlDomainInfo("pcapps.ir", key);
+    if (r.status === "ok") {
+      await send(
+        `✅ کلید API معتبر است.\n🗓 انقضای pcapps.ir: ${fmtJalali(r.expiry).split(" - ")[0]}\n⏳ باقی‌مانده: ${domExpiryRemaining(r.expiry)}`,
+        [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }, { text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else if (r.status === "api_error") {
+      await send(`⚠️ کلید ذخیره شد اما تست ناموفق بود:\n${code(String(r.message || ""))}`, [
+        [{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }],
+      ]);
+    } else {
+      await send("⚠️ کلید ذخیره شد، اما برای pcapps.ir تاریخی برنگشت (ممکن است در دیتابیس تاریخی هم نباشد).", [
+        [{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }],
+      ]);
+    }
+    return;
+  }
+
+  // ===================== Hetzner =====================
+  if (type === "hz_add_name") {
+    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_add_token", name: txt }), { expirationTtl: 600 });
+    await send(`🔑 حالا API Token هتزنر اکانت «${txt}» را بفرستید:`);
+    return;
+  }
+
+  if (type === "hz_add_token") {
+    await kv.delete(`pend:${chatId}`);
+    const token = txt.trim();
+    const test = await hzFetch(token, "/servers?per_page=1");
+    if (test.error) {
+      await send("❌ توکن نامعتبر است.", [[{ text: "🇩🇪 هتزنر", callback_data: "hz" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      return;
+    }
+    const hzAccounts = await getHzAccounts(kv);
+    hzAccounts.push({ name: pending.name, token });
+    await saveHzAccounts(kv, hzAccounts);
+    await send(`✅ اکانت «${pending.name}» اضافه شد.`, [
+      [{ text: "🇩🇪 هتزنر", callback_data: "hz" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  if (type === "hz_srv_remark") {
+    const remark = txt;
+    if (/\s/.test(remark)) {
+      await send("⚠️ نام سرور نباید فاصله داشته باشد. دوباره بفرستید:");
+      return;
+    }
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ اکانت پیدا نشد.");
+      return;
+    }
+    const locs = await hzGetAll(acc.token, "/locations");
+    if (!locs.length) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ لوکیشنی پیدا نشد.");
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_srv_remark", acc: pending.acc, remark }), { expirationTtl: 600 });
+    const kb = grid2(locs.map((l) => ({ text: `${l.city || l.name} (${l.name})`, callback_data: `hzsl:${pending.acc}:${l.name}` })));
+    kb.push([{ text: "🔙 انصراف", callback_data: `hzs:${pending.acc}:0` }]);
+    await send("🌍 لوکیشن (دیتاسنتر) را انتخاب کنید:", kb);
+    return;
+  }
+
+  if (type === "hz_srv_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    const r = await hzFetch(acc.token, `/servers/${pending.server_id}`, { method: "PUT", body: JSON.stringify({ name: txt }) });
+    if (r.error) return send("❌ خطا: " + hzErr(r));
+    await send("✅ نام سرور تغییر کرد.", [[{ text: "🖥️ سرورها", callback_data: `hzs:${pending.acc}:0` }]]);
+    return;
+  }
+
+  if (type === "hz_ip_remark") {
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ اکانت پیدا نشد.");
+      return;
+    }
+    const locs = await hzGetAll(acc.token, "/locations");
+    if (!locs.length) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ لوکیشنی پیدا نشد.");
+      return;
+    }
+    await kv.put(
+      `pend:${chatId}`,
+      JSON.stringify({ type: "hz_ip_remark", acc: pending.acc, ip_type: pending.ip_type, remark: txt }),
+      { expirationTtl: 600 }
+    );
+    const kb = grid2(locs.map((l) => ({ text: `${l.city || l.name} (${l.name})`, callback_data: `hzpl:${pending.acc}:${l.name}` })));
+    kb.push([{ text: "🔙 انصراف", callback_data: `hzp:${pending.acc}:0` }]);
+    await send("🌍 لوکیشن (دیتاسنتر) را انتخاب کنید:", kb);
+    return;
+  }
+
+  if (type === "hz_ip_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    const r = await hzFetch(acc.token, `/primary_ips/${pending.ip_id}`, { method: "PUT", body: JSON.stringify({ name: txt }) });
+    if (r.error) return send("❌ خطا: " + hzErr(r));
+    await send("✅ نام آی‌پی تغییر کرد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${pending.acc}:0` }]]);
+    return;
+  }
+
+  if (type === "hz_snap_remark") {
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ اکانت پیدا نشد.");
+      return;
+    }
+    const servers = await hzGetAll(acc.token, "/servers");
+    if (!servers.length) {
+      await kv.delete(`pend:${chatId}`);
+      await send("❌ سروری پیدا نشد.");
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_snap_remark", acc: pending.acc, remark: txt }), { expirationTtl: 600 });
+    const kb = grid2(servers.map((s) => ({ text: s.name, callback_data: `hzns:${pending.acc}:${s.id}` })));
+    kb.push([{ text: "🔙 انصراف", callback_data: `hzn:${pending.acc}:0` }]);
+    await send("🌍 سرور مبدا اسنپ‌شات را انتخاب کنید:", kb);
+    return;
+  }
+
+  if (type === "hz_snap_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    const r = await hzFetch(acc.token, `/images/${pending.image_id}`, { method: "PUT", body: JSON.stringify({ description: txt }) });
+    if (r.error) return send("❌ خطا: " + hzErr(r));
+    await send("✅ نام اسنپ‌شات تغییر کرد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${pending.acc}:0` }]]);
+    return;
+  }
+
+  // تنظیمات کلاینت (اکانت) — تغییر نام و توکن (پورت ServerManagerBot)
+  if (type === "hz_acc_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    if (!txt || /\s/.test(txt)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_acc_rename", acc: pending.acc }), { expirationTtl: 600 });
+      await send("⚠️ نام معتبر نیست (بدون فاصله). دوباره بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzacc:${pending.acc}` }]]);
+      return;
+    }
+    acc.name = txt;
+    await saveHzAccounts(kv, hzAccounts);
+    await send(`✅ نام اکانت به «${txt}» تغییر کرد.`, [[{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${pending.acc}` }]]);
+    return;
+  }
+
+  if (type === "hz_acc_token") {
+    await kv.delete(`pend:${chatId}`);
+    const hzAccounts = await getHzAccounts(kv);
+    const acc = hzAccounts[pending.acc];
+    if (!acc) return send("❌ اکانت پیدا نشد.");
+    const token = txt.trim();
+    const test = await hzFetch(token, "/servers?per_page=1");
+    if (test.error) {
+      await send("❌ توکن نامعتبر است.", [[{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${pending.acc}` }]]);
+      return;
+    }
+    acc.token = token;
+    await saveHzAccounts(kv, hzAccounts);
+    await send("✅ توکن اکانت به‌روزرسانی شد.", [[{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${pending.acc}` }]]);
+    return;
+  }
+
+  if (type === "ln_add_name") {
+    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_add_token", name: txt }), { expirationTtl: 600 });
+    await send(`🔑 حالا API Token لینود اکانت «${txt}» را بفرستید:`);
+    return;
+  }
+
+  if (type === "ln_add_token") {
+    await kv.delete(`pend:${chatId}`);
+    const token = txt;
+    const accTest = await lnFetch(token, "/account");
+    if (accTest.errors || (!accTest.email && !accTest.company && !accTest.id)) {
+      await send("❌ توکن نامعتبر است.", [[{ text: "🟢 لینود", callback_data: "ln" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      return;
+    }
+    const lnAccounts = await getLnAccounts(kv);
+    lnAccounts.push({ name: pending.name, token });
+    await saveLnAccounts(kv, lnAccounts);
+    await send(`✅ اکانت «${pending.name}» اضافه شد.`, [
+      [{ text: "🟢 لینود", callback_data: "ln" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  if (type === "ln_srv_remark") {
+    const remark = txt;
+    if (/\s/.test(remark)) {
+      await send("⚠️ نام سرور نباید فاصله داشته باشد. دوباره بفرستید:");
+      return;
+    }
+    const lnAccounts = await getLnAccounts(kv);
+    const acc = lnAccounts[pending.acc];
+    if (!acc) {
+      await send("❌ اکانت پیدا نشد.");
+      await kv.delete(`pend:${chatId}`);
+      return;
+    }
+    const regions = (await lnGetAll(acc.token, "/regions")).filter((r) => (r.capabilities || []).includes("Linodes"));
+    if (!regions.length) {
+      await send("❌ منطقه‌ای پیدا نشد.");
+      await kv.delete(`pend:${chatId}`);
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_srv_remark", acc: pending.acc, remark }), { expirationTtl: 600 });
+    const kb = grid2(regions.map((r) => ({ text: r.label, callback_data: `lnscd:${pending.acc}:${r.id}` })));
+    kb.push([{ text: "🔙 انصراف", callback_data: `lns:${pending.acc}:0` }]);
+    await send("🌍 منطقه را انتخاب کنید:", kb);
+    return;
+  }
+
+  if (type === "ln_srv_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const lnAccounts = await getLnAccounts(kv);
+    const acc = lnAccounts[pending.acc];
+    const r = await lnFetch(acc.token, `/linode/instances/${pending.server_id}`, { method: "PUT", body: JSON.stringify({ label: txt }) });
+    if (r.errors) {
+      await send("❌ خطا: " + lnErr(r));
+      return;
+    }
+    await send("✅ نام سرور تغییر کرد.", [[{ text: "🖥️ سرورها", callback_data: `lns:${pending.acc}:0` }]]);
+    return;
+  }
+
+  if (type === "ln_snap_remark") {
+    const lnAccounts = await getLnAccounts(kv);
+    const acc = lnAccounts[pending.acc];
+    if (!acc) {
+      await send("❌ اکانت پیدا نشد.");
+      await kv.delete(`pend:${chatId}`);
+      return;
+    }
+    const servers = await lnGetAll(acc.token, "/linode/instances");
+    if (!servers.length) {
+      await send("❌ سروری پیدا نشد.");
+      await kv.delete(`pend:${chatId}`);
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_snap_remark", acc: pending.acc, remark: txt }), { expirationTtl: 600 });
+    const kb = grid2(servers.map((s) => ({ text: s.label, callback_data: `lnns:${pending.acc}:${s.id}` })));
+    kb.push([{ text: "🔙 انصراف", callback_data: `lnn:${pending.acc}:0` }]);
+    await send("🌍 سرور مبدا اسنپ‌شات را انتخاب کنید:", kb);
+    return;
+  }
+
+  if (type === "ln_snap_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const lnAccounts = await getLnAccounts(kv);
+    const acc = lnAccounts[pending.acc];
+    const r = await lnFetch(acc.token, `/images/${pending.image_id}`, { method: "PUT", body: JSON.stringify({ label: txt }) });
+    if (r.errors) {
+      await send("❌ خطا: " + lnErr(r));
+      return;
+    }
+    await send("✅ نام اسنپ‌شات تغییر کرد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${pending.acc}:0` }]]);
+    return;
+  }
+
+  if (type === "ln_ip_rename") {
+    await kv.delete(`pend:${chatId}`);
+    const lnAccounts = await getLnAccounts(kv);
+    const acc = lnAccounts[pending.acc];
+    const r = await lnFetch(acc.token, `/networking/ips/${encodeURIComponent(pending.address)}`, { method: "PUT", body: JSON.stringify({ rdns: txt }) });
+    if (r.errors) {
+      await send("❌ خطا: " + lnErr(r));
+      return;
+    }
+    await send("✅ رکورد PTR آی‌پی تغییر کرد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `lnp:${pending.acc}:0` }]]);
+    return;
+  }
+
+  if (type === "rem_text") {
+    if (!txt) {
+      await send("⚠️ متن خالی است. دوباره بفرستید:");
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", target: pending.target || null, text: txt }), { expirationTtl: 900 });
+    await send(REM_WHEN_TEXT, remWhenKb());
+    return;
+  }
+
+  if (type === "rem_when") {
+    const s = parseFaNums(txt).trim();
+    const m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})(?:[\s\-T]+(\d{1,2}):(\d{2}))$/);
+    if (!m) {
+      await send("❌ قالب درست نیست. مثال: 1404/06/20 14:30");
+      return;
+    }
+    const jy = Number(m[1]);
+    const jm = Number(m[2]);
+    const jd = Number(m[3]);
+    const hh = Number(m[4]);
+    const mm = Number(m[5]);
+    if (jm < 1 || jm > 12 || jd < 1 || jd > 31 || hh > 23 || mm > 59) {
+      await send("❌ تاریخ/ساعت نامعتبر است. دوباره بفرستید:");
+      return;
+    }
+    let at;
+    try {
+      at = jalaliToEpoch(jy, jm, jd, hh, mm);
+    } catch (e) {
+      await send("❌ تاریخ نامعتبر است. دوباره بفرستید:");
+      return;
+    }
+    await finalizeReminder(kv, chatId, pending, at, send);
+    return;
+  }
+
+  if (type === "rem_rel_num") {
+    const n = Number(parseFaNums(txt).trim());
+    if (!Number.isInteger(n) || n < 1 || n > 10000) {
+      await send("❌ عدد نامعتبر است. یک عدد بین ۱ تا ۱۰۰۰۰ بفرستید:");
+      return;
+    }
+    const at = addRel(pending.unit, n);
+    await finalizeReminder(kv, chatId, pending, at, send);
+    return;
+  }
+
+  if (type === "rem_abs_day") {
+    const n = Number(parseFaNums(txt).trim());
+    if (!Number.isInteger(n) || n < 1 || n > 31) {
+      await send("❌ روز نامعتبر است. عددی بین ۱ تا ۳۱ بفرستید:");
+      return;
+    }
+    let ok = false;
+    try {
+      const g = toGregorian(pending.jy, pending.jm, n);
+      const b = toJalaali(g.gy, g.gm, g.gd);
+      ok = b.jy === pending.jy && b.jm === pending.jm && b.jd === n;
+    } catch (e) {}
+    if (!ok) {
+      await send("❌ این روز در آن ماه وجود ندارد. دوباره بفرستید:");
+      return;
+    }
+    await kv.put(
+      `pend:${chatId}`,
+      JSON.stringify({ type: "rem_abs_time", target: pending.target || null, text: pending.text || "", jy: pending.jy, jm: pending.jm, jd: n, mode: pending.mode || "" }),
+      { expirationTtl: 900 }
+    );
+    await send("🕒 ساعت را وارد کنید (مثلاً 14:30):", [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+    return;
+  }
+
+  if (type === "rem_abs_time") {
+    const m = parseFaNums(txt).trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) {
+      await send("❌ فرمت ساعت درست نیست. مثال: 14:30");
+      return;
+    }
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (hh > 23 || mm > 59) {
+      await send("❌ ساعت نامعتبر است. دوباره بفرستید:");
+      return;
+    }
+    let at;
+    try {
+      at = jalaliToEpoch(pending.jy, pending.jm, pending.jd, hh, mm);
+    } catch (e) {
+      await send("❌ تاریخ نامعتبر است.");
+      return;
+    }
+    await finalizeReminder(kv, chatId, pending, at, send);
+    return;
+  }
+}
+
+async function handleCallback(cb, botToken, adminId, kv, env) {
+  const chatId = cb.message ? cb.message.chat.id : null;
+  const messageId = cb.message ? cb.message.message_id : null;
+  let data = cb.data || "";
+
+  await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+
+  if (!chatId) return;
+
+  if (data === "noop") return;
+
+  let pendingReturn = null;
+  let returnMsgId = null;
+  const applyPerm = async (text, kb) => {
+    if (!text || text.indexOf(PERM_MARK) === -1) return { text, kb };
+    const clean = text.split(PERM_MARK).join("");
+    const rows = kb ? kb.slice() : [];
+    const row = [];
+    if (data) {
+      try {
+        await kv.put(`pretry:${chatId}`, data, { expirationTtl: 900 });
+        await kv.put(`pback:${chatId}`, parentCb(data), { expirationTtl: 900 });
+      } catch (e) {}
+      row.push({ text: "🔄 بررسی مجدد", callback_data: "permretry" });
+    }
+    row.push({ text: "⬅️ بازگشت", callback_data: "permback" });
+    rows.push(row);
+    return { text: clean, kb: rows };
+  };
+  const edit = async (text, kb) => {
+    const r = await applyPerm(text, kb);
+    const res = await editMessage(botToken, chatId, messageId, r.text, r.kb);
+    const isPerm = text && String(text).indexOf(PERM_MARK) !== -1;
+    if (!isPerm && isResultText(text)) {
+      pendingReturn = findReturnCb(r.kb, parentCb(data));
+      returnMsgId = messageId;
+    } else {
+      pendingReturn = null;
+    }
+    return res;
+  };
+  const send = async (text, kb) => {
+    const r = await applyPerm(text, kb);
+    const res = await sendMessage(botToken, chatId, r.text, r.kb);
+    const isPerm = text && String(text).indexOf(PERM_MARK) !== -1;
+    if (!isPerm && isResultText(text)) {
+      pendingReturn = findReturnCb(r.kb, parentCb(data));
+      returnMsgId = res && res.result && res.result.message_id ? res.result.message_id : messageId;
+    } else {
+      pendingReturn = null;
+    }
+    return res;
+  };
+
+  if (!kv) {
+    await edit("⚠️ KV با نام BOT_KV لازم است.");
+    return;
+  }
+
+  const accounts = await getAccounts(kv, env);
+  const arvanAccounts = await getArvanAccounts(kv);
+  const lnAccounts = await getLnAccounts(kv);
+  const hzAccounts = await getHzAccounts(kv);
+  const admins = await getAdmins(kv, env);
+  if (!admins.includes(chatId)) return;
+
+  const isMain = chatId === adminId;
+
+  try {
+    if (data === "permretry") {
+      const prev = await kv.get(`pretry:${chatId}`);
+      if (!prev) return edit("⏳ عملیات قبلی منقضی شد. دوباره از منو تلاش کن.");
+      data = prev;
+    } else if (data === "permback") {
+      const back = await kv.get(`pback:${chatId}`);
+      data = back || "menu";
+    } else if (data === "permretrytxt") {
+      const cmd = await kv.get(`pretrytxt:${chatId}`);
+      if (!cmd) return edit("⏳ عملیات قبلی منقضی شد. دوباره تلاش کن.");
+      await processUpdate({ message: { chat: { id: chatId }, text: cmd } }, env, botToken, adminId);
+      return;
+    }
+    if (data === "menu") {
+      // menu: بازگشت به منوی اصلی و پاک کردن وضعیت‌های موقت (qa/pend)
+      await kv.delete(`qa:${chatId}`);
+      await kv.delete(`pend:${chatId}`);
+      await edit(mainMenuText(), mainMenuKeyboard());
+    } else if (data === "help") {
+      // help: نمایش صفحهٔ راهنما
+      await edit(helpText(), helpKeyboard());
+    } else if (data === "hqi") {
+      // hqi: راهنمای «جای‌گذاری سریع»
+      await edit(HELP_GUIDE.hqi, helpGuideKb());
+    } else if (data.startsWith("hg:")) {
+      // hg:<key>: نمایش راهنمای همان بخش (cf/arvan/prov/mons/...)
+      await edit(HELP_GUIDE[data.slice(3)] || "ℹ️ راهنمای این بخش موجود نیست.", helpGuideKb());
+    } else if (data === "admins_menu") {
+      // admins_menu: لیست ادمین‌ها (فقط ادمین اصلی)
+      if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین‌ها را مدیریت کند.");
+      await renderAdmins(admins, adminId, edit);
+    } else if (data === "adminadd") {
+      // adminadd: افزودن ادمین جدید با شناسهٔ عددی تلگرام
+      if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین اضافه کند.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "admin_add" }), { expirationTtl: 600 });
+      await edit("➕ شناسه عددی تلگرام ادمین جدید را بفرستید (می‌توانید با /myid در ربات خود ببینید):", [
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "admindel") {
+      // admindel: انتخاب ادمین برای حذف | admindely:<id>: تأیید حذف
+      if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین حذف کند.");
+      const extra = admins.filter((id) => id !== adminId);
+      if (extra.length === 0) return edit("📭 ادمین دیگری وجود ندارد.", [
+        [{ text: "⬅️ بازگشت", callback_data: "admins_menu" }],
+      ]);
+      const kb = extra.map((id) => [{ text: `🗑 ${id}`, callback_data: `admindely:${id}` }]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: "admins_menu" }]);
+      await edit("🗑 کدام ادمین حذف شود؟ (ادمین اصلی قابل حذف نیست)", kb);
+    } else if (data.startsWith("admindely:")) {
+      if (!isMain) return edit("❌ فقط ادمین اصلی.");
+      const id = Number(data.slice(10));
+      let list = (await kv.get("admins", "json")) || [];
+      list = list.map(Number).filter((x) => x !== id);
+      await kvPutCached(kv, "admins", JSON.stringify(list));
+      await renderAdmins(await getAdmins(kv, env), adminId, edit);
+    } else if (data === "addzone") {
+      // addzone: انتخاب اکانت برای ثبت دامنهٔ جدید | azacc:<accIndex>: انتخاب همان اکانت
+      await edit("🌐 افزودن دامنه جدید\n\nدامنه را در کدام اکانت کلودفلر ثبت کنید؟", [
+        ...accounts.map((a, i) => [{ text: a.name, callback_data: `azacc:${i}` }]),
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data.startsWith("azacc:")) {
+      const i = Number(data.slice(6));
+      const acc = accounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "addzone_name", acc: i }), { expirationTtl: 600 });
+      await edit(`🌐 نام دامنه جدید را بفرستید (مثلاً example.com) — در اکانت «${acc.name}» ثبت می‌شود:`, [
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "zones") {
+      // zones: لیست دامنه‌های کلودفلر (همهٔ اکانت‌ها)
+      await showZones(0, "all", accounts, edit, kv, chatId);
+    } else if (data === "arvan") {
+      // arvan: لیست دامنه‌های آروان | arvnsync: همگام‌سازی دوباره | arvpage:<page>: صفحه‌بندی
+      await showArvanDomains(0, arvanAccounts, edit, kv, env);
+    } else if (data.startsWith("arvacc:")) {
+      await showArvanDomains(0, arvanAccounts, edit, kv, env);
+    } else if (data === "arvnsync") {
+      await kvDeleteCached(kv, "arvan:cached:domains");
+      await edit("🔄 در حال همگام‌سازی با آروان...", [[{ text: "⏳ لطفا صبر کنید", callback_data: "noop" }]]);
+      await showArvanDomains(0, arvanAccounts, edit, kv, env);
+    } else if (data.startsWith("arvpage:")) {
+      const page = Number(data.slice(10));
+      await showArvanDomains(page, arvanAccounts, edit, kv, env);
+    } else if (data.startsWith("arv:")) {
+      // arv:<acc>:<domain>: ورود به دامنهٔ آروان و نمایش رکوردها
+      const parts = data.split(":");
+      const accIdx = Number(parts[1]);
+      const domain = parts[2];
+      const token = makeToken();
+      await kv.put(`s:${token}`, JSON.stringify({ domain, acc: accIdx, provider: "arvan" }), { expirationTtl: 86400 });
+      await showArvanRecords(domain, accIdx, token, arvanAccounts, edit, kv, env);
+    } else if (data.startsWith("ap:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const page = Number(parts[2]);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session || session.provider !== "arvan") return edit("⏳ نشست منقضی شده.");
+      session.page = page;
+      await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
+      const records = await arvanGetAllRecords(arvanAccounts[session.acc].token, session.domain, kv, env);
+      await renderArvanRecords(session.domain, records, token, page, edit, "arvan");
+    } else if (data.startsWith("zf:")) {
+      const parts = data.split(":");
+      const flt = parts[1];
+      const page = Number(parts[2]) || 0;
+      await showZones(page, flt, accounts, edit, kv, chatId);
+    } else if (data === "search") {
+      // search: جست‌وجوی سراسری (آی‌پی یا نام) — کاربر عبارت را در چت می‌فرستد
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search_any" }), { expirationTtl: 600 });
+      await edit(SEARCH_PROMPT_TEXT, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data.startsWith("sf:")) {
+      // sf:<name|content>: انتخاب میدان جست‌وجو (نام دامنه یا مقدار/IP)
+      const field = data.slice(3);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search", field }), { expirationTtl: 600 });
+      await edit(
+        field === "name" ? "🔤 نام دامنه یا بخشی از آن را بفرستید:" : "🌐 IP یا بخشی از مقدار را بفرستید:",
+        [[{ text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else if (data === "accounts") {
+      // accounts: نمایش اکانت‌های کلودفلر/آروان | accadd: افزودن اکانت کلودفلر | arvanaccadd: افزودن اکانت آروان
+      await showAccounts(accounts, arvanAccounts, edit);
+    } else if (data === "accadd") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "acc_name" }), { expirationTtl: 600 });
+      await edit("👤 افزودن اکانت کلودفلر\n\nنام دلخواه اکانت را بفرستید (مثلاً: اصلی، بکاپ):", [
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "accdel") {
+      if (accounts.length === 0 && arvanAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const kb = [];
+      for (let i = 0; i < accounts.length; i++) kb.push([{ text: `☁️ 🗑 ${accounts[i].name}`, callback_data: `dacc:${i}` }]);
+      for (let i = 0; i < arvanAccounts.length; i++) kb.push([{ text: `🇮🇷 🗑 ${arvanAccounts[i].name}`, callback_data: `darvan:${i}` }]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: "accounts" }]);
+      await edit("🗑 کدام اکانت حذف شود؟", kb);
+    } else if (data.startsWith("dacc:")) {
+      const idx = Number(data.slice(5));
+      const acc = accounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
+      await edit(`⚠️ مطمئنید اکانت «${acc.name}» حذف شود؟\nتوکن: ${maskToken(acc.token)}`, [
+        [{ text: "✅ بله", callback_data: `daccy:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
+      ]);
+    } else if (data.startsWith("daccy:")) {
+      const idx = Number(data.slice(6));
+      const acc = accounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
+      accounts.splice(idx, 1);
+      await kvPutCached(kv, "accounts", JSON.stringify(accounts));
+      await edit(`✅ اکانت «${acc.name}» حذف شد.`, [
+        [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "arvanaccadd") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_name" }), { expirationTtl: 600 });
+      await edit("🇮🇷 افزودن اکانت آروان کلاد\n\nنام دلخواه اکانت را بفرستید (مثلاً: اصلی، بکاپ):", [
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "arvanaccdel") {
+      if (arvanAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const kb = arvanAccounts.map((a, i) => [{ text: `🗑 ${a.name}`, callback_data: `darvan:${i}` }]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: "accounts" }]);
+      await edit("🗑 کدام اکانت آروان حذف شود؟", kb);
+    } else if (data.startsWith("darvan:")) {
+      const idx = Number(data.slice(7));
+      const acc = arvanAccounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
+      await edit(`⚠️ مطمئنید اکانت «${acc.name}» حذف شود؟\nکلید: ${maskArvanToken(acc.token)}`, [
+        [{ text: "✅ بله", callback_data: `darvany:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
+      ]);
+    } else if (data.startsWith("darvany:")) {
+      const idx = Number(data.slice(9));
+      const acc = arvanAccounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
+      arvanAccounts.splice(idx, 1);
+      await kvPutCached(kv, "arvan_accounts", JSON.stringify(arvanAccounts));
+      await edit(`✅ اکانت «${acc.name}» حذف شد.`, [
+        [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "addrec") {
+      // addrec: انتخاب دامنه (کلودفلر/آروان) برای ساخت رکورد جدید
+      // arz:<acc>:<zoneId> برای کلودفلر و arvrec:<acc>:<domain> برای آروان
+      const zones = await getAllZones(accounts, kv);
+      const arvanDomains = await getArvanDomainsCached(kv, arvanAccounts, env);
+      const allItems = [];
+      for (const z of zones) {
+        allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
+      }
+      for (const d of arvanDomains) {
+        allItems.push({ text: `🟢 🇮🇷 ${d.domain}`, cb: `arvrec:${d.acc}:${d.domain}` });
+      }
+      if (allItems.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const kb = [];
+      for (let i = 0; i < allItems.length; i += 2) {
+        const row = [{ text: allItems[i].text, callback_data: allItems[i].cb }];
+        if (i + 1 < allItems.length) row.push({ text: allItems[i + 1].text, callback_data: allItems[i + 1].cb });
+        else row.push(EMPTY_BTN);
+        kb.push(row);
+      }
+      kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+      await edit("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
+    } else if (data.startsWith("arvrec:")) {
+      const parts = data.split(":");
+      const accIndex = Number(parts[1]);
+      const domain = parts[2];
+      const token = makeToken();
+      await kv.put(`s:${token}`, JSON.stringify({ domain, acc: accIndex, provider: "arvan" }), { expirationTtl: 86400 });
+      await edit(`➕ ساخت رکورد در ${domain}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
+    } else if (data.startsWith("arz:")) {
+      const parts = data.split(":");
+      const accIndex = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, accIndex, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const token = makeToken();
+      await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex }), {
+        expirationTtl: 86400,
+      });
+      await edit(`➕ ساخت رکورد در ${zone.name}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
+    } else if (data.startsWith("addz:")) {
+      const token = data.slice(5);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (session.provider === "arvan") {
+        await edit(`➕ ساخت رکورد در ${session.domain}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
+      } else {
+        const zone = await getZoneById(session.zone_id, session.acc, accounts);
+        await edit(`➕ ساخت رکورد در ${zone.name}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
+      }
+    } else if (data.startsWith("at:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const rtype = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "ar_name", acc: session.acc, zone_id: session.zone_id, zone_name: session.zone_name, rtype, provider: session.provider || "cloudflare", domain: session.domain }),
+        { expirationTtl: 600 }
+      );
+      await edit(`➕ ساخت رکورد ${rtype}\n\nنام رکورد را بفرستید (مثلاً www یا @):`, [
+        [{ text: "⬅️ انصراف", callback_data: `rback:${token}` }],
+      ]);
+    } else if (data === "czback") {
+      const pending = await kv.get(`pend:${chatId}`, "json");
+      if (!pending || pending.type !== "ar_content") return edit("⏳ عملیات منقضی شده.");
+      const { text, kb } = await cnameTargetPickerData(accounts, kv, pending.name);
+      await edit(text, kb);
+    } else if (data.startsWith("cz:")) {
+      const parts = data.split(":");
+      const accIndex = Number(parts[1]);
+      const zoneId = parts[2];
+      let page = Number(parts[3]) || 0;
+      const zone = await getZoneById(zoneId, accIndex, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const records = await getRecords(zone, accounts, kv);
+      const counts = {};
+      for (const rec of records) counts[rec.name] = (counts[rec.name] || 0) + 1;
+      const seen = {};
+      const items = records.map((rec) => {
+        let label = rec.name;
+        if (counts[rec.name] > 1) {
+          seen[rec.name] = (seen[rec.name] || 0) + 1;
+          label = `${seen[rec.name]}. ${label}`;
+        }
+        return { text: `↪️ ${label}`, callback_data: `czr:${rec.name}` };
+      });
+      const pages = Math.ceil(items.length / CZR_PAGE_SIZE);
+      if (page < 0) page = 0;
+      if (page >= pages) page = pages - 1;
+      const slice = items.slice(page * CZR_PAGE_SIZE, page * CZR_PAGE_SIZE + CZR_PAGE_SIZE);
+      const kb = [];
+      kb.push([{ text: `🏠 ${zone.name} (ریشه دامنه)`, callback_data: `czr:${zone.name}` }]);
+      for (const row of grid2(slice)) kb.push(row);
+      const nav = [];
+      nav.push(page > 0 ? { text: "◀️", callback_data: `cz:${accIndex}:${zoneId}:${page - 1}` } : EMPTY_BTN);
+      nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+      nav.push(page < pages - 1 ? { text: "▶️", callback_data: `cz:${accIndex}:${zoneId}:${page + 1}` } : EMPTY_BTN);
+      kb.push(nav);
+      kb.push([{ text: "⌨️ ورود دستی دامنه", callback_data: "czman" }]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: "czback" }]);
+      await edit(`🔤 ساب‌دامنه‌های «${zone.name}»:\n\nروی یکی کلیک کنید تا به‌عنوان هدف CNAME استفاده شود:`, kb);
+    } else if (data.startsWith("czp:")) {
+      const rest = data.slice(4);
+      const idx = rest.lastIndexOf(":");
+      const name = idx >= 0 ? rest.slice(0, idx) : rest;
+      const page = idx >= 0 ? Number(rest.slice(idx + 1)) || 0 : 0;
+      const { text, kb } = await cnameTargetPickerData(accounts, kv, name, page);
+      await edit(text, kb);
+    } else if (data === "czman") {
+      const pending = await kv.get(`pend:${chatId}`, "json");
+      if (!pending || pending.type !== "ar_content") return edit("⏳ عملیات منقضی شده.");
+      await edit(`⌨️ دامنه هدف را به‌صورت دستی تایپ کنید (مثلاً target.example.com):`, [
+        [{ text: "⬅️ انصراف", callback_data: "menu" }],
+      ]);
+    } else if (data.startsWith("czr:")) {
+      const targetName = data.slice(4);
+      const pending = await kv.get(`pend:${chatId}`, "json");
+      if (!pending || pending.type !== "ar_content") return edit("⏳ عملیات منقضی شده.");
+      await addRecordFromPending(pending, targetName, accounts, kv, chatId, edit);
+    } else if (data.startsWith("zsearch:")) {
+      const token = data.slice(8);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zoneName = session.provider === "arvan" ? session.domain : session.zone_name;
+      await edit(`🔍 جستجو در ${zoneName}\n\nبر اساس چه چیزی جستجو کنیم؟`, [
+        [{ text: "🔤 بر اساس نام/دامنه", callback_data: `zsf:${token}:name` }],
+        [{ text: "🌐 بر اساس IP/مقدار", callback_data: `zsf:${token}:content` }],
+        [{ text: "⬅️ بازگشت", callback_data: session.provider === "arvan" ? `rback:${token}` : `rback:${token}` }],
+      ]);
+    } else if (data.startsWith("zsf:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const field = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "search_zone", field, zone_id: session.zone_id, acc: session.acc, provider: session.provider || "cloudflare", domain: session.domain }),
+        { expirationTtl: 600 }
+      );
+      await edit(
+        field === "name" ? "🔤 نام یا بخشی از آن را بفرستید:" : "🌐 IP یا بخشی از مقدار را بفرستید:",
+        [[{ text: "⬅️ انصراف", callback_data: session.provider === "arvan" ? `rback:${token}` : `rback:${token}` }]]
+      );
+    } else if (data.startsWith("zset:")) {
+      const token = data.slice(5);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      await edit(`⚙️ تنظیمات ${zone.name}:\n\nوضعیت: ${zone.status}`, [
+        ...grid2([
+          { text: "🔒 SSL / TLS", callback_data: `zssl:${token}` },
+          { text: "🛡 امنیت", callback_data: `zsec:${token}` },
+          { text: "⚡ کارایی", callback_data: `zperf:${token}` },
+          { text: "ℹ️ جزئیات دامنه", callback_data: `zd:${token}` },
+          { text: "🧹 پاکسازی کامل کش", callback_data: `zpurge:${token}` },
+          { text: `🚧 حالت توسعه: ${zone.development_mode === 1 ? "روشن" : "خاموش"}`, callback_data: `zdev:${token}` },
+          { text: zone.status === "active" ? "⏸️ توقف دامنه" : "▶️ فعال‌سازی دامنه", callback_data: `zpause:${token}` },
+        ]),
+        [{ text: "⬅️ بازگشت", callback_data: `rback:${token}` }],
+      ]);
+    } else if (data.startsWith("zssl:")) {
+      const token = data.slice(5);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await renderSettingsGroup(token, session, accounts, edit, "🔒 SSL / TLS", SSL_KEYS);
+    } else if (data.startsWith("zsec:")) {
+      const token = data.slice(5);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await renderSettingsGroup(token, session, accounts, edit, "🛡 امنیت", SEC_KEYS);
+    } else if (data.startsWith("zperf:")) {
+      const token = data.slice(6);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await renderSettingsGroup(token, session, accounts, edit, "⚡ کارایی", PERF_KEYS);
+    } else if (data.startsWith("ztog:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const setting = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const map = await getSettingsMap(zone, accounts);
+      const cur = map[setting];
+      const newVal = cur === "on" ? "off" : "on";
+      const d = await setSetting(zone, accounts, setting, newVal);
+      if (d.success) {
+        await renderSettingsGroup(token, session, accounts, edit, groupTitleFor(setting), groupKeysFor(setting));
+      } else {
+        await edit("❌ خطا:\n" + cfErrText(d));
+      }
+    } else if (data.startsWith("zval:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const setting = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const map = await getSettingsMap(zone, accounts);
+      const info = SETTINGS_INFO[setting];
+      const cur = map[setting];
+      const buttons = Object.keys(info.values).map((v) => ({
+        text: `${v === cur ? "✅ " : ""}${info.values[v]}`,
+        callback_data: `zvset:${token}:${setting}:${v}`,
+      }));
+      const kb = grid2(buttons);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }]);
+      await edit(`🔧 ${info.label}:\n\nمقدار فعلی: ${info.values[cur] || cur}`, kb);
+    } else if (data.startsWith("zvset:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const setting = parts[2];
+      const value = parts[3];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const d = await setSetting(zone, accounts, setting, value);
+      if (d.success) {
+        await renderSettingsGroup(token, session, accounts, edit, groupTitleFor(setting), groupKeysFor(setting));
+      } else {
+        await edit("❌ خطا:\n" + cfErrText(d));
+      }
+    } else if (data.startsWith("zd:")) {
+      const token = data.slice(3);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const text =
+        `ℹ️ ${zone.name}\n\n` +
+        `وضعیت: ${zone.status}\n` +
+        `پلن: ${zone.plan ? zone.plan.name : "؟"}\n` +
+        `NS ها:\n${(zone.name_servers || []).join("\n")}\n` +
+        `ایجاد شده: ${new Date(zone.created_on).toLocaleDateString("fa-IR")}\n` +
+        `SSL: ${zone.ssl ? zone.ssl.status : "؟"}`;
+      await edit(text, [[{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }]]);
+    } else if (data.startsWith("zpurge:")) {
+      const token = data.slice(7);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const res = await fetch(`${CF_API}/zones/${session.zone_id}/purge_cache`, {
+        method: "POST",
+        headers: hdr(accounts[session.acc].token),
+        body: JSON.stringify({ purge_everything: true }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        await edit(`✅ کش ${session.zone_name} به طور کامل پاک شد.`, [
+          [{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }],
+        ]);
+      } else {
+        await edit("❌ خطا:\n" + cfErrText(d));
+      }
+    } else if (data.startsWith("zdev:")) {
+      const token = data.slice(5);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const newMode = zone.development_mode === 1 ? "off" : "on";
+      const res = await fetch(`${CF_API}/zones/${session.zone_id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[session.acc].token),
+        body: JSON.stringify({ development_mode: newMode }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        await edit(`✅ حالت توسعه ${newMode === "on" ? "روشن" : "خاموش"} شد.`, [
+          [{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }],
+        ]);
+      } else {
+        await edit("❌ خطا:\n" + cfErrText(d));
+      }
+    } else if (data.startsWith("zpause:")) {
+      const token = data.slice(7);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const newPaused = zone.status === "active";
+      const res = await fetch(`${CF_API}/zones/${session.zone_id}`, {
+        method: "PATCH",
+        headers: hdr(accounts[session.acc].token),
+        body: JSON.stringify({ paused: newPaused }),
+      });
+      const d = await res.json();
+      if (d.success) {
+        await edit(`✅ دامنه ${newPaused ? "متوقف" : "فعال"} شد.`, [
+          [{ text: "⬅️ بازگشت", callback_data: `zset:${token}` }],
+        ]);
+      } else {
+        await edit("❌ خطا:\n" + cfErrText(d));
+      }
+    } else if (data.startsWith("z:")) {
+      const parts = data.split(":");
+      const accIndex = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, accIndex, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const records = await getRecords(zone, accounts, kv);
+      const token = makeToken();
+      const zctx = (await kv.get(`zctx:${chatId}`, "json")) || null;
+      const zback = zctx && zctx.filter !== undefined ? `zf:${zctx.filter}:${Number(zctx.page) || 0}` : "zones";
+      await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, page: 0, zback }), {
+        expirationTtl: 86400,
+      });
+      if (records.length === 0) {
+        const kb = [
+          [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
+          [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
+          [{ text: "🔙 بازگشت", callback_data: zback }],
+        ];
+        await edit(`📭 رکوردی برای ${zone.name} یافت نشد.`, kb);
+      } else {
+        await renderRecords(zone, records, token, 0, edit, undefined, zback);
+      }
+    } else if (data.startsWith("p:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const page = Number(parts[2]);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
+      session.page = page;
+      await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, page, edit, undefined, session.zback);
+    } else if (data.startsWith("rback:")) {
+      const token = data.slice(6);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const rpage = Number(session.page) || 0;
+      if (session.provider === "arvan") {
+        const records = await arvanGetAllRecords(arvanAccounts[session.acc].token, session.domain, kv, env);
+        return renderArvanRecords(session.domain, records, token, rpage, edit, "arvan");
+      }
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, rpage, edit, undefined, session.zback);
+    } else if (data.startsWith("selmode:")) {
+      const token = data.slice(8);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const page = Number(session.page) || 0;
+      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids: [], page }), { expirationTtl: 3600 });
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, page, edit, [], session.zback);
+    } else if (data.startsWith("sel:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const selState = (await kv.get(`sel:${chatId}`, "json")) || { token, ids: [], page: 0 };
+      if (selState.token !== token) return edit("⏳ نشست منقضی شده.");
+      const ids = selState.ids || [];
+      const idx = ids.indexOf(recordId);
+      if (idx >= 0) ids.splice(idx, 1);
+      else ids.push(recordId);
+      const page = Number(selState.page) || 0;
+      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids, page }), { expirationTtl: 3600 });
+      const session = await kv.get(`s:${token}`, "json");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, page, edit, ids, session.zback);
+    } else if (data.startsWith("selp:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const page = Number(parts[2]);
+      const selState = (await kv.get(`sel:${chatId}`, "json")) || { token, ids: [], page: 0 };
+      selState.page = page;
+      await kv.put(`sel:${chatId}`, JSON.stringify(selState), { expirationTtl: 3600 });
+      const session = await kv.get(`s:${token}`, "json");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, page, edit, selState.ids || [], session.zback);
+    } else if (data.startsWith("seldone:")) {
+      const token = data.slice(8);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      const page = selState && Number(selState.page) ? Number(selState.page) : 0;
+      await kv.delete(`sel:${chatId}`);
+      const session = await kv.get(`s:${token}`, "json");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      const records = await getRecords(zone, accounts, kv);
+      await renderRecords(zone, records, token, page, edit, undefined, session.zback);
+    } else if (data.startsWith("favsel:")) {
+      const token = data.slice(7);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const favs = await getFavs(kv, chatId);
+      let added = 0;
+      for (const rid of selState.ids) {
+        if (favExists(favs, session.zone_id, rid)) continue;
+        const rec = await getRecordById(session.acc, session.zone_id, rid, accounts);
+        if (!rec) continue;
+        favs.push({ zone_id: session.zone_id, zone_name: session.zone_name, acc: session.acc, record_id: rid, name: rec.name, type: rec.type });
+        added++;
+      }
+      await saveFavs(kv, chatId, favs);
+      await kv.delete(`sel:${chatId}`);
+      await edit(added > 0 ? `✅ ${added} ساب به منتخب‌ها اضافه شد.` : "ℹ️ این ساب‌ها از قبل در منتخب‌ها بودند.", []);
+      await sleep(2000);
+      await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+    } else if (data.startsWith("bulkdel:")) {
+      const token = data.slice(8);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
+      await edit(`⚠️ ${selState.ids.length} رکورد حذف شود؟`, [
+        [{ text: "✅ بله، حذف کن", callback_data: `bulkdely:${token}` }, { text: "❌ انصراف", callback_data: `selmode:${token}` }],
+      ]);
+    } else if (data.startsWith("bulkdely:")) {
+      const token = data.slice(9);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids) return edit("⏳ نشست منقضی شده.");
+      const session = await kv.get(`s:${token}`, "json");
+      let okCount = 0;
+      for (const id of selState.ids) {
+        const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${id}`, {
+          method: "DELETE",
+          headers: hdr(accounts[session.acc].token),
+        });
+        const d = await del.json();
+        if (d.success) okCount++;
+      }
+      await invalidateCache(kv, session.zone_id);
+      await kv.delete(`sel:${chatId}`);
+      await edit(`✅ تغییر یافت\n\n${okCount} از ${selState.ids.length} رکورد حذف شد.`, []);
+      await sleep(2000);
+      await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+    } else if (data.startsWith("bulkedit:")) {
+      const token = data.slice(9);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
+      const session = await kv.get(`s:${token}`, "json");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "bulk_edit", zone_id: session.zone_id, acc: session.acc, ids: selState.ids, token, msgId: messageId }),
+        { expirationTtl: 600 }
+      );
+      await edit("✏️ مقدار جدید را برای رکوردهای انتخاب‌شده بفرستید:", [
+        [{ text: "⬅️ انصراف", callback_data: `selmode:${token}` }],
+      ]);
+    } else if (data.startsWith("bulktype:")) {
+      const token = data.slice(9);
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
+      await edit("🔄 نوع جدید برای رکوردهای انتخاب‌شده:", [
+        ...RECORD_TYPES.map((t) => [{ text: t, callback_data: `bulktypev:${token}:${t}` }]),
+        [{ text: "⬅️ انصراف", callback_data: `selmode:${token}` }],
+      ]);
+    } else if (data.startsWith("bulktypev:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const newType = parts[2];
+      const selState = await kv.get(`sel:${chatId}`, "json");
+      if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
+      const session = await kv.get(`s:${token}`, "json");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "bulk_type", zone_id: session.zone_id, acc: session.acc, ids: selState.ids, new_type: newType, token, msgId: messageId }),
+        { expirationTtl: 600 }
+      );
+      await edit(`🔄 مقدار جدید برای نوع ${newType} را بفرستید:`, [
+        [{ text: "⬅️ انصراف", callback_data: `selmode:${token}` }],
+      ]);
+    } else if (data.startsWith("se:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      const kb = [
+        [{ text: "✏️ تغییر مقدار", callback_data: `sev:${token}:${idx}` }],
+        [{ text: "🔄 تغییر نوع", callback_data: `set:${token}:${idx}` }],
+        [{ text: "🔄 تغییر Proxy", callback_data: `sep:${token}:${idx}` }],
+      ];
+      if (lbIsLbRecord(res.record)) {
+        kb.push([
+          { text: "➕ افزودن آی‌پی لود بالانسر", callback_data: `selba:${token}:${idx}`, style: "success" },
+          { text: "⚙️ تنظیمات لود بالانسر", callback_data: `selbs:${token}:${idx}`, style: "success" },
+        ]);
+      }
+      kb.push([{ text: "⬅️ بازگشت", callback_data: `sr:${token}` }]);
+      await edit(`✏️ ${res.record.type}-${code(res.record.name)} (${code(res.zone_name)})`, kb);
+    } else if (data.startsWith("sev:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "edit_value", zone_id: res.zone_id, record_id: res.record.id, acc: res.acc, srToken: token, msgId: messageId, provider: res.provider || "cloudflare", domain: res.domain }),
+        { expirationTtl: 600 }
+      );
+      await edit(`✏️ مقدار جدید برای ${res.record.name} را بفرستید:`, [
+        [{ text: "⬅️ انصراف", callback_data: `sr:${token}` }],
+      ]);
+    } else if (data.startsWith("sep:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      const record = res.record;
+      if (res.provider === "arvan") {
+        const records = await arvanGetAllRecords(await arvanToken(kv, res.acc), res.domain, kv, env);
+        const orig = records.find((r) => r.id === record.id);
+        if (!orig) return edit("❌ رکورد پیدا نشد.");
+        orig.proxied = !record.proxied;
+        const r2 = await arvanUpdateRecord(await arvanToken(kv, res.acc), res.domain, orig, orig.content, kv, env);
+        if (r2.success !== false) {
+          const sum =
+            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
+            `🔴 Proxy قبلی: ${!orig.proxied ? "روشن" : "خاموش"}\n` +
+            `🟢 Proxy فعلی: ${orig.proxied ? "روشن" : "خاموش"}`;
+          await edit(sum, []);
+          await sleep(2000);
+          await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(r2));
+        }
+      } else {
+        const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${record.id}`, {
+          method: "PATCH",
+          headers: hdr(accounts[res.acc].token),
+          body: JSON.stringify({ proxied: !record.proxied }),
+        });
+        const d = await r.json();
+        if (d.success) {
+          await invalidateCache(kv, res.zone_id);
+          const sum =
+            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
+            `🔴 Proxy قبلی: ${record.proxied ? "روشن" : "خاموش"}\n` +
+            `🟢 Proxy فعلی: ${d.result.proxied ? "روشن" : "خاموش"}`;
+          await edit(sum, []);
+          await sleep(2000);
+          await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(d));
+        }
+      }
+    } else if (data.startsWith("set:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      const kb = RECORD_TYPES.filter((t) => t !== res.record.type).map((t) => [
+        { text: `به ${t}`, callback_data: `sett:${token}:${idx}:${t}` },
+      ]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: `sr:${token}` }]);
+      await edit(`🔄 تبدیل نوع ${res.record.name} از ${res.record.type} به:`, kb);
+    } else if (data.startsWith("sett:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const newType = parts[3];
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "change_type", new_type: newType, zone_id: res.zone_id, record_id: res.record.id, acc: res.acc, srToken: token, msgId: messageId }),
+        { expirationTtl: 600 }
+      );
+      await edit(`🔄 مقدار جدید برای نوع ${newType} (${res.record.name}) را بفرستید:`, [
+        [{ text: "⬅️ انصراف", callback_data: `sr:${token}` }],
+      ]);
+    } else if (data.startsWith("sr:")) {
+      const token = data.slice(3);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored) return edit("⏳ نشست منقضی شده.");
+      await renderSearchResults(token, stored.results, stored.query, stored.field, edit);
+    } else if (data.startsWith("sd:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      await edit(`⚠️ مطمئنید حذف شود؟\n\n${res.record.type} — ${res.record.name} → ${res.record.content}`, [
+        [{ text: "✅ بله", callback_data: `sdy:${token}:${idx}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
+      ]);
+    } else if (data.startsWith("sdy:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${token}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      let delData;
+      if (res.provider === "arvan") {
+        const r = await arvanDeleteRecord(await arvanToken(kv, res.acc), res.domain, res.record.id, kv, env);
+        delData = r;
+      } else {
+        const del = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
+          method: "DELETE",
+          headers: hdr(accounts[res.acc].token),
+        });
+        delData = await del.json();
+      }
+      if (delData.success || delData.success !== false) {
+        if (res.provider !== "arvan") await invalidateCache(kv, res.zone_id);
+        const gone = res.record;
+        stored.results.splice(idx, 1);
+        await kv.put(`sr:${token}`, JSON.stringify(stored), { expirationTtl: 3600 });
+        const sum = `✅ حذف شد\n\n📛 ساب‌دامین: ${code(gone.name)}\n\n🔴 مقدار قبلی:\n${code(gone.content)}`;
+        await edit(sum, []);
+        await sleep(2000);
+        await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
+      } else {
+        await edit("❌ خطا در حذف:\n" + cfErrText(delData));
+      }
+    } else if (data.startsWith("e:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      const page = session && Number(session.page) ? Number(session.page) : 0;
+      const backCb = session && session.provider === "arvan" ? `ap:${token}:${page}` : `p:${token}:${page}`;
+      await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId, backCb }), { expirationTtl: 86400 });
+      await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, env);
+    } else if (data.startsWith("ev:") || data.startsWith("et:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const field = data.startsWith("ev:") ? "edit_value" : "edit_ttl";
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: session.provider === "arvan" ? `ap:${token}:${Number(session.page) || 0}` : `p:${token}:${Number(session.page) || 0}` }),
+        { expirationTtl: 600 }
+      );
+      await edit(
+        field === "edit_ttl"
+          ? "⏱ TTL جدید را بفرستید (عدد به ثانیه، یا 1 برای خودکار):"
+          : "✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):",
+        [[{ text: "⬅️ انصراف", callback_data: `cancel:${token}` }]]
+      );
+    } else if (data.startsWith("cancel:")) {
+      await kv.delete(`pend:${chatId}`);
+      const token = data.slice(7);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const rp = Number(session.page) || 0;
+      if (session.provider === "arvan") {
+        try {
+          const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+          await renderArvanRecords(session.domain, records, token, rp, edit, "arvan");
+        } catch (e) {
+          await showArvanDomains(0, arvanAccounts, edit, kv, env);
+        }
+      } else {
+        const zone = await getZoneById(session.zone_id, session.acc, accounts);
+        const records = await getRecords(zone, accounts, kv);
+        await renderRecords(zone, records, token, rp, edit, undefined, session.zback);
+      }
+    } else if (data.startsWith("ct:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+        headers: hdr(accounts[session.acc].token),
+      });
+      const recData = await recRes.json();
+      if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+      const record = recData.result;
+      const kb = RECORD_TYPES.filter((t) => t !== record.type).map((t) => [
+        { text: `به ${t}`, callback_data: `ctt:${token}:${recordId}:${t}` },
+      ]);
+      kb.push([{ text: "⬅️ بازگشت", callback_data: `e:${token}:${recordId}` }]);
+      await edit(`🔄 تبدیل نوع ${record.name} از ${record.type} به:`, kb);
+    } else if (data.startsWith("ctt:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const newType = parts[3];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "change_type", new_type: newType, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId }),
+        { expirationTtl: 600 }
+      );
+      await edit(`🔄 مقدار جدید برای نوع ${newType} را بفرستید:`, [
+        [{ text: "⬅️ انصراف", callback_data: `rback:${token}` }],
+      ]);
+    } else if (data.startsWith("ep:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      let record;
+      if (session.provider === "arvan") {
+        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+        record = records.find((r) => r.id === recordId);
+        if (!record) return edit("❌ رکورد پیدا نشد.");
+      } else {
+        const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          headers: hdr(accounts[session.acc].token),
+        });
+        const recData = await recRes.json();
+        if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+        record = recData.result;
+      }
+      if (session.provider === "arvan") {
+        const newProxied = !record.proxied;
+        record.proxied = newProxied;
+        const res = await arvanUpdateRecord(await arvanToken(kv, session.acc), session.domain, record, record.content, kv, env);
+        if (res.success !== false) {
+          const sum =
+            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
+            `🔴 Proxy قبلی: ${!newProxied ? "روشن" : "خاموش"}\n` +
+            `🟢 Proxy فعلی: ${newProxied ? "روشن" : "خاموش"}`;
+          await edit(sum, []);
+          await sleep(2000);
+          await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(res));
+        }
+      } else {
+        const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          method: "PATCH",
+          headers: hdr(accounts[session.acc].token),
+          body: JSON.stringify({ proxied: !record.proxied }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await invalidateCache(kv, session.zone_id);
+          const sum =
+            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
+            `🔴 Proxy قبلی: ${record.proxied ? "روشن" : "خاموش"}\n` +
+            `🟢 Proxy فعلی: ${data.result.proxied ? "روشن" : "خاموش"}`;
+          await edit(sum, []);
+          await sleep(2000);
+          await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(data));
+        }
+      }
+    } else if (data.startsWith("d:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      let record;
+      if (session.provider === "arvan") {
+        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+        record = records.find((r) => r.id === recordId);
+        if (!record) return edit("❌ رکورد پیدا نشد.");
+      } else {
+        const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          headers: hdr(accounts[session.acc].token),
+        });
+        const recData = await recRes.json();
+        if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+        record = recData.result;
+      }
+      await edit(`⚠️ مطمئنید رکورد زیر حذف شود؟\n\n${record.type} — ${record.name} → ${record.content}`, [
+        [{ text: "✅ بله، حذف کن", callback_data: `dy:${token}:${recordId}` }, { text: "❌ انصراف", callback_data: `rback:${token}` }],
+      ]);
+    } else if (data.startsWith("dy:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (session.provider === "arvan") {
+        const res = await arvanDeleteRecord(await arvanToken(kv, session.acc), session.domain, recordId, kv, env);
+        if (res.success !== false) {
+          await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+        } else {
+          await edit("❌ خطا در حذف:\n" + cfErrText(res));
+        }
+      } else {
+        const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          method: "DELETE",
+          headers: hdr(accounts[session.acc].token),
+          signal: withTimeout(),
+        });
+        const delData = await del.json();
+        if (delData.success) {
+          await invalidateCache(kv, session.zone_id);
+          await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+        } else {
+          await edit("❌ خطا در حذف:\n" + cfErrText(delData));
+        }
+      }
+    } else if (data.startsWith("lbs:")) {
+      const parts = data.split(":");
+      await lbOpenSettings(kv, accounts, edit, chatId, messageId, parts[1], parts[2], env);
+    } else if (data.startsWith("lbsr:")) {
+      await renderLbSettings(kv, accounts, edit, chatId, data.slice(5), env);
+    } else if (data.startsWith("lba:")) {
+      const parts = data.split(":");
+      const ctx = await lbLoadById(kv, accounts, parts[1], parts[2], env);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      await lbPromptAdd(kv, edit, chatId, messageId, parts[1], ctx.name, lbTypeOf(ctx.rec), `e:${parts[1]}:${parts[2]}`);
+    } else if (data.startsWith("lbadd:")) {
+      const ctx = await lbLoadByGid(kv, accounts, data.slice(6), env);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const type0 = ctx.group.length ? lbTypeOf(ctx.group[0]) : (ctx.cfg.disabled[0] ? String(ctx.cfg.disabled[0].type).toUpperCase() : "A");
+      await lbPromptAdd(kv, edit, chatId, messageId, ctx.token, ctx.name, type0, `lbsr:${ctx.gid}`);
+    } else if (data.startsWith("lbw:")) {
+      const parts = data.split(":");
+      const gid = parts[1];
+      const idx = Number(parts[2]);
+      const ctx = await lbLoadByGid(kv, accounts, gid, env);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_weight", gid, idx, msgId: messageId }), { expirationTtl: 600 });
+      await edit(`⚖️ وزن جدید برای ${code(e.content)} را بفرستید (عدد ۰ یا بیشتر):`, [
+        [{ text: "⬅️ انصراف", callback_data: `lbsr:${gid}` }],
+      ]);
+    } else if (data.startsWith("lbt:")) {
+      const parts = data.split(":");
+      const gid = parts[1];
+      const idx = Number(parts[2]);
+      const ctx = await lbLoadByGid(kv, accounts, gid, env);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      const arvan = ctx.session.provider === "arvan";
+      let ok = false;
+      let errText = "";
+      if (e.on) {
+        if (arvan) {
+          const res = await arvanDeleteRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, e.id, kv, env);
+          ok = res.success !== false;
+          if (!ok) errText = cfErrText(res);
+        } else {
+          const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records/${e.id}`, {
+            method: "DELETE",
+            headers: hdr(accounts[ctx.session.acc].token),
+            signal: withTimeout(),
+          });
+          const d = await res.json();
+          ok = !!d.success;
+          if (!ok) errText = cfErrText(d);
+          if (ok) await invalidateCache(kv, ctx.session.zone_id);
+        }
+        if (!ok) return edit("❌ خطا در غیرفعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+        ctx.cfg.disabled.push({ content: e.content, type: e.type, ttl: e.ttl, proxied: e.proxied });
+      } else {
+        const ref = ctx.group[0] || {};
+        const proxied = e.proxied != null ? !!e.proxied : !!ref.proxied;
+        const ttl = e.ttl || ref.ttl || 1;
+        if (arvan) {
+          const res = await arvanCreateRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, e.type, ctx.name, e.content, proxied, kv, env);
+          ok = res.success !== false;
+          if (!ok) errText = cfErrText(res);
+        } else {
+          const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records`, {
+            method: "POST",
+            headers: hdr(accounts[ctx.session.acc].token),
+            body: JSON.stringify({ type: e.type, name: ctx.name, content: e.content, ttl, proxied }),
+            signal: withTimeout(),
+          });
+          const d = await res.json();
+          ok = !!d.success;
+          if (!ok) errText = cfErrText(d);
+          if (ok) await invalidateCache(kv, ctx.session.zone_id);
+        }
+        if (!ok) return edit("❌ خطا در فعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+        ctx.cfg.disabled = ctx.cfg.disabled.filter((d) => String(d.content) !== e.content);
+      }
+      await saveLbCfg(kv, ctx.key, ctx.cfg);
+      await renderLbSettings(kv, accounts, edit, chatId, gid, env);
+    } else if (data.startsWith("lbp:")) {
+      const parts = data.split(":");
+      const gid = parts[1];
+      const want = parts[2] === "on";
+      const ctx = await lbLoadByGid(kv, accounts, gid, env);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      const arvan = ctx.session.provider === "arvan";
+      let ok = 0;
+      let fail = 0;
+      for (const r of ctx.group) {
+        if (!lbIsLbRecord(r)) continue;
+        if (arvan) {
+          const rec = { ...r, proxied: want };
+          const res = await arvanUpdateRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, rec, r.content, kv, env);
+          if (res.success !== false) ok++;
+          else fail++;
+        } else {
+          const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records/${r.id}`, {
+            method: "PATCH",
+            headers: hdr(accounts[ctx.session.acc].token),
+            body: JSON.stringify({ proxied: want }),
+            signal: withTimeout(),
+          });
+          const d = await res.json();
+          if (d.success) ok++;
+          else fail++;
+        }
+      }
+      if (!arvan) await invalidateCache(kv, ctx.session.zone_id);
+      await renderLbSettings(kv, accounts, edit, chatId, gid, env);
+      if (fail) await send(`⚠️ Proxy برای ${ok} رکورد اعمال شد و ${fail} مورد ناموفق بود.`);
+    } else if (data.startsWith("selba:") || data.startsWith("selbs:")) {
+      const isAdd = data.startsWith("selba:");
+      const parts = data.split(":");
+      const srToken = parts[1];
+      const idx = Number(parts[2]);
+      const stored = await kv.get(`sr:${srToken}`, "json");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      const res = stored.results[idx];
+      const stoken = makeToken();
+      await kv.put(`s:${stoken}`, JSON.stringify({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc, provider: res.provider, domain: res.domain, zback: "qnb:" + srToken }), { expirationTtl: 86400 });
+      if (isAdd) {
+        await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token: stoken, recordId: res.record.id, backCb: `sr:${srToken}` }), { expirationTtl: 86400 });
+        const ctx = await lbLoadById(kv, accounts, stoken, res.record.id, env);
+        if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+        await lbPromptAdd(kv, edit, chatId, messageId, stoken, ctx.name, lbTypeOf(ctx.rec), `sr:${srToken}`);
+      } else {
+        await lbOpenSettings(kv, accounts, edit, chatId, messageId, stoken, res.record.id, env);
+      }
+    } else if (data === "pnl") {
+      await renderNodeHome(edit, kv);
+    } else if (data === "pnladd") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_name" }), { expirationTtl: 600 });
+      await edit("🧠 نام پنل پاسارگارد را بفرستید (مثلاً: پنل اصلی):", [[{ text: "🔙 انصراف", callback_data: "nd" }]]);
+    } else if (data === "pndef") {
+      // تعریف پنل پاسارگارد: ثبت/ویرایش/حذف پنل در یک منوی جدا
+      const panels = await getPanels(kv);
+      const lines = ["🎛 تعریف پنل پاسارگارد\n"];
+      if (panels.length) {
+        lines.push("🗂 پنل‌های ثبت‌شده:");
+        for (let i = 0; i < panels.length; i++) lines.push(`${i + 1}) ${escHtml(panels[i].name)} — ${escHtml(panels[i].url)}`);
+        lines.push("");
+      }
+      lines.push("ثبت، ویرایش یا حذف پنل‌های پاسارگارد:");
+      await edit(lines.join("\n"), [
+        [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
+        [{ text: "✏️ ویرایش پنل", callback_data: "pnle" }],
+        [{ text: "🗑 حذف پنل", callback_data: "pnld" }],
+        [{ text: "🔙 بازگشت", callback_data: "nd" }],
+      ]);
+    } else if (data === "pnle") {
+      // لیست پنل‌ها برای انتخاب ویرایش
+      const panels = await getPanels(kv);
+      if (!panels.length) return edit("📭 پنلی ثبت نشده.", [
+        [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+      ]);
+      const kb = panels.map((p, i) => [{ text: `✏️ ${p.name}`, callback_data: `pnle:${i}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }]);
+      await edit("کدام پنل را ویرایش کنم؟", kb);
+    } else if (data.startsWith("pnle:")) {
+      // منوی ویرایش یک پنل مشخص
+      const i = Number(data.slice(5));
+      const panels = await getPanels(kv);
+      const p = panels[i];
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }]]);
+      const lines = [
+        "✏️ ویرایش پنل «" + escHtml(p.name) + "»",
+        "🌐 " + code(p.url),
+        "👤 " + code(p.username || "—"),
+        "",
+        "کدام فیلد را تغییر دهم؟",
+      ];
+      await edit(lines.join("\n"), [
+        [{ text: "✏️ نام", callback_data: `pnleN:${i}` }, { text: "🌐 آدرس", callback_data: `pnleU:${i}` }],
+        [{ text: "👤 نام‌کاربری", callback_data: `pnleP:${i}` }, { text: "🔑 رمز", callback_data: `pnleW:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: "pnle" }],
+      ]);
+    } else if (data.startsWith("pnleN:") || data.startsWith("pnleU:") || data.startsWith("pnleP:") || data.startsWith("pnleW:")) {
+      // شروع ویزارد ویرایش یکی از فیلدهای پنل
+      const field = data[4];
+      const i = Number(data.slice(6));
+      const panels = await getPanels(kv);
+      const p = panels[i];
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }]]);
+      const prompts = {
+        N: [`✏️ نام جدید پنل «${escHtml(p.name)}» را بفرستید:`, "p_ename"],
+        U: [`🌐 آدرس جدید پنل را بفرستید (فعلی: ${code(p.url)}):`, "p_eurl"],
+        P: [`👤 نام‌کاربری جدید پنل را بفرستید (فعلی: ${code(p.username || "—")}):`, "p_euser"],
+        W: ["🔑 رمز جدید پنل را بفرستید:", "p_epass"],
+      };
+      const [prompt, ttype] = prompts[field];
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: ttype, idx: i }), { expirationTtl: 600 });
+      await edit(prompt, [[{ text: "⬅️ انصراف", callback_data: `pnle:${i}` }]]);
+    } else if (data === "pnld") {
+      // لیست پنل‌ها برای حذف
+      const panels = await getPanels(kv);
+      if (!panels.length) return edit("📭 پنلی ثبت نشده.", [
+        [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+      ]);
+      const kb = panels.map((p, i) => [{ text: `🗑 ${p.name}`, callback_data: `pnlx:${i}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }]);
+      await edit("کدام پنل را حذف کنم؟", kb);
+    } else if (data.startsWith("pnlx:")) {
+      const i = Number(data.slice(5));
+      const panels = await getPanels(kv);
+      const p = panels[i];
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      await edit(`⚠️ پنل «${escHtml(p.name)}» حذف شود؟ (مانیتور نودِ متصل به آن هم حذف می‌شود)`, [
+        [{ text: "✅ بله", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
+      ]);
+    } else if (data.startsWith("pnlxx:")) {
+      const i = Number(data.slice(6));
+      const panels = await getPanels(kv);
+      const p = panels[i];
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      panels.splice(i, 1);
+      await savePanels(kv, panels);
+      const monitors = await getNodeMonitors(kv);
+      const removed = monitors.filter((mo) => mo.panel_id === p.id);
+      await saveNodeMonitors(kv, monitors.filter((mo) => mo.panel_id !== p.id));
+      for (const mo of removed) await kv.delete(`ndst:${mo.id}`);
+      await edit(`✅ پنل «${escHtml(p.name)}» حذف شد.`);
+      await renderNodeHome(edit, kv);
+    } else if (data === "mons") {
+      // منوی اصلی مانیتورها؛ انتخاب هر دکمه کاربر را به بخش مربوطه می‌برد:
+      // hf = مانیتور فیلترشدن ساب‌دامین هاست‌های پاسارگارد
+      // nd = مانیتور نود پاسارگارد (هشدار قطع/وصل)
+      // srvmon = مانیتور سرورها (CPU/RAM/دیسک از طریق رلهٔ SSH)
+      // sslm = مانیتور انقضای گواهی SSL
+      // rem = یادآورها
+      // um = مانیتور مصرف پاسارگارد (کشف کاربران پرمصرف)
+      await edit("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", [
+        [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
+        [
+          { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
+          { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" },
+        ],
+        [{ text: "🖥 مانیتور سرورها", callback_data: "srvmon" }],
+        [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
+        [{ text: "⏰ یادآور", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "srv") {
+      // بخش سرورها: مدیریت سرورهای لینوکسی از طریق رله
+      await renderServersHome(edit, kv, env);
+    } else if (data === "srvrelayhelp") {
+      const { url: base, token: tok } = await getSrvRelayCfg(kv, env);
+      const fromKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
+      const lines = [
+        "ℹ️ رلهٔ SSH",
+        "",
+        "کلادفلر ورکر به پورت ۲۲ دسترسی ندارد؛ پس همهٔ اتصال‌های SSH از طریق «رلهٔ واحد» روی یک VPS انجام می‌شود.",
+        "",
+        (base ? "✅ رلهٔ فعلی: " + code(base) : "❌ رله ثبت نشده است.") + (fromKv ? " (ثبت‌شده توسط شما)" : " (متغیرهای ورکر)"),
+        tok ? "🔑 توکن: ثبت شده است" : "🔑 توکن: ثبت نشده است",
+        "",
+        "🛠 نصب رله روی هر سرور لینوکسی (Ubuntu/Debian):",
+        code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"'),
+        "",
+        "• رله بعد از نصب روی پورت 8788 گوش می‌دهد و آدرس + توکن را در خروجی نصب نشان می‌دهد.",
+        "• اگر آدرس را با آی‌پی بفرستید، ربات خودش از یک دامنهٔ فعال یک ساب‌دامهٔ rel.make می‌سازد؛ با دامنه هم می‌توانید بفرستید.",
+        "• با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را خودت ثبت کن — نیازی به پیام دادن به ادمین نیست.",
+        "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
+      ];
+      const kb = [
+        [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+        [{ text: "🗑 حذف تنظیمات رله", callback_data: "srvrelayclear" }],
+        [{ text: "🔙 سرورها", callback_data: "srv" }],
+      ];
+      await edit(lines.join("\n"), kb);
+    } else if (data === "srvrelayset") {
+      // ثبت/تغییر رله توسط خود کاربر: آدرس → توکن → تست اتصال
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url" }), { expirationTtl: 900 });
+      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+    } else if (data === "srvrelayclear") {
+      const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
+      if (!hasKv) {
+        return edit("ℹ️ رلهٔ فعلی از متغیرهای ورکر (SRV_RELAY_URL / SRV_RELAY_TOKEN) تنظیم شده و در ربات ذخیره نیست.\n\nبرای حذف کامل، باید آن را از تنظیمات ورکر (متغیرها) بردارید. اگر فقط می‌خواهید رله\u200cی دیگری جایگزین شود، از «🔧 تنظیم رله» آدرس و توکن جدید را ثبت کنید — رلهٔ ثبت‌شده همیشه بر متغیر ورکر مقدم است.", [
+          [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+          [{ text: "🔙 بازگشت", callback_data: "srvrelayhelp" }],
+        ]);
+      }
+      await edit("🗑 تنظیمات رلهٔ ثبت‌شده حذف شود؟ (از متغیرهای ورکر استفاده می‌شود)", [
+        [{ text: "✅ بله", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: "srvrelayhelp" }],
+      ]);
+    } else if (data === "srvrelaycleary") {
+      await kvDeleteCached(kv, RELAY_URL_KEY);
+      await kvDeleteCached(kv, RELAY_TOKEN_KEY);
+      await edit("✅ تنظیمات رلهٔ ثبت‌شده پاک شد.", [[{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }]]);
+    } else if (data === "srvadd") {
+      // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
+      await edit("➕ افزودن سرور\n\n🌐 آی‌پی یا هاست سرور را بفرستید (پورت غیرپیش‌فرض را با : اضافه کنید، مثل 1.2.3.4:2222):", [[{ text: "⬅️ انصراف", callback_data: "srv" }]]);
+    } else if (data === "srvpw") {
+      await renderSrvPw(edit, kv);
+    } else if (data === "srvpwadd") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_pw_add" }), { expirationTtl: 900 });
+      await edit("🔑 رمز عبور SSH موردنظر را بفرستید تا ذخیره شود:", [[{ text: "⬅️ انصراف", callback_data: "srvpw" }]]);
+    } else if (data.startsWith("srvpwdel:")) {
+      const i = Number(data.slice(9));
+      const pws = await getSrvPasswords(kv);
+      if (!pws[i]) return renderSrvPw(edit, kv);
+      await edit(`⚠️ «رمز ${i + 1}» حذف شود؟`, [
+        [{ text: "✅ بله", callback_data: `srvpwdely:${i}` }, { text: "❌ انصراف", callback_data: "srvpw" }],
+      ]);
+    } else if (data.startsWith("srvpwdely:")) {
+      const i = Number(data.slice(10));
+      const pws = await getSrvPasswords(kv);
+      pws.splice(i, 1);
+      await saveSrvPasswords(kv, pws);
+      await renderSrvPw(edit, kv);
+    } else if (data.startsWith("srvauthpw:")) {
+      // انتخاب یکی از رمزهای ذخیره‌شده در مرحلهٔ احراز هویت افزودن سرور
+      const i = Number(data.slice(10));
+      const pending = await kv.get(`pend:${chatId}`, "json");
+      if (!pending || pending.type !== "srv_add" || pending.step !== "auth") {
+        return edit("⏳ این دکمه منقضی شده؛ دوباره «افزودن سرور» را بزن.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      }
+      const pws = await getSrvPasswords(kv);
+      const password = pws[i];
+      if (!password) return edit("❌ رمز پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await kv.delete(`pend:${chatId}`);
+      const { item, authLabel } = await srvCompleteAdd(kv, pending.d, password);
+      await edit(
+        `✅ سرور «${escHtml(item.name)}» اضافه شد.\n🌐 ${code(item.host + ":" + item.port)} (${item.user})\n🔐 ${authLabel}`,
+        [[{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🏠 منو", callback_data: "menu" }]]
+      );
+    } else if (data === "srvdel") {
+      const list = await getServersList(kv);
+      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🔙 سرورها", callback_data: "srv" }]]);
+      const kb = list.map((s) => [{ text: `🗑 ${s.name}`, callback_data: `srvdely:${s.id}` }]);
+      kb.push([{ text: "⬅️ انصراف", callback_data: "srv" }]);
+      await edit("🗑 کدام سرور حذف شود؟", kb);
+    } else if (data.startsWith("srvdely:")) {
+      // حذف بر اساس شناسهٔ یکتای سرور (نه ایندکس) تا سرور اشتباهی حذف نشود
+      const id = data.slice(8);
+      const list = await getServersList(kv);
+      const s = list.find((x) => x.id === id);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 سرورها", callback_data: "srv" }]]);
+      await saveServersList(kv, list.filter((x) => x.id !== id));
+      await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+    } else if (data.startsWith("srvdelx:")) {
+      // حذف از صفحهٔ اختصاصی سرور (با تأیید) — بر اساس شناسهٔ یکتا
+      const id = data.slice(8);
+      const list = await getServersList(kv);
+      const s = list.find((x) => x.id === id);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 سرورها", callback_data: "srv" }]]);
+      const backIdx = list.findIndex((x) => x.id === id);
+      await edit(`⚠️ سرور «${escHtml(s.name)}» (${code(s.host)}) حذف شود؟`, [
+        [{ text: "✅ بله، حذف شود", callback_data: `srvdelxok:${id}` }, { text: "❌ انصراف", callback_data: `srvopen:${backIdx}` }],
+      ]);
+    } else if (data.startsWith("srvdelxok:")) {
+      const id = data.slice(10);
+      const list = await getServersList(kv);
+      const s = list.find((x) => x.id === id);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 سرورها", callback_data: "srv" }]]);
+      await saveServersList(kv, list.filter((x) => x.id !== id));
+      await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+    } else if (data.startsWith("srvopen:")) {
+      await renderSrvDetail(edit, kv, env, Number(data.slice(8)));
+    } else if (data.startsWith("srvnodemenu:")) {
+      // زیرمنوی «نصب نود»: نصب عادی، نصب با هستهٔ ویرایشی و افزودن نود نصب‌شده به پنل
+      const i = Number(data.slice(12));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit(`📥 نصب نود روی «${escHtml(s.name)}»\n\nیک روش را انتخاب کن:`, [
+        [{ text: "📥 نصب خودکار پاسارگارد", callback_data: `srvnode:${i}` }],
+        [{ text: "🧩 نصب با هستهٔ ویرایشی", callback_data: `srvnodecore:${i}` }],
+        [{ text: "➕ افزودن نود نصب‌شده به پنل", callback_data: `srvpaneladd:${i}` }],
+        [{ text: "🔎 بررسی وضعیت نصب", callback_data: `srvnodecheck:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvnodecheck:")) {
+      // بررسی وضعیت نصب نود از روی سرور (لاگ نصب، فایل اطلاعات، کانتینر/سرویس)
+      const i = Number(data.slice(13));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      await edit("⏳ در حال بررسی وضعیت نود روی سرور…");
+      const chk = await srvRelayExec(kv, env,
+        s,
+        "echo ===LOG===; tail -c 1200 /tmp/pg-node-install.log 2>/dev/null; echo; grep -o 'PG_EXIT=[0-9]*' /tmp/pg-node-install.log 2>/dev/null | tail -n1; " +
+        "echo ===INFO===; ls -la /root/pg-node-info.txt 2>/dev/null || echo no-info; " +
+        "echo ===RUN===; (docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null || true); (systemctl is-active pg-node 2>/dev/null || true)",
+        30000);
+      if (chk.error) return edit("❌ خطا در بررسی: " + chk.error, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      const raw = String(chk.out || "");
+      const logPart = (raw.split("===INFO===")[0] || "").replace("===LOG===", "").trim();
+      const infoPart = (raw.split("===INFO===")[1] || "").split("===RUN===")[0].trim();
+      const runPart = (raw.split("===RUN===")[1] || "").trim();
+      const done = /PG_EXIT=0/.test(logPart);
+      const hasInfo = /pg-node-info\.txt/.test(infoPart);
+      const running = /(^|\n)node .*Up|active/i.test(runPart);
+      const statusLine = done && running ? "✅ نصب کامل و نود در حال اجراست."
+        : done ? "ℹ️ نصب تمام شده (PG_EXIT=0) ولی سرویس/کانتینر در حال اجرا دیده نشد."
+        : /PG_EXIT=/.test(logPart) ? "⚠️ نصب با خطا تمام شده: " + (logPart.match(/PG_EXIT=\d+/) || [""])[0]
+        : "⏳ هنوز PG_EXIT ثبت نشده؛ ممکن است نصب در حال اجرا باشد.";
+      const txt = `🔎 وضعیت نود «${escHtml(s.name)}»\n\n${statusLine}\n\n` +
+        (running ? `🐳 اجرا: ${code(runPart.slice(0, 300))}\n\n` : "") +
+        `📄 انتهای لاگ:\n${code(logPart.slice(-1200) || "(خالی)")}` +
+        (hasInfo ? "\n\n📋 فایل اطلاعات نود موجود است؛ می‌توانی آن را به پنل اضافه کنی." : "");
+      const kb = [];
+      if (hasInfo) kb.push([{ text: "➕ افزودن نود به پنل", callback_data: `srvpaneladd:${i}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]);
+      await edit(txt.substring(0, 4000), kb);
+    } else if (data.startsWith("srvnode:")) {
+      const i = Number(data.slice(8));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      await edit(`⚠️ نصب خودکار نود پاسارگارد روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت رسمی PasarGuard اجرا می‌شود (چند دقیقه طول می‌کشد).`, [
+        [{ text: "✅ شروع نصب", callback_data: `srvnodego:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvnodego:")) {
+      const i = Number(data.slice(10));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.");
+      await edit("⏳ در حال شروع…");
+      await srvInstallNodeLive(chatId, botToken, env, { ...s, _idx: i });
+    } else if (data.startsWith("srvnodecore:")) {
+      const i = Number(data.slice(12));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      await edit(`🧩 نصب نود با «هستهٔ ویرایشی» روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت pg-node به‌همراه هستهٔ xray-amd64 سفارشی نصب می‌شود (چند دقیقه طول می‌کشد).`, [
+        [{ text: "✅ شروع نصب", callback_data: `srvnodecorego:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvnodecorego:")) {
+      const i = Number(data.slice(14));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.");
+      await edit("⏳ در حال شروع…");
+      await srvInstallNodeCoreLive(chatId, botToken, env, { ...s, _idx: i });
+    } else if (data.startsWith("srvprovision:")) {
+      // تأیید کاربر برای سرور تازه‌ساخته‌شده: تست اتصال، تنظیم رمز ۱ و سپس نصب نود
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const mode = parts[2] || "none";
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      const prep = await srvPrepServer(kv, env, edit, i, s);
+      if (!prep.ready) {
+        return edit(`⚠️ سرور هنوز به SSH پاسخ نداد. کمی بعد دوباره تلاش کن.${prep.pwNote}`, [
+          [{ text: "🔁 تلاش دوباره", callback_data: `srvprovision:${i}:${mode}` }],
+          [{ text: "🖥 سرورها", callback_data: "srv" }],
+        ]);
+      }
+      const l2 = await getServersList(kv);
+      const s2 = l2[i] || s;
+      if (mode === "auto" || mode === "core") {
+        await edit(`✅ سرور آماده شد.${prep.pwNote}\n\n⏳ شروع نصب نود…`);
+        if (mode === "auto") return srvInstallNodeLive(chatId, botToken, env, { ...s2, _idx: i });
+        return srvInstallNodeCoreLive(chatId, botToken, env, { ...s2, _idx: i });
+      }
+      await edit(`✅ سرور آماده است.${prep.pwNote}`, [
+        [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${i}` }, { text: "🖥 سرورها", callback_data: "srv" }],
+      ]);
+    } else if (data.startsWith("srvpaneladd:")) {
+      // افزودن نودِ از قبل نصب‌شده روی سرور به پنل (بدون نصب دوباره)
+      const i = Number(data.slice(12));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      await edit("⏳ در حال خواندن اطلاعات نود از سرور…");
+      const rr = await srvFinishNodeInstall(kv, env, { ...s, _idx: i }, `🖧 افزودن نود سرور «${escHtml(s.name)}» به پنل`);
+      await edit(rr.txt, [...rr.addKb, [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+    } else if (data.startsWith("srvstats:")) {
+      const i = Number(data.slice(9));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      await edit("⏳ در حال جمع‌آوری آمار…");
+      const st = await srvRelayStats(kv, env, s);
+      const txt = srvStatsText(s, st);
+      await edit(txt, [
+        [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvreboot:")) {
+      const i = Number(data.slice(10));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit(`⚠️ سرور «${escHtml(s.name)}» ریبوت شود؟`, [
+        [{ text: "✅ بله", callback_data: `srvrebootgo:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvrebootgo:")) {
+      const i = Number(data.slice(12));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.");
+      await edit("⏳ در حال ریبوت…");
+      const r = await srvRelayExec(kv, env, s, "sudo reboot || reboot", 15000);
+      await edit(r.error ? `❌ خطا: ${r.error}` : `✅ دستور ریبوت ارسال شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+    } else if (data.startsWith("srvupd:")) {
+      const i = Number(data.slice(7));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit(`⚠️ آپدیت و آپگرید روی «${escHtml(s.name)}» اجرا شود؟`, [
+        [{ text: "✅ بله", callback_data: `srvupdgo:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
+      ]);
+    } else if (data.startsWith("srvupdgo:")) {
+      const i = Number(data.slice(9));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.");
+      await edit("⏳ شروع آپدیت…");
+      const r = await srvRelayExec(kv, env, s, "export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -y && sudo apt-get upgrade -y", 300000);
+      if (r.error) return edit(`❌ خطا: ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      const out = String(r.out || "").slice(-1200);
+      // اگر مهلت اجرا تمام شد، نتیجه را قلابی «موفق» نشان نده
+      const head = r.timedOut
+        ? `⏱ مهلت اجرا به پایان رسید؛ آپدیت ممکن است ناقص باشد. بعداً دوباره اجرا کنید.\n\n📄 انتهای خروجی:\n` + code(out)
+        : `✅ آپدیت و آپگرید انجام شد.\n\n📄 انتهای خروجی:\n` + code(out);
+      await edit(head, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+    } else if (data.startsWith("srvinfo:")) {
+      const i = Number(data.slice(8));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit("⏳ در حال خواندن مشخصات…");
+      const r = await srvRelayExec(kv, env, s, "uname -a; echo ---; lsb_release -a 2>/dev/null || cat /etc/os-release | head -3; echo ---; systemd-detect-virt 2>/dev/null; echo ---; ip -4 addr show | grep inet | grep -v 127.0.0.1", 30000);
+      const out = String(r.out || "—").trim();
+      await edit(`ℹ️ مشخصات سیستم «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+    } else if (data.startsWith("srvdisk:")) {
+      const i = Number(data.slice(8));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit("⏳ در حال خواندن دیسک…");
+      const r = await srvRelayExec(kv, env, s, "df -h; echo ---; lsblk", 30000);
+      const out = String(r.out || "—").trim();
+      await edit(`💾 دیسک‌های «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+    } else if (data.startsWith("srvedit:")) {
+      const i = Number(data.slice(8));
+      const list = await getServersList(kv);
+      const s = list[i];
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      const kb = [
+        [{ text: "✏️ نام", callback_data: `srvedith:${i}:name` }, { text: `🌐 هاست/پورت`, callback_data: `srvedith:${i}:host` }],
+        [{ text: "👤 کاربر", callback_data: `srvedith:${i}:user` }, { text: "🔐 رمز/کلید", callback_data: `srvedith:${i}:auth` }],
+        [{ text: "📝 یادداشت", callback_data: `srvedith:${i}:note` }],
+        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+      ];
+      await edit(`✏️ ویرایش «${escHtml(s.name)}» — کدام مورد؟`, kb);
+    } else if (data.startsWith("srvedith:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const field = parts[2];
+      const prompts = {
+        name: "✏️ نام جدید سرور را بفرستید:",
+        host: "🌐 هاست جدید را بفرستید (مثل 1.2.3.4 یا domain.com:2222 — پورت با : جدا می‌شود):",
+        user: "👤 نام کاربر جدید را بفرستید (پیش‌فرض root):",
+        auth: "🔐 رمز عبور جدید را بفرستید؛ یا کلید خصوصی را با - شروع کنید (مثل -----BEGIN...)؛ یا - بفرستید تا بدون تغییر بماند:",
+        note: "📝 یادداشت جدید را بفرستید (- برای حذف):",
+      };
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_edit", srv: i, field }), { expirationTtl: 900 });
+      await edit(prompts[field] || "مقدار جدید را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `srvopen:${i}` }]]);
+    } else if (data === "srvmon") {
+      await renderSrvMonCfg(edit, kv);
+    } else if (data === "srvmontg") {
+      const cfg = await getSrvMonCfg(kv);
+      cfg.enabled = !cfg.enabled;
+      await saveSrvMonCfg(kv, cfg);
+      await renderSrvMonCfg(edit, kv);
+    } else if (data.startsWith("srvmonh:")) {
+      const field = data.slice(8);
+      const labels = { cpu: "CPU (درصد)", mem: "RAM (درصد)", disk: "دیسک (درصد)", cool: "فاصلهٔ تکرار هشدار (دقیقه)" };
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_monh", field }), { expirationTtl: 900 });
+      await edit(`⚙️ ${labels[field] || "مقدار"} جدید را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "srvmon" }]]);
+    } else if (data === "srvmonrun") {
+      await edit("⏳ در حال بررسی همهٔ سرورها…", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
+      await runSrvMonitor(env, botToken, true);
+    } else if (data === "um") {
+      // نمایش صفحهٔ تنظیمات مانیتور مصرف با مقادیر فعلی
+      const cfg = await getUmCfg(kv);
+      await edit(umCfgText(cfg), umCfgKeyboard(cfg));
+    } else if (data === "um:toggle") {
+      // روشن/خاموش کردن کل مانیتور مصرف
+      const cfg = await getUmCfg(kv);
+      cfg.enabled = !cfg.enabled;
+      await saveUmCfg(kv, cfg);
+      await edit(`✅ مانیتور مصرف پاسارگارد ${cfg.enabled ? "روشن" : "خاموش"} شد.`, [[{ text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }]]);
+    } else if (data === "um:h") {
+      // شروع ویرایش آستانهٔ ساعتی: از کاربر می‌خواهد مقدار GB را در پیام بعدی بفرستد
+      const cfg = await getUmCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "um_hourly", msgId: messageId }), { expirationTtl: 600 });
+      await edit(`⏱ آستانهٔ ساعتی را به گیگابایت بفرستید (مثلاً 7):\n\nفعلی: ${cfg.hourlyGb} GB`, [[{ text: "⬅️ انصراف", callback_data: "um" }]]);
+    } else if (data === "um:d") {
+      // شروع ویرایش آستانهٔ روزانه
+      const cfg = await getUmCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "um_daily", msgId: messageId }), { expirationTtl: 600 });
+      await edit(`📅 آستانهٔ روزانه را به گیگابایت بفرستید (مثلاً 25):\n\nفعلی: ${cfg.dailyGb} GB`, [[{ text: "⬅️ انصراف", callback_data: "um" }]]);
+    } else if (data === "um:c") {
+      // شروع ویرایش فاصلهٔ تکرار هشدار (cooldown)
+      const cfg = await getUmCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "um_cool", msgId: messageId }), { expirationTtl: 600 });
+      await edit(`🔁 فاصلهٔ تکرار هشدار هر کاربر را به ساعت بفرستید (مثلاً 6):\n\nفعلی: ${cfg.cooldownH} ساعت`, [[{ text: "⬅️ انصراف", callback_data: "um" }]]);
+    } else if (data === "um:min") {
+      // شروع ویرایش «حداقل مصرف برای اسنپ‌شات» (minGb):
+      // فقط کاربرانی که مصرف کل‌شان ≥ این مقدار است در اسنپ‌شات‌ها ذخیره می‌شوند
+      // تا حجم دادهٔ KV و تعداد کاربران بی‌مصرف کم شود. مقدار ۰ = ذخیرهٔ همه.
+      const cfg = await getUmCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "um_min", msgId: messageId }), { expirationTtl: 600 });
+      await edit(`🧮 حداقل مصرف برای اسنپ‌شات را به گیگابایت بفرستید (۰ = بدون فیلتر، مثلاً 1):\n\nفعلی: ${cfg.minGb} GB`, [[{ text: "⬅️ انصراف", callback_data: "um" }]]);
+    } else if (data === "um:report") {
+      // روشن/خاموش کردن گزارش دوره‌ای پرمصرف‌ها
+      const cfg = await getUmCfg(kv);
+      cfg.report = !cfg.report;
+      await saveUmCfg(kv, cfg);
+      await edit(`✅ گزارش روزانهٔ اخطارشده‌ها ${cfg.report ? "روشن" : "خاموش"} شد.`, [[{ text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }]]);
+    } else if (data === "nd") {
+      await renderNodeHome(edit, kv);
+    } else if (data.startsWith("ndint:")) {
+      // تعیین فاصلهٔ پایش خودکار (کرون) برای یک مانیتور نود
+      const mi = Number(data.slice(6));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[mi];
+      if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_interval", mi }), { expirationTtl: 600 });
+      await edit("⏱ فاصلهٔ پایش خودکار نودها را به دقیقه بفرستید (مثلاً ۱۰، ۳۰ یا ۶۰):\n\nفعلی: " + (m.intervalMin || 10) + " دقیقه", [
+        [{ text: "⬅️ انصراف", callback_data: "nd" }],
+      ]);
+    } else if (data.startsWith("ndexc:")) {
+      // صفحهٔ استثناهای نودهای یک مانیتور (روشن/خاموش‌کردن هشدار هر نود)
+      await renderNodeExclusions(edit, kv, Number(data.slice(6)));
+    } else if (data.startsWith("pnd:")) {
+      const panels = await getPanels(kv);
+      const monitors = await getNodeMonitors(kv);
+      await renderPanelDetail(panels, monitors, Number(data.slice(4)), edit, kv);
+    } else if (data === "ndhelp") {
+      const base = await selfUrlBase(env, kv);
+      const lines = [
+        "ℹ️ راهنمای مانیتور نود",
+        "",
+        "این بخش وضعیت نودهای پنل‌های شما را نشان می‌دهد و وقتی نودی «قطع» یا دوباره «وصل» شد به همه ادمین‌ها پیام می‌دهد.",
+        "",
+        "• پایش خودکار: با دکمه «⏱ فاصله» می‌توانی فاصلهٔ بررسی نودها از پنل را تنظیم کنی (مثلاً هر ۱۰ یا ۳۰ دقیقه).",
+        "",
+        "• رویدادمحور: اگر بخواهی هشدار فوری و بدون تأخیر باشد، «🔗 وب‌هوک» را وصل کن؛ خود سرورِ پنل هر تغییر وضعیت را همان لحظه POST می‌کند.",
+        "",
+        "• استثنا: از دکمه «🚫 استثنا» هشدار برخی نودها را خاموش کن (مثلاً نودی که عمداً خاموش است).",
+        "",
+        "• وب‌هوک: از دکمه «🔗 وب‌هوک» آدرس و توکنِ مخصوص همین مانیتور را کپی کنید و روی سرور پنل، هر تغییر وضعیت نود را به آن آدرس POST کنید:",
+        `  آدرس: ${base ? `${code(base + "/ndhook/<token>")}` : "… (WORKER_URL تنظیم نشده — از «🔗 وب‌هوک» ببینید)"}`,
+        "  بدنه: { \"event\": \"down\" | \"up\", \"node\": \"نام نود\", \"reason\": \"علت قطع شدن\" }",
+        "",
+        "• «⏸ توقف هشدار» هشدارهای این پنل را نگه می‌دارد اما وضعیت نودها همچنان ثبت می‌شود.",
+      ];
+      await edit(lines.join("\n"), [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+    } else if (data === "nda") {
+      const monitors = await getNodeMonitors(kv);
+      const panels = await getPanels(kv);
+      if (!panels.length) return edit("📭 ابتدا از «🎛 تعریف پنل پاسارگارد» یک پنل پاسارگارد اضافه کنید.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      const avail = panels.filter((p) => !monitors.some((mo) => mo.panel_id === p.id));
+      if (!avail.length) return edit("✅ برای همه پنل‌های ثبت‌شده، مانیتور نود ساخته شده.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      const kb = avail.map((p) => [{ text: `🖥 ${p.name}`, callback_data: `nda:${p.id}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+      await edit("برای کدام پنل، مانیتور نود بسازم؟", kb);
+    } else if (data.startsWith("nda:")) {
+      const panelId = data.slice(4);
+      const panels = await getPanels(kv);
+      const panel = panels.find((p) => p.id === panelId);
+      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      const monitors = await getNodeMonitors(kv);
+      monitors.push({ id: makeToken() + makeToken(), panel_id: panel.id, name: panel.name, url: panel.url, token: makeToken() + makeToken(), enabled: true });
+      await saveNodeMonitors(kv, monitors);
+      const idx = monitors.length - 1;
+      await edit("⏳ در حال ساخت مانیتور نود و همگام‌سازی اولیه…");
+      const r = await nodeSyncFromPanel(monitors[idx], kv);
+      if (r.error) return edit(`✅ مانیتور نود ساخته شد.\n❌ ${r.error}\nبعداً از «🔄 همگام‌سازی» دوباره امتحان کنید.`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      await renderNodeHome(edit, kv);
+    } else if (data.startsWith("ndd:")) {
+      const i = Number(data.slice(4));
+      const monitors = await getNodeMonitors(kv);
+      if (!monitors[i]) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      await renderNodeMonitor(monitors, i, edit, kv);
+    } else if (data.startsWith("ndsync:")) {
+      const i = Number(data.slice(7));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      await edit("⏳ در حال همگام‌سازی نودها با پنل…");
+      const r = await nodeSyncFromPanel(m, kv);
+      if (r.error) return edit(`❌ ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      await renderNodeHome(edit, kv);
+    } else if (data.startsWith("ndtg:")) {
+      const i = Number(data.slice(5));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+      m.enabled = m.enabled === false;
+      await saveNodeMonitors(kv, monitors);
+      await renderNodeHome(edit, kv);
+    } else if (data.startsWith("nddel:")) {
+      const i = Number(data.slice(6));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+      await edit(`⚠️ مانیتور نود «${escHtml(m.name)}» حذف شود؟ (هشدارهای بعدی برای این پنل ارسال نمی‌شود)`, [
+        [{ text: "✅ بله", callback_data: `nddely:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
+      ]);
+    } else if (data.startsWith("nddely:")) {
+      const i = Number(data.slice(7));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+      const rm = monitors.splice(i, 1);
+      await saveNodeMonitors(kv, monitors);
+      if (rm[0]) await kv.delete(`ndst:${rm[0].id}`);
+      await edit(`✅ مانیتور نود «${escHtml(m.name)}» حذف شد.`, [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+    } else if (data.startsWith("ndadd:")) {
+      // افزودن نود نصب‌شده به پنل انتخابی (نام = آیپی). توکن = اطلاعات نود در KV.
+      const rest = data.slice(6);
+      const ci = rest.indexOf(":");
+      const tok = ci >= 0 ? rest.slice(0, ci) : rest;
+      const panelId = ci >= 0 ? rest.slice(ci + 1) : "";
+      const rec = await kv.get(`ndadd:${tok}`, "json");
+      if (!rec || !rec.info) return edit("⏳ اطلاعات نود منقضی شد؛ دوباره نود را نصب کن.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      const panels = await getPanels(kv);
+      const panel = panelId ? panels.find((p) => p.id === panelId) : panels[0];
+      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      const idx = rec.srvIdx;
+      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]] : [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]];
+      await edit(`⏳ در حال افزودن نود «${escHtml(rec.info.ip)}» به پنل «${escHtml(panel.name)}»…`);
+      const r = await pgPanelAddNode(panel, rec.info);
+      if (r.error) {
+        return edit(`⚠️ افزودن نود انجام نشد:\n${escHtml(r.error)}`, [
+          [{ text: "🔁 تلاش دوباره", callback_data: `ndadd:${tok}:${panel.id}` }],
+          ...backKb,
+        ]);
+      }
+      await kv.delete(`ndadd:${tok}`);
+      await edit(
+        `✅ نود به پنل «${escHtml(panel.name)}» اضافه شد.\n\n` +
+        `🖧 نام نود: ${code(rec.info.ip)}\n🌐 آدرس: ${code(rec.info.ip)}\n🔌 پورت: ${code(String(rec.info.port))}`,
+        backKb
+      );
+    } else if (data.startsWith("ndhook:")) {
+      const i = Number(data.slice(7));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+      const base = await selfUrlBase(env, kv);
+      const url = `${base || "https://<your-worker>.workers.dev"}/ndhook/${m.token}`;
+      const lines = [
+        `🔗 وب‌هوک مانیتور نود «${escHtml(m.name)}»`,
+        "",
+        "این آدرس را روی سرور پنل تنظیم کنید. هر بار که وضعیت یک نود تغییر کند، یک درخواست POST با بدنه JSON به این آدرس بفرستید:",
+        "",
+        `آدرس: ${code(url)}`,
+        "",
+        "نمونه بدنه برای قطع شدن:",
+        `${code(JSON.stringify({ event: "down", node: "نام نود", reason: "علت قطع شدن" }))}`,
+        "",
+        "نمونه بدنه برای وصل شدن:",
+        `${code(JSON.stringify({ event: "up", node: "نام نود", reason: "optional" }))}`,
+        "",
+        "اگر WORKER_URL تعریف نشده باشد، آدرس کامل بعد از اولین پیام به ربات به‌صورت خودکار تشخیص داده می‌شود.",
+      ];
+      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+    } else if (data.startsWith("ndtest:")) {
+      const i = Number(data.slice(7));
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[i];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.");
+      await send(
+        "🧪 این فقط یک پیام آزمایشی است تا قالب هشدار قطع شدن را ببینید:\n\n" +
+          "🚨 نود قطع شد!\n🖥 پنل: " +
+          m.name +
+          "\n🖧 نود: node-test\n⏱ زمان: " +
+          ndFmtTs(new Date().toISOString()) +
+          " به وقت ایران\n🔎 علت: اتصال به پنل از دست رفت (تست)"
+      );
+      await renderNodeHome(edit, kv);
+    } else if (data.startsWith("ndi:") || data.startsWith("ndip:") || data.startsWith("ndx:")) {
+      const parts = data.split(":");
+      const mi = Number(parts[1]);
+      const ni = Number(parts[2]);
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[mi];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      const st = await getNodeState(kv, m.id);
+      const nm = sortedNodeNames(st)[ni];
+      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
+      const nd = st.nodes[nm];
+      if (data.startsWith("ndx:")) {
+        const set = new Set(m.excluded || []);
+        if (set.has(nm)) set.delete(nm);
+        else set.add(nm);
+        m.excluded = [...set];
+        await saveNodeMonitors(kv, monitors);
+        await renderNodeExclusions(edit, kv, mi);
+      } else if (data.startsWith("ndip:")) {
+        await edit(`🌐 آی‌پی نود «${escHtml(nm)}»:\n${code(nd.address || "—")}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      } else {
+        const exc = (m.excluded || []).includes(nm);
+        const lines = ["🖧 نود «" + escHtml(nm) + "»", nodeStatusEmoji(nd.status) + " " + nodeStatusLabel(nd.status)];
+        if (nd.address) lines.push("🌐 " + code(nd.address));
+        if (nd.version) lines.push("🧩 نسخه: " + code(nd.version));
+        if (nd.first_seen) lines.push("🟢 اولین مشاهده: " + ndFmtTs(nd.first_seen));
+        if (nd.ts) lines.push("🕐 آخرین وضعیت: " + ndFmtTs(nd.ts));
+        if (nd.reason) lines.push("🔎 علت: " + escHtml(nd.reason));
+        if (exc) lines.push("🚫 این نود استثنا شده.");
+        await edit(lines.join("\n"), [
+          [
+            { text: "📡 آی‌پی", callback_data: `ndip:${mi}:${ni}` },
+            { text: exc ? "✅ استثنا" : "🚫 استثنا", callback_data: `ndx:${mi}:${ni}` },
+          ],
+          [{ text: "⏰ ایجاد یادآور انقضا سرور", callback_data: `ndexp:${mi}:${ni}` }],
+          [{ text: "🔙 بازگشت", callback_data: "nd" }],
+        ]);
+      }
+    } else if (data.startsWith("ndexp:")) {
+      const parts = data.split(":");
+      const mi = Number(parts[1]);
+      const ni = Number(parts[2]);
+      const monitors = await getNodeMonitors(kv);
+      const m = monitors[mi];
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      const st = await getNodeState(kv, m.id);
+      const nm = sortedNodeNames(st)[ni];
+      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
+      const nd = st.nodes[nm];
+      const target = { type: "server", label: `${nd.address || "—"} — ${nm}`, ip: nd.address || "", dc: nm, panel_id: m.panel_id };
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", mode: "expiry", target, text: "" }), { expirationTtl: 1200 });
+      await edit(
+        "⏰ یادآور انقضای سرور\n\n" + (nd.address ? "🌐 " + code(nd.address) + "\n" : "") + "🖧 " + escHtml(nm) + "\n\nزمان انقضا را وارد کن:",
+        remWhenKb()
+      );
+    } else if (data === "hf") {
+      await renderHostFilterHome(edit, kv, env);
+    } else if (data === "hflist") {
+      await renderHostFilterHosts(edit, kv, env);
+    } else if (data.startsWith("hfchk:")) {
+      const parts = data.split(":");
+      const cfg0 = await getHostFilterCfg(kv);
+      if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
+        return edit("⚠️ «چک هاست» هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» رله را ثبت کن، سپس دوباره تست کن.", [
+          [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+          [{ text: "🔙 بازگشت به لیست", callback_data: "hflist" }],
+        ]);
+      }
+      await edit("⏳ در حال بررسی این هاست…");
+      const r = await hfHostCheck(kv, env, parts[1], parts[2]);
+      await edit(r.text, r.kb);
+    } else if (data.startsWith("hfexc:")) {
+      const parts = data.split(":");
+      const key = parts[1] + ":" + parts[2];
+      const cfg = await getHostFilterCfg(kv);
+      const set = new Set(cfg.exceptions || []);
+      if (set.has(key)) set.delete(key);
+      else set.add(key);
+      cfg.exceptions = [...set];
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterHosts(edit, kv, env);
+    } else if (data === "hftg") {
+      const cfg = await getHostFilterCfg(kv);
+      cfg.enabled = !cfg.enabled;
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterHome(edit, kv, env);
+    } else if (data === "hfcheck") {
+      const cfg = await getHostFilterCfg(kv);
+      cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
+      await saveHostFilterCfg(kv, cfg);
+      await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+    } else if (data === "hfforeign") {
+      const cfg0 = await getHostFilterCfg(kv);
+      if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
+        return edit("⚠️ بررسی دسترسی خارج هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» رله را ثبت کن.", [
+          [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+          [{ text: "🔙 بازگشت", callback_data: "hfset" }],
+        ]);
+      }
+      await edit("⏳ در حال بررسی دسترسی خارج (آلمان) برای همهٔ ساب‌ها… کمی طول می‌کشد.");
+      const txt = await hfForeignScan(kv, env);
+      await edit(txt, [[{ text: "🔙 بازگشت", callback_data: "hfset" }]]);
+    } else if (data === "hfhist") {
+      const log = await kv.get("host_filter_log", "json");
+      const lines = ["📜 تاریخچهٔ تعویض خودکار", ""];
+      if (!Array.isArray(log) || !log.length) {
+        lines.push("📭 هنوز رویدادی ثبت نشده.");
+      } else {
+        for (const e of log.slice(0, 15)) {
+          const ts = ndFmtTs(e.ts);
+          if (e.kind === "rotated") {
+            lines.push(`🔄 ${ts} — هاست ${e.host_id}: ` + (e.events || []).map((ev) => `${ev.from}→${ev.to}`).join(", "));
+          } else if (e.kind === "ip_blocked") {
+            lines.push(`🚫 ${ts} — آی‌پی فیلتر: ${e.from} (${e.ip || "?"})`);
+          } else if (e.kind === "ip_down") {
+            lines.push(`🛑 ${ts} — آی‌پی/سرور خاموش (تعویض نشد): ${e.from} (${e.ip || "?"})`);
+          } else if (e.kind === "iran_access") {
+            lines.push(`🇮🇷 ${ts} — ایران‌اکسس (تعویض نشد): ${e.from} (${e.ip || "?"})`);
+          } else if (e.kind === "revert") {
+            lines.push(`↩️ ${ts} — بازگشت هاست ${e.host_id}`);
+          } else if (e.kind === "protected") {
+            lines.push(`🔒 ${ts} — فقط هشدار (${e.reason}): ${e.from}`);
+          } else if (e.kind === "restore") {
+            lines.push(`💾 ${ts} — بازگردانی بکاپ «${e.label || "-"}» (${e.ok} موفق / ${e.fail} ناموفق)`);
+          } else if (e.kind === "external_sni") {
+            lines.push(`⚠️ ${ts} — sni/host غیرقابل‌مدیریت: ${e.from}`);
+          } else {
+            lines.push(`⚠️ ${ts} — ${e.kind}${e.from ? " " + e.from : ""}${e.error ? " — " + e.error : ""}`);
+          }
+        }
+      }
+      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+    } else if (data === "hfset") {
+      await renderHostFilterSettings(edit, kv);
+    } else if (data === "hfsetprov") {
+      const cfg = await getHostFilterCfg(kv);
+      cfg.provider = cfg.provider === "checkhost" ? "globalping" : "checkhost";
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterSettings(edit, kv);
+    } else if (data === "hfsettoken") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_gptoken" }), { expirationTtl: 600 });
+      await edit(
+        "🔑 توکن Globalping را بفرستید (از dash.globalping.io).\nبرای حذف توکن، یک خط «-» بفرستید.",
+        [[{ text: "🔙 انصراف", callback_data: "hfset" }]]
+      );
+    } else if (data === "hfcities") {
+      await renderHostFilterCities(edit, kv);
+    } else if (data.startsWith("hfcityt:")) {
+      const c = data.slice(8);
+      const cfg = await getHostFilterCfg(kv);
+      if (!IR_CITIES.includes(c)) return renderHostFilterCities(edit, kv);
+      const set = new Set(cfg.citiesSel);
+      if (set.has(c)) {
+        if (set.size > 1) set.delete(c);
+      } else {
+        set.add(c);
+      }
+      cfg.citiesSel = IR_CITIES.filter((x) => set.has(x));
+      if (cfg.cities > cfg.citiesSel.length) cfg.cities = cfg.citiesSel.length;
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterCities(edit, kv);
+    } else if (data.startsWith("hfsetedit:")) {
+      const key = data.slice(10);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_set", key }), { expirationTtl: 600 });
+      const hints = {
+        interval: "⏱ فاصلهٔ اجرا را به دقیقه بفرستید (۱ تا ۱۴۴۰):",
+        cities: "🎯 حداقل تعداد شهرهای فیلتر برای تعویض را بفرستید (۱ تا " + (await getHostFilterCfg(kv)).citiesSel.length + "):",
+        maxok: "📶 حداکثر پینگ موفق مجاز هر پروب/نود را بفرستید (۰ تا ۳؛ ۰ یعنی فقط ۰ از ۴):",
+        probes: "📡 حداکثر تعداد پروب‌های ایرانی Globalping را بفرستید (۱ تا ۵۰؛ ۵۰ = همه، پروب جدید خودکار اضافه می‌شود):",
+        minfail: "🎯 حداقل تعداد پروب فیلتر برای تعویض را بفرستید (۱ تا ۵۰):",
+        batch: "📦 تعداد دامنه‌های هر اجرا را بفرستید (۱ تا ۳۰):",
+        maxchanges: "🔁 حداکثر تعویض در هر اجرا را بفرستید (۱ تا ۲۰):",
+        backupkeep: "💾 تعداد بکاپ‌های نگه‌داشته را بفرستید (۱ تا ۱۰):",
+        recheck: "♻️ تعداد بررسی مجدد پس از تشخیص فیلتر را بفرستید (۰ تا ۳؛ ۰ = بدون بررسی و تعویض فوری):",
+        recheckmin: "⏱ فاصلهٔ بررسی مجدد را به دقیقه بفرستید (۱ تا ۶۰):",
+      };
+      await edit(hints[key] || "مقدار جدید را بفرستید:", [[{ text: "🔙 انصراف", callback_data: "hfset" }]]);
+    } else if (data === "hfbk") {
+      await renderHostFilterBackups(edit, kv);
+    } else if (data === "hfbknow") {
+      await edit("⏳ در حال گرفتن بکاپ از هاست‌ها…");
+      const b = await hfSnapshot(kv, env, "دستی");
+      await edit("✅ بکاپ «" + ndFmtTs(b.ts) + "» با " + b.count + " هاست ساخته شد.", [[{ text: "🔙 بکاپ‌ها", callback_data: "hfbk" }]]);
+    } else if (data.startsWith("hfbkr:")) {
+      const id = data.slice(6);
+      await edit("⚠️ بازگردانی این بکاپ، مقادیر address/sni/host همهٔ هاست‌ها را به آن زمان برمی‌گرداند. مطمئنی؟", [
+        [{ text: "✅ بله، بازگردان", callback_data: "hfbkrd:" + id }],
+        [{ text: "❌ انصراف", callback_data: "hfbk" }],
+      ]);
+    } else if (data.startsWith("hfbkrd:")) {
+      const id = data.slice(7);
+      await edit("⏳ در حال بازگردانی بکاپ…");
+      const r = await hfRestoreBackup(kv, env, id);
+      if (r.error) {
+        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بکاپ‌ها", callback_data: "hfbk" }]]);
+      } else {
+        await edit("✅ بازگردانی انجام شد.\nموفق: " + r.ok + " — ناموفق: " + r.fail, [[{ text: "🔙 بکاپ‌ها", callback_data: "hfbk" }]]);
+      }
+    } else if (data.startsWith("hfbkdel:")) {
+      const id = data.slice(8);
+      const backups = (await getHfBackups(kv)).filter((b) => b.id !== id);
+      await saveHfBackups(kv, backups);
+      await renderHostFilterBackups(edit, kv);
+    } else if (data.startsWith("hfrev:")) {
+      const key = data.slice(6);
+      const parts = key.split(":");
+      await edit("⏳ در حال بازگردانی…");
+      const r = await hostFilterRevert(kv, env, parts[0], parts[1]);
+      if (r.error) {
+        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+      } else {
+        await edit("✅ به دامنهٔ قبلی برگشت.", [[{ text: "🧭 تعویض خودکار هاست فیلتر", callback_data: "hf" }]]);
+      }
+    } else if (data.startsWith("hokeep:")) {
+      await edit("✅ تغییر حفظ شد.", [[{ text: "🧭 تعویض خودکار هاست فیلتر", callback_data: "hf" }]]);
+    } else if (data === "sslm") {
+      const monitors = await getSslMonitors(kv);
+      let text = "🔐 مانیتور گواهی SSL\n\n";
+      if (monitors.length === 0) {
+        text += "📭 دامنه‌ای برای نظارت ثبت نشده.\nبرای هشدار هنگام نزدیک شدن به انقضا (پیش‌فرض ۵ روز)، یک دامنه اضافه کنید.";
+      } else {
+        const items = await sslCheckAll(kv);
+        text += items.map((it) => sslResultLine(it)).join("\n");
+      }
+      const kb = [];
+      // sslma: افزودن دامنهٔ جدید به نظارت (کاربر نام دامنه را می‌فرستد)
+      kb.push([{ text: "➕ افزودن دامنه", callback_data: "sslma" }]);
+      if (monitors.length > 0) {
+        // sslm: بررسی مجدد وضعیت گواهی همهٔ دامنه‌ها | sslmd: انتخاب دامنه برای حذف از نظارت
+        kb.push([{ text: "🔄 بررسی دوباره", callback_data: "sslm" }, { text: "🗑 حذف دامنه", callback_data: "sslmd" }]);
+      }
+      kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+      await edit(text, kb);
+    } else if (data === "sslma") {
+      // درخواست نام دامنه از کاربر و ذخیره در pending
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ssl_host" }), { expirationTtl: 600 });
+      await edit("🔐 دامنه یا ساب‌دامنه‌ای که می‌خواهید گواهی‌اش نظارت شود را بفرستید (مثلاً example.com):", [[{ text: "🔙 انصراف", callback_data: "sslm" }]]);
+    } else if (data === "sslmd") {
+      const monitors = await getSslMonitors(kv);
+      if (monitors.length === 0) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "sslm" }]]);
+      // هر دکمه: sslmdy:<index> = حذف همان دامنه از نظارت
+      const kb = monitors.map((m, i) => [{ text: `🗑 ${m.host}`, callback_data: `sslmdy:${i}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "sslm" }]);
+      await edit("🗑 کدام دامنه از نظارت حذف شود؟", kb);
+    } else if (data.startsWith("sslmdy:")) {
+      const idx = Number(data.slice(7));
+      const monitors = await getSslMonitors(kv);
+      const removed = monitors[idx];
+      if (!removed) return edit("❌ دامنه پیدا نشد.");
+      monitors.splice(idx, 1);
+      await saveSslMonitors(kv, monitors);
+      await edit(`✅ «${removed.host}» از نظارت حذف شد.`, [[{ text: "🔐 مانیتور SSL", callback_data: "sslm" }]]);
+    } else if (data === "domexp") {
+      // domexp: صفحهٔ مانیتور انقضای دامنه + استعلام دوباره از همه
+      await edit("⏳ در حال استعلام دامنه‌ها…");
+      const list = await getDomExpiry(kv);
+      if (list.length) await domExpiryCheckAll(kv, env);
+      await renderDomExpiryHome(kv, edit, 0);
+    } else if (data === "domexpp" || data.startsWith("domexpp:")) {
+      // domexpp:<page>: صفحه‌بندی لیست انقضا (بدون استعلام دوباره)
+      const pg = data.includes(":") ? Number(data.split(":")[1]) || 0 : 0;
+      await renderDomExpiryHome(kv, edit, pg);
+    } else if (data === "domexpall") {
+      // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌های کلودفلر/آروان یک‌جا
+      await domExpiryAddAll(kv, edit, env);
+    } else if (data === "domexpkey") {
+      // domexpkey: صفحهٔ تنظیمات کلید API انقضای دامنه (WhoisXMLAPI)
+      const cfg = await getDomExpCfg(kv);
+      const has = !!cfg.key;
+      const masked = has ? cfg.key.slice(0, 4) + "…" + cfg.key.slice(-4) : "—";
+      const kb = [
+        [{ text: has ? "♻️ تغییر کلید API" : "🔑 ثبت کلید API", callback_data: "domexpk" }],
+      ];
+      if (has) kb.push([{ text: "🧪 تست روی pcapps.ir", callback_data: "domexptest" }]);
+      if (has) kb.push([{ text: "🗑 حذف کلید", callback_data: "domexpkdel" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      await edit(
+        "🔑 کلید API انقضای دامنه\n\n" +
+          `وضعیت: ${has ? "ثبت‌شده ✅" : "ثبت‌نشده ❌"}\n` +
+          `کلید: ${code(masked)}\n` +
+          `سرویس: WhoisXMLAPI — Domain Info API\n\n` +
+          "چرا لازم است؟ ایرنیک تاریخ انقضای دامنه‌های .ir را از whois حذف کرده؛ این API فیلدهای حذف‌شده را از دیتابیس تاریخی پر می‌کند.\n\n" +
+          "برای گرفتن کلید (۵۰۰ کردیت رایگان، بدون کارت):\n" +
+          "domain-info.whoisxmlapi.com/api/signup\n\n" +
+          "کلید فقط در KV همین ربات ذخیره می‌شود.",
+        kb
+      );
+    } else if (data === "domexpk") {
+      // domexpk: دریافت کلید API از کاربر
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "domexp_key" }), { expirationTtl: 900 });
+      await edit("🔑 کلید API را بفرستید:\n(برای حذف کلید، «-» بفرستید)", [[{ text: "🔙 انصراف", callback_data: "domexpkey" }]]);
+    } else if (data === "domexpkdel") {
+      // domexpkdel: حذف کلید API
+      await saveDomExpCfg(kv, { provider: DOMEXP_DEFAULT_PROVIDER, key: "" });
+      await edit("🗑 کلید API حذف شد.", [[{ text: "🔙 کلید API", callback_data: "domexpkey" }]]);
+    } else if (data === "domexptest") {
+      // domexptest: تست کلید ذخیره‌شده روی pcapps.ir
+      const cfg = await getDomExpCfg(kv);
+      if (!cfg.key) return edit("❌ کلیدی ثبت نشده.", [[{ text: "🔙 کلید API", callback_data: "domexpkey" }]]);
+      await edit("⏳ در حال تست کلید روی pcapps.ir…");
+      const r = await whoisXmlDomainInfo("pcapps.ir", cfg.key);
+      if (r.status === "ok") {
+        await edit(
+          `✅ کلید معتبر است.\n🗓 انقضای pcapps.ir: ${fmtJalali(r.expiry).split(" - ")[0]}\n⏳ باقی‌مانده: ${domExpiryRemaining(r.expiry)}`,
+          [[{ text: "🔙 کلید API", callback_data: "domexpkey" }]]
+        );
+      } else if (r.status === "api_error") {
+        await edit(`⚠️ تست ناموفق:\n${code(String(r.message || ""))}`, [[{ text: "🔙 کلید API", callback_data: "domexpkey" }]]);
+      } else {
+        await edit("⚠️ کلید کار می‌کند اما برای pcapps.ir تاریخی برنگشت.", [[{ text: "🔙 کلید API", callback_data: "domexpkey" }]]);
+      }
+    } else if (data === "domexpa") {
+      // domexpa: افزودن دستی — کاربر نام دامنه را می‌فرستد
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "domexp_domain" }), { expirationTtl: 600 });
+      await edit(
+        "✍️ دامنه‌ای که می‌خواهید انقضایش نظارت شود را بفرستید (مثلاً example.ir یا example.com):\n\n" +
+          "ℹ️ دامنهٔ .ir از whois.nic.ir استعلام می‌شود؛ اگر ایرنیک تاریخ را مخفی کرده باشد و «🔑 کلید API» ثبت شده باشد، خودکار از WhoisXMLAPI گرفته می‌شود؛ وگرنه از «🗓 ثبت تاریخ دستی» وارد کن.",
+        [[{ text: "🔙 انصراف", callback_data: "domexpp:0" }]]
+      );
+    } else if (data === "domexpcal") {
+      // domexpcal: ثبت/اصلاح دستی تاریخ انقضا برای یک دامنه (لیست انتخاب)
+      const list = await getDomExpiry(kv);
+      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      const hidden = list.filter((x) => x.status !== "ok");
+      const showList = hidden.length ? hidden : list;
+      const kb = showList.slice(0, 30).map((x) => [
+        { text: `🗓 ${x.domain}`, callback_data: `domexpi:${encodeURIComponent(x.domain)}` },
+      ]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      await edit("🗓 برای کدام دامنه تاریخ انقضا را دستی ثبت/اصلاح کنیم؟", kb);
+    } else if (data.startsWith("domexpi:")) {
+      // domexpi:<domain>: ورود دستی تاریخ شمسی انقضا برای دامنه
+      const dom = decodeURIComponent(data.slice(8));
+      const list = await getDomExpiry(kv);
+      const item = list.find((x) => x.domain === dom);
+      if (!item) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "domexp_date", domain: dom }), { expirationTtl: 900 });
+      const cur = Number.isFinite(item.expiry) ? `\n\n🗓 فعلی: ${fmtJalali(item.expiry).split(" - ")[0]}` : "";
+      await edit(
+        `🗓 تاریخ انقضای ${code(dom)} را به شمسی بفرستید:\nمثال: 1405/06/20\n\n` +
+          "ℹ️ بعد از ثبت، تاریخ دستی مرجع است و دیگر استعلام خودکار روی آن انجام نمی‌شود." + cur,
+        [[{ text: "🔙 انصراف", callback_data: "domexpp:0" }]]
+      );
+    } else if (data === "domexpd") {
+      // domexpd: لیست حذف دامنه از مانیتور
+      const list = await getDomExpiry(kv);
+      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      const kb = list.slice(0, 40).map((x, i) => [
+        { text: `🗑 ${x.domain}`, callback_data: `domexpdy:${i}` },
+      ]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      await edit("🗑 کدام دامنه از مانیتور حذف شود؟", kb);
+    } else if (data.startsWith("domexpdy:")) {
+      // domexpdy:<index>: حذف تأییدشدهٔ یک دامنه
+      const idx = Number(data.slice(9));
+      const list = await getDomExpiry(kv);
+      const removed = list[idx];
+      if (!removed) return edit("❌ دامنه پیدا نشد.");
+      list.splice(idx, 1);
+      await saveDomExpiry(kv, list);
+      await edit(`✅ «${removed.domain}» از مانیتور حذف شد.`, [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]);
+    } else if (data === "providers") {
+      // hz: هتزنر | ln: لینود | arvan: آروان | menu: منوی اصلی
+      await edit("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
+        [
+          { text: "🇩🇪 هتزنر", callback_data: "hz" },
+          { text: "🟢 لینود", callback_data: "ln" },
+        ],
+        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "hz") {
+      await showHzHome(hzAccounts, edit);
+    } else if (data === "hza") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_add_name" }), { expirationTtl: 600 });
+      await edit("👤 نام دلخواه اکانت هتزنر را بفرستید (مثلاً: اصلی):", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data === "hzdel") {
+      if (hzAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      const kb = hzAccounts.map((a, idx) => [{ text: `🗑 ${a.name}`, callback_data: `hzd:${idx}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
+      await edit("🗑 کدام اکانت حذف شود؟", kb);
+    } else if (data.startsWith("hzd:")) {
+      const idx = Number(data.slice(4));
+      const acc = hzAccounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
+        [{ text: "✅ بله", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hz" }],
+      ]);
+    } else if (data.startsWith("hzdy:")) {
+      const idx = Number(data.slice(5));
+      hzAccounts.splice(idx, 1);
+      await saveHzAccounts(kv, hzAccounts);
+      await edit("✅ اکانت حذف شد.", [[{ text: "🇩🇪 هتزنر", callback_data: "hz" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data.startsWith("hzm:")) {
+      await showHzAccountMenu(hzAccounts, Number(data.slice(4)), edit);
+    } else if (data.startsWith("hzacc:")) {
+      await showHzClientSettings(hzAccounts, Number(data.slice(6)), edit);
+    } else if (data.startsWith("hzaccrn:")) {
+      const i = Number(data.slice(8));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_acc_rename", acc: i }), { expirationTtl: 600 });
+      await edit("✏️ نام جدید اکانت را بفرستید (بدون فاصله):", [[{ text: "🔙 انصراف", callback_data: `hzacc:${i}` }]]);
+    } else if (data.startsWith("hzacctk:")) {
+      const i = Number(data.slice(8));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_acc_token", acc: i }), { expirationTtl: 600 });
+      await edit("🔑 توکن جدید اکانت هتزنر را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzacc:${i}` }]]);
+    } else if (data.startsWith("hzs:")) {
+      const parts = data.split(":");
+      await showHzServers(hzAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
+    } else if (data.startsWith("hzsi:")) {
+      const parts = data.split(":");
+      await showHzServerInfo(hzAccounts, Number(parts[1]), parts[2], edit, kv);
+    } else if (data.startsWith("hzsc:")) {
+      const i = Number(data.slice(5));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_srv_remark", acc: i }), { expirationTtl: 600 });
+      await edit("➕ ساخت سرور هتزنر\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: `hzs:${i}:0` }]]);
+    } else if (data.startsWith("hzsl:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const location = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "hz_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = hzAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      const allTypes = (await hzGetAll(acc.token, "/server_types")).filter((t) => !t.deprecated && Array.isArray(t.prices));
+      const priceFor = (t) => (t.prices || []).find((x) => x.location === location) || null;
+      // موجودبودن بر اساس قیمت همان لوکیشن (پلن‌های ناموجود خاکستری/غیرقابل‌کلیک می‌شوند)
+      const hasLoc = (t) => (t.prices || []).some((x) => x.location === location);
+      const pmNet = (t) => {
+        const pm = priceFor(t);
+        return parseFloat((pm && pm.price_monthly && pm.price_monthly.net) || 0) || 0;
+      };
+      const availTypes = allTypes.filter(hasLoc).sort((a, b) => pmNet(a) - pmNet(b));
+      const unavailTypes = allTypes.filter((t) => !hasLoc(t)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, location }), { expirationTtl: 600 });
+      const famLabel = {
+        cpx: "🧩 CPX · پردازنده AMD",
+        cx: "🧩 CX · پردازنده Intel",
+        cax: "🧩 CAX · پردازنده Ampere ARM",
+        ccx: "🧩 CCX · اختصاصی (Dedicated)",
+        other: "🧩 سایر پلن‌ها",
+      };
+      const famOrder = ["cpx", "cx", "cax", "ccx", "other"];
+      const groups = {};
+      let shown = 0;
+      for (const t of availTypes) {
+        if (shown >= 60) break;
+        const fam = hzPlanFamily(t.name);
+        (groups[fam] = groups[fam] || []).push(t);
+        shown++;
+      }
+      const kb = [];
+      for (const fam of famOrder) {
+        const arr = groups[fam];
+        if (!arr || !arr.length) continue;
+        kb.push([{ text: famLabel[fam] || "🧩", callback_data: "noop" }]);
+        kb.push(
+          ...grid2(
+            arr.map((t) => {
+              const pm = priceFor(t);
+              const eur = pm && pm.price_monthly && pm.price_monthly.gross;
+              return { text: hzPlanLabel(t, eur), callback_data: `hzscp:${i}:${t.id}` };
+            })
+          )
+        );
+      }
+      if (unavailTypes.length) {
+        kb.push([{ text: "🚫 ناموجود در این لوکیشن", callback_data: "noop", style: "plain" }]);
+        kb.push(...grid2(unavailTypes.slice(0, 18).map((t) => ({ text: `🚫 ${t.name}`, callback_data: "noop", style: "plain" }))));
+      }
+      kb.push([{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]);
+      const title = availTypes.length
+        ? `💰 پلن سرور را انتخاب کن (لوکیشن: ${location}):`
+        : `⚠️ هیچ پلنی در لوکیشن ${location} موجود نیست؛ پلن‌های ناموجود پایین نشان داده شده‌اند.`;
+      await edit(title, kb);
+    } else if (data.startsWith("hzscp:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const planId = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "hz_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = hzAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      const type = (await hzFetch(acc.token, `/server_types/${planId}`)).server_type;
+      const imgs = await hzGetAll(acc.token, "/images");
+      const avail = imgs.filter((im) => (im.type === "system" || im.type === "snapshot") && (!type || !type.architecture || im.architecture === type.architecture));
+      if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]]);
+      avail.sort((a, b) => (b.type === "system" ? 1 : 0) - (a.type === "system" ? 1 : 0));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, planId }), { expirationTtl: 600 });
+      const kb = grid2(avail.slice(0, 50).map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsci:${i}:${im.id}` })));
+      kb.push([{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]);
+      await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
+    } else if (data.startsWith("hzsci:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const imageId = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "hz_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = hzAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      // رمز root را از قبل تعیین می‌کنیم و با cloud-init روی سرور ست می‌کنیم
+      // تا مشکل «رمز منقضی» هتزنر پیش نیاید.
+      const pw = (await getSrvPasswords(kv))[0] || lnRandomPass();
+      const r = await hzFetch(acc.token, "/servers", {
+        method: "POST",
+        body: JSON.stringify({
+          name: pend.remark,
+          server_type: String(pend.planId),
+          image: String(imageId),
+          location: String(pend.location),
+          start_after_create: true,
+          user_data: hzCloudInitRootPw(pw),
+        }),
+      });
+      if (r.error) {
+        // خطای ساخت (مثلاً پلن ناموجود در لوکیشن) با پیام فارسی + دکمهٔ بازگشت به انتخاب پلن
+        return edit(`❌ ساخت سرور ناموفق بود:\n${hzErrFa(r)}`, [
+          [{ text: "🔙 بازگشت به انتخاب پلن", callback_data: `hzsl:${i}:${pend.location}` }],
+          [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
+        ]);
+      }
+      await kv.delete(`pend:${chatId}`);
+      const hs = r.server || {};
+      const hIp = hs.public_net && hs.public_net.ipv4 ? hs.public_net.ipv4.ip : "";
+      if (hIp) {
+        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود و نصب نود پیشنهاد می‌شود
+        return srvProvisionNewServer(kv, env, edit, { host: hIp, password: pw, note: `Hetzner: ${hs.name || ""}` });
+      }
+      return edit(passMsg("🎉 سرور هتزنر ساخته شد؛ رمز root:", pw), passKb(pw, `hzs:${i}:0`, "🖥️ سرورها"));
+    } else if (data.startsWith("hzsu:")) {
+      const parts = data.split(":");
+      await hzServerDispatch(hzAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("hzsv:")) {
+      const parts = data.split(":");
+      await hzServerPick(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+    } else if (data.startsWith("hzok:")) {
+      const parts = data.split(":");
+      await hzServerDo(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+    } else if (data.startsWith("hzp:")) {
+      const parts = data.split(":");
+      await showHzPrimaryIps(hzAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
+    } else if (data.startsWith("hzpi:")) {
+      const parts = data.split(":");
+      await showHzPrimaryIpInfo(hzAccounts, Number(parts[1]), parts[2], edit);
+    } else if (data.startsWith("hzpc:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const type = parts[2];
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_ip_remark", acc: i, ip_type: type }), { expirationTtl: 600 });
+      await edit(`➕ ساخت آی‌پی ${type.toUpperCase()}\n\nنام (remark) آی‌پی را بفرستید:`, [[{ text: "🔙 انصراف", callback_data: `hzp:${i}:0` }]]);
+    } else if (data.startsWith("hzpl:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const location = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "hz_ip_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = hzAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      const body = { name: pend.remark, type: pend.ip_type, assignee_type: "server", location, auto_delete: pend.ip_type === "ipv4" };
+      const r = await hzFetch(acc.token, "/primary_ips", { method: "POST", body: JSON.stringify(body) });
+      if (r.error) return edit("❌ خطا: " + hzErr(r));
+      await kv.delete(`pend:${chatId}`);
+      await edit("✅ آی‌پی ساخته شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+    } else if (data.startsWith("hzpu:")) {
+      const parts = data.split(":");
+      await hzIpDispatch(hzAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("hzpv:")) {
+      const parts = data.split(":");
+      await hzIpPick(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+    } else if (data.startsWith("hzpo:")) {
+      const parts = data.split(":");
+      await hzIpDo(hzAccounts, Number(parts[1]), parts[2], parts[3], edit);
+    } else if (data.startsWith("hzn:")) {
+      const parts = data.split(":");
+      await showHzSnapshots(hzAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
+    } else if (data.startsWith("hzni:")) {
+      const parts = data.split(":");
+      await showHzSnapshotInfo(hzAccounts, Number(parts[1]), parts[2], edit);
+    } else if (data.startsWith("hznc:")) {
+      const i = Number(data.slice(5));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_snap_remark", acc: i }), { expirationTtl: 600 });
+      await edit("📸 ساخت اسنپ‌شات\n\nتوضیح (نام) اسنپ‌شات را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzn:${i}:0` }]]);
+    } else if (data.startsWith("hzns:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const serverId = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "hz_snap_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = hzAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      const r = await hzFetch(acc.token, `/servers/${serverId}/actions/create_image`, {
+        method: "POST",
+        body: JSON.stringify({ description: pend.remark, type: "snapshot" }),
+      });
+      if (r.error) return edit("❌ خطا: " + hzErr(r));
+      await kv.delete(`pend:${chatId}`);
+      await edit("✅ اسنپ‌شات ساخته شد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }]]);
+    } else if (data.startsWith("hznu:")) {
+      const parts = data.split(":");
+      await hzSnapshotDispatch(hzAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("hzno:")) {
+      const parts = data.split(":");
+      await hzSnapshotDo(hzAccounts, Number(parts[1]), parts[2], parts[3], edit);
+    } else if (data === "rem") {
+      await renderRemindersHome(kv, edit);
+    } else if (data === "remnew") {
+      await renderReminderTargets(edit);
+    } else if (data === "remset") {
+      const cfg = await getRemCfg(kv);
+      const opts = [1, 3, 6, 12, 24, 48, 72];
+      const rk = [];
+      for (let i = 0; i < opts.length; i += 3) {
+        rk.push(opts.slice(i, i + 3).map((h) => ({ text: (h === cfg.leadHours ? "✅ " : "") + h + " ساعت", callback_data: `remseth:${h}` })));
+      }
+      rk.push([{ text: "🔙 بازگشت", callback_data: "rem" }]);
+      await edit(`⚙️ تنظیمات یادآور\n\nچند ساعت قبل از انقضا خبر بدم؟ (الان: ${cfg.leadHours} ساعت)`, rk);
+    } else if (data.startsWith("remseth:")) {
+      const h = Number(data.slice(8));
+      if (!Number.isFinite(h) || h < 1 || h > 720) return edit("❌ مقدار نامعتبر.");
+      await saveRemCfg(kv, { leadHours: h });
+      await renderRemindersHome(kv, edit);
+    } else if (data === "remsrv" || data === "remsrvf") {
+      // remsrv: انتخاب سرور از ساب‌ها به‌عنوان هدف یادآور | remsrvf: همان کار با اجبار به بروزرسانی لیست
+      const force = data === "remsrvf";
+      await edit(force ? "⏳ در حال بروزرسانی سرورها…" : "⏳ در حال خواندن سرورها…", [
+        [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+      let servers = null;
+      try {
+        servers = await getServersPicker(kv, force);
+      } catch (e) {
+        return edit("❌ خطا در خواندن سرورها: " + remPlain(e && e.message ? e.message : e), [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      }
+      if (!servers || !servers.length) return edit("📭 سروری پیدا نشد.\n(ابتدا در «🖥 مانیتورهای پاسارگارد» پنل ثبت و نودها را همگام‌سازی کنید؛ سپس 🔄 بروزرسانی.)", [[{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }, { text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      const token = makeToken();
+      await kv.put(`rmsess:${token}`, JSON.stringify(servers), { expirationTtl: 1800 });
+      await renderReminderServers(kv, token, 0, edit);
+    } else if (data.startsWith("rempage:")) {
+      const p = data.split(":");
+      await renderReminderServers(kv, p[1], Number(p[2]) || 0, edit);
+    } else if (data.startsWith("rempick:")) {
+      const p = data.split(":");
+      const servers = await kv.get(`rmsess:${p[1]}`, "json");
+      const s = Array.isArray(servers) ? servers[Number(p[2])] : null;
+      if (!s) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      const target = {
+        type: "server",
+        label: `${s.ip || "—"} — ${s.remark || s.panel_name || ""}`.trim(),
+        ip: s.ip || "",
+        dc: s.remark || "",
+        panel: s.panel_name || "",
+        host_id: s.host_id,
+      };
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_text", target }), { expirationTtl: 600 });
+      await edit("✍️ متن یادآور را بفرستید:", [
+        [{ text: "⏭ بدون متن", callback_data: "remnote" }],
+        [{ text: "🔙 بازگشت", callback_data: "remnew" }],
+      ]);
+    } else if (data === "remtxt") {
+      // remtxt: یادآور با متن آزاد (بدون هدف سرور)
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_text", target: null }), { expirationTtl: 600 });
+      await edit("✍️ متن یادآور را بفرستید:", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+    } else if (data === "remnote") {
+      // remnote: رد کردن مرحلهٔ متن و رفتن به انتخاب زمان
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      const target = pend && pend.type === "rem_text" ? pend.target : null;
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", target, text: "" }), { expirationTtl: 900 });
+      await edit(REM_WHEN_TEXT, remWhenKb());
+    } else if (data === "remwhenback") {
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      const target = pend && pend.target ? pend.target : null;
+      const text = pend && pend.text ? pend.text : "";
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", target, text, mode: pend && pend.mode ? pend.mode : "" }), { expirationTtl: 900 });
+      await edit(REM_WHEN_TEXT, remWhenKb());
+    } else if (data === "remrel") {
+      // remrel: زمان‌بندی نسبی (بعد از چند ساعت/روز از الان)
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || (pend.type !== "rem_when" && pend.type !== "rem_rel" && pend.type !== "rem_abs")) return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_rel", target: pend.target || null, text: pend.text || "", mode: pend.mode || "" }), { expirationTtl: 900 });
+      await edit("⏳ بعد از چه زمانی؟", remRelKb());
+    } else if (data.startsWith("remrelu:")) {
+      const unit = data.slice(8);
+      if (!REL_UNITS[unit]) return edit("❌ گزینه نامعتبر.");
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "rem_rel") return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_rel_num", target: pend.target || null, text: pend.text || "", unit, mode: pend.mode || "" }), { expirationTtl: 900 });
+      await edit(`⏳ بعد از چند ${REL_UNITS[unit]}؟ (فقط عدد بفرستید):`, [[{ text: "🔙 بازگشت", callback_data: "remrel" }]]);
+    } else if (data === "remabs") {
+      // remabs: زمان‌بندی مطلق (تاریخ شمسی مشخص) — remabsman = ورود دستی تاریخ
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || (pend.type !== "rem_when" && pend.type !== "rem_rel" && pend.type !== "rem_abs")) return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_abs", target: pend.target || null, text: pend.text || "", mode: pend.mode || "" }), { expirationTtl: 900 });
+      await edit("📅 سال را انتخاب کنید:", remYearKb());
+    } else if (data.startsWith("remabsy:")) {
+      const jy = Number(data.slice(8));
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || (pend.type !== "rem_abs" && pend.type !== "rem_abs_m")) return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, type: "rem_abs_m", jy }), { expirationTtl: 900 });
+      await edit(`📅 ماه را انتخاب کنید (${jy}):`, remMonthKb(jy));
+    } else if (data.startsWith("remabsm:")) {
+      const p = data.split(":");
+      const jy = Number(p[1]);
+      const jm = Number(p[2]);
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || (pend.type !== "rem_abs_m" && pend.type !== "rem_abs")) return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, type: "rem_abs_day", jy, jm }), { expirationTtl: 900 });
+      await edit(`📅 روز را وارد کنید (عدد) — ${jy}/${String(jm).padStart(2, "0")}:`, [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+    } else if (data === "remabsman") {
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || (pend.type !== "rem_abs" && pend.type !== "rem_abs_m")) return edit("⏳ عملیات منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", target: pend.target || null, text: pend.text || "", mode: pend.mode || "" }), { expirationTtl: 900 });
+      await edit("✍️ تاریخ و ساعت را بنویسید:\nمثال: 1405/06/20 14:30", [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+    } else if (data === "remdel") {
+      // remdel: نمایش لیست یادآورها برای حذف | remdelx:<id> انتخاب یک مورد | remdely:<id> تأیید حذف
+      const list = (await getReminders(kv)).slice().sort((a, b) => a.at - b.at);
+      if (!list.length) return edit("📭 یادآوری نیست.", [[{ text: "🔙 بازگشت", callback_data: "rem" }]]);
+      const kb = list.slice(0, 20).map((r) => [
+        { text: `🗑 ${fmtJalali(r.at)} ${r.text || (r.target && r.target.label) || ""}`.substring(0, 60), callback_data: `remdelx:${r.id}` },
+      ]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "rem" }]);
+      await edit("🗑 کدام یادآور حذف شود؟", kb);
+    } else if (data.startsWith("remdelx:")) {
+      const id = data.slice(8);
+      const list = await getReminders(kv);
+      const item = list.find((r) => r.id === id);
+      if (!item) return edit("❌ پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "rem" }]]);
+      await edit(`⚠️ این یادآور حذف شود؟\n🕒 ${fmtJalali(item.at)}\n📝 ${remPlain(item.text || "-")}`, [
+        [{ text: "✅ بله", callback_data: `remdely:${id}` }, { text: "❌ انصراف", callback_data: "rem" }],
+      ]);
+    } else if (data.startsWith("remdely:")) {
+      const id = data.slice(8);
+      const list = await getReminders(kv);
+      await saveReminders(kv, list.filter((r) => r.id !== id));
+      await edit("✅ یادآور حذف شد.", [[{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data.startsWith("remack:")) {
+      const id = data.slice(7);
+      const list = await getReminders(kv);
+      await saveReminders(kv, list.filter((r) => r.id !== id));
+      await edit("👀 ثبت شد.", [[{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data.startsWith("remagain:")) {
+      // remagain:<id>: انتخاب «بعداً دوباره یادآوری کن» (۱/۶/۲۴ ساعت) → remagainx اجرای آن
+      const id = data.slice(9);
+      const list = await getReminders(kv);
+      const r = list.find((x) => x.id === id);
+      if (!r) return edit("⏳ یادآور پیدا نشد.", [[{ text: "⏰ یادآورها", callback_data: "rem" }]]);
+      await edit("🔁 چند ساعت بعد دوباره یادآوری کنم؟", [
+        [
+          { text: "۱ ساعت", callback_data: `remagainx:${id}:1` },
+          { text: "۶ ساعت", callback_data: `remagainx:${id}:6` },
+          { text: "۲۴ ساعت", callback_data: `remagainx:${id}:24` },
+        ],
+        [{ text: "🔙 بازگشت", callback_data: "rem" }],
+      ]);
+    } else if (data.startsWith("remagainx:")) {
+      const p = data.split(":");
+      const id = p[1];
+      const h = Number(p[2]);
+      const list = await getReminders(kv);
+      const r = list.find((x) => x.id === id);
+      if (!r || !Number.isFinite(h)) return edit("⏳ یادآور پیدا نشد.", [[{ text: "⏰ یادآورها", callback_data: "rem" }]]);
+      r.at = Date.now() + h * 3600 * 1000;
+      r.notifiedAt = null;
+      await saveReminders(kv, list);
+      await edit(`✅ ${h} ساعت دیگر یادآوری می‌شود.`, [[{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data === "ln") {
+      await showLnHome(lnAccounts, edit);
+    } else if (data === "lna") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_add_name" }), { expirationTtl: 600 });
+      await edit("👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data === "lndel") {
+      if (lnAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      const kb = lnAccounts.map((a, idx) => [{ text: `🗑 ${a.name}`, callback_data: `lnd:${idx}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
+      await edit("🗑 کدام اکانت حذف شود؟", kb);
+    } else if (data.startsWith("lnd:")) {
+      const idx = Number(data.slice(4));
+      const acc = lnAccounts[idx];
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
+        [{ text: "✅ بله", callback_data: `lndy:${idx}` }, { text: "❌ انصراف", callback_data: "ln" }],
+      ]);
+    } else if (data.startsWith("lndy:")) {
+      const idx = Number(data.slice(5));
+      lnAccounts.splice(idx, 1);
+      await saveLnAccounts(kv, lnAccounts);
+      await edit("✅ اکانت حذف شد.", [[{ text: "🟢 لینود", callback_data: "ln" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data.startsWith("lnm:")) {
+      await showLnAccountMenu(lnAccounts, Number(data.slice(4)), edit);
+    } else if (data.startsWith("lnacc:")) {
+      const i = Number(data.slice(6));
+      const acc = lnAccounts[i];
+      if (!acc) return edit("❌ اکانت پیدا نشد.");
+      await edit(`⚙️ اکانت «${acc.name}»\n\nتوکن: ${code(maskLnToken(acc.token))}`, [
+        [{ text: "🗑 حذف اکانت", callback_data: `lnd:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+      ]);
+    } else if (data.startsWith("lns:")) {
+      const parts = data.split(":");
+      await showLnServers(lnAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
+    } else if (data.startsWith("lnsi:")) {
+      const parts = data.split(":");
+      await showLnServerInfo(lnAccounts, Number(parts[1]), parts[2], edit);
+    } else if (data.startsWith("lnsc:")) {
+      const i = Number(data.slice(5));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_srv_remark", acc: i }), { expirationTtl: 600 });
+      await edit("➕ ساخت سرور لینود\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: `lns:${i}:0` }]]);
+    } else if (data.startsWith("lnscd:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const region = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "ln_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = lnAccounts[i];
+      const types = await lnGetAll(acc.token, "/linode/types");
+      types.sort((a, b) => (lnRegionPrice(a, region).monthly || 0) - (lnRegionPrice(b, region).monthly || 0));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, region }), { expirationTtl: 600 });
+      const kb = grid2(
+        types.map((t) => {
+          const pr = lnRegionPrice(t, region);
+          return { text: `${t.label} ($${pr.monthly || "?"}/m)`, callback_data: `lnscp:${i}:${region}:${t.id}` };
+        })
+      );
+      kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]);
+      await edit("💰 پلن سرور را انتخاب کنید:", kb);
+    } else if (data.startsWith("lnscp:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const region = parts[2];
+      const planId = parts[3];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "ln_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = lnAccounts[i];
+      const imgs = (await lnGetAll(acc.token, "/images")).filter((im) => im.is_public && im.status === "available");
+      imgs.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+      if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, region, planId }), { expirationTtl: 600 });
+      const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsci:${i}:${im.id}` })));
+      kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]);
+      await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
+    } else if (data.startsWith("lnsci:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const imageId = parts.slice(2).join(":");
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "ln_srv_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = lnAccounts[i];
+      const pass = (await getSrvPasswords(kv))[0] || lnRandomPass();
+      const r = await lnFetch(acc.token, "/linode/instances", {
+        method: "POST",
+        body: JSON.stringify({ label: pend.remark, region: pend.region, type: pend.planId, image: imageId, root_pass: pass, booted: true }),
+      });
+      if (r.errors) return edit("❌ خطا: " + lnErr(r));
+      await kv.delete(`pend:${chatId}`);
+      const lnIp = (r.ipv4 && r.ipv4[0]) || "";
+      if (lnIp) {
+        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود، رمز تنظیم و نصب نود پیشنهاد می‌شود
+        return srvProvisionNewServer(kv, env, edit, { host: lnIp, password: pass, note: `Linode: ${r.label || ""}` });
+      }
+      await edit(passMsg("🎉 سرور لینود ساخته شد؛ رمز root:", pass), passKb(pass, `lns:${i}:0`, "🖥️ سرورها"));
+    } else if (data.startsWith("lnsu:")) {
+      const parts = data.split(":");
+      await lnServerDispatch(lnAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("lnsv:")) {
+      const parts = data.split(":");
+      await lnServerPick(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+    } else if (data.startsWith("lnok:")) {
+      const parts = data.split(":");
+      await lnServerDo(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+    } else if (data.startsWith("lnp:")) {
+      const parts = data.split(":");
+      await showLnIps(lnAccounts, Number(parts[1]), Number(parts[2]) || 0, edit, kv);
+    } else if (data.startsWith("lnpi:")) {
+      const parts = data.split(":");
+      await showLnIpInfo(lnAccounts, Number(parts[1]), parts[2], edit, kv);
+    } else if (data.startsWith("lnpu:")) {
+      const parts = data.split(":");
+      await lnIpDispatch(lnAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("lnpv:")) {
+      const parts = data.split(":");
+      await lnIpPick(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit, kv);
+    } else if (data.startsWith("lnpo:")) {
+      const parts = data.split(":");
+      await lnIpDo(lnAccounts, Number(parts[1]), parts[2], parts[3], edit, kv);
+    } else if (data.startsWith("lnn:")) {
+      const parts = data.split(":");
+      await showLnSnapshots(lnAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
+    } else if (data.startsWith("lnni:")) {
+      const parts = data.split(":");
+      await showLnSnapshotInfo(lnAccounts, Number(parts[1]), parts[2], edit);
+    } else if (data.startsWith("lnnc:")) {
+      const i = Number(data.slice(5));
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_snap_remark", acc: i }), { expirationTtl: 600 });
+      await edit("📸 ساخت اسنپ‌شات\n\nیک نام برای اسنپ‌شات بفرستید:", [[{ text: "🔙 انصراف", callback_data: `lnn:${i}:0` }]]);
+    } else if (data.startsWith("lnns:")) {
+      const parts = data.split(":");
+      const i = Number(parts[1]);
+      const serverId = parts[2];
+      const pend = await kv.get(`pend:${chatId}`, "json");
+      if (!pend || pend.type !== "ln_snap_remark") return edit("⏳ عملیات منقضی شده.");
+      const acc = lnAccounts[i];
+      const disks = await lnGetAll(acc.token, `/linode/instances/${serverId}/disks`);
+      const disk = disks.find((d) => d.filesystem && d.filesystem !== "swap") || disks[0];
+      if (!disk) return edit("❌ دیسکی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }]]);
+      const r = await lnFetch(acc.token, "/images", { method: "POST", body: JSON.stringify({ disk_id: disk.id, label: pend.remark, description: pend.remark }) });
+      if (r.errors) return edit("❌ خطا: " + lnErr(r));
+      await kv.delete(`pend:${chatId}`);
+      await edit("✅ اسنپ‌شات ساخته شد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${i}:0` }]]);
+    } else if (data.startsWith("lnnu:")) {
+      const parts = data.split(":");
+      await lnSnapshotDispatch(lnAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
+    } else if (data.startsWith("lnno:")) {
+      const parts = data.split(":");
+      await lnSnapshotDo(lnAccounts, Number(parts[1]), parts[2], parts[3], edit);
+    } else {
+      const okFav = await dispatchFavQa(data, { kv, chatId, messageId, accounts, botToken, edit, send, env });
+      if (!okFav) await edit("❓ عملیات ناشناخته.", mainMenuKeyboard());
+    }
+  } catch (err) {
+    console.error("CALLBACK_ERROR", err && err.stack ? err.stack : String(err));
+    await edit("❌ خطا:\n" + String(err && err.message ? err.message : err).substring(0, 3000));
+  } finally {
+    // نمایش نتیجهٔ تغییر/تنظیم به مدت ۳ ثانیه و سپس بازگشت خودکار به صفحهٔ قبل
+    if (pendingReturn) {
+      try {
+        await sleep(3000);
+        await handleCallback(
+          { id: "autoreturn", message: { chat: { id: chatId }, message_id: returnMsgId || messageId }, data: pendingReturn },
+          botToken,
+          adminId,
+          kv,
+          env
+        );
+      } catch (e) {
+        console.error("AUTORETURN", String(e));
+      }
+    }
+  }
+}
+
+// انتخاب نوع رکورد در ویزارد افزودن رکورد.
+// at:<token>:<type> = انتخاب نوع (A/AAAA/CNAME) | p:<token>:<page> = بازگشت به صفحهٔ قبل
+function typeKeyboard(token, backPage) {
+  const kb = RECORD_TYPES.map((t) => [{ text: t, callback_data: `at:${token}:${t}` }]);
+  kb.push([{ text: "⬅️ بازگشت", callback_data: `p:${token}:${backPage}` }]);
+  return kb;
+}
+
+// ===================== یادآور (Reminder) UI =====================
+async function renderRemindersHome(kv, edit) {
+  const list = (await getReminders(kv)).slice().sort((a, b) => a.at - b.at);
+  const cfg = await getRemCfg(kv);
+  let text = "⏰ یادآورها\n\n";
+  text += `ℹ️ راهنما: می‌تونی انقضای سرور رو همین‌جا ثبت کنی تا ${cfg.leadHours} ساعت قبل‌تر بهت اطلاع بده و از سایت مربوطه تمدید کنی.\n\n`;
+  const kb = [];
+  if (!list.length) {
+    text += "📭 هنوز یادآوری ثبت نشده.";
+  } else {
+    text += `📌 ${list.length} یادآور:\n`;
+    for (const r of list.slice(0, 15)) {
+      const tgt = r.target && r.target.label ? ` — ${remPlain(r.target.label)}` : "";
+      const when = r.kind === "expiry" && r.expiryAt ? `انقضا ${fmtJalali(r.expiryAt)}` : fmtJalali(r.at);
+      text += `• ${when}${tgt}${r.text ? " — " + remPlain(r.text) : ""}\n`;
+    }
+    if (list.length > 15) text += `… و ${list.length - 15} مورد دیگر`;
+  }
+  // remnew: ساخت یادآور جدید | remdel: حذف یادآور | remset: تنظیم چند ساعت قبل هشدار داده شود
+  kb.push([{ text: "➕ یادآور جدید", callback_data: "remnew" }]);
+  if (list.length) kb.push([{ text: "🗑 حذف یادآور", callback_data: "remdel" }]);
+  kb.push([{ text: `⚙️ تنظیمات یادآور (${cfg.leadHours} ساعت قبل)`, callback_data: "remset" }]);
+  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit(text, kb);
+}
+
+// انتخاب نوع هدف یادآور: سرور (از ساب‌ها) یا متن آزاد
+async function renderReminderTargets(edit) {
+  await edit("⏰ یادآور جدید\n\nروی چه چیزی یادآور بذارم؟", [
+    // remsrv: انتخاب سرور از لیست ساب‌های پنل | remtxt: ثبت متن آزاد
+    [{ text: "🖥 انتخاب از سرورها (ساب‌ها)", callback_data: "remsrv" }],
+    [{ text: "✍️ متن آزاد", callback_data: "remtxt" }],
+    [{ text: "🔙 بازگشت", callback_data: "rem" }],
+  ]);
+}
+
+async function renderReminderServers(kv, token, page, edit) {
+  const servers = await kv.get(`rmsess:${token}`, "json");
+  if (!Array.isArray(servers)) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+  if (!servers.length) return edit("📭 سروری در پنل‌ها پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+  const per = 8;
+  const pages = Math.max(1, Math.ceil(servers.length / per));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = servers.slice(page * per, page * per + per);
+  const kb = [];
+  for (let k = 0; k < slice.length; k++) {
+    const s = slice[k];
+    const gi = page * per + k;
+    const ip = s.ip || "—";
+    const dc = s.remark || s.panel_name || "—";
+    const dcShort = dc.length > 18 ? dc.slice(0, 17) + "…" : dc;
+    // rempick: انتخاب همین سرور به‌عنوان هدف یادآور (هر دو دکمه یک عمل دارند)
+    kb.push([
+      { text: `🌐 ${ip}`, callback_data: `rempick:${token}:${gi}` },
+      { text: `🖥 ${dcShort}`, callback_data: `rempick:${token}:${gi}` },
+    ]);
+  }
+  const nav = [];
+  // rempage: صفحهٔ قبل/بعد لیست سرورها | noop: دکمهٔ بی‌اثر (نمایش شمارهٔ صفحه)
+  nav.push(page > 0 ? { text: "◀️", callback_data: `rempage:${token}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `rempage:${token}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  // remsrvf: خواندن دوبارهٔ سرورها از پنل | remnew: بازگشت
+  kb.push([{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "remnew" }]);
+  await edit("🖥 یک سرور انتخاب کنید (ستون آدرس / ستون نام):", kb);
+}
+
+// ===================== Hetzner UI =====================
+// hzm:<index>: ورود به منوی همان اکانت | hza: افزودن اکانت | hzdel: حذف اکانت | providers/menu: بازگشت
+async function showHzHome(hzAccounts, edit) {
+  const kb = [];
+  for (let i = 0; i < hzAccounts.length; i += 2) {
+    const row = [{ text: `👤 ${hzAccounts[i].name}`, callback_data: `hzm:${i}` }];
+    row.push(i + 1 < hzAccounts.length ? { text: `👤 ${hzAccounts[i + 1].name}`, callback_data: `hzm:${i + 1}` } : EMPTY_BTN);
+    kb.push(row);
+  }
+  kb.push([{ text: "➕ افزودن اکانت هتزنر", callback_data: "hza" }]);
+  if (hzAccounts.length) kb.push([{ text: "🗑 حذف اکانت", callback_data: "hzdel" }]);
+  kb.push([{ text: "🔙 دیتاسنترها", callback_data: "providers" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit("🇩🇪 اکانت‌های هتزنر\n\nیک اکانت را انتخاب کنید:", kb);
+}
+
+// تنظیمات کلاینت (اکانت) — تغییر نام/توکن/حذف
+async function showHzClientSettings(hzAccounts, i, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  await edit(`⚙️ تنظیمات کلاینت\n\n👤 نام: ${code(acc.name)}\n🔑 توکن: ${code(maskHzToken(acc.token))}`, [
+    [{ text: "✏️ تغییر نام", callback_data: `hzaccrn:${i}` }, { text: "🔑 تغییر توکن", callback_data: `hzacctk:${i}` }],
+    [{ text: "🗑 حذف اکانت", callback_data: `hzd:${i}` }],
+    [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+  ]);
+}
+
+// منوی داخلی اکانت هتزنر:
+// hzs: سرورها | hzn: اسنپ‌شات‌ها | hzp: آی‌پی‌های اصلی | hzacc: تنظیمات کلاینت
+async function showHzAccountMenu(hzAccounts, i, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  await edit(`👤 ${acc.name}\n\nانتخاب کنید:`, [
+    [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
+    [{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }],
+    [{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }],
+    [{ text: "🔙 اکانت‌ها", callback_data: "hz" }, { text: "🏠 منو", callback_data: "menu" }],
+  ]);
+}
+
+async function showHzServers(hzAccounts, i, page, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const servers = await hzGetAll(acc.token, "/servers");
+  if (servers.length === 0) {
+    return edit("📭 سروری یافت نشد.", [
+      [{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+    ]);
+  }
+  const pages = Math.ceil(servers.length / HZ_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = servers.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
+  // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور
+  const kb = grid2(slice.map((s) => ({ text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}` })));
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `hzs:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzs:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  await edit(`🖥️ سرورهای «${acc.name}» (${servers.length}):`, kb);
+}
+
+async function showHzServerInfo(hzAccounts, i, serverId, edit, kv) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const s = (await hzFetch(acc.token, `/servers/${serverId}`)).server;
+  if (!s) return edit("❌ سرور پیدا نشد.");
+  const in_gb = hzGb(s.ingoing_traffic);
+  const out_gb = hzGb(s.outgoing_traffic);
+  const total_gb = Math.round((in_gb + out_gb) * 1000) / 1000;
+  const included_gb = hzGb(s.included_traffic);
+  const used_pct = included_gb ? Math.round((out_gb / included_gb) * 1000) / 10 : null;
+  const billable = included_gb ? Math.round(Math.max(total_gb - included_gb, 0) * 1000) / 1000 : 0;
+  const euro = await hzEuroRate(kv);
+  let hourly = "—";
+  let monthly = "—";
+  const p = s.server_type && s.server_type.prices && s.server_type.prices[0];
+  if (p) {
+    hourly = hzPriceFmt(p.price_hourly && p.price_hourly.gross, euro);
+    monthly = hzPriceFmt(p.price_monthly && p.price_monthly.gross, euro);
+  }
+  let snapCount = "—";
+  try {
+    const imgs = await hzGetAll(acc.token, "/images");
+    snapCount = hzSnapshotCount(imgs, serverId);
+  } catch (e) {}
+  const st = s.server_type || {};
+  const dcloc = (s.datacenter && s.datacenter.location) || s.location;
+  const loc = dcloc ? `${dcloc.country}, ${dcloc.city}` : "—";
+  const text =
+    `🚀 نام: ${code(s.name)} [${code(s.status)}]\n` +
+    `🔗 IPv4: ${code(s.public_net && s.public_net.ipv4 ? s.public_net.ipv4.ip : "—")}\n` +
+    `🔗 IPv6: ${code(s.public_net && s.public_net.ipv6 ? s.public_net.ipv6.ip : "—")}\n` +
+    `🌍 کشور/شهر: ${code(loc)}\n` +
+    `⚙️ CPU: ${code((st.cores || "—") + " Core")}\n` +
+    `💾 RAM: ${code((st.memory || "—") + " GB")}\n` +
+    `💿 Disk: ${code((st.disk || "—") + " GB")}\n` +
+    `📸 اسنپ‌شات: ${code(snapCount)}\n` +
+    `🖼️ تصویر: ${code(s.image ? s.image.name || s.image.description : "—")}\n` +
+    `📊 ترافیک:\n • ورودی: ${code(in_gb + " GB")}\n • خروجی: ${code(out_gb + " GB")}\n • کل: ${code(total_gb + " GB")}\n • سهمیه: ${code(included_gb + " GB")}\n • مصرف: ${code(used_pct === null ? "—" : used_pct + "%")} [Out/Included]\n • مازاد: ${code(billable + " GB")}\n` +
+    `💰 قیمت:\n • ساعتی: ${code(hourly)}\n • ماهانه: ${code(monthly)}\n` +
+    `📅 ساخته‌شده: ${code(s.created ? s.created.slice(0, 10) : "—")} [${code(hzAgeDays(s.created) + " روز پیش")}]`;
+  // hzsu:<acc>:<serverId>:<step>
+  // on/off · reboot/reset · pass · rename · rebuild · upgrade · snap/dsnap · a4/a6 · u4/u6 · del
+  const kb = grid2([
+    { text: "⚡ روشن", callback_data: `hzsu:${i}:${serverId}:on` },
+    { text: "🔌 خاموش", callback_data: `hzsu:${i}:${serverId}:off` },
+    { text: "🔄 ریبوت", callback_data: `hzsu:${i}:${serverId}:reboot` },
+    { text: "🔄 ریست", callback_data: `hzsu:${i}:${serverId}:reset` },
+    { text: "🔓 ریست رمز", callback_data: `hzsu:${i}:${serverId}:pass` },
+    { text: "✏️ تغییر نام", callback_data: `hzsu:${i}:${serverId}:rename` },
+    { text: "🛠️ ریبیلد", callback_data: `hzsu:${i}:${serverId}:rebuild` },
+    { text: "⬆️ ارتقا", callback_data: `hzsu:${i}:${serverId}:upgrade` },
+    { text: "📷 ساخت اسنپ‌شات", callback_data: `hzsu:${i}:${serverId}:snap` },
+    { text: "🗑 حذف اسنپ‌شات", callback_data: `hzsu:${i}:${serverId}:dsnap` },
+    { text: "🔗 اختصاص IPv4", callback_data: `hzsu:${i}:${serverId}:a4` },
+    { text: "🔗 اختصاص IPv6", callback_data: `hzsu:${i}:${serverId}:a6` },
+    { text: "❌ حذف IPv4", callback_data: `hzsu:${i}:${serverId}:u4` },
+    { text: "❌ حذف IPv6", callback_data: `hzsu:${i}:${serverId}:u6` },
+    { text: "🗑 حذف سرور", callback_data: `hzsu:${i}:${serverId}:del` },
+  ]);
+  kb.push([{ text: "🔄 بروزرسانی", callback_data: `hzsi:${i}:${serverId}` }]);
+  kb.push([{ text: "🔙 سرورها", callback_data: `hzs:${i}:0` }]);
+  await edit(text, kb);
+}
+
+async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const s = (await hzFetch(acc.token, `/servers/${serverId}`)).server;
+  if (!s) return edit("❌ سرور پیدا نشد.");
+  const back = `hzsi:${i}:${serverId}`;
+
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_srv_rename", acc: i, server_id: serverId }), { expirationTtl: 600 });
+    return edit("✏️ نام جدید سرور را بفرستید:", [[{ text: "🔙 انصراف", callback_data: back }]]);
+  }
+  if (step === "rebuild") {
+    const imgs = await hzGetAll(acc.token, "/images");
+    const arch = s.image && s.image.architecture;
+    const avail = imgs.filter((x) => (x.type === "system" || x.type === "snapshot") && (!arch || x.architecture === arch));
+    if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    avail.sort((a, b) => (b.type === "system" ? 1 : 0) - (a.type === "system" ? 1 : 0));
+    const kb = grid2(avail.slice(0, 50).map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsv:${i}:${serverId}:rebuild:${im.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit("🛠️ ریبیلد\n⚠️ همهٔ داده‌های سرور پاک می‌شود.\n\nتصویر جدید را انتخاب کنید:", kb);
+  }
+  if (step === "upgrade") {
+    const types = await hzGetAll(acc.token, "/server_types");
+    const cur = s.server_type;
+    const up = types.filter(
+      (t) => t.architecture === cur.architecture && t.id !== cur.id && (t.memory >= cur.memory || t.cores >= cur.cores || t.disk >= cur.disk)
+    );
+    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    up.sort((a, b) => a.memory + a.cores + a.disk - (b.memory + b.cores + b.disk));
+    const upLocObj = (s.datacenter && s.datacenter.location) || s.location;
+    const upLoc = upLocObj ? upLocObj.name : null;
+    const priceOf = (t) => {
+      const arr = t.prices || [];
+      const pr = (upLoc && arr.find((x) => x.location === upLoc)) || arr[0] || null;
+      return pr && pr.price_monthly ? pr.price_monthly.gross : undefined;
+    };
+    const kb = grid2(
+      up.map((t) => ({ text: hzPlanLabel(t, priceOf(t)), callback_data: `hzsv:${i}:${serverId}:upgrade:${t.id}` }))
+    );
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit(`⬆️ ارتقا\n${s.status !== "off" ? "⚠️ برای ارتقا اول سرور را خاموش کن.\n" : ""}پلن جدید را انتخاب کنید:`, kb);
+  }
+  if (step === "a4" || step === "a6") {
+    const type = step === "a4" ? "ipv4" : "ipv6";
+    if (s.public_net && s.public_net[type === "ipv4" ? "primary_ipv4" : "primary_ipv6"]) {
+      return edit(`⚠️ این سرور از قبل ${type} اختصاصی دارد؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    }
+    const ips = await hzGetAll(acc.token, "/primary_ips");
+    const avail = ips.filter((ip) => !ip.assignee_id && ip.type === type);
+    if (!avail.length) return edit(`❌ آی‌پی ${type} خالی پیدا نشد.`, [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    const kb = grid2(avail.map((ip) => ({ text: `${ip.name || ""} ${ip.ip}`.trim(), callback_data: `hzsv:${i}:${serverId}:${step}:${ip.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit(`🔗 آی‌پی ${type.toUpperCase()} برای اختصاص (سرور خاموش می‌شود):`, kb);
+  }
+  if (step === "dsnap") {
+    const imgs = await hzGetAll(acc.token, "/images");
+    const snaps = imgs.filter((im) => im.type === "snapshot" && im.created_from && im.created_from.id === Number(serverId));
+    if (!snaps.length) return edit("❌ اسنپ‌شاتی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    const kb = grid2(snaps.map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsv:${i}:${serverId}:dsnap:${im.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit("🗑 اسنپ‌شات برای حذف:", kb);
+  }
+  const label = {
+    on: "روشن کردن",
+    off: "خاموش کردن",
+    reset: "ریست شدید",
+    reboot: "ریبوت",
+    pass: "ریست رمز",
+    del: "حذف سرور",
+    snap: "ساخت اسنپ‌شات",
+    u4: "حذف اختصاص IPv4",
+    u6: "حذف اختصاص IPv6",
+  }[step];
+  if (!label) return edit("❓ عملیات ناشناخته.");
+  return edit(`⚠️ مطمئنید «${label}» روی «${s.name}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `hzok:${i}:${serverId}:${step}` }, { text: "❌ انصراف", callback_data: back }],
+  ]);
+}
+
+async function hzServerPick(hzAccounts, i, serverId, step, arg, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const s = (await hzFetch(acc.token, `/servers/${serverId}`)).server;
+  if (!s) return edit("❌ سرور پیدا نشد.");
+  const label = { rebuild: "ریبیلد", upgrade: "ارتقا", a4: "اختصاص IPv4", a6: "اختصاص IPv6", dsnap: "حذف اسنپ‌شات" }[step];
+  return edit(`⚠️ مطمئنید «${label}» روی «${s.name}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `hzok:${i}:${serverId}:${step}:${arg}` }, { text: "❌ انصراف", callback_data: `hzsi:${i}:${serverId}` }],
+  ]);
+}
+
+async function hzServerDo(hzAccounts, i, serverId, step, arg, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const token = acc.token;
+  const back = [[{ text: "🔙 بازگشت", callback_data: `hzsi:${i}:${serverId}` }]];
+  const backList = [[{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }]];
+  if (step === "del") {
+    const r = await hzRetry(token, `/servers/${serverId}`, { method: "DELETE" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+    return edit("✅ سرور حذف شد.", backList);
+  }
+  if (step === "a4" || step === "a6") {
+    // برای اختصاص آی‌پی اصلی، سرور باید خاموش و از قفل خارج باشد (مثل ServerManagerBot)
+    await hzEnsureOff(token, serverId);
+    const r = await hzRetry(token, `/primary_ips/${arg}/actions/assign`, {
+      method: "POST",
+      body: JSON.stringify({ assignee_id: Number(serverId), assignee_type: "server" }),
+    });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+    return edit("✅ آی‌پی اختصاص یافت.", back);
+  }
+  if (step === "u4" || step === "u6") {
+    const s = (await hzFetch(token, `/servers/${serverId}`)).server;
+    const ipId = hzPrimaryIpId(s.public_net && s.public_net[step === "u4" ? "primary_ipv4" : "primary_ipv6"]);
+    if (!ipId) return edit("❌ آی‌پی اختصاصی وجود ندارد.", back);
+    await hzEnsureOff(token, serverId);
+    const r = await hzRetry(token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+    return edit("✅ اختصاص آی‌پی حذف شد.", back);
+  }
+  if (step === "dsnap") {
+    const r = await hzRetry(token, `/images/${arg}`, { method: "DELETE" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+    return edit("✅ اسنپ‌شات حذف شد.", back);
+  }
+  if (step === "upgrade") {
+    const sc = (await hzFetch(token, `/servers/${serverId}`)).server;
+    if (sc && sc.status !== "off") return edit("⚠️ برای ارتقا اول سرور را خاموش کن.", back);
+  }
+  let path = "";
+  let body = {};
+  switch (step) {
+    case "on":
+      path = `/servers/${serverId}/actions/poweron`;
+      break;
+    case "off":
+      path = `/servers/${serverId}/actions/poweroff`;
+      break;
+    case "reset":
+      path = `/servers/${serverId}/actions/reset`;
+      break;
+    case "reboot":
+      path = `/servers/${serverId}/actions/reboot`;
+      break;
+    case "pass":
+      path = `/servers/${serverId}/actions/reset_password`;
+      break;
+    case "snap":
+      path = `/servers/${serverId}/actions/create_image`;
+      body = { type: "snapshot" };
+      break;
+    case "rebuild":
+      path = `/servers/${serverId}/actions/rebuild`;
+      body = { image: String(arg) };
+      break;
+    case "upgrade":
+      path = `/servers/${serverId}/actions/change_type`;
+      body = { server_type: String(arg), upgrade_disk: true };
+      break;
+    default:
+      return edit("❓ عملیات ناشناخته.");
+  }
+  const r = await hzRetry(token, path, { method: "POST", body: JSON.stringify(body) });
+  if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+  if (step === "pass" && r.root_password) {
+    return edit(passMsg("🔓 رمز سرور ریست شد؛ رمز جدید:", r.root_password), passKb(r.root_password, `hzsi:${i}:${serverId}`));
+  }
+  return edit("✅ انجام شد.", back);
+}
+
+async function showHzPrimaryIps(hzAccounts, i, page, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const ips = await hzGetAll(acc.token, "/primary_ips");
+  if (ips.length === 0) {
+    return edit("📭 آی‌پی اصلی‌ای یافت نشد.", [
+      [{ text: "➕ ساخت IPv4", callback_data: `hzpc:${i}:ipv4` }, { text: "➕ ساخت IPv6", callback_data: `hzpc:${i}:ipv6` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+    ]);
+  }
+  const pages = Math.ceil(ips.length / HZ_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = ips.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
+  const kb = grid2(slice.map((ip) => ({ text: `${ip.type === "ipv4" ? "4️⃣" : "6️⃣"} ${ip.ip}${ip.assignee_id ? " (متصل)" : ""}`, callback_data: `hzpi:${i}:${ip.id}` })));
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `hzp:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzp:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "➕ ساخت IPv4", callback_data: `hzpc:${i}:ipv4` }, { text: "➕ ساخت IPv6", callback_data: `hzpc:${i}:ipv6` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  await edit(`🌐 آی‌پی‌های اصلی «${acc.name}» (${ips.length}):`, kb);
+}
+
+async function showHzPrimaryIpInfo(hzAccounts, i, ipId, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
+  if (!ip) return edit("❌ آی‌پی پیدا نشد.");
+  let assignee = "—";
+  if (ip.assignee_id) {
+    const s = (await hzFetch(acc.token, `/servers/${ip.assignee_id}`)).server;
+    if (s) assignee = s.name;
+  }
+  const text =
+    `🌐 آی‌پی اصلی\n\n` +
+    `🏷 نام: ${code(ip.name || "—")}\n` +
+    `🔗 IP: ${code(ip.ip)}\n` +
+    `🔤 نوع: ${code(ip.type)}\n` +
+    `🔗 متصل به: ${code(assignee)}\n` +
+    `🆔 شناسهٔ متصل: ${code(ip.assignee_id || "—")}\n` +
+    `📅 ساخته‌شده: ${code(ip.created ? ip.created.slice(0, 10) : "—")} [${code(hzAgeDays(ip.created) + " روز پیش")}]`;
+  const kb = grid2([
+    { text: "✏️ تغییر نام", callback_data: `hzpu:${i}:${ipId}:rename` },
+    { text: "🔗 اختصاص به سرور", callback_data: `hzpu:${i}:${ipId}:assign` },
+    { text: "❌ حذف اختصاص", callback_data: `hzpu:${i}:${ipId}:unassign` },
+    { text: "🗑 حذف آی‌پی", callback_data: `hzpu:${i}:${ipId}:del` },
+  ]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzp:${i}:0` }]);
+  await edit(text, kb);
+}
+
+async function hzIpDispatch(hzAccounts, i, ipId, step, edit, kv, chatId) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
+  if (!ip) return edit("❌ آی‌پی پیدا نشد.");
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_ip_rename", acc: i, ip_id: ipId }), { expirationTtl: 600 });
+    return edit("✏️ نام جدید آی‌پی را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzpi:${i}:${ipId}` }]]);
+  }
+  if (step === "assign") {
+    const servers = await hzGetAll(acc.token, "/servers");
+    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    const kb = grid2(servers.map((s) => ({ text: s.name, callback_data: `hzpv:${i}:${ipId}:assign:${s.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]);
+    return edit("🔗 سرور مقصد را انتخاب کنید:", kb);
+  }
+  const label = step === "unassign" ? "حذف اختصاص آی‌پی" : "حذف آی‌پی";
+  return edit(`⚠️ مطمئنید «${label}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `hzpo:${i}:${ipId}:${step}` }, { text: "❌ انصراف", callback_data: `hzpi:${i}:${ipId}` }],
+  ]);
+}
+
+async function hzIpPick(hzAccounts, i, ipId, step, arg, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
+  if (!ip) return edit("❌ آی‌پی پیدا نشد.");
+  if (ip.assignee_id && String(ip.assignee_id) !== String(arg)) {
+    await hzEnsureOff(acc.token, ip.assignee_id);
+  }
+  await hzEnsureOff(acc.token, arg);
+  const r = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/assign`, {
+    method: "POST",
+    body: JSON.stringify({ assignee_id: Number(arg), assignee_type: "server" }),
+  });
+  if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+}
+
+async function hzIpDo(hzAccounts, i, ipId, step, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  if (step === "del") {
+    const r = await hzRetry(acc.token, `/primary_ips/${ipId}`, { method: "DELETE" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    return edit("✅ آی‌پی حذف شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+  }
+  if (step === "unassign") {
+    const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
+    if (ip && ip.assignee_id) await hzEnsureOff(acc.token, ip.assignee_id);
+    const r = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+  }
+  return edit("❓ عملیات ناشناخته.");
+}
+
+async function showHzSnapshots(hzAccounts, i, page, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const snaps = (await hzGetAll(acc.token, "/images")).filter((x) => x.type === "snapshot");
+  if (snaps.length === 0) {
+    return edit("📭 اسنپ‌شاتی یافت نشد.", [
+      [{ text: "➕ ساخت اسنپ‌شات", callback_data: `hznc:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+    ]);
+  }
+  const pages = Math.ceil(snaps.length / HZ_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = snaps.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
+  const kb = grid2(slice.map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzni:${i}:${im.id}` })));
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `hzn:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzn:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "➕ ساخت اسنپ‌شات", callback_data: `hznc:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  await edit(`📸 اسنپ‌شات‌های «${acc.name}» (${snaps.length}):`, kb);
+}
+
+async function showHzSnapshotInfo(hzAccounts, i, imageId, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const im = (await hzFetch(acc.token, `/images/${imageId}`)).image;
+  if (!im) return edit("❌ اسنپ‌شات پیدا نشد.");
+  const size = im.image_size ? Math.round(im.image_size * 1000) / 1000 : "—";
+  const text =
+    `📸 اسنپ‌شات\n\n` +
+    `🏷 نام: ${code(im.name || im.description || "—")}\n` +
+    `🔗 وضعیت: ${code(im.status)}\n` +
+    `💾 حجم: ${code(size + " GB")}\n` +
+    `📅 ساخته‌شده: ${code(im.created ? im.created.slice(0, 10) : "—")} [${code(hzAgeDays(im.created) + " روز پیش")}]`;
+  const kb = [
+    [{ text: "✏️ تغییر نام", callback_data: `hznu:${i}:${imageId}:rename` }, { text: "🗑 حذف", callback_data: `hznu:${i}:${imageId}:del` }],
+    [{ text: "🔙 بازگشت", callback_data: `hzn:${i}:0` }],
+  ];
+  await edit(text, kb);
+}
+
+async function hzSnapshotDispatch(hzAccounts, i, imageId, step, edit, kv, chatId) {
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_snap_rename", acc: i, image_id: imageId }), { expirationTtl: 600 });
+    return edit("✏️ نام جدید اسنپ‌شات را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzni:${i}:${imageId}` }]]);
+  }
+  return edit("⚠️ مطمئنید اسنپ‌شات حذف شود؟", [
+    [{ text: "✅ بله", callback_data: `hzno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `hzni:${i}:${imageId}` }],
+  ]);
+}
+
+async function hzSnapshotDo(hzAccounts, i, imageId, step, edit) {
+  const acc = hzAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  if (step === "del") {
+    const r = await hzFetch(acc.token, `/images/${imageId}`, { method: "DELETE" });
+    if (r.error) return edit("❌ خطا: " + hzErr(r));
+    return edit("✅ اسنپ‌شات حذف شد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }]]);
+  }
+  return edit("❓ عملیات ناشناخته.");
+}
+
+// ===================== Linode UI =====================
+// lnm:<index>: ورود به منوی اکانت | lna: افزودن اکانت | lndel: حذف اکانت | providers/menu: بازگشت
+async function showLnHome(lnAccounts, edit) {
+  const kb = [];
+  for (let i = 0; i < lnAccounts.length; i += 2) {
+    const row = [{ text: `👤 ${lnAccounts[i].name}`, callback_data: `lnm:${i}` }];
+    row.push(i + 1 < lnAccounts.length ? { text: `👤 ${lnAccounts[i + 1].name}`, callback_data: `lnm:${i + 1}` } : EMPTY_BTN);
+    kb.push(row);
+  }
+  kb.push([{ text: "➕ افزودن اکانت لینود", callback_data: "lna" }]);
+  kb.push([{ text: "🗑 حذف اکانت", callback_data: "lndel" }]);
+  kb.push([{ text: "🔙 دیتاسنترها", callback_data: "providers" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit("🟢 اکانت‌های لینود\n\nیک اکانت را انتخاب کنید:", kb);
+}
+
+// منوی داخلی اکانت لینود:
+// lns: لیست سرورها | lnn: اسنپ‌شات‌ها | lnp: آی‌پی‌ها | lnacc: تنظیمات اکانت
+async function showLnAccountMenu(lnAccounts, i, edit) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  await edit(`👤 ${acc.name}\n\nانتخاب کنید:`, [
+    [{ text: "🖥️ سرورها", callback_data: `lns:${i}:0` }],
+    [{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${i}:0` }, { text: "🌐 آی‌پی‌ها", callback_data: `lnp:${i}:0` }],
+    [{ text: "⚙️ تنظیمات اکانت", callback_data: `lnacc:${i}` }],
+    [{ text: "🔙 اکانت‌ها", callback_data: "ln" }, { text: "🏠 منو", callback_data: "menu" }],
+  ]);
+}
+
+async function showLnServers(lnAccounts, i, page, edit) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const servers = await lnGetAll(acc.token, "/linode/instances");
+  if (servers.length === 0) {
+    return edit("📭 سروری یافت نشد.", [
+      [{ text: "➕ ساخت سرور", callback_data: `lnsc:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+    ]);
+  }
+  const pages = Math.ceil(servers.length / LN_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = servers.slice(page * LN_PAGE_SIZE, page * LN_PAGE_SIZE + LN_PAGE_SIZE);
+  // lnsi:<acc>:<serverId>: جزئیات و عملیات سرور | lns:<acc>:<page>: صفحه‌بندی | lnsc: ساخت سرور | lnm: بازگشت
+  const kb = grid2(slice.map((s) => ({ text: lnServerListText(s), callback_data: `lnsi:${i}:${s.id}` })));
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `lns:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lns:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "➕ ساخت سرور", callback_data: `lnsc:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  await edit(`🖥️ سرورهای «${acc.name}»:`, kb);
+}
+
+async function showLnServerInfo(lnAccounts, i, serverId, edit) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const s = await lnFetch(acc.token, `/linode/instances/${serverId}`);
+  if (!s || s.errors || !s.id) return edit("❌ سرور پیدا نشد.");
+  const tr = await lnFetch(acc.token, `/linode/instances/${serverId}/transfer`);
+  const used = tr && typeof tr.used === "number" ? tr.used : null;
+  const quota = tr && typeof tr.quota === "number" ? tr.quota : null;
+  const billable = tr && typeof tr.billable === "number" ? tr.billable : null;
+  const usedPct = quota ? Math.round((used / quota) * 10) / 10 : null;
+  let price = "—";
+  try {
+    const types = await lnGetAll(acc.token, "/linode/types");
+    const t = types.find((x) => x.id === s.type);
+    if (t) {
+      const pr = lnRegionPrice(t, s.region);
+      price = `$${pr.monthly != null ? pr.monthly : "—"}/ماه · $${pr.hourly != null ? pr.hourly : "—"}/ساعت`;
+    }
+  } catch (e) {}
+  const specs = s.specs || {};
+  const text =
+    `🚀 ${code(s.label)} [${code(s.status)}]\n\n` +
+    `🔗 IPv4: ${code((s.ipv4 && s.ipv4[0]) || "—")}\n` +
+    `🔗 IPv6: ${code(s.ipv6 || "—")}\n` +
+    `🌍 منطقه: ${code(s.region)}\n` +
+    `⚙️ مشخصات: ${code(`${specs.vcpus || "?"} هسته / ${lnGb(specs.memory)}GB رم / ${lnGb(specs.disk)}GB دیسک`)}\n` +
+    `🖼️ تصویر: ${code(s.image || "—")}\n` +
+    `📊 ترافیک (GB):\n • مصرف: ${code(used === null ? "—" : used)}\n • سهمیه: ${code(quota === null ? "—" : quota)}\n • مازاد: ${code(billable === null ? "—" : billable)}\n • درصد: ${code(usedPct === null ? "—" : usedPct + "%")}\n` +
+    `💰 قیمت: ${code(price)}`;
+  // lnsu:<acc>:<serverId>:<step>: عملیات سرور لینود (on/off، reboot/reset، pass، rename،
+  // rebuild، upgrade، snap/dsnap، a4/a6، u4/u6، del)
+  const kb = grid2([
+    { text: "⚡ روشن", callback_data: `lnsu:${i}:${serverId}:on` },
+    { text: "🔌 خاموش", callback_data: `lnsu:${i}:${serverId}:off` },
+    { text: "🔄 ریبوت", callback_data: `lnsu:${i}:${serverId}:reboot` },
+    { text: "🔄 ریست", callback_data: `lnsu:${i}:${serverId}:reset` },
+    { text: "🔓 ریست رمز", callback_data: `lnsu:${i}:${serverId}:pass` },
+    { text: "✏️ تغییر نام", callback_data: `lnsu:${i}:${serverId}:rename` },
+    { text: "🛠️ ریبیلد", callback_data: `lnsu:${i}:${serverId}:rebuild` },
+    { text: "⬆️ ارتقا", callback_data: `lnsu:${i}:${serverId}:upgrade` },
+    { text: "📷 اسنپ‌شات", callback_data: `lnsu:${i}:${serverId}:snap` },
+    { text: "🗑 حذف اسنپ‌شات", callback_data: `lnsu:${i}:${serverId}:dsnap` },
+    { text: "➕ IPv4", callback_data: `lnsu:${i}:${serverId}:a4` },
+    { text: "➕ IPv6", callback_data: `lnsu:${i}:${serverId}:a6` },
+    { text: "❌ IPv4", callback_data: `lnsu:${i}:${serverId}:u4` },
+    { text: "❌ IPv6", callback_data: `lnsu:${i}:${serverId}:u6` },
+    { text: "🗑 حذف سرور", callback_data: `lnsu:${i}:${serverId}:del` },
+  ]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]);
+  await edit(text, kb);
+}
+
+async function lnServerDispatch(lnAccounts, i, serverId, step, edit, kv, chatId) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const s = await lnFetch(acc.token, `/linode/instances/${serverId}`);
+  if (!s || !s.id) return edit("❌ سرور پیدا نشد.");
+  const back = `lnsi:${i}:${serverId}`;
+
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_srv_rename", acc: i, server_id: serverId }), { expirationTtl: 600 });
+    return edit("✏️ نام جدید سرور را بفرستید:", [[{ text: "🔙 انصراف", callback_data: back }]]);
+  }
+  if (step === "rebuild") {
+    const imgs = (await lnGetAll(acc.token, "/images")).filter((x) => x.status === "available");
+    if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    imgs.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsv:${i}:${serverId}:rebuild:${im.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit("🛠️ تصویر جدید برای ریبیلد:", kb);
+  }
+  if (step === "upgrade") {
+    const types = await lnGetAll(acc.token, "/linode/types");
+    const cur = s.specs || {};
+    const up = types.filter((t) => t.id !== s.type && (t.memory > (cur.memory || 0) || t.vcpus > (cur.vcpus || 0) || t.disk > (cur.disk || 0)));
+    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    up.sort((a, b) => a.memory + a.vcpus + a.disk - (b.memory + b.vcpus + b.disk));
+    const kb = grid2(
+      up.slice(0, 60).map((t) => {
+        const pr = lnRegionPrice(t, s.region);
+        return { text: `${t.label} ($${pr.monthly || "?"}/m)`, callback_data: `lnsv:${i}:${serverId}:upgrade:${t.id}` };
+      })
+    );
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit("⬆️ پلن جدید را انتخاب کنید:", kb);
+  }
+  if (step === "dsnap") {
+    const imgs = (await lnGetAll(acc.token, "/images?is_public=false")).filter((x) => x.status === "available");
+    if (!imgs.length) return edit("❌ اسنپ‌شاتی برای حذف پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsv:${i}:${serverId}:dsnap:${im.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    return edit("🗑 اسنپ‌شات برای حذف:", kb);
+  }
+  const label = { on: "روشن کردن", off: "خاموش کردن", reset: "ریست", reboot: "ریبوت", pass: "ریست رمز", del: "حذف سرور", snap: "ساخت اسنپ‌شات", a4: "افزودن IPv4", a6: "افزودن IPv6", u4: "حذف IPv4", u6: "حذف IPv6" }[step];
+  return edit(`⚠️ مطمئنید «${label}» روی «${s.label}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `lnok:${i}:${serverId}:${step}` }, { text: "❌ انصراف", callback_data: back }],
+  ]);
+}
+
+async function lnServerPick(lnAccounts, i, serverId, step, arg, edit) {
+  const acc = lnAccounts[i];
+  const s = await lnFetch(acc.token, `/linode/instances/${serverId}`);
+  if (!s || !s.id) return edit("❌ سرور پیدا نشد.");
+  const label = { rebuild: "ریبیلد", upgrade: "ارتقا", dsnap: "حذف اسنپ‌شات" }[step];
+  return edit(`⚠️ مطمئنید «${label}» روی «${s.label}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `lnok:${i}:${serverId}:${step}:${arg}` }, { text: "❌ انصراف", callback_data: `lnsi:${i}:${serverId}` }],
+  ]);
+}
+
+async function lnServerDo(lnAccounts, i, serverId, step, arg, edit) {
+  const acc = lnAccounts[i];
+  const token = acc.token;
+  const back = [[{ text: "🔙 بازگشت", callback_data: `lnsi:${i}:${serverId}` }]];
+  const backList = [[{ text: "🖥️ سرورها", callback_data: `lns:${i}:0` }]];
+  if (step === "del") {
+    const r = await lnFetch(token, `/linode/instances/${serverId}`, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ سرور حذف شد.", backList);
+  }
+  if (step === "snap") {
+    const s = await lnFetch(token, `/linode/instances/${serverId}`);
+    const disks = await lnGetAll(token, `/linode/instances/${serverId}/disks`);
+    const disk = disks.find((d) => d.filesystem && d.filesystem !== "swap") || disks[0];
+    if (!disk) return edit("❌ دیسکی پیدا نشد.", back);
+    const r = await lnFetch(token, "/images", { method: "POST", body: JSON.stringify({ disk_id: disk.id, label: `snap-${s.label}-${Date.now()}` }) });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ اسنپ‌شات ساخته شد.", back);
+  }
+  if (step === "dsnap") {
+    const r = await lnFetch(token, `/images/${arg}`, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ اسنپ‌شات حذف شد.", back);
+  }
+  if (step === "a4" || step === "a6") {
+    const type = step === "a4" ? "ipv4" : "ipv6";
+    const r = await lnFetch(token, `/linode/instances/${serverId}/ips`, { method: "POST", body: JSON.stringify({ type, public: true }) });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit(`✅ آی‌پی ${type.toUpperCase()} اضافه شد.`, back);
+  }
+  if (step === "u4") {
+    const s = await lnFetch(token, `/linode/instances/${serverId}`);
+    const v4 = s.ipv4 || [];
+    if (v4.length < 2) return edit("❌ آی‌پی IPv4 اضافه‌ای برای حذف وجود ندارد.", back);
+    const address = v4[v4.length - 1];
+    const r = await lnFetch(token, `/networking/ips/${encodeURIComponent(address)}`, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ آی‌پی حذف شد.", back);
+  }
+  if (step === "u6") {
+    const ips = await lnGetAll(token, "/networking/ips");
+    const six = ips.find((x) => x.type === "ipv6" && String(x.linode_id) === String(serverId));
+    if (!six) return edit("❌ آی‌پی IPv6 قابل حذف پیدا نشد.", back);
+    const r = await lnFetch(token, `/networking/ips/${encodeURIComponent(six.address)}`, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ آی‌پی IPv6 حذف شد.", back);
+  }
+  if (step === "pass") {
+    const disks = await lnGetAll(token, `/linode/instances/${serverId}/disks`);
+    const disk = disks.find((d) => d.filesystem && d.filesystem !== "swap") || disks[0];
+    if (!disk) return edit("❌ دیسکی پیدا نشد.", back);
+    const pass = lnRandomPass();
+    const r = await lnFetch(token, `/linode/instances/${serverId}/disks/${disk.id}/password`, { method: "POST", body: JSON.stringify({ password: pass }) });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r) + "\n(برای تغییر رمز، سرور باید خاموش باشد)", back);
+    return edit(passMsg("🔓 رمز جدید سرور:", pass, "⚠️ برای اعمال، سرور را خاموش و روشن کن.\n📋 برای کپی رمز، روی دکمهٔ زیر بزن."), passKb(pass, `lnsi:${i}:${serverId}`));
+  }
+  if (step === "rebuild") {
+    const pass = lnRandomPass();
+    const r = await lnFetch(token, `/linode/instances/${serverId}/rebuild`, { method: "POST", body: JSON.stringify({ image: arg, root_pass: pass, booted: true }) });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit(passMsg("🛠️ ریبیلد شروع شد؛ رمز root:", pass), passKb(pass, `lnsi:${i}:${serverId}`));
+  }
+  if (step === "upgrade") {
+    const r = await lnFetch(token, `/linode/instances/${serverId}/resize`, { method: "POST", body: JSON.stringify({ type: arg, allow_auto_disk_resize: true }) });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ ارتقا انجام شد.", back);
+  }
+  if (step === "on") {
+    const r = await lnFetch(token, `/linode/instances/${serverId}/boot`, { method: "POST", body: "{}" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ روشن شد.", back);
+  }
+  if (step === "off") {
+    const r = await lnFetch(token, `/linode/instances/${serverId}/shutdown`, { method: "POST", body: "{}" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ خاموش شد.", back);
+  }
+  if (step === "reboot" || step === "reset") {
+    const r = await lnFetch(token, `/linode/instances/${serverId}/reboot`, { method: "POST", body: "{}" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ ریبوت شد.", back);
+  }
+  return edit("❓ عملیات ناشناخته.");
+}
+
+async function showLnIps(lnAccounts, i, page, edit, kv) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const ips = await lnGetAll(acc.token, "/networking/ips");
+  if (ips.length === 0) {
+    return edit("📭 آی‌پی‌ای یافت نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]]);
+  }
+  const pages = Math.ceil(ips.length / LN_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = ips.slice(page * LN_PAGE_SIZE, page * LN_PAGE_SIZE + LN_PAGE_SIZE);
+  const buttons = [];
+  for (const ip of slice) {
+    const token = makeToken();
+    await kv.put(`lnip:${token}`, JSON.stringify({ i, address: ip.address }), { expirationTtl: 3600 });
+    const tag = ip.type === "ipv4" ? "4️⃣" : "6️⃣";
+    buttons.push({ text: `${tag} ${ip.address}${ip.linode_id ? " (متصل)" : ""}`, callback_data: `lnpi:${i}:${token}` });
+  }
+  const kb = grid2(buttons);
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `lnp:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lnp:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  await edit(`🌐 آی‌پی‌های «${acc.name}»:`, kb);
+}
+
+async function showLnIpInfo(lnAccounts, i, token, edit, kv) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const rec = await kv.get(`lnip:${token}`, "json");
+  if (!rec) return edit("⏳ نشست منقضی شده.");
+  const ips = await lnGetAll(acc.token, "/networking/ips");
+  const ip = ips.find((x) => x.address === rec.address);
+  if (!ip) return edit("❌ آی‌پی پیدا نشد.");
+  let assignee = "—";
+  if (ip.linode_id) {
+    const s = await lnFetch(acc.token, `/linode/instances/${ip.linode_id}`);
+    if (s && s.label) assignee = s.label;
+  }
+  const text =
+    `🌐 آی‌پی\n\n` +
+    `🔗 IP: ${code(ip.address)}\n` +
+    `🔤 نوع: ${code(ip.type)}\n` +
+    `🌍 منطقه: ${code(ip.region || "—")}\n` +
+    `🔗 متصل به: ${code(assignee)}\n` +
+    `🌐 PTR: ${code(ip.rdns || "—")}`;
+  const kb = grid2([
+    { text: "✏️ تغییر PTR", callback_data: `lnpu:${i}:${token}:rename` },
+    { text: "🔗 اختصاص به سرور", callback_data: `lnpu:${i}:${token}:assign` },
+    { text: "❌ حذف اختصاص", callback_data: `lnpu:${i}:${token}:unassign` },
+    { text: "🗑 حذف آی‌پی", callback_data: `lnpu:${i}:${token}:del` },
+  ]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnp:${i}:0` }]);
+  await edit(text, kb);
+}
+
+async function lnIpDispatch(lnAccounts, i, token, step, edit, kv, chatId) {
+  const acc = lnAccounts[i];
+  const rec = await kv.get(`lnip:${token}`, "json");
+  if (!acc || !rec) return edit("❌ آی‌پی پیدا نشد.");
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_ip_rename", acc: i, address: rec.address }), { expirationTtl: 600 });
+    return edit("✏️ مقدار جدید PTR/rdns را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `lnpi:${i}:${token}` }]]);
+  }
+  if (step === "assign") {
+    const servers = await lnGetAll(acc.token, "/linode/instances");
+    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+    const kb = grid2(servers.map((s) => ({ text: s.label, callback_data: `lnpv:${i}:${token}:assign:${s.id}` })));
+    kb.push([{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]);
+    return edit("🔗 سرور مقصد را انتخاب کنید:", kb);
+  }
+  const label = step === "unassign" ? "حذف اختصاص آی‌پی" : "حذف آی‌پی";
+  return edit(`⚠️ مطمئنید «${label}» انجام شود؟`, [
+    [{ text: "✅ بله", callback_data: `lnpo:${i}:${token}:${step}` }, { text: "❌ انصراف", callback_data: `lnpi:${i}:${token}` }],
+  ]);
+}
+
+async function lnIpPick(lnAccounts, i, token, step, arg, edit, kv) {
+  const acc = lnAccounts[i];
+  const rec = await kv.get(`lnip:${token}`, "json");
+  if (!acc || !rec) return edit("❌ آی‌پی پیدا نشد.");
+  const r = await lnFetch(acc.token, `/networking/ips/${encodeURIComponent(rec.address)}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ linode_id: Number(arg) }),
+  });
+  if (r.errors) return edit("❌ خطا: " + lnErr(r));
+  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+}
+
+async function lnIpDo(lnAccounts, i, token, step, edit, kv) {
+  const acc = lnAccounts[i];
+  const rec = await kv.get(`lnip:${token}`, "json");
+  if (!acc || !rec) return edit("❌ آی‌پی پیدا نشد.");
+  const base = `/networking/ips/${encodeURIComponent(rec.address)}`;
+  if (step === "del") {
+    const r = await lnFetch(acc.token, base, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ آی‌پی حذف شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `lnp:${i}:0` }]]);
+  }
+  if (step === "unassign") {
+    const r = await lnFetch(acc.token, `${base}/unassign`, { method: "POST", body: "{}" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+  }
+  return edit("❓ عملیات ناشناخته.");
+}
+
+async function showLnSnapshots(lnAccounts, i, page, edit) {
+  const acc = lnAccounts[i];
+  if (!acc) return edit("❌ اکانت پیدا نشد.");
+  const snaps = (await lnGetAll(acc.token, "/images?is_public=false")).filter((x) => x.status === "available");
+  if (snaps.length === 0) {
+    return edit("📭 اسنپ‌شاتی یافت نشد.", [
+      [{ text: "➕ ساخت اسنپ‌شات", callback_data: `lnnc:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+    ]);
+  }
+  const pages = Math.ceil(snaps.length / LN_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = snaps.slice(page * LN_PAGE_SIZE, page * LN_PAGE_SIZE + LN_PAGE_SIZE);
+  // lnni:<acc>:<imageId>: جزئیات اسنپ‌شات | lnn:<acc>:<page>: صفحه‌بندی | lnnc: ساخت اسنپ‌شات | lnm: بازگشت
+  const kb = grid2(slice.map((im) => ({ text: im.label || String(im.id), callback_data: `lnni:${i}:${im.id}` })));
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `lnn:${i}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lnn:${i}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([{ text: "➕ ساخت اسنپ‌شات", callback_data: `lnnc:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  await edit(`📸 اسنپ‌شات‌های «${acc.name}»:`, kb);
+}
+
+async function showLnSnapshotInfo(lnAccounts, i, imageId, edit) {
+  const acc = lnAccounts[i];
+  const im = await lnFetch(acc.token, `/images/${imageId}`);
+  if (!im || im.errors || !im.id) return edit("❌ اسنپ‌شات پیدا نشد.");
+  const size = im.size ? Math.round((im.size / 1024) * 100) / 100 : "—";
+  const text =
+    `📸 اسنپ‌شات\n\n` +
+    `🏷 نام: ${code(im.label || "—")}\n` +
+    `🔗 وضعیت: ${code(im.status)}\n` +
+    `💾 حجم: ${code(size + " GB")}\n` +
+    `📅 ساخته‌شده: ${code(im.created ? String(im.created).slice(0, 10) : "—")}`;
+  // lnnu:...:rename تغییر نام | lnnu:...:del حذف اسنپ‌شات
+  const kb = [
+    [{ text: "✏️ تغییر نام", callback_data: `lnnu:${i}:${imageId}:rename` }, { text: "🗑 حذف", callback_data: `lnnu:${i}:${imageId}:del` }],
+    [{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }],
+  ];
+  await edit(text, kb);
+}
+
+async function lnSnapshotDispatch(lnAccounts, i, imageId, step, edit, kv, chatId) {
+  if (step === "rename") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_snap_rename", acc: i, image_id: imageId }), { expirationTtl: 600 });
+    return edit("✏️ نام جدید اسنپ‌شات را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `lnni:${i}:${imageId}` }]]);
+  }
+  return edit("⚠️ مطمئنید اسنپ‌شات حذف شود؟", [
+    [{ text: "✅ بله", callback_data: `lnno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `lnni:${i}:${imageId}` }],
+  ]);
+}
+
+async function lnSnapshotDo(lnAccounts, i, imageId, step, edit) {
+  const acc = lnAccounts[i];
+  if (step === "del") {
+    const r = await lnFetch(acc.token, `/images/${imageId}`, { method: "DELETE" });
+    if (r.errors) return edit("❌ خطا: " + lnErr(r));
+    return edit("✅ اسنپ‌شات حذف شد.", [[{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${i}:0` }]]);
+  }
+  return edit("❓ عملیات ناشناخته.");
+}
+
+// ===================== افزودن به منتخب‌ها (picker) =====================
+function nameShortStr(name, zoneName) {
+  if (!name) return "";
+  const suffix = zoneName ? "." + zoneName : "";
+  return zoneName && name.length > suffix.length && name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+}
+
+async function favPickOpen(kv, chatId, accounts, edit, token, page) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const zone = await getZoneById(session.zone_id, session.acc, accounts);
+  if (!zone) return edit("❌ دامنه پیدا نشد.");
+  const records = await getRecords(zone, accounts, kv);
+  if (!records.length) return edit(`📭 رکوردی در ${zone.name} نیست.`, [[{ text: "🔙 بازگشت", callback_data: "zones" }]]);
+  const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
+  if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+  const favs = await getFavs(kv, chatId);
+  const favIds = new Set(favs.filter((f) => f.zone_id === zone.id).map((f) => f.record_id));
+  const chosen = new Set(st.ids || []);
+  const pages = Math.ceil(records.length / RECORD_PAGE_SIZE);
+  if (page === undefined || page === null) page = st.page || 0;
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  st.page = page;
+  const labels = duplicateLabels(records, zone.name);
+  const slice = records.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
+  const kb = [];
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2; j++) {
+      if (j < slice.length) {
+        const r = slice[j];
+        const mark = favIds.has(r.id) ? "⭐" : chosen.has(r.id) ? "✅" : "⬜";
+        row.push({ text: `${mark} ${labels[r.id]}`, callback_data: `favpsel:${token}:${r.id}` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    kb.push(row);
+  }
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `favpp:${token}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `favpp:${token}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([
+    { text: `✅ ذخیره (${(st.ids || []).length})`, callback_data: `favpsave:${token}` },
+    { text: "❌ لغو", callback_data: `favpcancel:${token}` },
+  ]);
+  await edit(
+    `⭐ افزودن به منتخب‌ها — ${zone.name}\n\nروی ساب‌ها بزنید (⬜ → ✅). ⭐ یعنی از قبل منتخب است.\nبرای حذف از منتخب‌ها، از صفحهٔ «⭐ ساب‌های منتخب» استفاده کنید.`,
+    kb
+  );
+}
+
+async function favPickZoneScreen(kv, accounts, edit) {
+  const zones = await getAllZones(accounts, kv);
+  const kb = grid2(
+    zones.map((z) => ({ text: `📁 ${z.name}`, callback_data: `favz:${z._acc}:${z.id}` }))
+  );
+  kb.push([{ text: "🔙 ساب‌های منتخب", callback_data: "favs" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await edit(zones.length ? "دامنه‌ای را که می‌خواهید از رکوردهایش به منتخب اضافه کنید انتخاب کنید:" : "📭 دامنه‌ای یافت نشد.", kb);
+}
+
+async function showBulkSelect(kv, accounts, edit, token, zone, page, selected) {
+  const records = await getRecords(zone, accounts, kv);
+  const pages = Math.ceil(records.length / RECORD_PAGE_SIZE);
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = records.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
+  const selSet = new Set(selected || []);
+  const labels = duplicateLabels(records, zone.name);
+  const kb = [];
+  for (let i = 0; i < slice.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3; j++) {
+      if (j < slice.length) {
+        const r = slice[j];
+        const mark = selSet.has(r.id) ? "✅" : "⬜";
+        row.push({ text: `${mark} ${labels[r.id]}`, callback_data: `bulksel:${token}:${r.id}` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    kb.push(row);
+  }
+  if (selSet.size > 0) {
+    kb.push([
+      { text: `✅ ${selSet.size} انتخاب`, callback_data: "noop" },
+      { text: "🗑 حذف انتخاب‌ها", callback_data: `bulkdel:${token}` },
+      { text: "✏️ تغییر مقدار", callback_data: `bulkedit:${token}` },
+    ]);
+    // bulktype: تغییر نوع گروهی | bulkdne: لغو انتخاب
+    kb.push([{ text: "🔄 تغییر نوع", callback_data: `bulktype:${token}` }, { text: "❌ لغو انتخاب", callback_data: `bulkdne:${token}` }]);
+  } else {
+    kb.push([{ text: "❌ لغو انتخاب", callback_data: `bulkdne:${token}` }]);
+  }
+  // bulkp:<token>:<page>: صفحه‌بندی لیست رکوردها در حالت انتخاب گروهی
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `bulkp:${token}:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `bulkp:${token}:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  await edit(`🗂 ${zone.name} — ${selSet.size} انتخاب شده`, kb);
+}
+
+// ===================== تغییر سریع (فرستادن IP / نام در چت) =====================
+async function ipExactResults(ip, accounts, kv) {
+  let results = [];
+  try {
+    const all = await searchRecords(accounts, "content", ip, null, kv);
+    const target = String(ip).trim().toLowerCase();
+    results = all.filter((r) => String(r.record.content || "").trim().toLowerCase() === target);
+  } catch (e) {
+    console.error("IPS_SEARCH", String(e));
+  }
+  return results;
+}
+
+async function showIpSubs(io, ip) {
+  const { accounts, kv } = io;
+  const results = await ipExactResults(ip, accounts, kv);
+  const token = makeToken();
+  await kv.put(`ips:${token}`, JSON.stringify({ ip, results }), { expirationTtl: 3600 });
+  await renderIpSearchMenu(io, token, 0);
+}
+
+async function renderIpSearchMenu(io, token, page, note) {
+  const { kv, edit, send } = io;
+  const fn = edit || send;
+  const stored = await kv.get(`ips:${token}`, "json");
+  if (!stored) return fn("⏳ نشست منقضی شد. دوباره آیپی را بفرستید.", mainMenuKeyboard());
+  const ip = stored.ip;
+  const results = stored.results || [];
+  const pages = Math.max(1, Math.ceil(results.length / CZ_PAGE_SIZE));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = results.slice(page * CZ_PAGE_SIZE, page * CZ_PAGE_SIZE + CZ_PAGE_SIZE);
+  const lines = [`🌐 آیپی: ${code(ip)}`, ""];
+  if (!results.length) lines.push("📭 هیچ سابی با این آیپی پیدا نشد.");
+  else lines.push(`✅ ${results.length} ساب با این آیپی پیدا شد:`);
+  const kb = [];
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2; j++) {
+      const res = slice[j];
+      if (res) {
+        const label = `${res.record.type} ${nameShortStr(res.record.name, res.zone_name)}`;
+        // ipd:<token>:<index>: باز کردن جزئیات سابی که با این آی‌پی پیدا شده
+        row.push({ text: label, callback_data: `ipd:${token}:${page * CZ_PAGE_SIZE + j}` });
+      } else {
+        row.push(EMPTY_BTN);
+      }
+    }
+    kb.push(row);
+  }
+  if (pages > 1) {
+    const nav = [];
+    nav.push(page > 0 ? { text: "◀️", callback_data: `ipsp:${token}:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `ipsp:${token}:${page + 1}` } : EMPTY_BTN);
+    kb.push(nav);
+  }
+  kb.push([{ text: "➕ افزودن ساب جدید", callback_data: "qanadd", style: "danger" }]);
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await fn((note || "") + lines.join("\n"), kb);
+}
+
+async function sendQuickIpMenu(chatId, ip, kv, accounts, send) {
+  await showIpSubs({ kv, accounts, send, chatId }, ip);
+}
+
+async function refreshIpMenu(io, ip, note) {
+  const { accounts, kv } = io;
+  const results = await ipExactResults(ip, accounts, kv);
+  const token = makeToken();
+  await kv.put(`ips:${token}`, JSON.stringify({ ip, results }), { expirationTtl: 3600 });
+  await renderIpSearchMenu(io, token, 0, note);
+}
+
+async function renderQanZonePicker(io, page) {
+  const { kv, accounts, edit, send } = io;
+  const fn = edit || send;
+  const zones = await getAllZones(accounts, kv);
+  const arvanAccounts = await getArvanAccounts(kv);
+  const items = [];
+  for (const z of zones) {
+    items.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, callback_data: `qanz:${z._acc}:${z.id}` });
+  }
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    let domains = [];
+    try {
+      domains = await arvanGetAllDomains(arvanAccounts[i].token, io.kv, io.env);
+    } catch (e) {
+      domains = [];
+    }
+    for (const d of domains) {
+      items.push({ text: `🇮🇷 ${d.domain}`, callback_data: `qana:${i}:${d.domain}` });
+    }
+  }
+  if (!items.length) {
+    return fn("📭 هیچ دامنه‌ای برای ساخت ساب وجود ندارد.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+  }
+  const pages = Math.max(1, Math.ceil(items.length / ZONE_PAGE_SIZE));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const slice = items.slice(page * ZONE_PAGE_SIZE, page * ZONE_PAGE_SIZE + ZONE_PAGE_SIZE);
+  // qanz:<acc>:<zoneId> ساخت ساب در کلودفلر | qana:<acc>:<domain> ساخت ساب در آروان
+  const kb = grid2(slice);
+  if (pages > 1) {
+    // qanp:<page>: صفحه‌بندی لیست دامنه‌ها در ویزارد افزودن ساب
+    const nav = [];
+    nav.push(page > 0 ? { text: "◀️", callback_data: `qanp:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `qanp:${page + 1}` } : EMPTY_BTN);
+    kb.push(nav);
+  }
+  // qacancel: لغو ویزارد افزودن ساب
+  kb.push([{ text: "❌ لغو", callback_data: "qacancel" }]);
+  await fn("➕ افزودن ساب جدید\n\nروی دامنه‌ای که می‌خواهید ساب را بسازید کلیک کنید:", kb);
+}
+
+async function createQaSub(pending, io) {
+  const { accounts, kv, chatId, edit } = io;
+  const ip = pending.ip;
+  const name = pending.name;
+  const rtype = isIpv6(ip) ? "AAAA" : "A";
+  const note = `✅ ساب ساخته شد: ${code(rtype + "-" + name)}\n\n`;
+  if (pending.provider === "arvan") {
+    const token = await arvanToken(kv, pending.acc);
+    const res = await arvanCreateRecord(token, pending.domain, rtype, name, ip, false, kv, io.env);
+    if (res.success === false) return edit("❌ خطا در ساخت ساب:\n" + cfErrText(res));
+    await kv.delete(`pend:${chatId}`);
+    await kvDeleteCached(kv, "arvan:cached:domains");
+    await refreshIpMenu({ kv, accounts, edit, chatId }, ip, note);
+    return;
+  }
+  const fullName = normalizeName(name, pending.zone_name);
+  const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
+    method: "POST",
+    headers: hdr(accounts[pending.acc].token),
+    body: JSON.stringify({ type: rtype, name: fullName, content: ip, ttl: 1, proxied: false }),
+    signal: withTimeout(),
+  });
+  const data = await res.json();
+  if (!data.success) return edit("❌ خطا در ساخت ساب:\n" + cfErrText(data));
+  await invalidateCache(kv, pending.zone_id);
+  await kv.delete(`pend:${chatId}`);
+  await refreshIpMenu({ kv, accounts, edit, chatId }, ip, note);
+}
+
+async function renderQuickResults(token, results, query, qa, send) {
+  if (!results.length) {
+    const kb = qa && qa.ip
+      ? [[{ text: "🔙 انتخاب سریع", callback_data: "qamenu" }], [{ text: "🏠 منو", callback_data: "menu" }]]
+      : [[{ text: "🏠 منو", callback_data: "menu" }]];
+    return send(`🔍 نتیجه‌ای برای «${escHtml(query)}» پیدا نشد.`, kb);
+  }
+  const slice = results.slice(0, 10);
+  const lines = [`🔍 نتایج «${escHtml(query)}» (${results.length}):`, ""];
+  const kb = [];
+  for (let i = 0; i < slice.length; i++) {
+    const res = slice[i];
+    const short = nameShortStr(res.record.name, res.zone_name);
+    const label = `${res.record.type} ${short}`;
+    lines.push(`${i + 1}) ${label}\n   → ${code(res.record.content)}  [${code(res.zone_name)}]`);
+    // qasel: در حالت جای‌گذاری سریع، همین رکورد برای تغییر مقدار انتخاب می‌شود | qn: باز کردن جزئیات رکورد
+    kb.push([{ text: qa && qa.ip ? `⚡ ${label}` : `✏️ ${label}`, callback_data: qa && qa.ip ? `qasel:${token}:${i}` : `qn:${token}:${i}` }]);
+  }
+  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await send(lines.join("\n"), kb);
+}
+
+async function quickNameSearch(text, qa, chatId, accounts, send, kv) {
+  const results = await searchRecords(accounts, "name", text, null, kv);
+  const token = makeToken();
+  await kv.put(`sr:${token}`, JSON.stringify({ field: "name", query: text, results }), { expirationTtl: 3600 });
+  await renderQuickResults(token, results, text, qa, send);
+}
+
+async function qaConfirmText(qa, rec) {
+  return (
+    `⚡ تأیید تغییر\n\n` +
+    `📛 ساب‌دامین: ${code(rec.name)}\n` +
+    `📁 دامنه: ${code(qa.zone_name || "؟")}\n` +
+    `🔴 قبلی: ${code(rec.content)}\n` +
+    `🟢 جدید: ${code(qa.ip)}\n\n` +
+    `اعمال شود؟`
+  );
+}
+
+async function showQaConfirm(io) {
+  const { kv, chatId, messageId, accounts, botToken, edit } = io;
+  const qa = await kv.get(`qa:${chatId}`, "json");
+  if (!qa || !qa.record_id) {
+    await edit("⏳ انتخاب منقضی شد. دوباره IP را بفرستید.", mainMenuKeyboard());
+    return true;
+  }
+  const rec = await getRecordById(qa.acc, qa.zone_id, qa.record_id, accounts);
+  if (!rec) {
+    await kv.delete(`qa:${chatId}`);
+    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return true;
+  }
+  // qaok: اعمال تغییر مقدار رکورد | qacancel: لغو عملیات
+  await edit(await qaConfirmText(qa, rec), [
+    [{ text: "✅ تأیید و اعمال", callback_data: "qaok" }, { text: "❌ لغو", callback_data: "qacancel" }],
+  ]);
+  return true;
+}
+
+async function qaApply(io) {
+  const { kv, chatId, messageId, accounts, botToken, edit } = io;
+  const qa = await kv.get(`qa:${chatId}`, "json");
+  if (!qa || !qa.record_id) {
+    await edit("⏳ انتخاب منقضی شد.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return true;
+  }
+  const prev = await getRecordById(qa.acc, qa.zone_id, qa.record_id, accounts);
+  if (!prev) {
+    await kv.delete(`qa:${chatId}`);
+    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return true;
+  }
+  const res = await fetch(`${CF_API}/zones/${qa.zone_id}/dns_records/${qa.record_id}`, {
+    method: "PATCH",
+    headers: hdr(accounts[qa.acc].token),
+    body: JSON.stringify({ content: qa.ip }),
+    signal: withTimeout(),
+  });
+  const data = await res.json();
+  if (!data.success) {
+    await edit("❌ خطا:\n" + cfErrText(data));
+    return true;
+  }
+  await invalidateCache(kv, qa.zone_id);
+  await kv.delete(`qa:${chatId}`);
+  const sum = diffSummary(data.result.name, prev.content, data.result.content);
+  await edit(sum, []);
+  await sleep(2000);
+  await redrawMenuNav(kv, botToken, chatId, messageId);
+  return true;
+}
+
+async function dispatchFavQa(data, io) {
+  const { kv, chatId, messageId, accounts, botToken, edit, send, env } = io;
+
+  if (data === "favs") {
+    await renderFavsScreen(kv, chatId, accounts, edit);
+    return true;
+  }
+  if (data === "bulk_main") {
+    const zones = await getAllZones(accounts, kv);
+    if (zones.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    const kb = zones.map((z) => [{ text: `${z.status === "active" ? "🟢" : "⚪"} ${z.name}`, callback_data: `bulkz:${z._acc}:${z.id}` }]);
+    kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
+    await edit("🗂 عملیات گروهی\n\nروی دامنه‌ای که می‌خواهید رکوردها را انتخاب کنید کلیک کنید:", kb);
+    return true;
+  }
+  if (data === "favpickzone") {
+    await favPickZoneScreen(kv, accounts, edit);
+    return true;
+  }
+  if (data.startsWith("bulkz:")) {
+    const parts = data.split(":");
+    const accIndex = Number(parts[1]);
+    const zoneId = parts[2];
+    const zone = await getZoneById(zoneId, accIndex, accounts);
+    if (!zone) return edit("❌ دامنه پیدا نشد.");
+    const token = makeToken();
+    await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, bpage: 0, zback: "bulk_main" }), { expirationTtl: 86400 });
+    await showBulkSelect(kv, accounts, edit, token, zone, 0);
+    return true;
+  }
+  if (data.startsWith("favz:")) {
+    const parts = data.split(":");
+    const accIndex = Number(parts[1]);
+    const zoneId = parts[2];
+    const zone = await getZoneById(zoneId, accIndex, accounts);
+    if (!zone) return edit("❌ دامنه پیدا نشد.");
+    const token = makeToken();
+    await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex }), { expirationTtl: 86400 });
+    await kv.put(`favpk:${chatId}`, JSON.stringify({ token, ids: [], page: 0 }), { expirationTtl: 3600 });
+    await favPickOpen(kv, chatId, accounts, edit, token, 0);
+    return true;
+  }
+  if (data.startsWith("favpick:")) {
+    const token = data.slice(8);
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    await kv.put(`favpk:${chatId}`, JSON.stringify({ token, ids: [], page: 0 }), { expirationTtl: 3600 });
+    await favPickOpen(kv, chatId, accounts, edit, token, 0);
+    return true;
+  }
+  if (data.startsWith("favpsel:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const recordId = parts[2];
+    const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
+    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    const ids = st.ids || [];
+    const idx = ids.indexOf(recordId);
+    if (idx >= 0) ids.splice(idx, 1);
+    else if (!favExists(await getFavs(kv, chatId), session.zone_id, recordId)) ids.push(recordId);
+    st.ids = ids;
+    await kv.put(`favpk:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+    await favPickOpen(kv, chatId, accounts, edit, token, st.page || 0);
+    return true;
+  }
+  if (data.startsWith("favpp:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const page = Number(parts[2]) || 0;
+    const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
+    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    st.page = page;
+    await kv.put(`favpk:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+    await favPickOpen(kv, chatId, accounts, edit, token, page);
+    return true;
+  }
+  if (data.startsWith("favpcancel:")) {
+    const token = data.slice(11);
+    await kv.delete(`favpk:${chatId}`);
+    await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+    return true;
+  }
+  if (data.startsWith("favpsave:")) {
+    const token = data.slice(9);
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [] };
+    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    await kv.delete(`favpk:${chatId}`);
+    const favs = await getFavs(kv, chatId);
+    let added = 0;
+    for (const rid of st.ids || []) {
+      if (favExists(favs, session.zone_id, rid)) continue;
+      const rec = await getRecordById(session.acc, session.zone_id, rid, accounts);
+      if (!rec) continue;
+      favs.push({ zone_id: session.zone_id, zone_name: session.zone_name, acc: session.acc, record_id: rid, name: rec.name, type: rec.type });
+      added++;
+    }
+    await saveFavs(kv, chatId, favs);
+    await edit(`✅ ${added} ساب به منتخب‌ها اضافه شد.`, []);
+    await sleep(2000);
+    await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+    return true;
+  }
+  if (data === "favdel") {
+    const favs = await getFavs(kv, chatId);
+    if (!favs.length) return edit("📭 سابی در منتخب‌ها نیست.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
+    const kb = favs.map((f, i) => [{ text: `🗑 ${favTypeShort(f)} ${favShortName(f)} — ${f.zone_name}`, callback_data: `favdelx:${i}` }]);
+    kb.push([{ text: "🔙 ساب‌های منتخب", callback_data: "favs" }]);
+    await edit("🗑 کدام ساب از منتخب‌ها حذف شود؟", kb);
+    return true;
+  }
+  if (data.startsWith("favdelx:")) {
+    const i = Number(data.slice(8));
+    const favs = await getFavs(kv, chatId);
+    if (!favs[i]) return edit("❌ ساب پیدا نشد.");
+    favs.splice(i, 1);
+    await saveFavs(kv, chatId, favs);
+    await renderFavsScreen(kv, chatId, accounts, edit);
+    return true;
+  }
+  if (data.startsWith("favtg:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const recordId = parts[2];
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    const favs = await getFavs(kv, chatId);
+    const zoneIdForFav = session.provider === "arvan" ? "arvan:" + session.domain : session.zone_id;
+    const zoneNameForFav = session.provider === "arvan" ? session.domain : session.zone_name;
+    if (favExists(favs, zoneIdForFav, recordId)) {
+      const keep = favs.filter((f) => !(f.zone_id === zoneIdForFav && f.record_id === recordId));
+      await saveFavs(kv, chatId, keep);
+    } else {
+      let rec;
+      if (session.provider === "arvan") {
+        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
+        rec = records.find((r) => r.id === recordId);
+      } else {
+        rec = await getRecordById(session.acc, session.zone_id, recordId, accounts);
+      }
+      if (!rec) return edit("❌ رکورد پیدا نشد.");
+      favs.push({ zone_id: zoneIdForFav, zone_name: zoneNameForFav, acc: session.acc, record_id: recordId, name: rec.name, type: rec.type });
+      await saveFavs(kv, chatId, favs);
+    }
+    const nav = (await kv.get(`dd:${chatId}:${messageId}`, "json")) || { token, recordId, backCb: `rback:${token}` };
+    await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, nav.backCb, io.env);
+    return true;
+  }
+  if (data.startsWith("cref:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const recordId = parts[2];
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    const r = await fetchRecordForSession(kv, accounts, session, recordId, io.env);
+    if (!r) return edit("❌ رکورد پیدا نشد.");
+    await renderCnameReferrers(kv, accounts, edit, chatId, session, r, token, recordId, io.env);
+    return true;
+  }
+  if (data.startsWith("crb:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const recordId = parts[2];
+    const nav = (await kv.get(`dd:${chatId}:${messageId}`, "json")) || { token, recordId, backCb: `rback:${token}` };
+    await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, nav.backCb, io.env);
+    return true;
+  }
+  if (data.startsWith("bulksel:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const recordId = parts[2];
+    let selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected)) selected = [];
+    const idx = selected.indexOf(recordId);
+    if (idx >= 0) selected.splice(idx, 1);
+    else selected.push(recordId);
+    await kv.put(`sel:${chatId}`, JSON.stringify(selected));
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    const zone = await getZoneById(session.zone_id, session.acc, accounts);
+    await showBulkSelect(kv, accounts, edit, token, zone, Number(session.bpage) || 0, selected);
+    return true;
+  }
+  if (data.startsWith("bulkdne:")) {
+    await kv.delete(`sel:${chatId}`);
+    const token = data.slice(8);
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    const zone = await getZoneById(session.zone_id, session.acc, accounts);
+    const records = await getRecords(zone, accounts, kv);
+    await renderRecords(zone, records, token, Number(session.bpage) || 0, edit, undefined, session.zback);
+    return true;
+  }
+  if (data.startsWith("bulkp:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const page = Number(parts[2]);
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    session.bpage = page;
+    await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
+    const zone = await getZoneById(session.zone_id, session.acc, accounts);
+    let selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected)) selected = [];
+    await showBulkSelect(kv, accounts, edit, token, zone, page, selected);
+    return true;
+  }
+  if (data.startsWith("bulkdel:")) {
+    const token = data.slice(8);
+    const selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected) || selected.length === 0) {
+      await kv.delete(`sel:${chatId}`);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    }
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_del", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
+    await edit(`⚠️ ${selected.length} رکورد انتخاب شده. مطمئنید حذف شوند؟`, [
+      [{ text: "✅ بله، حذف کن", callback_data: `bulkdely:${token}` }, { text: "❌ انصراف", callback_data: `bulkdne:${token}` }],
+    ]);
+    return true;
+  }
+  if (data.startsWith("bulkdely:")) {
+    const token = data.slice(9);
+    const selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected) || selected.length === 0) {
+      await kv.delete(`sel:${chatId}`);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    }
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    let ok = 0;
+    for (const id of selected) {
+      const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${id}`, {
+        method: "DELETE",
+        headers: hdr(accounts[session.acc].token),
+        signal: withTimeout(),
+      });
+      const d = await del.json();
+      if (d.success) ok++;
+    }
+    await invalidateCache(kv, session.zone_id);
+    await kv.delete(`sel:${chatId}`);
+    await edit(`✅ ${ok} از ${selected.length} رکورد حذف شد.`, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return true;
+  }
+  if (data.startsWith("bulkedit:")) {
+    const token = data.slice(9);
+    const selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected) || selected.length === 0) {
+      await kv.delete(`sel:${chatId}`);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    }
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_edit", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
+    await edit("✏️ مقدار جدید را بفرستید:", [[{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]]);
+    return true;
+  }
+  if (data.startsWith("bulktype:")) {
+    const token = data.slice(9);
+    const selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected) || selected.length === 0) {
+      await kv.delete(`sel:${chatId}`);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    }
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_type", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
+    const kb = RECORD_TYPES.map((t) => [{ text: `به ${t}`, callback_data: `bulkty:${token}:${t}` }]);
+    kb.push([{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]);
+    await edit("🔄 نوع جدید را انتخاب کنید:", kb);
+    return true;
+  }
+  if (data.startsWith("bulkty:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const newType = parts[2];
+    const selected = await kv.get(`sel:${chatId}`, "json");
+    if (!Array.isArray(selected) || selected.length === 0) {
+      await kv.delete(`sel:${chatId}`);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    }
+    const session = await kv.get(`s:${token}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_type_convert", new_type: newType, ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
+    await edit(`🔄 مقدار جدید را برای نوع ${newType} بفرستید:`, [[{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]]);
+    return true;
+  }
+  if (data.startsWith("favopen:")) {
+    const i = Number(data.slice(8));
+    const favs = await getFavs(kv, chatId);
+    const f = favs[i];
+    if (!f) return edit("❌ ساب پیدا نشد.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
+    const token = makeToken();
+    await kv.put(`s:${token}`, JSON.stringify({ zone_id: f.zone_id, zone_name: f.zone_name, acc: f.acc }), { expirationTtl: 86400 });
+    await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId: f.record_id, backCb: "favs" }), { expirationTtl: 86400 });
+    await renderRecordDetail(kv, accounts, edit, chatId, token, f.record_id, "favs", io.env);
+    return true;
+  }
+
+  // ===== تغییر سریع =====
+  if (data === "qamenu") {
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (qa && qa.ip) await sendQuickIpMenu(chatId, qa.ip, kv, accounts, send);
+    else await edit(mainMenuText(), mainMenuKeyboard());
+    return true;
+  }
+  if (data === "qasearch") {
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "qa_search", msgId: messageId }), { expirationTtl: 600 });
+    await edit("🔍 نام ساب‌دامین یا بخشی از آن را بفرستید:", [[{ text: "❌ لغو", callback_data: "qacancel" }]]);
+    return true;
+  }
+  if (data === "qacancel") {
+    await kv.delete(`qa:${chatId}`);
+    await kv.delete(`pend:${chatId}`);
+    await edit(mainMenuText(), mainMenuKeyboard());
+    return true;
+  }
+  if (data.startsWith("ipd:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const idx = Number(parts[2]);
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!stored || !stored.results[idx]) {
+      await edit("⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    const res = stored.results[idx];
+    const page = Math.floor(idx / CZ_PAGE_SIZE);
+    const stoken = makeToken();
+    await kv.put(`s:${stoken}`, JSON.stringify({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc }), { expirationTtl: 86400 });
+    await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token: stoken, recordId: res.record.id, backCb: `ipback:${token}:${page}` }), { expirationTtl: 86400 });
+    await renderRecordDetail(kv, accounts, edit, chatId, stoken, res.record.id, `ipback:${token}:${page}`, io.env);
+    return true;
+  }
+  if (data.startsWith("ipback:") || data.startsWith("ipsp:")) {
+    const parts = data.split(":");
+    await renderIpSearchMenu(io, parts[1], Number(parts[2]) || 0);
+    return true;
+  }
+  if (data === "qanadd") {
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (!qa || !qa.ip) {
+      await edit("⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    await renderQanZonePicker(io, 0);
+    return true;
+  }
+  if (data.startsWith("qanp:")) {
+    await renderQanZonePicker(io, Number(data.slice(5)) || 0);
+    return true;
+  }
+  if (data.startsWith("qanz:")) {
+    const parts = data.split(":");
+    const accIndex = Number(parts[1]);
+    const zoneId = parts[2];
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (!qa || !qa.ip) {
+      await edit("⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    const zone = await getZoneById(zoneId, accIndex, accounts);
+    if (!zone) {
+      await edit("❌ دامنه پیدا نشد.");
+      return true;
+    }
+    await kv.put(
+      `pend:${chatId}`,
+      JSON.stringify({ type: "qan_name", ip: qa.ip, acc: accIndex, zone_id: zone.id, zone_name: zone.name, provider: "cloudflare", msgId: messageId }),
+      { expirationTtl: 600 }
+    );
+    await edit(`➕ افزودن ساب در ${code(zone.name)}\n\n🌐 آی‌پی: ${code(qa.ip)}\n\nنام ساب را بفرستید (مثلاً test یا @):`, [
+      [{ text: "❌ لغو", callback_data: "qacancel" }],
+    ]);
+    return true;
+  }
+  if (data.startsWith("qana:")) {
+    const parts = data.split(":");
+    const accIndex = Number(parts[1]);
+    const domain = parts.slice(2).join(":");
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (!qa || !qa.ip) {
+      await edit("⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    await kv.put(
+      `pend:${chatId}`,
+      JSON.stringify({ type: "qan_name", ip: qa.ip, acc: accIndex, domain, provider: "arvan", msgId: messageId }),
+      { expirationTtl: 600 }
+    );
+    await edit(`➕ افزودن ساب در ${code(domain)}\n\n🌐 آی‌پی: ${code(qa.ip)}\n\nنام ساب را بفرستید (مثلاً test یا @):`, [
+      [{ text: "❌ لغو", callback_data: "qacancel" }],
+    ]);
+    return true;
+  }
+  if (data === "qanok") {
+    const pending = await kv.get(`pend:${chatId}`, "json");
+    if (!pending || pending.type !== "qan_confirm") {
+      await edit("⏳ عملیات منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    await createQaSub(pending, io);
+    return true;
+  }
+  if (data.startsWith("qafav:")) {
+    const i = Number(data.slice(6));
+    const favs = await getFavs(kv, chatId);
+    const f = favs[i];
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (!f || !qa || !qa.ip) {
+      await edit("⏳ انتخاب منقضی شد. دوباره IP را بفرستید.", mainMenuKeyboard());
+      return true;
+    }
+    await kv.put(`qa:${chatId}`, JSON.stringify({ ip: qa.ip, zone_id: f.zone_id, zone_name: f.zone_name, acc: f.acc, record_id: f.record_id }), { expirationTtl: 3600 });
+    await showQaConfirm(io);
+    return true;
+  }
+  if (data.startsWith("qasel:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const idx = Number(parts[2]);
+    const stored = await kv.get(`sr:${token}`, "json");
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    if (!stored || !stored.results[idx] || !qa || !qa.ip) {
+      await edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return true;
+    }
+    const res = stored.results[idx];
+    await kv.put(`qa:${chatId}`, JSON.stringify({ ip: qa.ip, zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc, record_id: res.record.id }), { expirationTtl: 3600 });
+    await showQaConfirm(io);
+    return true;
+  }
+  // نتیجهٔ جست‌وجوی سریع (فرستادن نام دامنه/ساب در چت): صفحهٔ کامل ویرایش رکورد
+  // باز می‌شود — همان دکمه‌های عملیاتی صفحهٔ ساب‌دامنه‌ها (تغییر مقدار/نوع/TTL/Proxy،
+  // حذف و منتخب‌ها).
+  if (data.startsWith("qn:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const idx = Number(parts[2]);
+    const stored = await kv.get(`sr:${token}`, "json");
+    if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+    const res = stored.results[idx];
+    const stoken = makeToken();
+    await kv.put(
+      `s:${stoken}`,
+      JSON.stringify({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc, provider: res.provider, domain: res.domain, zback: "qnb:" + token }),
+      { expirationTtl: 86400 }
+    );
+    await kv.put(
+      `dd:${chatId}:${messageId}`,
+      JSON.stringify({ token: stoken, recordId: res.record.id, backCb: `qnb:${token}` }),
+      { expirationTtl: 86400 }
+    );
+    await renderRecordDetail(kv, accounts, edit, chatId, stoken, res.record.id, `qnb:${token}`, io.env);
+    return true;
+  }
+  if (data.startsWith("qnb:")) {
+    const token = data.slice(4);
+    const stored = await kv.get(`sr:${token}`, "json");
+    if (!stored) return edit("⏳ نشست منقضی شده.", mainMenuKeyboard());
+    const qa = await kv.get(`qa:${chatId}`, "json");
+    await renderQuickResults(token, stored.results || [], stored.query, qa, edit);
+    return true;
+  }
+  if (data === "qaok") {
+    await qaApply(io);
+    return true;
+  }
+  return false;
+}
+
+// ===================== Host Anti-Filter Monitor (PasarGuard hosts) =====================
+// Every run: read PasarGuard hosts, ping each domain from Iranian check-host nodes.
+// If >= cityThreshold Iranian cities report 0 successful pings (twice in a row), the
+// domain is considered filtered in Iran and is swapped for a freshly created numbered
+// subdomain (mirroring the original DNS record), then written back into the host.
+const CHECK_HOST_API = "https://check-host.net";
+const IR_CHECK_NODES = [
+  { id: "ir1.node.check-host.net", city: "Tehran" },
+  { id: "ir5.node.check-host.net", city: "Tehran" },
+  { id: "ir7.node.check-host.net", city: "Tehran" },
+  { id: "ir8.node.check-host.net", city: "Tehran" },
+  { id: "ir2.node.check-host.net", city: "Isfahan" },
+  { id: "ir3.node.check-host.net", city: "Shiraz" },
+  { id: "ir4.node.check-host.net", city: "Shiraz" },
+];
+const HOSTFILTER_FALLBACK_ROOTS = ["pcapps.ir", "app9.ir"];
+const IR_CITIES = ["Tehran", "Isfahan", "Shiraz"];
+const HOSTFILTER_DEFAULT_CITIES = 2;
+const HOSTFILTER_DEFAULT_BATCH = 60;
+const HOSTFILTER_MAX_LOG = 40;
+// کشورهای خارجی برای تشخیص خاموش/فیلتر بودن آی‌پی (پیش از تعویض دامنه)
+const HOSTFILTER_FOREIGN_COUNTRIES = ["DE", "NL"];
+// شهرهای خارجی موجود در رلهٔ check-host (آلمان + هلند)
+const HOSTFILTER_FOREIGN_CITIES = ["Frankfurt", "Nuremberg", "Amsterdam", "Meppel"];
+// حداقل «عدم پینگ» از آلمان/هلند که یعنی مشکل از خود آی‌پی است (نه دامنه)
+const HOSTFILTER_IP_DOWN_FAILS = 4;
+const HOSTFILTER_DEFAULT_RECHECK = 1;
+const HOSTFILTER_DEFAULT_RECHECK_MIN = 1;
+
+async function getHostFilterCfg(kv) {
+  let cfg = await kvGetCached(kv, "host_filter_cfg", "json", 30000);
+  if (!cfg || typeof cfg !== "object") cfg = {};
+  let sel = Array.isArray(cfg.citiesSel) ? cfg.citiesSel.filter((c) => IR_CITIES.includes(c)) : [];
+  if (!sel.length) sel = IR_CITIES.slice();
+  return {
+    enabled: cfg.enabled !== false,
+    provider: cfg.provider === "checkhost" ? "checkhost" : "globalping",
+    intervalMin: Math.max(1, Number(cfg.intervalMin) || 25),
+    iv25: cfg.iv25 === true,
+    cities: Math.min(Math.max(1, Number(cfg.cities) || HOSTFILTER_DEFAULT_CITIES), sel.length),
+    citiesSel: sel,
+    maxOk: Number.isInteger(cfg.maxOk) ? Math.max(0, Math.min(3, cfg.maxOk)) : 0,
+    probes: Math.max(1, Math.min(50, Number(cfg.probes) || 50)),
+    minFail: Math.max(1, Math.min(5, Number(cfg.minFail) || 2)),
+    recheckCount: Number.isInteger(cfg.recheckCount) ? Math.max(0, Math.min(3, cfg.recheckCount)) : HOSTFILTER_DEFAULT_RECHECK,
+    recheckMin: Math.max(1, Math.min(60, Number(cfg.recheckMin) || HOSTFILTER_DEFAULT_RECHECK_MIN)),
+    gpToken: cfg.gpToken || "",
+    exceptions: Array.isArray(cfg.exceptions) ? cfg.exceptions : [],
+    batch: Math.max(1, Math.min(60, Number(cfg.batch) || HOSTFILTER_DEFAULT_BATCH)),
+    maxChanges: Math.max(1, Math.min(20, Number(cfg.maxChanges) || 8)),
+    backupKeep: Math.max(1, Math.min(10, Number(cfg.backupKeep) || 5)),
+    cursor: Number(cfg.cursor) || 0,
+    last_run: cfg.last_run || null,
+    last_attempt: cfg.last_attempt || null,
+    last_summary: cfg.last_summary || null,
+    checkhost_down: cfg.checkhost_down || null,
+    manual_request: cfg.manual_request || null,
+  };
+}
+
+async function saveHostFilterCfg(kv, cfg) {
+  await kvPutCached(kv, "host_filter_cfg", JSON.stringify(cfg), undefined, 30000);
+}
+
+async function getHostStateAll(kv) {
+  const s = await kvGetCached(kv, "host_filter_state", "json", 30000);
+  return s && typeof s === "object" ? JSON.parse(JSON.stringify(s)) : {};
+}
+
+async function saveHostStateAll(kv, s) {
+  const json = JSON.stringify(s);
+  // اگر وضعیت تغییری نکرده، دوباره در KV نوشته نمی‌شود (کاهش write)
+  const prev = memGet("kv:host_filter_state");
+  if (prev !== undefined && JSON.stringify(prev) === json) return;
+  await kvPutCached(kv, "host_filter_state", json, undefined, 30000);
+}
+
+async function hostFilterLog(kv, entry) {
+  let log = await kvGetCached(kv, "host_filter_log", "json", 30000);
+  if (!Array.isArray(log)) log = [];
+  log = log.slice();
+  log.unshift(entry);
+  if (log.length > HOSTFILTER_MAX_LOG) log = log.slice(0, HOSTFILTER_MAX_LOG);
+  await kvPutCached(kv, "host_filter_log", JSON.stringify(log), undefined, 30000);
+}
+
+function isDomainLike(v) {
+  return typeof v === "string" && /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(v) && !/^\d{1,3}(\.\d{1,3}){3}$/.test(v);
+}
+
+function pingAttempts(raw) {
+  const out = [];
+  const walk = (x) => {
+    if (!Array.isArray(x)) return;
+    if (x.length && (typeof x[0] === "string" || x[0] === null)) {
+      out.push(x);
+      return;
+    }
+    for (const y of x) walk(y);
+  };
+  walk(raw);
+  return out;
+}
+
+async function checkHostPing(target, citySel, env, kv) {
+  const cities = Array.isArray(citySel) && citySel.length ? citySel : IR_CITIES;
+  const nodes = IR_CHECK_NODES.filter((n) => cities.includes(n.city));
+  if (!nodes.length) return { error: "no_city" };
+
+  // ردیف اول: رلهٔ ثبت‌شده (پروکسی /http) — check-host درخواست‌های IP کلادفلر را ۴۰۳ می‌کند
+  if (await getRelayBase(kv, env)) {
+    const qs = nodes.map((n) => `&node=${encodeURIComponent(n.id)}`).join("");
+    const hdrs = { accept: "application/json", "user-agent": "Mozilla/5.0" };
+    const first = await relayProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-ping?host=${encodeURIComponent(target)}${qs}`, hdrs, 45000);
+    const p0 = first && first.parsed;
+    if (!(p0 && p0.ok === 1 && p0.request_id)) return { error: "relay_api" };
+    const rid = p0.request_id;
+    let out = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await sleep(attempt === 0 ? 6000 : 3500);
+      const rr = await relayProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-result/${rid}`, hdrs, 15000);
+      if (!rr || !rr.parsed || typeof rr.parsed !== "object") continue;
+      const collected = {};
+      let pending = false;
+      for (const n of nodes) {
+        const raw = rr.parsed[n.id];
+        if (raw === null || raw === undefined) {
+          pending = true;
+          continue;
+        }
+        const atts = pingAttempts(raw);
+        if (!atts.length) {
+          pending = true;
+          continue;
+        }
+        let ok = 0;
+        for (const a of atts) if (a[0] === "OK") ok++;
+        collected[n.id] = { city: n.city, ok, total: atts.length };
+      }
+      if (Object.keys(collected).length) out = collected;
+      if (!pending && Object.keys(collected).length === nodes.length) return { nodes: collected };
+    }
+    if (out) return { nodes: out };
+    return { error: "no_result" };
+  }
+
+  // ردیف دوم: رلهٔ قدیمی /check از متغیرهای HF_RELAY_URL/HF_RELAY_TOKEN
+  const relay = env && env.HF_RELAY_URL ? String(env.HF_RELAY_URL).replace(/\/+$/, "") : "";
+  if (relay) {
+    let rres;
+    try {
+      rres = await fetch(
+        `${relay}/check?token=${encodeURIComponent((env && env.HF_RELAY_TOKEN) || "")}&target=${encodeURIComponent(target)}&cities=${encodeURIComponent(cities.join(","))}`,
+        { headers: { accept: "application/json" }, signal: withTimeout(70000) }
+      );
+    } catch (e) {
+      return { error: "relay_fetch" };
+    }
+    if (!rres.ok) return { error: `relay_http_${rres.status}` };
+    let rd;
+    try {
+      rd = await rres.json();
+    } catch (e) {
+      return { error: "relay_json" };
+    }
+    if (!rd || rd.error || !rd.nodes) return { error: rd && rd.error ? `relay_${rd.error}` : "relay_api" };
+    return { nodes: rd.nodes };
+  }
+
+  // ردیف سوم: مستقیم
+  let res;
+  try {
+    const qs = nodes.map((n) => `&node=${encodeURIComponent(n.id)}`).join("");
+    res = await fetch(`${CHECK_HOST_API}/check-ping?host=${encodeURIComponent(target)}${qs}`, {
+      headers: { accept: "application/json", "user-agent": "Mozilla/5.0" },
+      signal: withTimeout(20000),
+    });
+  } catch (e) {
+    return { error: "fetch" };
+  }
+  if (!res.ok) {
+    let body = "";
+    try {
+      body = (await res.text()).replace(/\s+/g, " ").substring(0, 160);
+    } catch (e) {}
+    return { error: `http_${res.status} ${body}` };
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    return { error: "bad_json" };
+  }
+  if (!data || data.ok !== 1 || !data.request_id) return { error: "api" };
+  const rid = data.request_id;
+  let out = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await sleep(attempt === 0 ? 6000 : 3500);
+    let rres;
+    try {
+      rres = await fetch(`${CHECK_HOST_API}/check-result/${rid}`, {
+        headers: { accept: "application/json" },
+        signal: withTimeout(15000),
+      });
+    } catch (e) {
+      continue;
+    }
+    if (!rres.ok) continue;
+    let rd;
+    try {
+      rd = await rres.json();
+    } catch (e) {
+      continue;
+    }
+    if (!rd || typeof rd !== "object") continue;
+    const collected = {};
+    let pending = false;
+    for (const n of nodes) {
+      const raw = rd[n.id];
+      if (raw === null || raw === undefined) {
+        pending = true;
+        continue;
+      }
+      const atts = pingAttempts(raw);
+      if (!atts.length) {
+        pending = true;
+        continue;
+      }
+      let ok = 0;
+      for (const a of atts) if (a[0] === "OK") ok++;
+      collected[n.id] = { city: n.city, ok, total: atts.length };
+    }
+    if (Object.keys(collected).length) out = collected;
+    if (!pending && Object.keys(collected).length === nodes.length) return { nodes: collected };
+  }
+  if (out) return { nodes: out };
+  return { error: "no_result" };
+}
+
+async function globalpingPingLoc(target, locations, cfg, limit) {
+  const lim = Math.max(1, Math.min(50, limit || (cfg && cfg.probes) || 50));
+  const locs = Array.isArray(locations) && locations.length ? locations : [{ country: "IR" }];
+  const headers = { "content-type": "application/json", "user-agent": "dns-telegram-bot" };
+  if (cfg && cfg.gpToken) headers.Authorization = `Bearer ${cfg.gpToken}`;
+  let res;
+  try {
+    res = await fetch("https://api.globalping.io/v1/measurements", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ type: "ping", target, locations: locs, limit: lim, measurementOptions: { packets: 4 } }),
+      signal: withTimeout(20000),
+    });
+  } catch (e) {
+    return { error: "gp_fetch" };
+  }
+  if (!res.ok) return { error: `gp_http_${res.status}` };
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    return { error: "gp_json" };
+  }
+  const id = data && data.id;
+  if (!id) return { error: "gp_api" };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await sleep(attempt === 0 ? 2500 : 2000);
+    let rr;
+    try {
+      rr = await fetch(`https://api.globalping.io/v1/measurements/${id}`, {
+        headers: cfg && cfg.gpToken ? { "user-agent": "dns-telegram-bot", Authorization: `Bearer ${cfg.gpToken}` } : { "user-agent": "dns-telegram-bot" },
+        signal: withTimeout(15000),
+      });
+    } catch (e) {
+      continue;
+    }
+    if (!rr.ok) continue;
+    let jj;
+    try {
+      jj = await rr.json();
+    } catch (e) {
+      continue;
+    }
+    if (!jj || jj.status !== "finished") continue;
+    const nodes = {};
+    let idx = 0;
+    for (const r of jj.results || []) {
+      const p = r.probe || {};
+      const res = r.result || {};
+      const st = res.stats || {};
+      const total = Number(st.total) || 0;
+      const rcv = Number(st.rcv) || 0;
+      const failed = res.status !== "finished" || total === 0;
+      nodes[`${p.country || "IR"}|${p.city || "IR"}|${p.asn || "?"}|${idx++}`] = {
+        city: p.city || p.country || "IR",
+        country: p.country || "IR",
+        network: p.network || "?",
+        asn: p.asn || "?",
+        ok: failed ? 0 : rcv,
+        total: total || 1,
+        failed,
+      };
+    }
+    if (!Object.keys(nodes).length) return { error: "gp_no_result" };
+    return { nodes };
+  }
+  return { error: "gp_timeout" };
+}
+
+async function globalpingPing(target, cfg) {
+  return globalpingPingLoc(target, [{ country: "IR" }], cfg, cfg && cfg.probes);
+}
+
+// آمار «عدم پینگ» از یک نتیجه (مجموع بسته‌های ازدست‌رفته)
+function pingFailStats(ping) {
+  let fail = 0;
+  let total = 0;
+  if (ping && !ping.error && ping.nodes) {
+    for (const nid of Object.keys(ping.nodes)) {
+      const n = ping.nodes[nid];
+      total += Number(n.total) || 0;
+      fail += Math.max(0, (Number(n.total) || 0) - (Number(n.ok) || 0));
+    }
+  }
+  return { fail, total };
+}
+
+// آیا نتیجهٔ پینگ حداقل یک پاسخ موفق دارد؟
+function pingHasResponse(ping) {
+  if (!ping || ping.error || !ping.nodes) return false;
+  for (const nid of Object.keys(ping.nodes)) if ((Number(ping.nodes[nid].ok) || 0) > 0) return true;
+  return false;
+}
+
+// بررسی آی‌پی از آلمان/هلند (تشخیص خاموش بودن سرور/آی‌پی)
+// اول از رلهٔ check-host (سریع‌تر و پایدارتر)، در صورت خطا از Globalping.
+async function foreignPing(target, cfg, env, kv) {
+  const relay = env && env.HF_RELAY_URL;
+  if (relay && cfg && cfg.provider === "checkhost") {
+    const r = await checkHostPing(target, HOSTFILTER_FOREIGN_CITIES, env, kv);
+    if (!r.error) return r;
+  }
+  const locations = HOSTFILTER_FOREIGN_COUNTRIES.map((c) => ({ country: c }));
+  return globalpingPingLoc(target, locations, cfg, 2);
+}
+
+// بررسی یک لوکیشن خارجی برای اسکن همهٔ ساب‌ها (ایران‌اکسس)
+async function foreignPingOne(target, cfg, env, kv) {
+  const relay = env && env.HF_RELAY_URL;
+  if (relay && cfg && cfg.provider === "checkhost") {
+    const r = await checkHostPing(target, [HOSTFILTER_FOREIGN_CITIES[0]], env, kv);
+    if (!r.error) return r;
+  }
+  return globalpingPingLoc(target, [{ country: "DE" }], cfg, 1);
+}
+
+
+async function pingTarget(target, cfg, env, kv) {
+  if (cfg.provider === "checkhost") return checkHostPing(target, cfg.citiesSel, env, kv);
+  return globalpingPing(target, cfg);
+}
+
+function hostFilterPingBlocked(ping, cfg) {
+  if (!ping || ping.error || !ping.nodes) return null;
+  const isCheckHost = cfg && cfg.provider === "checkhost";
+  const sel = cfg && Array.isArray(cfg.citiesSel) && cfg.citiesSel.length ? cfg.citiesSel : IR_CITIES;
+  const maxOk = cfg && Number.isInteger(cfg.maxOk) ? cfg.maxOk : 0;
+  const byCity = {};
+  let blockedProbes = 0;
+  let totalProbes = 0;
+  for (const nid of Object.keys(ping.nodes)) {
+    const n = ping.nodes[nid];
+    if (isCheckHost && !sel.includes(n.city)) continue;
+    totalProbes++;
+    const bad = n.ok <= maxOk;
+    if (bad) blockedProbes++;
+    if (!byCity[n.city]) byCity[n.city] = { nodes: 0, blocked: 0 };
+    byCity[n.city].nodes++;
+    if (bad) byCity[n.city].blocked++;
+  }
+  let blockedCities = 0;
+  for (const c of Object.keys(byCity)) {
+    if (byCity[c].nodes > 0 && byCity[c].blocked === byCity[c].nodes) blockedCities++;
+  }
+  return { blockedCities, blockedProbes, totalProbes, byCity };
+}
+
+function hostFilterIsBlocked(info, cfg) {
+  if (!info) return false;
+  if (cfg.provider === "checkhost") return info.blockedCities >= cfg.cities;
+  return info.blockedProbes >= cfg.minFail;
+}
+
+function zoneForName(zones, name) {
+  const lower = String(name || "").toLowerCase();
+  let best = null;
+  for (const z of zones || []) {
+    const zn = String(z.name || "").toLowerCase();
+    if (!zn) continue;
+    if (lower === zn || lower.endsWith("." + zn)) {
+      if (!best || zn.length > best.name.length) best = z;
+    }
+  }
+  return best;
+}
+
+async function hostFilterNewName(zones, accounts, kv, oldName) {
+  const lower = String(oldName).toLowerCase();
+  let zone = zoneForName(zones, lower);
+  let fallback = false;
+  let rel;
+  if (zone) {
+    const zn = zone.name.toLowerCase();
+    rel = lower === zn ? zn.split(".")[0] : lower.slice(0, -(zn.length + 1));
+    rel =
+      rel
+        .split(".")
+        .map((p) => p.replace(/[^a-z0-9-]/g, ""))
+        .filter(Boolean)
+        .join(".") || zn.split(".")[0];
+  } else {
+    for (const root of HOSTFILTER_FALLBACK_ROOTS) {
+      const z = zoneForName(zones, root);
+      if (z) {
+        zone = z;
+        break;
+      }
+    }
+    if (!zone) {
+      const sorted = [...(zones || [])].sort((a, b) => a.name.length - b.name.length);
+      zone = sorted[0] || null;
+    }
+    if (!zone) return { error: "no_zone" };
+    fallback = true;
+    rel = lower.split(".")[0].replace(/[^a-z0-9-]/g, "") || "cdn";
+  }
+  const records = await getRecords(zone, accounts, kv);
+  const names = new Set(records.map((r) => String(r.name).toLowerCase()));
+  let newName = "";
+  for (let n = 1; n <= 60; n++) {
+    const cand = `${rel}${n}.${zone.name}`.toLowerCase();
+    if (!names.has(cand)) {
+      newName = cand;
+      break;
+    }
+  }
+  if (!newName) return { error: "no_free_name" };
+  let source = null;
+  if (!fallback) {
+    source = records.filter((r) => String(r.name).toLowerCase() === lower && ["A", "AAAA", "CNAME"].includes(r.type));
+  }
+  return { zone, name: newName, source, fallback };
+}
+
+async function cfCreateRecords(zone, name, source, accounts, kv, oldName) {
+  const payloads = [];
+  if (source && source.length) {
+    for (const r of source) payloads.push({ type: r.type, name, content: r.content, proxied: !!r.proxied, ttl: r.ttl || 1 });
+  } else {
+    payloads.push({ type: "CNAME", name, content: oldName, proxied: false, ttl: 1 });
+  }
+  const created = [];
+  for (const p of payloads) {
+    const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+      method: "POST",
+      headers: hdr(accounts[zone._acc].token),
+      body: JSON.stringify(p),
+      signal: withTimeout(15000),
+    });
+    const data = await res.json();
+    if (!data.success) return { error: cfErrText(data) };
+    created.push(data.result);
+  }
+  await invalidateCache(kv, zone.id);
+  return { records: created };
+}
+
+async function panelHosts(p, token, timeoutMs) {
+  const base = p.url.replace(/\/+$/, "");
+  const res = await fetch(`${base}/api/hosts`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: withTimeout(timeoutMs || 25000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function panelPutHost(p, token, host) {
+  const base = p.url.replace(/\/+$/, "");
+  const body = { ...host };
+  delete body.id;
+  const res = await fetch(`${base}/api/host/${host.id}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: withTimeout(30000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = data && data.detail ? JSON.stringify(data.detail).substring(0, 300) : `HTTP ${res.status}`;
+    return { error: detail };
+  }
+  return { host: data };
+}
+
+async function hfNotify(botToken, admins, text, kb) {
+  for (const a of admins) {
+    try {
+      await sendMessage(botToken, a, text, kb);
+    } catch (e) {
+      console.error("HF_NOTIFY", String(e));
+    }
+  }
+}
+
+async function hostFilterRevert(kv, env, panelId, hostId) {
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => p.id === panelId);
+  if (!panel) return { error: "panel_not_found" };
+  const states = await getHostStateAll(kv);
+  const key = `${panelId}:${hostId}`;
+  const st = states[key];
+  if (!st || !st.original) return { error: "no_state" };
+  const token = await panelLogin(panel);
+  if (!token) return { error: "login_failed" };
+  let hosts;
+  try {
+    hosts = await panelHosts(panel, token);
+  } catch (e) {
+    return { error: "fetch_failed" };
+  }
+  const host = hosts.find((h) => String(h.id) === String(hostId));
+  if (!host) return { error: "host_not_found" };
+  for (const f of ["address", "sni", "host"]) {
+    if (Array.isArray(st.original[f])) host[f] = st.original[f];
+  }
+  const put = await panelPutHost(panel, token, host);
+  if (put.error) return { error: put.error };
+  delete states[key];
+  await saveHostStateAll(kv, states);
+  await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "revert", panel_id: panelId, host_id: Number(hostId), remark: host.remark });
+  return { ok: true };
+}
+
+function hfIsReality(host) {
+  const hay = [host && host.inbound_tag, host && host.remark, host && host.security]
+    .map((x) => String(x || ""))
+    .join(" ");
+  return /reality/i.test(hay);
+}
+
+function hfIsFastly(host, value) {
+  const hay = [value, host && host.inbound_tag, host && host.remark, host && host.address, host && host.sni, host && host.host]
+    .map((x) => (Array.isArray(x) ? x.join(" ") : String(x || "")))
+    .join(" ");
+  return /fastly/i.test(hay);
+}
+
+async function getHfBackups(kv) {
+  const b = await kv.get("host_filter_backups", "json");
+  return Array.isArray(b) ? b : [];
+}
+
+async function saveHfBackups(kv, list) {
+  await kv.put("host_filter_backups", JSON.stringify(list));
+}
+
+async function hfSnapshot(kv, env, label) {
+  const cfg = await getHostFilterCfg(kv);
+  const panels = await getPanels(kv);
+  const hosts = [];
+  for (const panel of panels) {
+    const token = await panelLogin(panel);
+    if (!token) continue;
+    let list;
+    try {
+      list = await panelHosts(panel, token);
+    } catch (e) {
+      continue;
+    }
+    for (const h of list) {
+      hosts.push({ panel_id: panel.id, host_id: h.id, remark: h.remark, address: h.address || [], sni: h.sni || [], host: h.host || [] });
+    }
+  }
+  const backups = await getHfBackups(kv);
+  const entry = { id: makeToken() + makeToken(), ts: new Date().toISOString(), label: label || "دستی", count: hosts.length, hosts };
+  backups.unshift(entry);
+  while (backups.length > cfg.backupKeep) backups.pop();
+  await saveHfBackups(kv, backups);
+  return entry;
+}
+
+async function hfStoreSnapshotFrom(kv, cfg, label, hostItems) {
+  const hosts = [];
+  for (const it of hostItems) {
+    hosts.push({ panel_id: it.panel.id, host_id: it.host.id, remark: it.host.remark, address: it.orig.address || [], sni: it.orig.sni || [], host: it.orig.host || [] });
+  }
+  const backups = await getHfBackups(kv);
+  const entry = { id: makeToken() + makeToken(), ts: new Date().toISOString(), label: label || "خودکار", count: hosts.length, hosts };
+  backups.unshift(entry);
+  while (backups.length > cfg.backupKeep) backups.pop();
+  await saveHfBackups(kv, backups);
+  return entry;
+}
+
+async function hfRestoreBackup(kv, env, id) {
+  const backups = await getHfBackups(kv);
+  const b = backups.find((x) => x.id === id);
+  if (!b) return { error: "backup_not_found" };
+  const panels = await getPanels(kv);
+  const byPanel = {};
+  for (const h of b.hosts || []) (byPanel[h.panel_id] = byPanel[h.panel_id] || []).push(h);
+  let ok = 0;
+  let fail = 0;
+  for (const pid of Object.keys(byPanel)) {
+    const panel = panels.find((p) => p.id === pid);
+    if (!panel) {
+      fail += byPanel[pid].length;
+      continue;
+    }
+    const token = await panelLogin(panel);
+    if (!token) {
+      fail += byPanel[pid].length;
+      continue;
+    }
+    let list;
+    try {
+      list = await panelHosts(panel, token);
+    } catch (e) {
+      fail += byPanel[pid].length;
+      continue;
+    }
+    for (const snap of byPanel[pid]) {
+      const host = list.find((x) => String(x.id) === String(snap.host_id));
+      if (!host) {
+        fail++;
+        continue;
+      }
+      for (const f of ["address", "sni", "host"]) if (Array.isArray(snap[f])) host[f] = snap[f];
+      const put = await panelPutHost(panel, token, host);
+      if (put.error) fail++;
+      else ok++;
+    }
+  }
+  await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "restore", backup_id: id, label: b.label, ok, fail });
+  return { ok, fail };
+}
+
+async function runReminders(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const list = await getReminders(kv);
+  const now = Date.now();
+  const due = list.filter((r) => r && !r.notifiedAt && Number(r.at) <= now);
+  if (!due.length) return;
+  // علامت‌گذاری به‌عنوان اطلاع‌داده‌شده (برای دکمهٔ «یادآوری مجدد» نگه می‌داریم)
+  for (const r of due) r.notifiedAt = now;
+  await saveReminders(kv, list);
+  const admins = await getAdmins(kv, env);
+  for (const r of due) {
+    const targets = new Set([...admins, r.by]);
+    let msg = r.kind === "expiry" ? "⏰ یادآور انقضای سرور\n\n" : "⏰ یادآور\n\n";
+    if (r.target && r.target.label) msg += `🎯 ${remPlain(r.target.label)}\n`;
+    if (r.text) msg += `📝 ${remPlain(r.text)}\n`;
+    if (r.kind === "expiry" && r.expiryAt) {
+      msg += `🗓 انقضا: ${fmtJalali(r.expiryAt)}\n`;
+      msg += `⏳ برای تمدید از سایت مربوطه اقدام کن.`;
+    } else {
+      msg += `🕒 ${fmtJalali(r.at)}`;
+    }
+    const kb = [
+      [{ text: "🔁 یادآوری مجدد", callback_data: `remagain:${r.id}` }],
+      [{ text: "👀 دیدم", callback_data: `remack:${r.id}` }],
+    ];
+    for (const t of targets) {
+      try {
+        await sendMessage(botToken, t, msg, kb);
+      } catch (e) {}
+    }
+  }
+}
+
+async function runHostFilter(env, opts = {}) {
+  const kv = env.BOT_KV;
+  if (!kv) return { error: "no_kv" };
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const cfg = await getHostFilterCfg(kv);
+  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
+  // مهاجرت یک‌باره: فاصلهٔ پیش‌فرض قدیمی (۱۱ دقیقه) به ۲۵ دقیقه تغییر کند
+  if (!cfg.iv25) {
+    if (Number(cfg.intervalMin) === 11) cfg.intervalMin = 25;
+    cfg.iv25 = true;
+    await saveHostFilterCfg(kv, cfg);
+  }
+  const mr = cfg.manual_request;
+  const manual = !!(mr && (!cfg.last_run || Date.parse(mr.ts) >= Date.parse(cfg.last_run)));
+  const manualBy = manual ? mr.by : null;
+  if (manual) {
+    cfg.manual_request = null;
+    cfg.last_attempt = new Date().toISOString();
+    await saveHostFilterCfg(kv, cfg);
+  }
+  const report = async (msg) => {
+    if (manualBy) {
+      try {
+        await sendMessage(botToken, manualBy, msg);
+      } catch (e) {}
+    }
+  };
+  if (!cfg.enabled && !opts.force && !manual) return { skipped: "disabled", cfg };
+
+  if (!opts.force && !manual) {
+    const lastMs = cfg.last_attempt ? Date.parse(cfg.last_attempt) : 0;
+    if (lastMs && Date.now() - lastMs < cfg.intervalMin * 60000) return { skipped: "interval", cfg };
+  }
+  if (!manual) {
+    cfg.last_attempt = new Date().toISOString();
+    await saveHostFilterCfg(kv, cfg);
+  }
+
+  const accounts = await getAccounts(kv, env);
+  const panels = await getPanels(kv);
+  if (!accounts.length || !panels.length) {
+    cfg.last_run = new Date().toISOString();
+    cfg.last_summary = "اکانت کلادفلر یا پنل ثبت نشده.";
+    await saveHostFilterCfg(kv, cfg);
+    await report("❌ بررسی انجام نشد: اکانت کلادفلر یا پنل ثبت نشده.");
+    return { error: "not_ready", cfg };
+  }
+  const zones = await getAllZones(accounts, kv);
+
+  // Control probe: if the checker itself is down, do nothing.
+  if (cfg.provider === "checkhost") {
+    const control = await checkHostPing("www.google.com", IR_CITIES, env, kv);
+    if (control.error) {
+      const wasDown = !!cfg.checkhost_down;
+      cfg.checkhost_down = { ts: new Date().toISOString(), reason: control.error };
+      cfg.last_run = new Date().toISOString();
+      cfg.last_summary = "check-host در دسترس نبود؛ هیچ تغییری انجام نشد.";
+      await saveHostFilterCfg(kv, cfg);
+      if (!wasDown && !opts.manual) {
+        const admins = await getAdmins(kv, env);
+        await hfNotify(botToken, admins, "⚠️ تعویض خودکار هاست: سایت check-host فعلاً در دسترس نیست. تا برگشتن آن هیچ دامنه‌ای تعویض نمی‌شود.");
+      }
+      await report("⚠️ بررسی انجام نشد: سرویس check-host در دسترس نیست.");
+      return { checkhost_down: true, cfg };
+    }
+  }
+  cfg.checkhost_down = null;
+
+  // Gather enabled hosts and their domain values.
+  const hostItems = [];
+  const uniqSet = new Set();
+  const hostList = [];
+  const hostSeen = new Set();
+  for (const panel of panels) {
+    const token = await panelLogin(panel);
+    if (!token) continue;
+    let hosts;
+    try {
+      hosts = await panelHosts(panel, token);
+    } catch (e) {
+      console.error("HF_HOSTS", e && e.message ? e.message : String(e));
+      continue;
+    }
+    for (const h of hosts) {
+      if (h.is_disabled) continue;
+      // لیست سرورها برای یادآور (کش)
+      {
+        const addrs = Array.isArray(h.address) ? h.address : [];
+        const ip = addrs.find((v) => /^\d{1,3}(\.\d{1,3}){3}$/.test(String(v))) || addrs[0] || "";
+        const rec = {
+          panel_id: panel.id,
+          panel_name: panel.name,
+          host_id: h.id,
+          remark: String(h.remark || "").trim(),
+          ip: String(ip || "").trim(),
+        };
+        const key = rec.ip ? "ip:" + rec.ip : "rm:" + rec.remark;
+        if (!hostSeen.has(key)) {
+          hostSeen.add(key);
+          hostList.push(rec);
+        }
+      }
+      if ((cfg.exceptions || []).includes(panel.id + ":" + h.id)) continue;
+      const domains = new Set();
+      for (const f of ["address", "sni", "host"]) {
+        const arr = Array.isArray(h[f]) ? h[f] : [];
+        for (const v of arr) {
+          if (isDomainLike(v)) {
+            const lv = String(v).toLowerCase();
+            domains.add(lv);
+            uniqSet.add(lv);
+          }
+        }
+      }
+      if (!domains.size) continue;
+      hostItems.push({
+        panel,
+        token,
+        host: h,
+        domains: [...domains],
+        orig: { address: h.address || [], sni: h.sni || [], host: h.host || [] },
+      });
+    }
+  }
+  if (hostList.length) await kvPutCached(kv, "hosts_cache", JSON.stringify(hostList), { expirationTtl: 3600 }, 3600000);
+  const uniq = [...uniqSet];
+  if (!uniq.length) {
+    cfg.last_run = new Date().toISOString();
+    cfg.last_summary = "دامنه‌ای برای بررسی پیدا نشد.";
+    await saveHostFilterCfg(kv, cfg);
+    await report("📭 بررسی انجام نشد: دامنه‌ای در هاست‌های فعال پیدا نشد.");
+    return { checked: 0, changed: 0, cfg };
+  }
+
+  // Rotating batch (bounded by worker subrequests / API rate limits; over cycles all domains get checked).
+  const effBatch = cfg.gpToken ? 60 : cfg.batch;
+  const batch = Math.max(1, Math.min(60, opts.batchOverride || effBatch));
+  const start = cfg.cursor % uniq.length;
+  const take = manual ? uniq.length : Math.min(batch, uniq.length);
+  const slice = [];
+  for (let i = 0; i < take; i++) slice.push(uniq[(start + i) % uniq.length]);
+  cfg.cursor = (start + take) % uniq.length;
+
+  // Ping checks.
+  const results = {};
+  let anyCheck = false;
+  for (const t of slice) {
+    const ping = await pingTarget(t, cfg, env, kv);
+    if (ping.error) {
+      await sleep(700);
+      continue;
+    }
+    results[t] = ping;
+    anyCheck = true;
+    await sleep(1000);
+  }
+  if (!anyCheck) {
+    cfg.checkhost_down = { ts: new Date().toISOString(), reason: "no_results" };
+    cfg.last_run = new Date().toISOString();
+    cfg.last_summary = "سرویس بررسی نتیجه نداد؛ هیچ تغییری انجام نشد.";
+    await saveHostFilterCfg(kv, cfg);
+    await report("⚠️ بررسی انجام نشد: سرویس بررسی (Globalping/check-host) نتیجه نداد.");
+    return { checkhost_down: true, cfg };
+  }
+
+  // First pass filter.
+  let filtered = {};
+  for (const t of Object.keys(results)) {
+    const info = hostFilterPingBlocked(results[t], cfg);
+    if (!hostFilterIsBlocked(info, cfg)) continue;
+    const ips = await resolveIPs(t, kv);
+    if (!ips || !ips.length) continue; // dead / non-resolving domain, not a filter
+    filtered[t] = info;
+  }
+
+  // Confirmation: re-check the exact filtered domains, cfg.recheckCount times with cfg.recheckMin interval.
+  // 0 re-checks = swap immediately on first detection.
+  if (filtered && Object.keys(filtered).length && !opts.skipRecheck && cfg.recheckCount > 0) {
+    let round = filtered;
+    for (let r = 0; r < cfg.recheckCount; r++) {
+      await sleep(cfg.recheckMin * 60000);
+      const still = {};
+      for (const t of Object.keys(round)) {
+        const ping2 = await pingTarget(t, cfg, env, kv);
+        if (!ping2.error) {
+          const info2 = hostFilterPingBlocked(ping2, cfg);
+          if (hostFilterIsBlocked(info2, cfg)) still[t] = info2;
+        }
+        await sleep(1000);
+      }
+      round = still;
+      if (!Object.keys(round).length) break;
+    }
+    filtered = round;
+  }
+
+  if (opts.dryRun) {
+    cfg.last_run = new Date().toISOString();
+    cfg.last_summary = `بررسی دستی ${slice.length} دامنه — ${Object.keys(filtered).length} فیلتر (بدون تغییر).`;
+    await saveHostFilterCfg(kv, cfg);
+    return { checked: slice.length, filtered: Object.keys(filtered).length, changed: 0, ipBlocked: 0, dryRun: true, cfg };
+  }
+
+  const states = await getHostStateAll(kv);
+  const admins = await getAdmins(kv, env);
+  const ipCache = {};
+  const maxChanges = Math.max(1, Number(opts.maxChanges) || cfg.maxChanges);
+  let changedCount = 0;
+  let ipBlockedCount = 0;
+  let ipDownCount = 0;
+  let iranAccessCount = 0;
+  let didBackup = false;
+
+  for (const item of hostItems) {
+    if (changedCount >= maxChanges) break;
+    const repl = {};
+    const events = [];
+    for (const field of ["address", "sni", "host"]) {
+      const arr = Array.isArray(item.host[field]) ? item.host[field] : [];
+      for (const v of arr) {
+        const dv = String(v).toLowerCase();
+        if (!filtered[dv] || repl[dv]) continue;
+
+        // REALITY / Fastly configs: alert only, never change.
+        if (hfIsReality(item.host) || hfIsFastly(item.host, dv)) {
+          const why = hfIsReality(item.host) ? "REALITY" : "Fastly";
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: why });
+          await hfNotify(
+            botToken,
+            admins,
+            "🔒 دامنه فیلتر شد ولی کانفیگ " + why + " است؛ فقط هشدار (بدون تغییر):\n" +
+              "🖥 پنل: " + escHtml(item.panel.name) + "\n📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n🔗 " + code(dv)
+          );
+          continue;
+        }
+
+        // Diagnose IP status before swapping: ping IP from Iran + Germany/Netherlands.
+        let diag = ipCache[dv];
+        if (!diag) {
+          diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
+          const ips = await resolveIPs(dv, kv);
+          if (ips && ips[0]) {
+            diag.ip = ips[0];
+            const ipp = await pingTarget(ips[0], cfg, env, kv);
+            const iranMeasured = !ipp.error;
+            const iranBlocked = iranMeasured && hostFilterIsBlocked(hostFilterPingBlocked(ipp, cfg), cfg);
+            const fp = await foreignPing(ips[0], cfg, env, kv);
+            const fstat = pingFailStats(fp);
+            const foreignDown = !fp.error && fstat.fail >= HOSTFILTER_IP_DOWN_FAILS;
+            diag.iranBlocked = iranBlocked;
+            diag.foreignFail = fstat.fail;
+            diag.ipDown = foreignDown && (!iranMeasured || iranBlocked);
+            diag.iranAccess = foreignDown && iranMeasured && !iranBlocked;
+            diag.ipBlocked = iranMeasured && iranBlocked && !foreignDown;
+            await sleep(900);
+          }
+          ipCache[dv] = diag;
+        }
+        if (diag.handled) continue;
+        if (diag.ipDown || diag.iranAccess || diag.ipBlocked) {
+          diag.handled = true;
+          if (diag.ipDown) ipDownCount++;
+          else if (diag.iranAccess) iranAccessCount++;
+          else ipBlockedCount++;
+          const head = diag.ipDown
+            ? "🛑 آی‌پی/سرور خاموش است — تعویض انجام نشد"
+            : diag.iranAccess
+              ? "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
+              : "🚫 آی‌پی فیلتر شده است (نه دامنه)";
+          const tail = diag.ipDown
+            ? "❌ از ایران و آلمان/هلند پاسخی نیامد (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ). احتمالاً سرور/IP خاموش است؛ تا روشن‌شدن سرور تعویض نکن."
+            : diag.iranAccess
+              ? "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست (ایران‌اکسس)."
+              : "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر ساب‌دامنهٔ این هاست قرار دارد.";
+          const txt =
+            head + "\n" +
+            "🖥 پنل: " + escHtml(item.panel.name) + "\n" +
+            "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
+            "🌐 آی‌پی: " + code(diag.ip || "?") + "\n" +
+            "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
+            "📝 " + tail + "\n" +
+            "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
+          await hfNotify(botToken, admins, txt);
+          const kind = diag.ipDown ? "ip_down" : diag.iranAccess ? "iran_access" : "ip_blocked";
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
+          continue;
+        }
+
+        // For sni/host camouflage values only rotate our own zones; alert otherwise.
+        if (field !== "address" && !zoneForName(zones, dv)) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "external_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv });
+          await hfNotify(
+            botToken,
+            admins,
+            "⚠️ مقدار " + code(field) + " فیلتر تشخیص داده شد ولی دامنه‌اش در اکانت‌های کلادفلر ما نیست:\n" +
+              "🖥 پنل: " + escHtml(item.panel.name) + "\n📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n🔗 " + code(dv)
+          );
+          continue;
+        }
+
+        if (!didBackup) {
+          await hfStoreSnapshotFrom(kv, cfg, "خودکار قبل از تعویض", hostItems);
+          didBackup = true;
+        }
+        const nn = await hostFilterNewName(zones, accounts, kv, dv);
+        if (nn.error) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "new_name_fail", from: dv, error: nn.error });
+          continue;
+        }
+        const cr = await cfCreateRecords(nn.zone, nn.name, nn.source, accounts, kv, dv);
+        if (cr.error) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "create_fail", from: dv, to: nn.name, error: cr.error });
+          continue;
+        }
+        repl[dv] = nn.name;
+        events.push({ field, from: dv, to: nn.name, zone: nn.zone.name });
+      }
+    }
+    if (!events.length) continue;
+
+    for (const field of ["address", "sni", "host"]) {
+      if (Array.isArray(item.host[field])) item.host[field] = item.host[field].map((v) => repl[String(v).toLowerCase()] || v);
+    }
+    const put = await panelPutHost(item.panel, item.token, item.host);
+    if (put.error) {
+      for (const ev of events) {
+        await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "put_fail", host_id: item.host.id, from: ev.from, to: ev.to, error: put.error });
+      }
+      continue;
+    }
+
+    changedCount++;
+    const key = item.panel.id + ":" + item.host.id;
+    const prev = states[key];
+    states[key] = {
+      panel_id: item.panel.id,
+      host_id: item.host.id,
+      remark: item.host.remark,
+      original: prev ? prev.original : item.orig,
+      current: { address: item.host.address || [], sni: item.host.sni || [], host: item.host.host || [] },
+      changed_at: new Date().toISOString(),
+    };
+
+    const lines = [
+      "🔄 دامنهٔ هاست تعویض شد",
+      "🖥 پنل: " + escHtml(item.panel.name),
+      "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)),
+    ];
+    for (const ev of events) lines.push("• " + ev.field + ": " + code(ev.from) + " ➜ " + code(ev.to) + " (" + escHtml(ev.zone) + ")");
+    lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
+    const kb = [[{ text: "↩️ دامنهٔ قبلی را جایگزین کن", callback_data: "hfrev:" + key }]];
+    await hfNotify(botToken, admins, lines.join("\n"), kb);
+    await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "rotated", panel_id: item.panel.id, host_id: item.host.id, remark: item.host.remark, events });
+  }
+
+  await saveHostStateAll(kv, states);
+  cfg.last_run = new Date().toISOString();
+  cfg.last_summary = `بررسی ${slice.length} دامنه — ${changedCount} تعویض، ${ipBlockedCount} آی‌پی فیلتر، ${ipDownCount} آی‌پی خاموش، ${iranAccessCount} ایران‌اکسس.`;
+  await saveHostFilterCfg(kv, cfg);
+  await report(
+    "✅ بررسی کامل انجام شد.\n" +
+      `🔎 بررسی‌شده: ${slice.length}\n` +
+      `🔴 فیلتر تأییدشده: ${Object.keys(filtered).length}\n` +
+      `🔄 تعویض: ${changedCount}\n` +
+      `🚫 آی‌پی فیلتر: ${ipBlockedCount}\n` +
+      `🛑 آی‌پی خاموش: ${ipDownCount}\n` +
+      `🇮🇷 ایران‌اکسس: ${iranAccessCount}`
+  );
+  return { checked: slice.length, filtered: Object.keys(filtered).length, changed: changedCount, ipBlocked: ipBlockedCount, ipDown: ipDownCount, iranAccess: iranAccessCount, cfg };
+}
+
+async function renderHostFilterHome(edit, kv, env) {
+  const cfg = await getHostFilterCfg(kv);
+  const states = await getHostStateAll(kv);
+  const backups = await getHfBackups(kv);
+  const count = Object.keys(states).length;
+  const lines = ["🧭 تعویض خودکار هاست فیلتر", ""];
+  lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
+  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping (پیش‌فرض)"));
+  lines.push("⏱ فاصلهٔ اجرا: هر " + cfg.intervalMin + " دقیقه");
+  if (cfg.provider === "checkhost") {
+    lines.push("🌆 شهرها: " + cfg.citiesSel.join("، "));
+    lines.push("🎯 آستانه: " + cfg.cities + " شهر از " + cfg.citiesSel.length + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
+  } else {
+    lines.push("🎯 آستانه: " + cfg.minFail + " پروب ایرانی از " + cfg.probes + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
+  }
+  lines.push("📦 تعداد هر اجرا: " + cfg.batch + " · 🔁 حداکثر تعویض: " + cfg.maxChanges);
+  lines.push("🔁 بررسی مجدد: " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار، هر " + cfg.recheckMin + " دقیقه" : "غیرفعال (تعویض فوری)"));
+  lines.push("🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
+  lines.push("💾 بکاپ‌های نگه‌داشته: " + backups.length + " (حداکثر " + cfg.backupKeep + ")");
+  if (cfg.last_run) lines.push("🕐 آخرین اجرا: " + ndFmtTs(cfg.last_run) + " به وقت ایران");
+  if (cfg.last_summary) lines.push("📝 " + escHtml(cfg.last_summary));
+  if (cfg.checkhost_down) lines.push("⚠️ سرویس بررسی در دسترس نیست (از " + ndFmtTs(cfg.checkhost_down.ts) + ")");
+  lines.push("🔁 هاست‌های تعویض‌شده: " + count);
+  lines.push("");
+  lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. کانفیگ‌های REALITY/Fastly فقط هشدار می‌گیرند.");
+  const kb = [];
+  // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
+  kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
+  // hfcheck: اجرای فوری بررسی فیلترشدن | hfhist: تاریخچهٔ تعویض‌ها
+  kb.push([{ text: "🔎 بررسی فوری", callback_data: "hfcheck" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
+  // hflist: لیست هاست‌های پنل‌ها + استثنا و بررسی تک‌تک
+  kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }]);
+  // hfsetprov: جابه‌جایی بین سرویس check-host و Globalping
+  kb.push([{ text: "🔌 سرویس: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping"), callback_data: "hfsetprov" }]);
+  // hfset: صفحهٔ تنظیمات آستانه‌ها | hfbk: مدیریت بکاپ هاست‌ها
+  kb.push([{ text: "⚙️ تنظیمات", callback_data: "hfset" }, { text: "💾 بکاپ", callback_data: "hfbk" }]);
+  // mons: بازگشت به صفحهٔ مانیتورها
+  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function renderHostFilterSettings(edit, kv) {
+  const cfg = await getHostFilterCfg(kv);
+  const lines = ["⚙️ تنظیمات تعویض خودکار هاست", ""];
+  lines.push("مقادیر قابل تغییر (با زدن روی هر مورد، عدد/گزینهٔ تازه را بفرست):");
+  lines.push("• 🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host (نیاز به رله)" : "Globalping"));
+  lines.push("• ⏱ فاصلهٔ اجرا: " + cfg.intervalMin + " دقیقه");
+  if (cfg.provider === "checkhost") {
+    lines.push("• 🌆 شهرهای بررسی‌شده: " + cfg.citiesSel.join("، "));
+    lines.push("• 🎯 حداقل شهرهای فیلتر: " + cfg.cities);
+  } else {
+    lines.push("• 📡 تعداد پروب ایرانی: " + cfg.probes);
+    lines.push("• 🎯 حداقل پروب فیلتر: " + cfg.minFail);
+  }
+  lines.push("• 📶 حداکثر پینگ موفق مجاز: " + cfg.maxOk + " از ۴");
+  lines.push("• 🔁 تعداد بررسی مجدد پس از تشخیص فیلتر: " + cfg.recheckCount + " (۰ = تعویض فوری)");
+  lines.push("• ⏱ فاصلهٔ بررسی مجدد: هر " + cfg.recheckMin + " دقیقه");
+  lines.push("• 🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
+  lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
+  lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
+  lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
+  if (cfg.provider !== "checkhost") lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده"));
+  const kb = [];
+  // hfsetprov: تغییر سرویس بررسی (check-host/Globalping)
+  kb.push([{ text: "🔌 تغییر سرویس", callback_data: "hfsetprov" }]);
+  // hfsetedit:<field>: ویرایش عددی هر فیلد تنظیمات (interval = فاصلهٔ اجرای بررسی)
+  kb.push([{ text: "⏱ فاصلهٔ اجرا", callback_data: "hfsetedit:interval" }]);
+  if (cfg.provider === "checkhost") {
+    // hfcities: انتخاب شهرهای ایرانی بررسی‌شده | cities: حداقل تعداد شهر فیلتر برای تعویض | maxok: حداکثر پینگ موفق مجاز
+    kb.push([{ text: "🌆 انتخاب شهرها", callback_data: "hfcities" }]);
+    kb.push([{ text: "🎯 حداقل شهر", callback_data: "hfsetedit:cities" }, { text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
+  } else {
+    // probes: تعداد پروب ایرانی | minfail: حداقل پروب فیلتر | maxok: حداکثر پینگ موفق
+    kb.push([{ text: "📡 تعداد پروب", callback_data: "hfsetedit:probes" }, { text: "🎯 حداقل پروب فیلتر", callback_data: "hfsetedit:minfail" }]);
+    kb.push([{ text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
+  }
+  // batch: تعداد بررسی در هر اجرا | maxchanges: حداکثر تعداد تعویض در هر اجرا
+  kb.push([{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }]);
+  // recheck: تعداد بررسی مجدد پس از تشخیص فیلتر | recheckmin: فاصلهٔ بررسی مجدد
+  kb.push([{ text: "♻️ تعداد بررسی مجدد", callback_data: "hfsetedit:recheck" }, { text: "⏱ فاصلهٔ بررسی مجدد", callback_data: "hfsetedit:recheckmin" }]);
+  // hfforeign: بررسی دسترسی خارج از ایران برای همهٔ ساب‌ها
+  kb.push([{ text: "🌍 بررسی دسترسی خارج همهٔ ساب‌ها", callback_data: "hfforeign" }]);
+  // hfsettoken: ثبت/حذف توکن Globalping (فقط وقتی سرویس Globalping است)
+  if (cfg.provider !== "checkhost") kb.push([{ text: "🔑 توکن Globalping", callback_data: "hfsettoken" }]);
+  // backupkeep: تعداد بکاپ‌های نگه‌داشته‌شده
+  kb.push([{ text: "💾 تعداد بکاپ", callback_data: "hfsetedit:backupkeep" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+// انتخاب شهرهای ایران برای سرویس check-host؛ هر دکمه (hfcityt:<city>) آن شهر را روشن/خاموش می‌کند
+async function renderHostFilterCities(edit, kv) {
+  const cfg = await getHostFilterCfg(kv);
+  const kb = IR_CITIES.map((c) => [{ text: (cfg.citiesSel.includes(c) ? "✅ " : "⬜ ") + c, callback_data: "hfcityt:" + c }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hfset" }]);
+  await edit("🌆 کدام شهرها بررسی شوند؟\n(حداقل یک شهر باید فعال بماند؛ حداقل شهرها خودکار اصلاح می‌شود)", kb);
+}
+
+// مدیریت بکاپ هاست‌ها: hfbknow ساخت بکاپ | hfbkr بازگردانی بکاپ | hfbkdel حذف بکاپ
+async function renderHostFilterBackups(edit, kv) {
+  const backups = await getHfBackups(kv);
+  const lines = ["💾 بکاپ‌های هاست‌ها", ""];
+  if (!backups.length) lines.push("📭 هنوز بکاپی گرفته نشده.");
+  else for (const b of backups) lines.push("• " + ndFmtTs(b.ts) + " — " + escHtml(b.label || "-") + " (" + (b.count || 0) + " هاست)");
+  const kb = [[{ text: "➕ گرفتن بکاپ جدید", callback_data: "hfbknow" }]];
+  for (const b of backups) {
+    kb.push([{ text: "↩️ " + ndFmtTs(b.ts), callback_data: "hfbkr:" + b.id }, { text: "🗑", callback_data: "hfbkdel:" + b.id }]);
+  }
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function renderHostFilterHosts(edit, kv, env) {
+  const panels = await getPanels(kv);
+  const cfg = await getHostFilterCfg(kv);
+  const exc = new Set(cfg.exceptions || []);
+  const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", ""];
+  const kb = [];
+  let n = 0;
+  for (const panel of panels) {
+    const token = await panelLogin(panel);
+    if (!token) continue;
+    let hosts;
+    try {
+      hosts = await panelHosts(panel, token);
+    } catch (e) {
+      continue;
+    }
+    for (const h of hosts) {
+      n++;
+      const addr = (Array.isArray(h.address) && h.address[0]) || "";
+      const label = String(addr || h.remark || "host").substring(0, 24);
+      const key = panel.id + ":" + h.id;
+      const isExc = exc.has(key);
+      lines.push(`${n}) ${h.is_disabled ? "⏸ " : ""}${label}`);
+      // hfchk: بررسی فوری فیلترشدن همین هاست | hfexc: افزودن/حذف همین هاست از استثناهای تعویض خودکار
+      kb.push([
+        { text: "🔎 " + label.substring(0, 16), callback_data: `hfchk:${panel.id}:${h.id}` },
+        { text: (isExc ? "✅" : "🚫") + " استثنا", callback_data: `hfexc:${panel.id}:${h.id}` },
+      ]);
+    }
+  }
+  if (!n) lines.push("📭 هاستی پیدا نشد.");
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function hfHostCheck(kv, env, panelId, hostId) {
+  const back = [[{ text: "🔙 بازگشت به لیست", callback_data: "hflist" }]];
+  const cfg = await getHostFilterCfg(kv);
+  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => p.id === panelId);
+  if (!panel) return { text: "❌ پنل پیدا نشد.", kb: back };
+  const token = await panelLogin(panel);
+  if (!token) return { text: "❌ ورود به پنل ناموفق.", kb: back };
+  let hosts;
+  try {
+    hosts = await panelHosts(panel, token);
+  } catch (e) {
+    return { text: "❌ خطا در خواندن هاست‌های پنل.", kb: back };
+  }
+  const h = hosts.find((x) => String(x.id) === String(hostId));
+  if (!h) return { text: "❌ هاست پیدا نشد.", kb: back };
+  if (h.is_disabled) {
+    return { text: "⏸ این هاست غیرفعال است؛ بررسی نمی‌شود.", kb: back };
+  }
+  const excKey = String(panelId) + ":" + String(h.id);
+  if ((cfg.exceptions || []).includes(excKey)) {
+    return {
+      text: "🚫 این هاست در لیست استثناست؛ بررسی نمی‌شود.\n\nاگر می‌خواهی بررسی شود، از لیست هاست دکمهٔ «✅ استثنا» را بزن تا از استثنا خارج شود.",
+      kb: [[{ text: "✅ خروج از استثنا و بازگشت", callback_data: `hfexc:${panelId}:${h.id}` }]],
+    };
+  }
+  const domains = new Set();
+  for (const f of ["address", "sni", "host"]) {
+    for (const v of h[f] || []) if (isDomainLike(v)) domains.add(String(v).toLowerCase());
+  }
+  const lines = [`🔎 بررسی هاست ${h.id}`, ""];
+  if (!domains.size) lines.push("دامنه‌ای برای بررسی ندارد.");
+  for (const d of domains) {
+    const ping = await pingTarget(d, cfg, env, kv);
+    if (ping.error) {
+      lines.push(`⚪ ${d} — خطای بررسی (${ping.error})`);
+      continue;
+    }
+    const info = hostFilterPingBlocked(ping, cfg);
+    const blocked = hostFilterIsBlocked(info, cfg);
+    if (cfg.provider === "checkhost") lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedCities}/${cfg.citiesSel.length} شهر بلاک`);
+    else lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedProbes}/${info.totalProbes} پروب بلاک`);
+    for (const nid of Object.keys(ping.nodes)) {
+      const n = ping.nodes[nid];
+      const who = n.network ? `${n.network}${n.asn ? "/" + n.asn : ""}${n.city ? " - " + n.city : ""}` : `${nid}${n.city ? " - " + n.city : ""}`;
+      lines.push(`   ${n.ok > 0 ? "🟢" : "🔴"} ${escHtml(who)}: ${n.ok}/${n.total}${n.failed ? " (failed/مسموم)" : ""}`);
+    }
+    await sleep(700);
+  }
+  return { text: lines.join("\n"), kb: back };
+}
+
+// بررسی یک لوکیشن خارجی (آلمان) برای همهٔ ساب‌دامنه‌ها/آی‌پی‌های هاست‌ها.
+// برای مواردی که از خارج پاسخ نمی‌دهند، ایران هم چک می‌شود تا «ایران‌اکسس» مشخص شود.
+const HOSTFILTER_FOREIGN_SCAN_CAP = 25;
+async function hfForeignScan(kv, env) {
+  const cfg = await getHostFilterCfg(kv);
+  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
+  const panels = await getPanels(kv);
+  const seen = new Set();
+  const targets = [];
+  for (const panel of panels) {
+    const token = await panelLogin(panel);
+    if (!token) continue;
+    let hosts;
+    try {
+      hosts = await panelHosts(panel, token);
+    } catch (e) {
+      continue;
+    }
+    for (const h of hosts) {
+      if (h.is_disabled) continue;
+      for (const f of ["address", "sni", "host"]) {
+        for (const v of Array.isArray(h[f]) ? h[f] : []) {
+          const s = String(v).toLowerCase();
+          if ((isDomainLike(s) || isIpv4(s)) && !seen.has(s)) {
+            seen.add(s);
+            targets.push({ target: s, panel: panel.name, remark: h.remark || h.id });
+          }
+        }
+      }
+    }
+  }
+  const list = targets.slice(0, HOSTFILTER_FOREIGN_SCAN_CAP);
+  const lines = ["🌍 بررسی دسترسی خارج (آلمان)", ""];
+  if (!list.length) lines.push("📭 موردی برای بررسی پیدا نشد.");
+  let iranAccess = 0;
+  let down = 0;
+  for (const it of list) {
+    const de = await foreignPingOne(it.target, cfg, env, kv);
+    if (de.error) {
+      lines.push(`⚪ ${escHtml(it.target)} — خطای بررسی (${de.error})`);
+      await sleep(700);
+      continue;
+    }
+    const st = pingFailStats(de);
+    if (st.fail === 0) {
+      lines.push(`🟢 ${escHtml(it.target)} — از خارج در دسترس`);
+      await sleep(700);
+      continue;
+    }
+    const ir = await pingTarget(it.target, cfg, env, kv);
+    if (pingHasResponse(ir)) {
+      iranAccess++;
+      lines.push(`🇮🇷 ${escHtml(it.target)} — ایران‌اکسس (خارج پاسخ نداد)`);
+    } else {
+      down++;
+      lines.push(`🔴 ${escHtml(it.target)} — نه از خارج و نه از ایران پاسخ نداد`);
+    }
+    await sleep(700);
+  }
+  if (targets.length > list.length) lines.push("", `⚠️ فقط ${list.length} مورد اول از ${targets.length} مورد بررسی شد.`);
+  lines.push("", `🌍 بررسی‌شده: ${list.length} · 🇮🇷 ایران‌اکسس: ${iranAccess} · 🔴 نامشخص/خاموش: ${down}`);
+  return lines.join("\n");
+}
