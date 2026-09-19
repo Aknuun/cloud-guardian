@@ -9,13 +9,16 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.08";
+const BOT_VERSION = "9.09";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
 const REQUEST_LIMIT_DAILY = 100000;
 const QUOTA_WARN_RATIO = 0.9;
 const QUOTA_PAUSE_KEY = "quota_pause";
+const QUOTA_CFG_KEY = "quota_cfg";
+const QUOTA_TOKEN_KEY = "quota_token";
+const QUOTA_SCHED_KEY = "quota_sched_saved";
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -29,6 +32,12 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.09": [
+    "☁️ منوی «سهمیهٔ کلادفلر» در بخش مانیتورها (کنار «مانیتور سرورها»): نمایش مصرف امروز/سقف، روشن‌وخاموش‌کردن استاپ خودکار، تغییر سقف روزانه، وضعیت کرون‌جاب‌ها و روشن‌کردن ربات",
+    "🔓 روشن‌کردن فوری ربات با لینک (بدون نیاز به وب‌هوک) + دکمه‌های «خاموش‌کردن موقت کرون ۶/۲۴ ساعت» روی پیام هشدار سهمیه",
+    "⏸ خاموش‌کردن موقت کرون‌جاب‌ها برای کم‌کردن مصرف درخواست کلادفلر (خودکار در پایان بازه روشن می‌شود)",
+    "🔔 هشدار سهمیهٔ کلادفلر روزی یک‌بار ارسال می‌شود (ضداسپم)",
+  ],
   "9.08": ["⚠️ هشدار سهمیهٔ کلادفلر در تنظیمات کرون/فاصله: هنگام تعیین «فاصلهٔ اجرا» و «فاصلهٔ بررسی مجدد» و مقادیر افزایش‌دهندهٔ درخواست (پروب، تعداد هر اجرا و…) به کاربر اخطار داده می‌شود که بازهٔ کوتاه ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود و انتخاب زمان بزرگ‌تر توصیه می‌شود"],
   "9.07": ["⚠️ گارد سهمیهٔ روزانهٔ کلادفلر: وقتی مصرف درخواست‌های امروز به ۹۰٪ (۹۰,۰۰۰ از ۱۰۰,۰۰۰) برسد، به ادمین هشدار می"],
   "9.06": ["⚡️ کاهش شدید مصرف Workers KV: جستجوی بازیابی نودها (kv.list) که در کرون یکدقیقهای بیش از سهمیهٔ روزانهٔ رایگان (۱۰۰۰ writ"],
@@ -467,6 +476,29 @@ export default {
       return ok();
     }
 
+    // لینک‌های بدون وب‌هوک: روشن‌کردن فوری ربات و خاموش‌کردن موقت کرون‌جاب‌ها
+    if (request.method === "GET" && (url.pathname === "/qresume" || url.pathname === "/qcron")) {
+      const token = await getQuotaToken(kv);
+      const given = url.searchParams.get("t") || "";
+      if (!kv || !token || given !== token) {
+        return new Response("⛔ لینک نامعتبر است.", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
+      }
+      if (url.pathname === "/qresume") {
+        await quotaResume(env, botToken);
+        return new Response("✅ ربات روشن شد. به تلگرام برگرد و /start بزن.", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+      const h = Number(url.searchParams.get("h") || "6");
+      await quotaPauseCron(env, h > 0 ? Math.min(h, 720) : 0);
+      return new Response(
+        h > 0
+          ? `✅ کرون‌جاب‌ها برای ${h} ساعت خاموش شدند. برای برگشت از لینک «روشن‌کردن فوری ربات» استفاده کن.`
+          : "✅ کرون‌جاب‌ها روشن شدند.",
+        { headers: { "content-type": "text/plain; charset=utf-8" } }
+      );
+    }
+
     if (request.method !== "POST") return ok();
 
     let payload;
@@ -486,6 +518,18 @@ export default {
     const cron = event.cron || "";
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    // خاموش‌کردن موقت کرون‌جاب‌ها (از منوی سهمیه یا لینک هشدار): فقط گارد سهمیه اجرا شود تا خودکار روشن شویم
+    const qcfg = await getQuotaCfg(env.BOT_KV, env).catch(() => null);
+    if (qcfg && qcfg.cronPausedUntil) {
+      if (Date.now() < qcfg.cronPausedUntil) {
+        ctx.waitUntil(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+        return;
+      }
+      // پایان خاموشی موقت: زمان‌بندهای اصلی کرون را برگردان
+      qcfg.cronPausedUntil = 0;
+      ctx.waitUntil(saveQuotaCfg(env.BOT_KV, qcfg));
+      ctx.waitUntil(quotaRestoreSchedules(env, env.BOT_KV).catch(() => {}));
+    }
     if (cron === "0 9 * * *") {
       ctx.waitUntil(runSslMonitor(env));
       ctx.waitUntil(runDomExpiryMonitor(env).catch((e) => console.error("DOMEXP", String(e))));
@@ -1155,9 +1199,142 @@ async function getSelfWebhook(env, tok) {
   return null;
 }
 
+async function getQuotaCfg(kv, env) {
+  let cfg = null;
+  try {
+    cfg = kv ? await kv.get(QUOTA_CFG_KEY, "json") : null;
+  } catch (e) {}
+  const envLimit = Number((env && env.REQUEST_LIMIT_DAILY) || REQUEST_LIMIT_DAILY);
+  return {
+    autoStop: cfg && typeof cfg.autoStop === "boolean" ? cfg.autoStop : true,
+    limit: cfg && Number(cfg.limit) > 0 ? Number(cfg.limit) : envLimit,
+    cronPausedUntil: cfg && Number(cfg.cronPausedUntil) > 0 ? Number(cfg.cronPausedUntil) : 0,
+    warnedDay: (cfg && cfg.warnedDay) || "",
+  };
+}
+
+async function saveQuotaCfg(kv, cfg) {
+  if (!kv) return;
+  try {
+    await kv.put(QUOTA_CFG_KEY, JSON.stringify(cfg));
+  } catch (e) {}
+}
+
+async function getQuotaToken(kv) {
+  if (!kv) return "";
+  let t = "";
+  try {
+    t = await kv.get(QUOTA_TOKEN_KEY, "text");
+  } catch (e) {}
+  if (!t) {
+    t = makeToken() + makeToken();
+    try {
+      await kv.put(QUOTA_TOKEN_KEY, t);
+    } catch (e) {}
+  }
+  return t;
+}
+
+// روشن‌کردن فوری ربات: برگرداندن وب‌هوک و پاک‌کردن وضعیت استاپ
+async function quotaResume(env, botToken) {
+  const kv = env.BOT_KV;
+  if (!kv) return false;
+  let paused = null;
+  try {
+    const raw = await kv.get(QUOTA_PAUSE_KEY, "text");
+    paused = raw ? JSON.parse(raw) : null;
+  } catch (e) {}
+  let webhook = paused && paused.webhook ? paused.webhook : "";
+  if (!webhook) {
+    try {
+      const acc = await getQuotaAcct(kv, env);
+      if (acc) webhook = await getSelfWebhook(env, acc.tok);
+    } catch (e) {}
+  }
+  let done = false;
+  if (webhook) {
+    try {
+      await tg(botToken, "setWebhook", { url: webhook, drop_pending_updates: false });
+      done = true;
+    } catch (e) {}
+  }
+  await kv.delete(QUOTA_PAUSE_KEY).catch(() => {});
+  return done;
+}
+
+// خواندن/نوشتن زمان‌بندهای کرون ورکر روی کلادفلر (برای خاموش‌کردن واقعی)
+async function cfGetSchedules(env, tok, aid) {
+  const name = env.WORKER_NAME || "";
+  if (!name || !aid || !tok) return null;
+  try {
+    const res = await fetch(`${CF_API}/accounts/${aid}/workers/scripts/${name}/schedules`, {
+      headers: hdr(tok),
+      signal: withTimeout(),
+    });
+    const d = await res.json();
+    const arr = d && d.result && d.result.schedules;
+    return Array.isArray(arr) ? arr.map((s) => s && s.cron).filter(Boolean) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function cfPutSchedules(env, tok, aid, crons) {
+  const name = env.WORKER_NAME || "";
+  if (!name || !aid || !tok) return false;
+  try {
+    const res = await fetch(`${CF_API}/accounts/${aid}/workers/scripts/${name}/schedules`, {
+      method: "PUT",
+      headers: hdr(tok),
+      body: JSON.stringify({ schedules: (crons || []).map((c) => ({ cron: c })) }),
+      signal: withTimeout(),
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+// برگرداندن زمان‌بندهای اصلی کرون که قبل از خاموش‌کردن موقت ذخیره شده‌اند
+async function quotaRestoreSchedules(env, kv) {
+  if (!kv) return;
+  let saved = null;
+  try {
+    saved = await kv.get(QUOTA_SCHED_KEY, "json");
+  } catch (e) {}
+  if (!Array.isArray(saved) || !saved.length) return;
+  const acc = await getQuotaAcct(kv, env);
+  if (!acc) return;
+  const okr = await cfPutSchedules(env, acc.tok, acc.aid, saved);
+  if (okr) await kv.delete(QUOTA_SCHED_KEY).catch(() => {});
+}
+
+// خاموش‌کردن موقت کرون‌جاب‌ها (ساعت؛ ۰ = روشن)
+async function quotaPauseCron(env, hours) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const cfg = await getQuotaCfg(kv, env);
+  cfg.cronPausedUntil = hours > 0 ? Date.now() + hours * 3600000 : 0;
+  await saveQuotaCfg(kv, cfg);
+  if (hours > 0) {
+    // زمان‌بندهای فعلی را ذخیره کن و فقط یک کرون سبک برای برگشت خودکار نگه دار
+    const acc = await getQuotaAcct(kv, env);
+    if (acc) {
+      const cur = await cfGetSchedules(env, acc.tok, acc.aid);
+      if (cur && cur.length) {
+        await kv.put(QUOTA_SCHED_KEY, JSON.stringify(cur)).catch(() => {});
+        await cfPutSchedules(env, acc.tok, acc.aid, ["*/30 * * * *"]);
+      }
+    }
+  } else {
+    await quotaRestoreSchedules(env, kv);
+  }
+}
+
 async function quotaGuard(env, botToken, adminId) {
   const kv = env.BOT_KV;
   if (!kv) return;
+  const cfg = await getQuotaCfg(kv, env);
   let paused = null;
   try {
     const raw = await kv.get(QUOTA_PAUSE_KEY, "text");
@@ -1170,11 +1347,14 @@ async function quotaGuard(env, botToken, adminId) {
         await tg(botToken, "setWebhook", { url: paused.webhook, drop_pending_updates: false });
       } catch (e) {}
       await kv.delete(QUOTA_PAUSE_KEY).catch(() => {});
+      try {
+        await sendMessage(botToken, adminId, "✅ سهمیهٔ روزانهٔ کلادفلر ریست شد و ربات دوباره روشن شد.", [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+      } catch (e) {}
     }
     return;
   }
 
-  const limit = Number((env && env.REQUEST_LIMIT_DAILY) || REQUEST_LIMIT_DAILY);
+  const limit = Number(cfg.limit) || 0;
   if (!(limit > 0)) return; // 0 = گارد غیرفعال
   const acc = await getQuotaAcct(kv, env);
   if (!acc) return;
@@ -1182,28 +1362,94 @@ async function quotaGuard(env, botToken, adminId) {
   if (count === null) return; // آنالیتیکس در دسترس نیست → بی‌سر و صدا رد شو
   if (count < Math.round(limit * QUOTA_WARN_RATIO)) return;
 
+  const today = new Date().toISOString().slice(0, 10);
+  if (cfg.warnedDay === today) return; // روزی یک‌بار هشدار
+  cfg.warnedDay = today;
+  await saveQuotaCfg(kv, cfg);
+
   const resetAt = _nextUtcMidnight();
   const pct = Math.round((count / limit) * 100);
+  const base = await selfUrlBase(env, kv);
+  const token = await getQuotaToken(kv);
+  const resumeUrl = base && token ? `${base}/qresume?t=${token}` : "";
   const lines = [
     "⚠️ هشدار سهمیهٔ روزانهٔ کلادفلر!",
     "",
     `تعداد درخواست‌های امروز ربات: ${count.toLocaleString("en-US")} از ${limit.toLocaleString("en-US")} (${pct}٪).`,
     "",
-    "🔒 به‌خاطر امنیت اکانت، ربات موقتاً استاپ می‌شود و بعد از ریست سهمیه",
-    `(ساعت ۰۰:۰۰ UTC = ساعت ${_tehranHm(resetAt)} به‌وقت تهران)`,
-    "دوباره خودم روشنش می‌کنم.",
+    cfg.autoStop
+      ? "🔒 به‌خاطر امنیت اکانت، ربات موقتاً استاپ می‌شود و بعد از ریست سهمیه"
+      : "ℹ️ استاپ خودکار خاموش است؛ ربات روشن می‌ماند.",
+    `(ریست: ۰۰:۰۰ UTC = ساعت ${_tehranHm(resetAt)} به‌وقت تهران)`,
+    "",
+    "برای کم‌کردن مصرف، می‌توانی کرون‌جاب‌ها را موقتاً خاموش کنی.",
   ];
+  if (resumeUrl) lines.push("", resumeUrl);
+  const kb = [[{ text: "🚀 استارت", callback_data: "menu" }]];
+  if (resumeUrl) {
+    kb.push([{ text: "🔓 روشن‌کردن فوری ربات", url: resumeUrl }]);
+    kb.push([{ text: "⏸ خاموش‌کردن موقت کرون ۶ ساعت", url: `${base}/qcron?t=${token}&h=6` }]);
+    kb.push([{ text: "⏸ خاموش‌کردن موقت کرون ۲۴ ساعت", url: `${base}/qcron?t=${token}&h=24` }]);
+  }
+  kb.push([{ text: "☁️ تنظیمات سهمیه", callback_data: "quota" }]);
   try {
-    await sendMessage(botToken, adminId, lines.join("\n"), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+    await sendMessage(botToken, adminId, lines.join("\n"), kb);
   } catch (e) {}
 
-  const webhook = await getSelfWebhook(env, acc.tok);
-  if (!webhook) return; // اگر URL ورکر معلوم نبود فقط هشدار بده؛ استاپ نکن
-  await kv.put(QUOTA_PAUSE_KEY, JSON.stringify({ reset_at: resetAt, webhook, count }));
-  try {
-    await tg(botToken, "deleteWebhook", {});
-  } catch (e) {}
+  if (cfg.autoStop) {
+    const webhook = await getSelfWebhook(env, acc.tok);
+    if (!webhook) return; // اگر URL ورکر معلوم نبود فقط هشدار بده؛ استاپ نکن
+    await kv.put(QUOTA_PAUSE_KEY, JSON.stringify({ reset_at: resetAt, webhook, count }));
+    try {
+      await tg(botToken, "deleteWebhook", {});
+    } catch (e) {}
+  }
 }
+
+async function renderQuotaMenu(edit, kv, env) {
+  const cfg = await getQuotaCfg(kv, env);
+  const acc = await getQuotaAcct(kv, env);
+  let count = null;
+  if (acc) count = await fetchRequestsToday(acc.tok, acc.aid);
+  let paused = null;
+  try {
+    const raw = await kv.get(QUOTA_PAUSE_KEY, "text");
+    paused = raw ? JSON.parse(raw) : null;
+  } catch (e) {}
+  const pct = count !== null && cfg.limit ? Math.round((count / cfg.limit) * 100) : null;
+  const lines = ["☁️ سهمیهٔ کلادفلر", ""];
+  lines.push(
+    "📊 مصرف امروز: " +
+      (count === null
+        ? "نامشخص (آنالیتیکس در دسترس نیست)"
+        : count.toLocaleString("en-US") + " از " + cfg.limit.toLocaleString("en-US") + (pct === null ? "" : " (" + pct + "٪)"))
+  );
+  lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
+  lines.push(
+    "⏸ کرون‌جاب‌ها: " +
+      (cfg.cronPausedUntil && Date.now() < cfg.cronPausedUntil ? "خاموش تا " + ndFmtTs(cfg.cronPausedUntil) : "روشن")
+  );
+  lines.push("🤖 وضعیت ربات: " + (paused ? "متوقف (منتظر ریست)" : "فعال"));
+  if (paused && paused.reset_at) lines.push("⏳ روشن‌شدن خودکار: " + ndFmtTs(paused.reset_at));
+  const kb = [];
+  kb.push([{ text: cfg.autoStop ? "🔓 خاموش‌کردن استاپ خودکار" : "🔒 روشن‌کردن استاپ خودکار", callback_data: "qtgauto" }]);
+  kb.push([{ text: "🔢 تغییر سقف روزانه", callback_data: "qsetlimit" }]);
+  if (cfg.cronPausedUntil && Date.now() < cfg.cronPausedUntil) {
+    kb.push([{ text: "▶️ روشن‌کردن کرون‌جاب‌ها", callback_data: "qcron:0" }]);
+  } else {
+    kb.push([
+      { text: "⏸ توقف کرون ۶ ساعت", callback_data: "qcron:6" },
+      { text: "⏸ توقف کرون ۲۴ ساعت", callback_data: "qcron:24" },
+    ]);
+  }
+  kb.push([
+    { text: "🔓 روشن‌کردن ربات", callback_data: "qresume" },
+    { text: "🔄 بررسی مجدد", callback_data: "quota" },
+  ]);
+  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
+}
+
 
 async function getAccountId(accounts, i) {
   const res = await fetch(`${CF_API}/zones?per_page=1`, { headers: hdr(accounts[i].token), signal: withTimeout() });
@@ -5744,6 +5990,20 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     return;
   }
 
+  if (type === "q_limit") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(txt);
+    if (!Number.isInteger(n) || n < 1000 || n > 100000000) {
+      await send("❌ عدد نامعتبر است (بازه: ۱۰۰۰ تا ۱۰۰٬۰۰۰٬۰۰۰).", [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]);
+      return;
+    }
+    const qc = await getQuotaCfg(kv, env);
+    qc.limit = n;
+    await saveQuotaCfg(kv, qc);
+    await send("✅ سقف روزانه به " + n.toLocaleString("en-US") + " تغییر کرد.", [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]);
+    return;
+  }
+
   if (type === "admin_add") {
     await kv.delete(`pend:${chatId}`);
     const id = Number(txt);
@@ -8432,10 +8692,35 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
           { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" },
         ],
-        [{ text: "🖥 مانیتور سرورها", callback_data: "srvmon" }],
+        [
+          { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
+          { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" },
+        ],
         [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
         [{ text: "⏰ یادآور", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
         [{ text: "🏠 منو", callback_data: "menu" }],
+      ]);
+    } else if (data === "quota") {
+      await renderQuotaMenu(edit, kv, env);
+    } else if (data === "qtgauto") {
+      const qc = await getQuotaCfg(kv, env);
+      qc.autoStop = !qc.autoStop;
+      await saveQuotaCfg(kv, qc);
+      await renderQuotaMenu(edit, kv, env);
+    } else if (data === "qsetlimit") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "q_limit" }), { expirationTtl: 600 });
+      const qc = await getQuotaCfg(kv, env);
+      await edit("🔢 سقف روزانهٔ درخواست‌های کلادفلر را بفرستید (عدد؛ مثلاً 100000):\n\nفعلی: " + qc.limit, [
+        [{ text: "🔙 انصراف", callback_data: "quota" }],
+      ]);
+    } else if (data.startsWith("qcron:")) {
+      const h = Number(data.slice(6)) || 0;
+      await quotaPauseCron(env, h);
+      await renderQuotaMenu(edit, kv, env);
+    } else if (data === "qresume") {
+      const okr = await quotaResume(env, botToken);
+      await edit(okr ? "✅ ربات روشن شد." : "✅ وضعیت استاپ پاک شد (وب‌هوک از قبل فعال بود).", [
+        [{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
       ]);
     } else if (data === "srv") {
       // بخش سرورها: مدیریت سرورهای لینوکسی از طریق رله
