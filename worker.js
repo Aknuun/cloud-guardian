@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.12";
+const BOT_VERSION = "9.13";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,9 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.13": [
+    "🔧 رفع فرمت درخواست زمان‌بندهای کلادفلر در خاموش/روشن‌کردن موقت کرون (بدنه باید آرایهٔ خام باشد) — حالا خاموش‌کردن موقت کرون‌ها درست کار می‌کند",
+  ],
   "9.12": [
     "⚡️ کاهش شدید مصرف KV (برای نزدیک نشدن به سقف روزانه):",
     "• رفع باگ گارد ثبت نود: کلید گارد دیگر با پیشوند nodeadd: تداخل ندارد و در حلقه حذف نمی‌شود (قبلاً kv.list عملاً هر دقیقه اجرا می‌شد)",
@@ -1486,7 +1489,7 @@ async function cfPutSchedules(env, tok, aid, crons) {
     const res = await fetch(`${CF_API}/accounts/${aid}/workers/scripts/${name}/schedules`, {
       method: "PUT",
       headers: hdr(tok),
-      body: JSON.stringify({ schedules: (crons || []).map((c) => ({ cron: c })) }),
+      body: JSON.stringify((crons || []).map((c) => ({ cron: c }))),
       signal: withTimeout(),
     });
     return res.ok;
