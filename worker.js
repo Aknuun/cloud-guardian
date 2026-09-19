@@ -9,7 +9,13 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.06";
+const BOT_VERSION = "9.07";
+
+// سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
+// از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
+const REQUEST_LIMIT_DAILY = 100000;
+const QUOTA_WARN_RATIO = 0.9;
+const QUOTA_PAUSE_KEY = "quota_pause";
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -23,6 +29,7 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.07": ["⚠️ گارد سهمیهٔ روزانهٔ کلادفلر: وقتی مصرف درخواست‌های امروز به ۹۰٪ (۹۰,۰۰۰ از ۱۰۰,۰۰۰) برسد، به ادمین هشدار می"],
   "9.06": ["⚡️ کاهش شدید مصرف Workers KV: جستجوی بازیابی نودها (kv.list) که در کرون یکدقیقهای بیش از سهمیهٔ روزانهٔ رایگان (۱۰۰۰ writ"],
   "9.05": ["📢 تبلیغ منوی اصلی به t.me/panelSazFilterBot تغییر کرد"],
   "9.04": ["🏠 متن روی منوی اصلی کوتاه شد: نوشتههای «در منوی اصلی هستید / یک گزینه را انتخاب کن» حذف شد"],
@@ -490,6 +497,8 @@ export default {
       ctx.waitUntil(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
       // آپدیت خودکار از گیت‌هاب (اگر WORKER_ACCOUNT_ID و WORKER_NAME در bindings باشد)
       ctx.waitUntil(maybeSelfUpdate(env, botToken, adminId).catch((e) => console.error("SELFUPDATE", String(e))));
+      // گارد سهمیهٔ روزانهٔ درخواست‌های کلادفلر: هشدار ۹۰٪ + استاپ خودکار تا ریست (۰۰:۰۰ UTC)
+      ctx.waitUntil(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
       // ثبت دکمه‌های صفحهٔ اصلی در منوی دستورات تلگرام (یک‌بار برای هر نسخه)
       ctx.waitUntil(ensureBotCommands(env, botToken, env.BOT_KV).catch(() => {}));
     } else if (cron === "* * * * *") {
@@ -1067,6 +1076,132 @@ async function maybeSelfUpdate(env, botToken, adminId) {
   } catch (e) {
     console.error("SELFUPDATE", String(e));
   }
+}
+
+// ============================================================
+// گارد سهمیهٔ روزانهٔ درخواست‌های کلادفلر (پلن رایگان = ۱۰۰,۰۰۰/روز)
+// روی کرون ۱۰ دقیقه‌ای:
+//   • تعداد درخواست‌های امروز از GraphQL (workersInvocationsAdaptive)
+//     با توکن CF خود حساب خوانده می‌شود.
+//   • اگر به ۹۰٪ رسید → به ادمین هشدار می‌دهد و وب‌هاوک را حذف می‌کند
+//     (ربات از نظر کاربر خاموش/ایمن؛ کرون‌ها همچنان کار می‌کنند).
+//   • بعد از ریست (ساعت ۰۰:۰۰ UTC) همان کرون، وب‌هاوک را برمی‌گرداند.
+// فقط وقتی استاپ/هشدار می‌گیرد که هم GraphQL جواب بدهد هم آدرس ورکر
+// (subdomain) قابل محاسبه باشد؛ وگرنه فقط هشدار می‌دهد و استاپ نمی‌کند.
+// ============================================================
+function _utcMidnight(dayMs) {
+  const d = new Date(dayMs);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+function _nextUtcMidnight() {
+  return _utcMidnight(Date.now()) + 86400000;
+}
+function _tehranHm(ms) {
+  const d = new Date(ms + 3.5 * 3600000);
+  const h = String(d.getUTCHours()).padStart(2, "0");
+  const m = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+async function getQuotaAcct(kv, env) {
+  const aid = env.WORKER_ACCOUNT_ID || "";
+  const list = await getAccounts(kv, env);
+  if (!Array.isArray(list) || !list.length) return null;
+  if (aid) {
+    const m = list.find((a) => a && a.token && String(a.account_id) === aid);
+    if (m) return { tok: m.token, aid };
+  }
+  const t = list[0] && list[0].token;
+  return t ? { tok: t, aid } : null;
+}
+
+async function fetchRequestsToday(tok, aid) {
+  if (!tok || !aid) return null;
+  const day = new Date().toISOString().slice(0, 10);
+  const q =
+    `{viewer{accounts(filter:{accountTag:"${aid}"}){workersInvocationsAdaptive(limit:1,` +
+    `filter:{datetime_geq:"${day}T00:00:30Z"}){sum{requests}}}}}`;
+  try {
+    const res = await fetch(`${CF_API}/graphql`, {
+      method: "POST",
+      headers: hdr(tok),
+      body: JSON.stringify({ query: q }),
+      signal: withTimeout(25000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const arr = data && data.data && data.data.viewer && data.data.viewer.accounts &&
+      data.data.viewer.accounts[0] && data.data.viewer.accounts[0].workersInvocationsAdaptive;
+    if (!Array.isArray(arr) || !arr.length) return 0;
+    const n = Number(arr[0].sum && arr[0].sum.requests);
+    return Number.isFinite(n) ? n : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getSelfWebhook(env, tok) {
+  const aid = env.WORKER_ACCOUNT_ID || "";
+  const wname = env.WORKER_NAME || "";
+  if (!aid || !wname) return null;
+  try {
+    const res = await fetch(`${CF_API}/accounts/${aid}/workers/subdomain`, { headers: hdr(tok), signal: withTimeout() });
+    const data = await res.json();
+    const sub = data && data.result && data.result.subdomain;
+    if (sub) return `https://${wname}.${sub}.workers.dev/tg`;
+  } catch (e) {}
+  return null;
+}
+
+async function quotaGuard(env, botToken, adminId) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  let paused = null;
+  try {
+    const raw = await kv.get(QUOTA_PAUSE_KEY, "text");
+    paused = raw ? JSON.parse(raw) : null;
+  } catch (e) {}
+
+  if (paused && paused.webhook && paused.reset_at) {
+    if (Date.now() >= Number(paused.reset_at)) {
+      try {
+        await tg(botToken, "setWebhook", { url: paused.webhook, drop_pending_updates: false });
+      } catch (e) {}
+      await kv.delete(QUOTA_PAUSE_KEY).catch(() => {});
+    }
+    return;
+  }
+
+  const limit = Number((env && env.REQUEST_LIMIT_DAILY) || REQUEST_LIMIT_DAILY);
+  if (!(limit > 0)) return; // 0 = گارد غیرفعال
+  const acc = await getQuotaAcct(kv, env);
+  if (!acc) return;
+  const count = await fetchRequestsToday(acc.tok, acc.aid);
+  if (count === null) return; // آنالیتیکس در دسترس نیست → بی‌سر و صدا رد شو
+  if (count < Math.round(limit * QUOTA_WARN_RATIO)) return;
+
+  const resetAt = _nextUtcMidnight();
+  const pct = Math.round((count / limit) * 100);
+  const lines = [
+    "⚠️ هشدار سهمیهٔ روزانهٔ کلادفلر!",
+    "",
+    `تعداد درخواست‌های امروز ربات: ${count.toLocaleString("en-US")} از ${limit.toLocaleString("en-US")} (${pct}٪).`,
+    "",
+    "🔒 به‌خاطر امنیت اکانت، ربات موقتاً استاپ می‌شود و بعد از ریست سهمیه",
+    `(ساعت ۰۰:۰۰ UTC = ساعت ${_tehranHm(resetAt)} به‌وقت تهران)`,
+    "دوباره خودم روشنش می‌کنم.",
+  ];
+  try {
+    await sendMessage(botToken, adminId, lines.join("\n"), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+  } catch (e) {}
+
+  const webhook = await getSelfWebhook(env, acc.tok);
+  if (!webhook) return; // اگر URL ورکر معلوم نبود فقط هشدار بده؛ استاپ نکن
+  await kv.put(QUOTA_PAUSE_KEY, JSON.stringify({ reset_at: resetAt, webhook, count }));
+  try {
+    await tg(botToken, "deleteWebhook", {});
+  } catch (e) {}
 }
 
 async function getAccountId(accounts, i) {
