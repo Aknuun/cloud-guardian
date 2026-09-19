@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.05";
+const BOT_VERSION = "9.06";
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -23,6 +23,7 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.06": ["⚡️ کاهش شدید مصرف Workers KV: جستجوی بازیابی نودها (kv.list) که در کرون یکدقیقهای بیش از سهمیهٔ روزانهٔ رایگان (۱۰۰۰ writ"],
   "9.05": ["📢 تبلیغ منوی اصلی به t.me/panelSazFilterBot تغییر کرد"],
   "9.04": ["🏠 متن روی منوی اصلی کوتاه شد: نوشتههای «در منوی اصلی هستید / یک گزینه را انتخاب کن» حذف شد"],
   "9.03": ["🏠 منوی اصلی: دکمه «دیتاسنترها» حذف شد و بهجایش «هتزنر | لینود | آروان» در یک ردیف سبز قرار گرفت؛ «سرورها» هم یک "],
@@ -4138,6 +4139,14 @@ async function pgPanelHasNode(p, token, ip) {
 async function runNodeAddPending(env) {
   const kv = env.BOT_KV;
   if (!kv || !(await getRelayBase(kv, env))) return;
+  // گارد بازهٔ ۱۰ دقیقه‌ای: سهمیهٔ رایگان KV ترکیبی (write+delete+list) فقط ۱۰۰۰ تا در روز است
+  // و قبل از این گارد، kv.list اینجا در کرون یک‌دقیقه‌ای اجرا می‌شد (۱۴۴۰ لیست در روز)
+  const now = Date.now();
+  const lastScan = Number((await kv.get("nodeadd:last")) || 0);
+  if (lastScan && now - lastScan < 600000) return;
+  try {
+    await kv.put("nodeadd:last", String(now), { expirationTtl: 610 });
+  } catch (e) {}
   let keys = [];
   try {
     const r = await kv.list({ prefix: "nodeadd:", limit: 10 });
