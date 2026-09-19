@@ -22,24 +22,17 @@
 | ۲ | توکن API کلادفلر | [آموزش تصویری ساخت توکن](docs/cloudflare-api-token.md) |
 | ۳ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۴ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
-| ۵ | یک سرور لینوکسی (فقط برای نصب — بعد از نصب دیگر لازم نیست) | هر VPS کوچک کافی است |
 
 **دسترسیهای موردنیاز توکن کلادفلر:**
 
 **Account · Workers Scripts · Edit**
-
 **Account · Workers KV Storage · Edit**
-
 **Zone · DNS · Edit**
-
 **Zone · Zone Settings · Edit**
-
 **Zone · Cache Purge · Purge**
-
 **Account · Workers Subdomain · Edit**
 
 ---
-
 ## نصب (تکخطی)
 
 روی سرور لینوکسی اجرا کنید:
@@ -60,49 +53,4 @@ bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main
 
 ---
 
-## راهاندازی رلهٔ SSH (اختیاری — برای بخش «سرورها»)
-
-روی یک VPS که میخواهید از آن نظارت شوید:
-
-```bash
-sudo bash -c "$(curl -sL -H 'Accept: application/vnd.github.raw' 'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main')"
-```
-
-سپس در ربات: «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» — فقط آیپی را بفرستید.
-
----
-
-## تبلیغات 📢
-
-روی `/start` نمایش داده میشود: **«طراحی توسط t.me/panelSazFilterBot»**
-
-- تغییر فوری: دستور `/promoset متن` توسط مدیر (همان ورکر)
-- تغییر مرکزی (همهٔ نصبها تا ۱۲ ساعت): ویرایش `promo.txt` در همین مخزن
-- بازگشت به حالت مرکزی: `/promoreset`
-
----
-
-## متغیرهای اختیاری (bindings ورکر)
-
-| متغیر | توضیح |
-|---|---|
-| `WHOIS_API_KEY` / `WHOIS_API_PROVIDER` | API اعتبارسنجی انقضای دامنه |
-| `GLOBALPING_TOKEN` | توکن Global Ping برای چک IPv4 |
-| `SRV_RELAY_URL` / `SRV_RELAY_TOKEN` | رلهٔ SSH پیشفرض (در ربات هم قابل ثبت است) |
-| `HF_RELAY_URL` / `HF_RELAY_TOKEN` | رلهٔ قدیمی میزبان فیلتر (اختیاری) |
-| `PROMO_TEXT` | تبلیغ محلی (اختیاری) |
-
----
-
-## ساختار مخزن
-
-```
-worker.js          ← ربات (همهٔ تنظیمها از bindings میآید)
-install.sh         ← نصب تکخطی
-update.sh          ← آپدیت پشتیبان (کرون اختیاری)
-deploy-tool.py     ← ابزار دیپلوی روی ورکر
-promo.txt          ← تبلیغ مرکزی
-docs/              ← آموزش تصویری و راهنماها (کلیدهای اختیاری)
-```
-
-ساختهشده با ❤️ برای کسانی که کار روزمرهٔ مدیریت دامنه و سرور را به تلگرام سپردهاند.
+ساخته شده با ❤️ برای کسانی که کار روزمرهٔ مدیریت دامنه و سرور را به تلگرام سپردهاند.
