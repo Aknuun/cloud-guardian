@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.11";
+const BOT_VERSION = "9.12";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,14 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.12": [
+    "⚡️ کاهش شدید مصرف KV (برای نزدیک نشدن به سقف روزانه):",
+    "• رفع باگ گارد ثبت نود: کلید گارد دیگر با پیشوند nodeadd: تداخل ندارد و در حلقه حذف نمی‌شود (قبلاً kv.list عملاً هر دقیقه اجرا می‌شد)",
+    "• ثبت خودکار نود فقط وقتی «در انتظار» باشد جست‌وجو می‌کند (فلگ nodeadd_any) — دیگر بدون نصب فعال، list دوره‌ای بی‌دلیل نداریم",
+    "• زمان‌بندی همهٔ کارهای دوره‌ای در یک کلید cron_state ادغام شد (کاهش نوشتن‌های تکراری)",
+    "• بازه‌ها: مانیتور مصرف ۱۵→۳۰ · مانیتور سرور ۱۴→۳۰ · ثبت نود ۱۰→۳۰ دقیقه · چک آپدیت ۱→۶ ساعت",
+    "• حذف کرون یک‌دقیقه‌ای؛ یادآورها روی کرون */5 و ثبت نود روی */10 اجرا می‌شوند (۱۴۴۰ اجرا در روز کمتر)",
+  ],
   "9.11": [
     "🔧 رفع مشکل «نامشخص/۰» در منوی سهمیه: حالا توکن حسابی که به اکانت خودِ ورکر دسترسی دارد (!) درست انتخاب می‌شود (تشخیص خودکار + کش)، پس آمار درخواست‌ها و KV نمایش داده می‌شود",
   ],
@@ -546,25 +554,41 @@ export default {
       ctx.waitUntil(runSslMonitor(env));
       ctx.waitUntil(runDomExpiryMonitor(env).catch((e) => console.error("DOMEXP", String(e))));
     } else if (cron === "*/10 * * * *") {
-      ctx.waitUntil(runNodePoll(env));
-      ctx.waitUntil(runUsageMonitor(env).catch((e) => console.error("USAGE_MONITOR", String(e))));
-      // مانیتور منابع سرورها (CPU/RAM/دیسک) روی همین کرون با گارد فاصلهٔ داخلی (~۱۵ دقیقه)
-      ctx.waitUntil(runSrvMonitor(env, botToken, false).catch((e) => console.error("SRV_MON", String(e))));
-      // اعلان نسخهٔ جدید روی کرون ۱۰ دقیقه‌ای (نه هر دقیقه) برای کاهش بار KV
-      ctx.waitUntil(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
-      // آپدیت خودکار از گیت‌هاب (اگر WORKER_ACCOUNT_ID و WORKER_NAME در bindings باشد)
-      ctx.waitUntil(maybeSelfUpdate(env, botToken, adminId).catch((e) => console.error("SELFUPDATE", String(e))));
-      // گارد سهمیهٔ روزانهٔ درخواست‌های کلادفلر: هشدار ۹۰٪ + استاپ خودکار تا ریست (۰۰:۰۰ UTC)
-      ctx.waitUntil(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
-      // ثبت دکمه‌های صفحهٔ اصلی در منوی دستورات تلگرام (یک‌بار برای هر نسخه)
-      ctx.waitUntil(ensureBotCommands(env, botToken, env.BOT_KV).catch(() => {}));
-    } else if (cron === "* * * * *") {
-      ctx.waitUntil(runReminders(env).catch((e) => console.error("REMIND", String(e))));
-      // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
-      ctx.waitUntil(runNodeAddPending(env).catch((e) => console.error("NODEADD", String(e))));
+      // همهٔ کارهای دوره‌ای در یک بلوک؛ زمان‌بندی‌شان در یک کلید (cron_state) ذخیره می‌شود
+      ctx.waitUntil(
+        (async () => {
+          const ckv = env.BOT_KV;
+          const cs = await getCronState(ckv);
+          const now = Date.now();
+          const jobs = [];
+          const patch = {};
+          jobs.push(runNodePoll(env).catch((e) => console.error("NODEPOLL", String(e))));
+          if (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS) {
+            patch.um = now;
+            jobs.push(runUsageMonitor(env, { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
+          }
+          if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
+            patch.srv = now;
+            jobs.push(runSrvMonitor(env, botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
+          }
+          if (!cs.node || now - cs.node >= NODEADD_MIN_MS) {
+            patch.node = now;
+            // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
+            jobs.push(runNodeAddPending(env, { skipGuard: true }).catch((e) => console.error("NODEADD", String(e))));
+          }
+          if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS) {
+            patch.selfup = now;
+            jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
+          }
+          jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
+          jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+          jobs.push(ensureBotCommands(env, botToken, ckv).catch(() => {}));
+          await Promise.allSettled(jobs);
+          if (Object.keys(patch).length) await saveCronState(ckv, { ...cs, ...patch });
+        })()
+      );
     } else {
-      // host filter — روی هر کرون دیگری (مثلاً */5) اجرا می‌شود؛ لیمیت واقعی
-      // با intervalMin داخل runHostFilter کنترل می‌شود.
+      // کرون */5: تعویض خودکار هاست فیلتر + یادآورها (دیگر کرون یک‌دقیقه‌ای نداریم)
       ctx.waitUntil(
         runHostFilter(env).catch(async (e) => {
           console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
@@ -573,6 +597,7 @@ export default {
           } catch (x) {}
         })
       );
+      ctx.waitUntil(runReminders(env).catch((e) => console.error("REMIND", String(e))));
     }
   },
 };
@@ -998,6 +1023,25 @@ async function getAdmins(kv, env) {
   return [...set];
 }
 
+// زمان‌بندی کرون‌های دوره‌ای در یک کلید واحد (کاهش شدید تعداد نوشتن‌های KV)
+// فیلدها: um (مانیتور مصرف) · srv (مانیتور سرور) · node (ثبت نود) · selfup (آپدیت خودکار)
+async function getCronState(kv) {
+  if (!kv) return {};
+  try {
+    const st = await kv.get("cron_state", "json");
+    return st && typeof st === "object" ? st : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+async function saveCronState(kv, st) {
+  if (!kv) return;
+  try {
+    await kv.put("cron_state", JSON.stringify(st || {}));
+  } catch (e) {}
+}
+
 // تبلیغ روی /start: اول مقدار محلی (KV)، بعد کش دیتای مرکزی از مخزن (قابل تغییر بدون آپدیت مشتری)، بعد env، بعد پیش‌فرض
 const PROMO_DEFAULT = "طراحی توسط t.me/panelSazFilterBot";
 const PROMO_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/promo.txt";
@@ -1063,14 +1107,17 @@ const SELF_UPDATE_URL = "https://api.github.com/repos/Aknuun/cloud-guardian/cont
 
 // آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از مخزن می‌گیرد و با همان توکن CF
 // خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور). فقط روی کرون ۱۰دقیقه‌ای، حداکثر هر یک ساعت.
-async function maybeSelfUpdate(env, botToken, adminId) {
+async function maybeSelfUpdate(env, botToken, adminId, opts) {
   const kv = env.BOT_KV;
   const aid = env.WORKER_ACCOUNT_ID || "";
   const wname = env.WORKER_NAME || "";
   if (!kv || !aid || !wname) return;
+  const skipGuard = !!(opts && opts.skipGuard);
   try {
-    const last = Number((await kv.get("selfup_last")) || 0);
-    if (Date.now() - last < 3600000) return;
+    if (!skipGuard) {
+      const last = Number((await kv.get("selfup_last")) || 0);
+      if (Date.now() - last < SELFUP_MIN_MS) return;
+    }
     const accounts = await getAccounts(kv, env);
     const tok = accounts && accounts[0] && accounts[0].token;
     if (!tok) return;
@@ -1116,7 +1163,7 @@ async function maybeSelfUpdate(env, botToken, adminId) {
     });
     const depData = await depRes.json();
     if (!depData.success) return;
-    await kv.put("selfup_last", String(Date.now()));
+    if (!skipGuard) await kv.put("selfup_last", String(Date.now()));
     try {
       await kv.put("release_seen", m[1]);
     } catch (e) {}
@@ -3929,8 +3976,10 @@ const UM_DAY_MIN_MS = 23 * 3600000;
 const UM_DAY_MAX_MS = 48 * 3600000;
 const UM_REPORT_MS = 24 * 3600000;
 const UM_REPORT_TOP = 10;
-// حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۲۰ دقیقه اجرا می‌شود)
-const UM_MIN_INTERVAL_MS = 15 * 60000;
+// حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۳۰ دقیقه اجرا می‌شود)
+const UM_MIN_INTERVAL_MS = 30 * 60000;
+const NODEADD_MIN_MS = 30 * 60000;
+const SELFUP_MIN_MS = 6 * 3600000;
 
 // ===================== سرورها (SSH از طریق رلهٔ واحد) =====================
 // همهٔ اتصال‌های SSH از طریق رلهٔ واحد srv-relay (روی VPS کاربر) انجام می‌شود؛
@@ -3942,7 +3991,7 @@ const SRV_RELAY_HINT =
   code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
   "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
 const SRV_DEFAULTS = { cpuPct: 85, memPct: 85, diskPct: 90, enabled: true, cooldownMin: 60 };
-const SRV_MON_MIN_MS = 14 * 60000;
+const SRV_MON_MIN_MS = 30 * 60000;
 const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
 
 // کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
@@ -4331,14 +4380,15 @@ async function renderSrvMonCfg(edit, kv) {
 }
 
 // اجرای مانیتور سرورها (از کرون */10 + دکمهٔ دستی)
-async function runSrvMonitor(env, botToken, manual) {
+async function runSrvMonitor(env, botToken, manual, opts) {
   const kv = env.BOT_KV;
   if (!kv) return;
+  const skipGuard = !!(opts && opts.skipGuard);
   const cfg = await getSrvMonCfg(kv);
   if (!cfg.enabled && !manual) return;
   const list = await getServersList(kv);
   if (!list.length) return;
-  if (!manual) {
+  if (!manual && !skipGuard) {
     const last = Number((await kv.get("srv_mon_last")) || 0);
     if (last && Date.now() - last < SRV_MON_MIN_MS) return;
     await kv.put("srv_mon_last", String(Date.now()));
@@ -4392,6 +4442,7 @@ async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
   const sent = await sendMessage(botToken, chatId, "📥 شروع نصب نود پاسارگارد…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت نصب…");
   const msgId = sent && sent.result ? sent.result.message_id : null;
   try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+  try { await env.BOT_KV.put("nodeadd_any", "1", { expirationTtl: 3600 }); } catch (e) {}
   const CMD = 'sudo bash -c "$(curl -sL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh)" @ install -y';
   try {
     const res = await fetch(base + "/install-node", {
@@ -4493,7 +4544,8 @@ async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
     }
     const startedAt = Date.now();
     // ثبت در صف «افزودن خودکار به پنل» تا حتی اگر اجرای ورکر قطع شد، کرون آن را اضافه کند
-    try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+  try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
+  try { await env.BOT_KV.put("nodeadd_any", "1", { expirationTtl: 3600 }); } catch (e) {}
     if (msgId) {
       try { await editMessage(botToken, chatId, msgId, `🧩 نصب نود با هستهٔ ویرایشی…\n\n⏳ اسکریپت آغاز شد؛ در حال خواندن خروجی…\n(سرور: ${escHtml(s.name)})`); } catch (e) {}
     }
@@ -4700,17 +4752,25 @@ async function pgPanelHasNode(p, token, ip) {
   }
 }
 
-async function runNodeAddPending(env) {
+async function runNodeAddPending(env, opts) {
   const kv = env.BOT_KV;
   if (!kv || !(await getRelayBase(kv, env))) return;
-  // گارد بازهٔ ۱۰ دقیقه‌ای: سهمیهٔ رایگان KV ترکیبی (write+delete+list) فقط ۱۰۰۰ تا در روز است
-  // و قبل از این گارد، kv.list اینجا در کرون یک‌دقیقه‌ای اجرا می‌شد (۱۴۴۰ لیست در روز)
-  const now = Date.now();
-  const lastScan = Number((await kv.get("nodeadd:last")) || 0);
-  if (lastScan && now - lastScan < 600000) return;
+  // فقط وقتی نودی «در انتظار» هست جست‌وجو کن (فلگ nodeadd_any هنگام نصب ست می‌شود)
+  let any = null;
   try {
-    await kv.put("nodeadd:last", String(now), { expirationTtl: 610 });
+    any = await kv.get("nodeadd_any");
   } catch (e) {}
+  if (!any) return;
+  // گارد بازهٔ ۳۰ دقیقه‌ای (کلید گارد بیرون از پیشوند nodeadd: است تا در list حذف نشود)
+  const skipGuard = !!(opts && opts.skipGuard);
+  const now = Date.now();
+  if (!skipGuard) {
+    const lastScan = Number((await kv.get("nodeadd_last")) || 0);
+    if (lastScan && now - lastScan < NODEADD_MIN_MS) return;
+    try {
+      await kv.put("nodeadd_last", String(now), { expirationTtl: 1900 });
+    } catch (e) {}
+  }
   let keys = [];
   try {
     const r = await kv.list({ prefix: "nodeadd:", limit: 10 });
@@ -4718,7 +4778,12 @@ async function runNodeAddPending(env) {
   } catch (e) {
     return;
   }
-  if (!keys.length) return;
+  if (!keys.length) {
+    try {
+      await kv.delete("nodeadd_any");
+    } catch (e) {}
+    return;
+  }
   const panels = await getPanels(kv);
   if (!panels.length) return;
   const srvList = await getServersList(kv);
@@ -4833,7 +4898,7 @@ function umPattern(recent, userId) {
   return { active, flat: active >= Math.min(4, vals.length - 1) };
 }
 
-async function runUsageMonitor(env) {
+async function runUsageMonitor(env, opts) {
   const kv = env.BOT_KV;
   if (!kv) return;
   const botToken = env.BOT_TOKEN || BOT_TOKEN;
@@ -4845,9 +4910,12 @@ async function runUsageMonitor(env) {
 
   const now = Date.now();
   // گارد فاصله: از اجرای پشت‌سرهم روی کرون‌های نزدیک جلوگیری می‌کند (کاهش بار پنل/KV)
-  const umLast = Number((await kv.get("um_last_run")) || 0);
-  if (umLast && now - umLast < UM_MIN_INTERVAL_MS) return;
-  await kv.put("um_last_run", String(now));
+  const skipGuard = !!(opts && opts.skipGuard);
+  if (!skipGuard) {
+    const umLast = Number((await kv.get("um_last_run")) || 0);
+    if (umLast && now - umLast < UM_MIN_INTERVAL_MS) return;
+    await kv.put("um_last_run", String(now));
+  }
 
   const sinceIso = new Date(now - cfg.activeMin * 60000).toISOString();
   const hourTh = Math.max(0, Number(cfg.hourlyGb) || 0) * 1024 ** 3;
