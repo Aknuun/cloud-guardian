@@ -3,7 +3,9 @@
 مدیریت کامل **دامنه، DNS، پنل پاسارگارد و سرورها (هتزنر، لینود، آروان)** در تلگرام — روی **Cloudflare Workers** اجرا میشود؛ بدون هیچ سروری برای اجرا (فقط یک سرور برای نصب لازم است).
 
 ---
-
+https://github.com/Aknuun/cloud-guardian/blob/main/docs/IMG_20260920_000345_938.jpg
+https://github.com/Aknuun/cloud-guardian/blob/main/docs/IMG_20260920_000345_594.jpg
+https://github.com/Aknuun/cloud-guardian/blob/main/docs/IMG_20260920_000345_118.jpg
 ## خلاصه
 
 - ربات تلگرامی که رکوردهای DNS را روی کلادفلر و آروان مدیریت میکند
