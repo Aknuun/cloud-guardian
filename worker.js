@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.00";
+const BOT_VERSION = "9.01";
 
 // مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
 const ARVAN_DOMAINS_CACHE_MS = 600000;
@@ -23,6 +23,9 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.01": [
+    "🔄 آپدیت خودکار از گیت‌هاب داخل خودِ ورکر: ربات هر یک ساعت مخزن را چک می‌کند و اگر نسخهٔ جدید باشد، خودش را دیپلوی می‌کند (بدون کرون/سرور)",
+  ],
   "9.00": [
     "🎉 نسخهٔ عمومی! پروژه در گیت‌هاب منتشر شد.",
     "📢 روی /start تبلیغ (پیش‌فرض «طراحی توسط @panelSazFilterBot») نمایش داده می‌شود؛ مدیر با /promoset یا از طریق فایل promo.txt مخزن می‌تواند بدون آپدیت مشتری عوضش کند.",
@@ -480,6 +483,8 @@ export default {
       ctx.waitUntil(runSrvMonitor(env, botToken, false).catch((e) => console.error("SRV_MON", String(e))));
       // اعلان نسخهٔ جدید روی کرون ۱۰ دقیقه‌ای (نه هر دقیقه) برای کاهش بار KV
       ctx.waitUntil(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
+      // آپدیت خودکار از گیت‌هاب (اگر WORKER_ACCOUNT_ID و WORKER_NAME در bindings باشد)
+      ctx.waitUntil(maybeSelfUpdate(env, botToken, adminId).catch((e) => console.error("SELFUPDATE", String(e))));
       // ثبت دکمه‌های صفحهٔ اصلی در منوی دستورات تلگرام (یک‌بار برای هر نسخه)
       ctx.waitUntil(ensureBotCommands(env, botToken, env.BOT_KV).catch(() => {}));
     } else if (cron === "* * * * *") {
@@ -977,6 +982,82 @@ async function announceRelease(env, botToken, adminId) {
     await kv.put("release_seen", BOT_VERSION);
   } catch (e) {}
   _releaseAnnouncedFor = BOT_VERSION;
+}
+
+const SELF_UPDATE_URL = "https://api.github.com/repos/Aknuun/cloud-guardian/contents/worker.js?ref=main";
+
+// آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از مخزن می‌گیرد و با همان توکن CF
+// خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور). فقط روی کرون ۱۰دقیقه‌ای، حداکثر هر یک ساعت.
+async function maybeSelfUpdate(env, botToken, adminId) {
+  const kv = env.BOT_KV;
+  const aid = env.WORKER_ACCOUNT_ID || "";
+  const wname = env.WORKER_NAME || "";
+  if (!kv || !aid || !wname) return;
+  try {
+    const last = Number((await kv.get("selfup_last")) || 0);
+    if (Date.now() - last < 3600000) return;
+    const accounts = await getAccounts(kv, env);
+    const tok = accounts && accounts[0] && accounts[0].token;
+    if (!tok) return;
+    const res = await fetch(SELF_UPDATE_URL, {
+      headers: { Accept: "application/vnd.github.raw" },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) return;
+    const code = await res.text();
+    const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
+    if (!m || m[1] === BOT_VERSION || !code.includes("export default {")) return;
+    const base = `${CF_API}/accounts/${aid}/workers/scripts/${encodeURIComponent(wname)}`;
+    const sRes = await fetch(base + "/settings", { headers: hdr(tok), signal: withTimeout() });
+    const sData = await sRes.json();
+    if (!sData.success || !sData.result) return;
+    const s = sData.result;
+    const meta = {
+      main_module: "worker.js",
+      modules: [{ name: "worker.js" }],
+      compatibility_date: s.compatibility_date || "2024-11-01",
+      usage_model: s.usage_model || "standard",
+      bindings: s.bindings || [],
+    };
+    const boundary = "----negahban" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const bodyStr =
+      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${code}\r\n` +
+      `--${boundary}--\r\n`;
+    const enc = new TextEncoder();
+    const upRes = await fetch(base + "/versions", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: enc.encode(bodyStr),
+      signal: withTimeout(90000),
+    });
+    const upData = await upRes.json();
+    if (!upData.success || !upData.result || !upData.result.id) return;
+    const depRes = await fetch(base + "/deployments", {
+      method: "POST",
+      headers: hdr(tok),
+      body: JSON.stringify({ versions: [{ version_id: upData.result.id, percentage: 100 }] }),
+      signal: withTimeout(),
+    });
+    const depData = await depRes.json();
+    if (!depData.success) return;
+    await kv.put("selfup_last", String(Date.now()));
+    try {
+      await kv.put("release_seen", m[1]);
+    } catch (e) {}
+    if (botToken && adminId) {
+      const notes = RELEASE_NOTES[m[1]] || [];
+      const lines = [
+        `🔄 آپدیت خودکار از مخزن انجام شد: v${BOT_VERSION} ← v${m[1]}`,
+        ...(notes.length ? ["", "✨ این نسخه:", ...notes.map((n) => "• " + n)] : []),
+      ];
+      try {
+        await sendMessage(botToken, adminId, lines.join("\n"), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error("SELFUPDATE", String(e));
+  }
 }
 
 async function getAccountId(accounts, i) {
