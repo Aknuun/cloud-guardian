@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.10";
+const BOT_VERSION = "9.11";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,9 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.11": [
+    "🔧 رفع مشکل «نامشخص/۰» در منوی سهمیه: حالا توکن حسابی که به اکانت خودِ ورکر دسترسی دارد (!) درست انتخاب می‌شود (تشخیص خودکار + کش)، پس آمار درخواست‌ها و KV نمایش داده می‌شود",
+  ],
   "9.10": [
     "🗄 سهمیهٔ Workers KV به منوی «☁️ سهمیهٔ کلادفلر» اضافه شد: خواندن/نوشتن/حذف/لیست روزانه + حجم اشغالی و تعداد کلید، با نوار مصرف و هشدار بالای ۹۰٪",
     "⚠️ گارد سهمیه حالا عبور از سقف KV را هم در پیام هشدار گزارش می‌دهد (استاپ خودکار همچنان فقط برای سهمیهٔ درخواست‌های ورکر است)",
@@ -1158,13 +1161,42 @@ function _tehranHm(ms) {
   return `${h}:${m}`;
 }
 
+async function accountHasId(tok, aid) {
+  if (!tok || !aid) return false;
+  try {
+    const res = await fetch(`${CF_API}/accounts?per_page=50`, { headers: hdr(tok), signal: withTimeout() });
+    const d = await res.json();
+    return !!(d && d.success && Array.isArray(d.result) && d.result.some((x) => x && x.id === aid));
+  } catch (e) {
+    return false;
+  }
+}
+
 async function getQuotaAcct(kv, env) {
   const aid = env.WORKER_ACCOUNT_ID || "";
   const list = await getAccounts(kv, env);
   if (!Array.isArray(list) || !list.length) return null;
   if (aid) {
+    // ۱) ورودی حسابی که account_id آن با اکانت ورکر یکی است
     const m = list.find((a) => a && a.token && String(a.account_id) === aid);
     if (m) return { tok: m.token, aid };
+    // ۲) توکن اختصاصی آنالیتیکس (اختیاری)
+    if (env.QUOTA_TOKEN) return { tok: env.QUOTA_TOKEN, aid };
+    // ۳) توکن حل‌شدهٔ قبلی (کش)
+    try {
+      const c = await kvGetCached(kv, "quota_tok_cache", "json", 3600000);
+      if (c && c.aid === aid && c.token && list.some((a) => a && a.token === c.token)) return { tok: c.token, aid };
+    } catch (e) {}
+    // ۴) اولین توکنی که به این اکانت دسترسی دارد
+    for (const a of list) {
+      if (!a || !a.token) continue;
+      if (await accountHasId(a.token, aid)) {
+        try {
+          await kvPutCached(kv, "quota_tok_cache", JSON.stringify({ aid, token: a.token }), undefined, 3600000);
+        } catch (e) {}
+        return { tok: a.token, aid };
+      }
+    }
   }
   const t = list[0] && list[0].token;
   return t ? { tok: t, aid } : null;
@@ -1187,7 +1219,8 @@ async function fetchRequestsToday(tok, aid) {
     const data = await res.json();
     const arr = data && data.data && data.data.viewer && data.data.viewer.accounts &&
       data.data.viewer.accounts[0] && data.data.viewer.accounts[0].workersInvocationsAdaptive;
-    if (!Array.isArray(arr) || !arr.length) return 0;
+    if (!Array.isArray(arr)) return null;
+    if (!arr.length) return 0;
     const n = Number(arr[0].sum && arr[0].sum.requests);
     return Number.isFinite(n) ? n : null;
   } catch (e) {
