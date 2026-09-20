@@ -28,20 +28,20 @@
 ## مرحلهٔ ۳ — تنظیم دسترسیها (مهمترین قسمت)
 
 1. یک نام بگذارید، مثلاً `cloud-guardian`.
-2. این شش دسترسی را اضافه کنید (روی **Add more** بعد از هر کدام):
+2. این پنج دسترسی را اضافه کنید (روی **Add more** بعد از هر کدام):
 
 | بخش | اسم | سطح | برای چه کاری در ربات |
 |---|---|---|---|
-| Account | Workers Scripts | Edit | دیپلوی و آپدیت خودکار ورکر |
+| Account | Workers Scripts | Edit | دیپلوی، آپدیت خودکار ورکر و سابدامنهٔ `workers.dev` |
 | Account | Workers KV Storage | Edit | ساخت KV ربات |
-| Account | Workers Subdomain | Edit | سابدامنهٔ `workers.dev` ورکر |
 | Zone | DNS | Edit | مدیریت رکوردها و ساخت سابدامنهٔ رله |
 | Zone | Zone Settings | Edit | مشاهده/تغییر تنظیمات هر زون (TLS/کش/…) |
 | Zone | Cache Purge | Purge | دکمهٔ «پاککردن کش» زون |
 
 📷 `docs/images/cf-token-03.png`
 
-> ⚠️ این شش دسترسی، **دقیقاً** همانهایی هستند که ربات استفاده میکند.
+> ⚠️ کار با سابدامنهٔ `workers.dev` جداگانه نیست؛ زیرمجموعهٔ دسترسی **Account → Workers Scripts → Edit** است و در فهرست پنل ابری به این اسم دیده نمیشود.
+> ⚠️ این پنج دسترسی، **دقیقاً** همانهایی هستند که ربات استفاده میکند.
 
 3. بخش **Account Resources** را روی **Include → All accounts** بگذارید.
 4. بخش **Zone Resources** را روی **Include → All zones** بگذارید.

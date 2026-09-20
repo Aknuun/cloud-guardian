@@ -82,7 +82,6 @@
 3. Zone · DNS · Edit
 4. Zone · Zone Settings · Edit
 5. Zone · Cache Purge · Purge
-6. Account · Workers Subdomain · Edit
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
