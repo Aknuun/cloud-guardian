@@ -3537,6 +3537,52 @@ async function saveSslMonitors(kv, list) {
   await kvPutCached(kv, "ssl_monitor", JSON.stringify(list));
 }
 
+const MULTI_LEVEL_SUFFIXES = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "net.uk", "ltd.uk", "plc.uk",
+  "com.au", "net.au", "org.au", "edu.au", "gov.au",
+  "co.nz", "net.nz", "org.nz",
+  "co.jp", "ne.jp", "or.jp", "ac.jp", "go.jp",
+  "com.br", "net.br", "org.br",
+  "co.in", "net.in", "org.in", "gen.in", "firm.in", "ind.in",
+  "com.tr", "net.tr", "org.tr", "edu.tr", "gov.tr",
+  "com.cn", "net.cn", "org.cn", "gov.cn",
+  "co.za", "net.za", "org.za",
+  "com.sa", "com.ae", "com.eg", "com.qa", "com.kw", "com.bh", "com.om",
+  "com.pk", "com.bd", "com.my", "com.sg", "com.hk", "com.tw",
+  "com.mx", "com.ar", "com.co",
+  "co.ir", "ac.ir", "org.ir", "net.ir", "gov.ir", "sch.ir", "id.ir",
+]);
+
+function urlHost(u) {
+  const s = String(u || "").trim().toLowerCase();
+  try {
+    const h = new URL(s.includes("://") ? s : "https://" + s).hostname;
+    return h.replace(/\.$/, "");
+  } catch (e) {
+    return s.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "").replace(/\.$/, "");
+  }
+}
+
+function apexDomain(host) {
+  const h = String(host || "").trim().toLowerCase().replace(/\.$/, "");
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return "";
+  const parts = h.split(".").filter(Boolean);
+  if (parts.length < 2) return "";
+  if (parts.length === 2) return parts.join(".");
+  const last2 = parts.slice(-2).join(".");
+  if (MULTI_LEVEL_SUFFIXES.has(last2)) return parts.slice(-3).join(".");
+  return last2;
+}
+
+async function ensureSslMonitor(kv, host, threshold = 5) {
+  if (!host) return false;
+  const monitors = await getSslMonitors(kv);
+  if (monitors.some((m) => m.host === host)) return false;
+  monitors.push({ host, port: 443, threshold });
+  await saveSslMonitors(kv, monitors);
+  return true;
+}
+
 async function sslProbe(host, port) {
   try {
     const url = `https://uptimepage.dev/tools/ssl-certificate-checker/probe?host=${encodeURIComponent(host)}&port=${Number(port) || 443}`;
@@ -7259,7 +7305,14 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     const panels = await getPanels(kv);
     panels.push({ id: makeToken(), name: pending.name, url: pending.url, username: pending.username, password: txt, enabled: true, last_error: null });
     await savePanels(kv, panels);
-    await send(`✅ پنل «${pending.name}» ثبت شد.`, [
+    const apex = apexDomain(urlHost(pending.url));
+    const sslAdded = await ensureSslMonitor(kv, apex, 5);
+    const sslNote = apex
+      ? sslAdded
+        ? `\n🔐 دامنهٔ «${apex}» خودکار به مانیتور SSL اضافه شد.`
+        : `\n🔐 دامنهٔ «${apex}» از قبل در مانیتور SSL بود.`
+      : "";
+    await send(`✅ پنل «${pending.name}» ثبت شد.${sslNote}`, [
       [{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }, { text: "🏠 منو", callback_data: "menu" }],
     ]);
     return;
@@ -7323,13 +7376,11 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     }
     await kv.delete(`pend:${chatId}`);
     const threshold = 5;
-    const monitors = await getSslMonitors(kv);
-    if (monitors.some((m) => m.host === host)) {
+    const added = await ensureSslMonitor(kv, host, threshold);
+    if (!added) {
       await send("❌ این دامنه از قبل در نظارت است.", [[{ text: "🔐 مانیتور SSL", callback_data: "sslm" }]]);
       return;
     }
-    monitors.push({ host, port: 443, threshold });
-    await saveSslMonitors(kv, monitors);
     await send(`✅ «${host}» با آستانه ${threshold} روز به نظارت اضافه شد.`, [
       [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🏠 منو", callback_data: "menu" }],
     ]);
