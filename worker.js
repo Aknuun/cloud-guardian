@@ -7291,7 +7291,8 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
   if (type === "p_url") {
     const url = normalizePanelUrl(txt);
     if (!/^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9.\-_]*/.test(url)) return send("❌ آدرس معتبر نیست. دوباره بفرستید:\n(مثلاً mypanel.com یا https://mypanel.com — ساب‌دامنه هم لازم نیست)");
-    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_user", name: pending.name, url }), { expirationTtl: 600 });
+    const name = pending.name || urlHost(url);
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_user", name, url }), { expirationTtl: 600 });
     await send("👤 نام‌کاربری ادمین پنل را بفرستید:");
     return;
   }
@@ -9074,8 +9075,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "pnl") {
       await renderNodeHome(edit, kv);
     } else if (data === "pnladd") {
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_name" }), { expirationTtl: 600 });
-      await edit("🧠 نام پنل پاسارگارد را بفرستید (مثلاً: پنل اصلی):", [[{ text: "🔙 انصراف", callback_data: "nd" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_url" }), { expirationTtl: 600 });
+      await edit("🌐 آدرس پنل پاسارگارد را بفرستید (مثلاً mypanel.com یا https://panel.mypanel.com — ساب‌دامنه هم لازم نیست):", [[{ text: "🔙 انصراف", callback_data: "nd" }]]);
     } else if (data === "pndef") {
       // تعریف پنل پاسارگارد: ثبت/ویرایش/حذف پنل در یک منوی جدا
       const panels = await getPanels(kv);
