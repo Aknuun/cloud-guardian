@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.3";
+const BOT_VERSION = "1.0.9";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -25,9 +25,6 @@ const KV_LIMITS_DAILY = { read: 100000, write: 1000, delete: 1000, list: 1000 };
 const KV_ACTION_LABEL = { read: "خواندن", write: "نوشتن", delete: "حذف", list: "لیست" };
 const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان)
 
-// مدت کش لیست دامنه‌های آروان (۱۰ دقیقه) برای باز شدن سریع دکمه‌هایی مثل «افزودن رکورد»
-const ARVAN_DOMAINS_CACHE_MS = 600000;
-
 // ============================================================
 // یادداشت انتشار (Release Notes)
 // ⚠️ قانون: بعد از هر تغییر در این فایل، قبل از deploy:
@@ -37,6 +34,10 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.9": [
+    "🗑 حذف کامل بخش «آروان» از ربات: مدیریت دامنه/رکورد آروان، سرور ابری آروان و اکانت‌های آروان — دیتاسنترها اکنون فقط «🇩🇪 هتزنر» و «🟢 لینود» هستند",
+    "🧹 پاک‌سازی راهنما، دستورها و مستندات مربوط به آروان (بخش‌های کلودفلر، سرورها و مانیتورها بدون تغییر)",
+  ],
   "1.0.3": [
     "🎛 هنگام ثبت پنل پاسارگارد، «مانیتور نود» خودکار ساخته و نودها همگام‌سازی می‌شوند و در پایان به‌جای صفحهٔ مانیتور نود، به «تعریف پنل پاسارگارد» برمی‌گردی",
     "➕ «افزودن گروهی سرورها»: آی‌پی هر سرور را در یک خط و رمز آن را در خط بعدی بفرست؛ دکمه‌اش کنار «افزودن سرور» قرار گرفت",
@@ -84,7 +85,7 @@ const RELEASE_NOTES = {
   "9.06": ["⚡️ کاهش شدید مصرف Workers KV: جستجوی بازیابی نودها (kv.list) که در کرون یکدقیقهای بیش از سهمیهٔ روزانهٔ رایگان (۱۰۰۰ writ"],
   "9.05": ["📢 تبلیغ منوی اصلی به t.me/panelSazFilterBot تغییر کرد"],
   "9.04": ["🏠 متن روی منوی اصلی کوتاه شد: نوشتههای «در منوی اصلی هستید / یک گزینه را انتخاب کن» حذف شد"],
-  "9.03": ["🏠 منوی اصلی: دکمه «دیتاسنترها» حذف شد و بهجایش «هتزنر | لینود | آروان» در یک ردیف سبز قرار گرفت؛ «سرورها» هم یک "],
+  "9.03": ["🏠 منوی اصلی: دکمه «دیتاسنترها» حذف شد و بهجایش «هتزنر | لینود» در یک ردیف سبز قرار گرفت؛ «سرورها» هم یک "],
   "9.02": ["به‌روزرسانی و نگهداری"],
   "9.01": [
     "🔄 آپدیت خودکار از گیت‌هاب داخل خودِ ورکر: ربات هر یک ساعت مخزن را چک می‌کند و اگر نسخهٔ جدید باشد، خودش را دیپلوی می‌کند (بدون کرون/سرور)",
@@ -128,13 +129,6 @@ const RELEASE_NOTES = {
   "8.89": [
     "🔧 تنظیم رله ساده شد: دیگر به دامنه/ساب نیازی نیست — آدرس با همان آی‌پی سرور ثبت می‌شود (http://آی‌پی:8788) و دستور نصب رله در راهنما هم به نسخهٔ بدون کش گیت‌هاب به‌روز شد",
     "🌐 «چک هاست» (تعویض خودکار ساب فیلتر) حالا از رلهٔ ثبت‌شده رد می‌شود؛ اگر رله تنظیم نباشد به‌جای خطای نامفهوم، پیام راهنمای تنظیم رله نمایش داده می‌شود",
-  ],
-  "8.88": [
-    "🛰 آروان حالا از رلهٔ SSH عبور می‌کند: چون کلادفلر ورکر به API آروان دسترسی ندارد، همهٔ عملیات آروان (لیست دامنه/رکورد، ساخت، ویرایش، حذف) وقتی رله ثبت شده باشد از پروکسی رله انجام می‌شود — رله باید rev4 یا بالاتر باشد",
-  ],
-  "8.87": [
-    "⚡️ رفع کندی «➕ افزودن رکورد»: لیست دامنه‌های آروان هم مثل کلودفلر کش‌دار شد و دیگر هر بار همهٔ اکانت‌ها را با مکث از API نمی‌گیرد",
-    "🛡 اگر یکی از اکانت‌های آروان کند/معیوب باشد، بقیهٔ دامنه‌ها هنوز نمایش داده می‌شوند",
   ],
   "8.86": [
     "🖥 به منوی «مانیتورها» دکمهٔ «مانیتور سرورها» اضافه شد (CPU/RAM/دیسک سرورها و آستانه‌های هشدار)",
@@ -306,7 +300,7 @@ const RELEASE_NOTES = {
     "🔧 به‌روزرسانی رلهٔ SSH (rev 2): رفع خطای «Could not resolve hostname /tmp/.../pass» در اتصال با رمز عبور",
   ],
   "8.48": [
-    "🔗 دکمهٔ «CNAMEهای وارده» در صفحهٔ ویرایش رکورد: فهرست همهٔ دامنه‌ها/ساب‌دامین‌هایی که به این رکورد CNAME کرده‌اند (روی همهٔ اکانت‌های کلودفلر و آروان)",
+    "🔗 دکمهٔ «CNAMEهای وارده» در صفحهٔ ویرایش رکورد: فهرست همهٔ دامنه‌ها/ساب‌دامین‌هایی که به این رکورد CNAME کرده‌اند (روی همهٔ اکانت‌های کلودفلر)",
     "🎨 چیدمان جدید دکمه‌های «🗑 حذف»، «🔗 CNAMEهای وارده» و «⭐ منتخب» در یک ردیف و با رنگ آبی",
   ],
   "8.47": [
@@ -364,7 +358,6 @@ const RELEASE_NOTES = {
   ],
   "8.37": [
     "حذف کامل بخش هتزنر از دیتاسنترها (سرور/اسنپ‌شات/آی‌پی و اکانت هتزنر)",
-    "دیتاسنترها اکنون فقط لینود و آروان را نشان می‌دهد",
   ],
   "8.35": [
     "بازگرداندن رلهٔ check-host به‌عنوان مسیر اصلی تعویض هاست",
@@ -382,14 +375,13 @@ const RELEASE_NOTES = {
   ],
   "8.31": [
     "🗓 مانیتور انقضای دامنه: استعلام .ir از whois.nic.ir و بین‌المللی از RDAP (client.rdap.org)",
-    "افزودن یک‌جای همهٔ دامنه‌های اکانت‌های کلودفلر/آروان به مانیتور انقضا با یک دکمه",
+    "افزودن یک‌جای همهٔ دامنه‌های اکانت‌های کلودفلر به مانیتور انقضا با یک دکمه",
     "نمایش باقی‌مانده (سال/ماه/روز) مقابل هر دامنه + هشدار خودکار روزانه (۶۰/۳۰/۱۴/۷/۳/۱ روز و روز انقضا)",
     "ورود دستی تاریخ انقضا برای دامنه‌هایی که ایرنیک اطلاعات‌شان را مخفی کرده",
   ],
 };
 
 const CF_API = "https://api.cloudflare.com/client/v4";
-const ARVAN_API = "https://napi.arvancloud.ir/cdn/4.0";
 const LINODE_API = "https://api.linode.com/v4";
 const HETZNER_API = "https://api.hetzner.cloud/v1";
 const RECORD_TYPES = ["A", "AAAA", "CNAME"];
@@ -496,6 +488,7 @@ function groupTitleFor(setting) {
   if (SEC_KEYS.includes(setting)) return "🛡 امنیت";
   return "⚡ کارایی";
 }
+
 
 export default {
   async fetch(request, env, ctx) {
@@ -676,11 +669,10 @@ async function processUpdate(payload, env, botToken, adminId) {
     }
 
     const accounts = await getAccounts(kv, env);
-    const arvanAccounts = await getArvanAccounts(kv);
     const pending = await kv.get(`pend:${chatId}`, "json");
 
     if (pending && !text.startsWith("/")) {
-      await resolvePending(pending, text, chatId, accounts, arvanAccounts, send, kv, botToken, env);
+      await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
       return;
     }
 
@@ -732,14 +724,8 @@ async function processUpdate(payload, env, botToken, adminId) {
       await renderFavsScreen(kv, chatId, accounts, send);
     } else if (cmd === "/newrecord" || cmd === "/addrec") {
       const zones = await getAllZones(accounts, kv);
-      const arvanDomains = [];
-      for (let i = 0; i < arvanAccounts.length; i++) {
-const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
-        for (const d of domains) arvanDomains.push({ domain: d.domain, acc: i });
-      }
       const allItems = [];
       for (const z of zones) allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
-      for (const d of arvanDomains) allItems.push({ text: `🟢 🇮🇷 ${d.domain}`, cb: `arvrec:${d.acc}:${d.domain}` });
       if (!allItems.length) {
         await send("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
       } else {
@@ -770,7 +756,6 @@ const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
           { text: "🇩🇪 هتزنر", callback_data: "hz" },
           { text: "🟢 لینود", callback_data: "ln" },
         ],
-        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
         [{ text: "🏠 منو", callback_data: "menu" }],
       ]);
     } else if (cmd === "/srv") {
@@ -849,11 +834,10 @@ function mainMenuKeyboard() {
     [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
     // search: جست‌وجوی سراسری رکورد در همهٔ اکانت‌ها (قرمز = تک‌ستونه)
     [{ text: "🔍 جست و جو در همه", callback_data: "search", style: "danger" }],
-    // hz/ln/arvan: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) مستقیم در منوی اصلی — سبز
+    // hz/ln: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود) مستقیم در منوی اصلی — سبز
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
-      { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
     // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی مانیتورها — در یک ردیف
     [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🖥 مانیتورها", callback_data: "mons" }],
@@ -902,7 +886,7 @@ function helpText() {
 const HELP_GUIDE = {
   hqi:
     "⚡ جای‌گذاری سریع\n\n" +
-    "در هر بخش از ربات (کلودفلر، آروان، رکوردها، مانیتورها و...) کافی است متن را در چت بفرستی؛ ربات خودش تشخیص می‌دهد و حالت «جست‌وجوی سریع» را فعال می‌کند:\n\n" +
+    "در هر بخش از ربات (کلودفلر، رکوردها، مانیتورها و...) کافی است متن را در چت بفرستی؛ ربات خودش تشخیص می‌دهد و حالت «جست‌وجوی سریع» را فعال می‌کند:\n\n" +
     "• آی‌پی بفرستی → رکوردها و دامنه‌های مرتبط با همان آی‌پی جست‌وجو می‌شوند.\n" +
     "• ساب‌دامنه یا نام دامنه بفرستی → رکوردهای آن پیدا می‌شود و امکان ویرایش/تغییر مقدار، نوع و TTL فراهم است.\n\n" +
     "از داخل نتایج می‌توانی ساب‌دامنه را تغییر دهی، Proxy را روشن/خاموش کنی یا مقدار را در «⭐ ساب‌های منتخب» ذخیره کنی.",
@@ -913,13 +897,9 @@ const HELP_GUIDE = {
     "• افزودن دامنه جدید و افزودن/حذف اکانت کلودفلر (از دکمه‌های همان صفحه)\n" +
     "• ورود به هر دامنه: مشاهده/افزودن/ویرایش/حذف رکورد، تغییر TTL و Proxy\n" +
     "• تنظیمات دامنه (SSL و تنظیمات دیگر)، عملیات گروهی و جست‌وجوی سریع",
-  arvan:
-    "🇮🇷 آروان کلاد\n\n" +
-    "دامنه را ابتدا از پنل آروان اضافه کن، سپس همین‌جا ساب‌دامنه/رکورد بساز و مدیریت کن.\n" +
-    "برای دیدن دامنه‌های تازه دکمهٔ «🔄 همگام‌سازی» را بزن؛ افزودن اکانت آروان هم از همان صفحه انجام می‌شود.",
   prov:
-    "🏢 دیتاسنترها (هتزنر، لینود و آروان)\n\n" +
-    "از منوی اصلی → «🇩🇪 هتزنر» یا «🟢 لینود» یا «🇮🇷 آروان» ارائه‌دهنده را انتخاب کن.\n" +
+    "🏢 دیتاسنترها (هتزنر و لینود)\n\n" +
+    "از منوی اصلی → «🇩🇪 هتزنر» یا «🟢 لینود» ارائه‌دهنده را انتخاب کن.\n" +
     "برای هتزنر:\n" +
     "• اکانت‌ها: افزودن/حذف + تغییر نام و توکن کلاینت\n" +
     "• سرورها: ساخت (دیتاسنتر→پلن→ایمیج)، روشن/خاموش/ریبوت/ریست، ریست رمز، تغییر نام، ریبیلد، ارتقای پلن و حذف\n" +
@@ -1003,8 +983,8 @@ function helpKeyboard() {
     [{ text: "🔍 جست و جو در همه", callback_data: "hg:search", style: "danger" }],
     // hg:mons: راهنمای مانیتورها (تک‌ستونه)
     [{ text: "🖥 مانیتورها", callback_data: "hg:mons" }],
-    // hg:prov: راهنمای دیتاسنترها (هتزنر/لینود/آروان)
-    [{ text: "🏢 دیتاسنترها (هتزنر، لینود و آروان)", callback_data: "hg:prov" }],
+    // hg:prov: راهنمای دیتاسنترها (هتزنر/لینود)
+    [{ text: "🏢 دیتاسنترها (هتزنر، لینود)", callback_data: "hg:prov" }],
     // hg:srv: راهنمای سرورها (SSH/نود/مانیتور)
     [{ text: "🖥 سرورها (SSH، نود، مانیتور)", callback_data: "hg:srv" }],
     // hg:help راهنمای خود راهنما | hg:admin راهنمای مدیریت ادمین — هر دو خاکستری
@@ -1772,7 +1752,7 @@ function withTimeout(ms) {
 //   • ردیف‌های «لیست داده» (دامنه/ساب‌دامنه/رکورد/آی‌پی/سرور و...) بدون رنگ
 //   • هر دکمه می‌تواند با style صریح رنگ ثابت بگیرد یا با {"style":"plain"} بی‌رنگ بماند.
 const DATA_CB = /^(z:|zf:|e:|p:|sel:|selp:|dd:|arv:|arvpage:|sr:|zsf:|ap:|cz:|ndi:|ndip:|ndx:|pnd:|favopen:|favpk:|favpsel:|favpp:|rempick:|rempage:|remdelx:|ipd:|qanz:|qana:|domexpi:)/;
-const DANGER_CB = /(^|[:_])(del|delete|dacc|daccy|darvan|darvany|pnlx|nddel|nddely|sslmdy|bulkdel|stop|suspend|cancel|revoke|reset)([:_]|$)/;
+const DANGER_CB = /(^|[:_])(del|delete|dacc|daccy|pnlx|nddel|nddely|sslmdy|bulkdel|stop|suspend|cancel|revoke|reset)([:_]|$)/;
 
 function isPlaceholderBtn(b) {
   return !b || typeof b !== "object" || b.text === "\u00A0";
@@ -2377,7 +2357,6 @@ function parentCb(data) {
   if (/^e:/.test(d) && tok) return `rback:${tok}`;
   if (/^sel/.test(d) && tok) return `rback:${tok}`;
   if (/^acc/.test(d)) return "accounts";
-  if (/^(arv|arf)/.test(d)) return "arvan";
   if (/^ln/.test(d)) return "providers";
   if (/^hz/.test(d)) return "providers";
   if (/^um/.test(d)) return "um";
@@ -2627,10 +2606,6 @@ async function renderFavsScreen(kv, chatId, accounts, edit) {
 }
 
 async function fetchRecordForSession(kv, accounts, session, recordId, env) {
-  if (session.provider === "arvan") {
-    const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-    return records.find((rec) => rec.id === recordId) || null;
-  }
   const recData = await (await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
     headers: hdr(accounts[session.acc].token),
     signal: withTimeout(),
@@ -2663,12 +2638,12 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   const session = await kv.get(`s:${token}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
   let r = await fetchRecordForSession(kv, accounts, session, recordId, env);
-  if (!r && session.provider !== "arvan") {
+  if (!r) {
     await invalidateCache(kv, session.zone_id).catch(() => {});
     r = await fetchRecordForSession(kv, accounts, session, recordId, env);
   }
   if (!r) {
-    const cfErr = session.provider !== "arvan" ? await cfRecordErr(kv, accounts, session, recordId) : "";
+    const cfErr = await cfRecordErr(kv, accounts, session, recordId);
     return edit(
       "❌ رکورد پیدا نشد." +
         (cfErr ? "\n\n📄 خطای کلادفلر:\n" + code(cfErr) : "")
@@ -2692,15 +2667,15 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
     ipBlock = `\n🌍 ${fmtIpInfo(r.content, info)}`;
   }
   const favs = await getFavs(kv, chatId);
-  const zoneIdForFav = session.provider === "arvan" ? "arvan:" + session.domain : session.zone_id;
+  const zoneIdForFav = session.zone_id;
   const faved = favExists(favs, zoneIdForFav, recordId);
-  const zoneName = session.provider === "arvan" ? session.domain : session.zone_name;
+  const zoneName = session.zone_name;
   const text =
     `✏️ ویرایش رکورد\n\n` +
     `📛 نام: ${code(r.name)}\n` +
     `🏷 نوع: ${code(r.type)}\n` +
     `💡 مقدار: ${code(r.content)}\n` +
-    `⏱\u200F TTL: ${r.ttl === 1 || r.ttl === 120 ? (session.provider === "arvan" ? "پیش‌فرض" : "خودکار") : r.ttl}\n` +
+    `⏱\u200F TTL: ${r.ttl === 1 || r.ttl === 120 ? "خودکار" : r.ttl}\n` +
     `🌐\u200F Proxy: ${r.proxied ? "روشن" : "خاموش"}\n` +
     `📁 دامنه: ${code(zoneName)}` +
     ipBlock;
@@ -2739,7 +2714,7 @@ async function redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, 
 }
 
 // ===================== CNAMEهای وارده (دامنه‌هایی که به این رکورد CNAME کرده‌اند) =====================
-// کلادفلر/آروان API جست‌وجوی معکوس CNAME ندارند؛ پس همهٔ زون‌های همهٔ اکانت‌ها
+// کلادفلر API جست‌وجوی معکوس CNAME ندارد؛ پس همهٔ زون‌های همهٔ اکانت‌ها
 // پیمایش می‌شوند و رکوردهای CNAMEای که مقدارشان برابر نام این رکورد است برگردانده می‌شوند.
 // نتیجه برای مدتی کوتاه در KV کش می‌شود تا کلیک‌های پشت‌سرهم سبک باشد.
 function normCnameHost(s) {
@@ -2783,36 +2758,6 @@ async function findCnameReferrers(kv, accounts, session, targetName, env) {
   });
   // mapLimit آرایه‌ای از آرایه‌ها برمی‌گرداند؛ یک سطح flatten می‌کنیم تا خودِ رکوردها بمانند.
   refs.push(...cfHits.flat());
-  // آروان: پیمایش همهٔ دامنه‌های همهٔ اکانت‌ها
-  let arvanAccounts = [];
-  try {
-    arvanAccounts = await getArvanAccounts(kv);
-  } catch (e) {
-    arvanAccounts = [];
-  }
-  for (let i = 0; i < arvanAccounts.length; i++) {
-    let domains = [];
-    try {
-      domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
-    } catch (e) {
-      continue;
-    }
-    for (const d of domains) {
-      const dn = typeof d === "string" ? d : d && d.domain;
-      if (!dn) continue;
-      let records = [];
-      try {
-        records = await arvanGetAllRecords(arvanAccounts[i].token, dn, kv, env);
-      } catch (e) {
-        continue;
-      }
-      for (const rec of records) {
-        if (String(rec.type).toUpperCase() !== "CNAME") continue;
-        if (normCnameHost(rec.content) !== target) continue;
-        refs.push({ name: rec.name, zone_name: dn, provider: "arvan" });
-      }
-    }
-  }
   refs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
   return refs;
 }
@@ -2841,8 +2786,7 @@ async function renderCnameReferrers(kv, accounts, edit, chatId, session, r, toke
     lines.push(`📊 تعداد: ${refs.length}`, "");
     for (let i = 0; i < refs.length; i++) {
       const f = refs[i];
-      const prov = f.provider === "arvan" ? "🇮🇷" : "☁️";
-      lines.push(`${i + 1}) ${prov} ${code(f.name)} — ${code(f.zone_name)}`);
+      lines.push(`${i + 1}) ☁️ ${code(f.name)} — ${code(f.zone_name)}`);
     }
   }
   // crb: بازگشت به صفحهٔ ویرایش همان رکورد
@@ -2865,9 +2809,7 @@ function lbIsLbRecord(r) {
 }
 
 function lbKeyFor(session, name) {
-  const provider = session.provider === "arvan" ? "arvan" : "cf";
-  const scope = session.provider === "arvan" ? session.domain : session.zone_id;
-  return `lb:${provider}:${scope}:${name}`;
+  return `lb:cf:${session.zone_id}:${name}`;
 }
 
 async function getLbCfg(kv, key) {
@@ -2894,9 +2836,6 @@ function lbEntriesOf(group, cfg) {
 }
 
 async function lbFetchRecords(kv, accounts, session, env) {
-  if (session.provider === "arvan") {
-    return await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-  }
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   if (!zone) return null;
   return await getRecords(zone, accounts, kv);
@@ -3006,18 +2945,6 @@ async function redrawRecordsList(kv, accounts, botToken, chatId, messageId, toke
   const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
   const session = await kv.get(`s:${token}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده.");
-  if (session.provider === "arvan") {
-    const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-    if (records.length === 0) {
-      const kb = [
-        [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
-        [{ text: "🔙 بازگشت", callback_data: "arvan" }],
-      ];
-      return edit(`📭 رکوردی برای ${session.domain} باقی نمانده.`, kb);
-    }
-    await renderArvanRecords(session.domain, records, token, page || 0, edit);
-    return;
-  }
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   if (!zone) return edit("❌ دامنه پیدا نشد.");
   const records = await getRecords(zone, accounts, kv);
@@ -3042,21 +2969,6 @@ async function redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId,
 async function redrawMenuNav(kv, botToken, chatId, messageId) {
   const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
   await edit(mainMenuText(), mainMenuKeyboard());
-}
-
-async function getArvanAccounts(kv) {
-  let list = await kvGetCached(kv, "arvan_accounts", "json");
-  if (!Array.isArray(list)) list = [];
-  return list;
-}
-
-async function arvanToken(kv, i) {
-  const list = await getArvanAccounts(kv);
-  return list[i] ? list[i].token : "";
-}
-
-async function saveArvanAccounts(kv, list) {
-  await kvPutCached(kv, "arvan_accounts", JSON.stringify(list));
 }
 
 // ===================== Linode =====================
@@ -3341,246 +3253,6 @@ function passKb(pw, backCb, backLabel) {
 }
 function passMsg(head, pw, note) {
   return `${head}\n\n🔑 ${code(String(pw))}\n\n${note || "📋 برای کپی رمز، روی دکمهٔ زیر بزن."}`;
-}
-
-// ===================== ArvanCloud =====================
-function arvanHdr(token) {
-  return { Authorization: `APIKEY ${token}`, "Content-Type": "application/json", Accept: "application/json" };
-}
-
-// چون کلادفلر ورکر به API آروان دسترسی ندارد (آی‌پی‌های کلادفلر رد می‌شوند)،
-// همهٔ فراخوانی‌های آروان وقتی رله ثبت شده باشد از پروکسی HTTP رله (/http) عبور می‌کنند.
-// اگر رله‌ای ثبت نشده یا پروکسی خطا بدهد، به فراخوانی مستقیم برمی‌گردیم.
-async function arvanFetch(token, path, opts = {}, timeoutMs = 30000, kv, env) {
-  let viaRelay = false;
-  try {
-    if (kv && env) {
-      const rl = await getSrvRelayCfg(kv, env);
-      if (rl && rl.url) {
-        const rprox = await fetch(rl.url.replace(/\/+$/, "") + "/http", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-SRV-Token": rl.token || "" },
-          body: JSON.stringify({
-            method: opts.method || "GET",
-            url: ARVAN_API + path,
-            headers: arvanHdr(token),
-            body: opts.body || null,
-            timeoutMs,
-          }),
-          signal: AbortSignal.timeout(Math.min(timeoutMs + 15000, 90000)),
-        });
-        if (rprox.ok) {
-          const j = await rprox.json().catch(() => ({}));
-          if (!j.error) {
-            viaRelay = true;
-            try {
-              return JSON.parse(j.body || "{}");
-            } catch {
-              return {};
-            }
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.error("ARVAN_RELAY_ERR", String(e));
-  }
-  if (viaRelay) return {};
-  const res = await fetch(ARVAN_API + path, { ...opts, headers: arvanHdr(token), signal: AbortSignal.timeout(timeoutMs) });
-  const text = await res.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-async function arvanGetAllDomains(token, kv, env) {
-  const out = [];
-  let page = 1;
-  while (true) {
-    const data = await arvanFetch(token, `/domains?per_page=50&page=${page}`, {}, 30000, kv, env);
-    let arr = null;
-    if (data.data && Array.isArray(data.data)) {
-      arr = data.data;
-    } else if (data.result && Array.isArray(data.result)) {
-      arr = data.result;
-    }
-    if (!arr || arr.length === 0) break;
-    for (const d of arr) {
-      const name = d.domain || d.name || d.domain_name || "";
-      if (name) out.push({ domain: name, ...d });
-    }
-    if (arr.length < 50) break;
-    page++;
-  }
-  return out;
-}
-
-// لیست دامنه‌های آروان با کش کوتاه (مثل کش دامنه‌های کلودفلر) تا دکمه‌هایی مثل «افزودن رکورد»
-// بدون مکث طولانی جواب بدهند؛ هر اکانت هم جداگانه try/catch می‌شود که یک اکانت معیوب کل را خراب نکند.
-async function getArvanDomainsCached(kv, arvanAccounts, env) {
-  if (kv) {
-    const cached = await kvGetCached(kv, "cache:arvan_domains", "json", ARVAN_DOMAINS_CACHE_MS);
-    if (Array.isArray(cached)) return cached;
-  }
-  const out = [];
-  for (let i = 0; i < arvanAccounts.length; i++) {
-    try {
-      const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
-      for (const d of domains) out.push({ domain: d.domain, acc: i });
-    } catch (e) {
-      console.error("ARVAN_DOMAINS_ERR", String(e));
-    }
-  }
-  if (kv && arvanAccounts.length) {
-    await kvPutCached(kv, "cache:arvan_domains", JSON.stringify(out), { expirationTtl: ARVAN_DOMAINS_CACHE_MS / 1000 }, ARVAN_DOMAINS_CACHE_MS);
-  }
-  return out;
-}
-
-function normalizeArvanRecord(record, domain) {
-  const rawName = record.name || "@";
-  const fullName = rawName === "@" ? domain : (rawName.endsWith("." + domain) ? rawName : rawName + "." + domain);
-  const getValue = (v) => {
-    if (Array.isArray(v) && v.length) {
-      const first = v[0];
-      if (typeof first === "object") return first.ip || first.host || first.text || first.value || first.content || "";
-      return String(first);
-    }
-    if (typeof v === "object") return v.ip || v.host || v.text || v.value || v.content || "";
-    return v != null ? String(v) : "";
-  };
-  const content = getValue(record.value) || getValue(record.values) || getValue(record.content) || getValue(record.data);
-  const type = (record.type || "A").toUpperCase();
-  return {
-    id: record.id || record.uuid || record.record_id || "",
-    type,
-    name: fullName,
-    content,
-    proxied: !!record.cloud,
-    ttl: record.ttl || 120,
-    provider: "arvan",
-    domain,
-    raw: record,
-  };
-}
-
-async function arvanGetAllRecords(token, domain, kv, env) {
-  const out = [];
-  let page = 1;
-  while (true) {
-    const data = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records?per_page=100&page=${page}`, {}, 30000, kv, env);
-    let arr = null;
-    if (data.data && Array.isArray(data.data)) {
-      arr = data.data;
-    } else if (data.result && Array.isArray(data.result)) {
-      arr = data.result;
-    } else if (data.data && typeof data.data === "object") {
-      arr = data.data.records || data.data.dns_records || data.data.items || null;
-    }
-    if (!arr || !Array.isArray(arr) || arr.length === 0) break;
-    for (const r of arr) {
-      if (typeof r === "object") {
-        const norm = normalizeArvanRecord(r, domain);
-        if (norm.id) out.push(norm);
-      }
-    }
-    if (arr.length < 100) break;
-    page++;
-  }
-  return out;
-}
-
-async function arvanUpdateRecord(token, domain, record, newContent, kv, env) {
-  const rid = record.id || record.raw?.id || record.raw?.uuid || "";
-  if (!rid) return { success: false, errors: [{ message: "Missing record id" }] };
-  const url = `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`;
-  const raw = record.raw || {};
-  const rtype = (record.type || raw.type || "A").toUpperCase();
-  const ttl = raw.ttl != null ? raw.ttl : record.ttl;
-  const cloudVal = record.proxied != null ? record.proxied : (raw.cloud || false);
-  let valuePayload = [];
-  if (rtype === "A" || rtype === "AAAA") {
-    const extra = {};
-    for (const k of Object.keys(raw)) {
-      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
-        extra[k] = raw[k];
-      }
-    }
-    extra.ip = newContent;
-    valuePayload = [extra];
-  } else if (rtype === "CNAME" || rtype === "NS") {
-    const extra = {};
-    for (const k of Object.keys(raw)) {
-      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
-        extra[k] = raw[k];
-      }
-    }
-    extra.host = newContent;
-    valuePayload = [extra];
-  } else if (rtype === "TXT") {
-    const extra = {};
-    for (const k of Object.keys(raw)) {
-      if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) {
-        extra[k] = raw[k];
-      }
-    }
-    extra.text = newContent;
-    valuePayload = [extra];
-  } else {
-    valuePayload = [newContent];
-  }
-  const payload = {
-    type: rtype.toLowerCase(),
-    name: raw.name || record.name || "@",
-    value: valuePayload,
-    cloud: cloudVal,
-  };
-  if (ttl != null && ttl !== 0 && ttl !== "") payload.ttl = ttl;
-  if (rid) payload.id = rid;
-  let res = await arvanFetch(token, url, { method: "PUT", body: JSON.stringify(payload) }, 30000, kv, env);
-  if (res.success !== false) return res;
-  res = await arvanFetch(token, url, { method: "PATCH", body: JSON.stringify(payload) }, 30000, kv, env);
-  return res;
-}
-
-async function arvanCreateRecord(token, domain, rtype, name, content, proxied, kv, env) {
-  const shortName = name === domain ? "@" : (name.endsWith("." + domain) ? name.slice(0, -(domain.length + 1)) : name);
-  let valuePayload = [];
-  const rtypeU = rtype.toUpperCase();
-  if (rtypeU === "A" || rtypeU === "AAAA") {
-    valuePayload = [{ ip: content }];
-  } else if (rtypeU === "CNAME" || rtypeU === "NS") {
-    valuePayload = [{ host: content }];
-  } else if (rtypeU === "TXT") {
-    valuePayload = [{ text: content }];
-  } else {
-    valuePayload = [content];
-  }
-  const payload = {
-    type: rtypeU.toLowerCase(),
-    name: shortName,
-    value: valuePayload,
-    cloud: rtypeU === "A" || rtypeU === "AAAA" || rtypeU === "CNAME" ? !!proxied : false,
-  };
-  const res = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }, 30000, kv, env);
-  return res;
-}
-
-async function arvanDeleteRecord(token, domain, rid, kv, env) {
-  const res = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`, { method: "DELETE" }, 30000, kv, env);
-  return res;
-}
-
-function maskArvanToken(t) {
-  if (!t) return "";
-  if (t.length <= 12) return t.slice(0, 6) + "…";
-  return t.slice(0, 10) + "…" + t.slice(-4);
 }
 
 // ===================== SSL Monitor =====================
@@ -4009,7 +3681,7 @@ async function renderDomExpiryHome(kv, edit, page) {
     : "⚠️ ایرنیک تاریخ دامنه‌های .ir را حذف/مخفی کرده. برای استعلام خودکار، «🔑 ثبت کلید API» را بزن؛ وگرنه از «✍️ ورود دستی» تاریخ را ثبت کن.\n\n";
   if (!sorted.length) {
     text += "📭 دامنه‌ای ثبت نشده. از دکمه‌های زیر اضافه کن:\n";
-    text += "• «🌍 افزودن از اکانت‌ها»: همهٔ دامنه‌های اکانت‌های کلودفلر و آروان یک‌جا اضافه می‌شوند.\n";
+    text += "• «🌍 افزودن از اکانت‌ها»: همهٔ دامنه‌های اکانت‌های کلودفلر یک‌جا اضافه می‌شوند.\n";
     text += "• «✍️ ورود دستی»: یک دامنه را با نام یا با تاریخ دستی ثبت کن.";
   } else {
     text += `📌 ${sorted.length} دامنه (مرتب بر اساس نزدیک‌ترین انقضا):\n\n`;
@@ -4023,7 +3695,7 @@ async function renderDomExpiryHome(kv, edit, page) {
     if (pages > 1) text += `\nصفحه ${p + 1} از ${pages}`;
   }
   const kb = [];
-  // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر + آروان) | domexpa: افزودن دستی نام دامنه
+  // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر) | domexpa: افزودن دستی نام دامنه
   kb.push([
     { text: "🌍 افزودن از اکانت‌ها", callback_data: "domexpall" },
     { text: "✍️ ورود دستی", callback_data: "domexpa" },
@@ -4039,11 +3711,10 @@ async function renderDomExpiryHome(kv, edit, page) {
   await edit(text, kb);
 }
 
-// افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر + آروان) به مانیتور انقضا
+// افزودن همهٔ دامنه‌های همهٔ اکانت‌ها (کلودفلر) به مانیتور انقضا
 async function domExpiryAddAll(kv, edit, env) {
   await edit("⏳ در حال خواندن دامنه‌ها از همهٔ اکانت‌ها…");
   const accounts = await getAccounts(kv, {});
-  const arvanAccounts = await getArvanAccounts(kv);
   const names = [];
   const seen = new Set();
   const push = (n) => {
@@ -4059,16 +3730,8 @@ async function domExpiryAddAll(kv, edit, env) {
   } catch (e) {
     console.error("DOMEXP_ALL_CF", String(e));
   }
-  for (const a of arvanAccounts) {
-    try {
-      const ds = await arvanGetAllDomains(a.token, kv, env);
-      for (const d of ds) push(d.domain);
-    } catch (e) {
-      console.error("DOMEXP_ALL_ARV", String(e));
-    }
-  }
   if (!names.length) {
-    return edit("📭 دامنه‌ای در اکانت‌های کلودفلر/آروان پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
+    return edit("📭 دامنه‌ای در اکانت‌های کلودفلر پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
   }
   const list = await getDomExpiry(kv);
   let added = 0;
@@ -6123,132 +5786,6 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
   await send(title, keyboard);
 }
 
-async function showArvanDomains(page, arvanAccounts, edit, kv, env) {
-  if (!arvanAccounts.length) {
-    await edit("🇮🇷 آروان کلاد\n\n📭 اکانتی ثبت نشده. با دکمهٔ زیر اضافه کنید.", [
-      [{ text: "➕ افزودن اکانت آروان", callback_data: "arvanaccadd" }],
-      [{ text: "🏠 منو", callback_data: "menu" }],
-    ]);
-    return;
-  }
-  const items = [];
-  let err = "";
-  for (let i = 0; i < arvanAccounts.length; i++) {
-    try {
-      const domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
-      for (const d of domains) items.push({ domain: d.domain, acc: i, name: arvanAccounts[i].name });
-    } catch (e) {
-      err = e && e.message ? e.message : String(e);
-    }
-  }
-  if (!items.length) {
-    await edit(
-      "🇮🇷 آروان کلاد\n\n📭 دامنه‌ای در اکانت‌های آروان پیدا نشد." +
-        (err ? "\n⚠️ خطا: " + escHtml(err) : "") +
-        "\n\nℹ️ ساخت دامنه در آروان از طریق API امکان‌پذیر نیست؛ باید از پنل آروان اضافه شود. پس از افزودن، دکمهٔ «🔄 همگام‌سازی» را بزن (سپس ساخت ساب‌دامنه/رکورد از همین ربات انجام می‌شود).",
-      [
-        // url: باز کردن پنل آروان برای افزودن دامنه (ساخت دامنه از API ممکن نیست)
-        [{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }],
-        // arvnsync: همگام‌سازی دوبارهٔ لیست دامنه‌ها از آروان
-        [{ text: "🔄 همگام‌سازی", callback_data: "arvnsync" }],
-        // arvanaccadd: افزودن اکانت آروان | menu: منوی اصلی
-        [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }, { text: "🏠 منو", callback_data: "menu" }],
-      ]
-    );
-    return;
-  }
-  const per = CZ_PAGE_SIZE;
-  const pages = Math.max(1, Math.ceil(items.length / per));
-  if (page < 0) page = 0;
-  if (page >= pages) page = pages - 1;
-  const slice = items.slice(page * per, page * per + per);
-  const lines = ["🇮🇷 آروان کلاد — دامنه‌ها (" + items.length + ")", ""];
-  const kb = [];
-  // arv:<accIndex>:<domain>: ورود به دامنه و مدیریت رکوردهای آن
-  for (const it of slice) kb.push([{ text: `🔍 ${it.domain}`, callback_data: `arv:${it.acc}:${it.domain}` }]);
-  if (pages > 1) {
-    // arvpage:<page>: صفحه‌بندی لیست دامنه‌های آروان
-    kb.push([
-      { text: "⬅️", callback_data: `arvpage:${page - 1}` },
-      { text: `${page + 1}/${pages}`, callback_data: "noop" },
-      { text: "➡️", callback_data: `arvpage:${page + 1}` },
-    ]);
-  }
-  // arvnsync: همگام‌سازی دوباره | arvanaccadd: افزودن اکانت آروان
-  kb.push([
-    { text: "🔄 همگام‌سازی", callback_data: "arvnsync" },
-    { text: "➕ افزودن اکانت", callback_data: "arvanaccadd" },
-  ]);
-  kb.push([{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }]);
-  kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
-}
-
-async function showArvanRecords(domain, accIdx, token, arvanAccounts, edit, kv, env) {
-  const token_val = arvanAccounts[accIdx].token;
-  const records = await arvanGetAllRecords(token_val, domain, kv, env);
-  await kv.put(
-    `s:${token}`,
-    JSON.stringify({ domain, acc: accIdx, provider: "arvan" }),
-    { expirationTtl: 86400 }
-  );
-  if (records.length === 0) {
-    await edit(
-      `📭 رکوردی برای ${domain} یافت نشد.`,
-      [
-        [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
-        [{ text: "🔙 بازگشت", callback_data: "arvan" }],
-      ]
-    );
-    return;
-  }
-  await renderArvanRecords(domain, records, token, 0, edit);
-}
-
-async function renderArvanRecords(domain, records, token, page, edit, backCb) {
-  const pages = Math.ceil(records.length / RECORD_PAGE_SIZE);
-  if (page < 0) page = 0;
-  if (page >= pages) page = pages - 1;
-  const slice = records.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
-  const labels = {};
-  const counts = {};
-  for (const r of records) {
-    counts[r.name] = (counts[r.name] || 0) + 1;
-  }
-  const seen = {};
-  for (const r of records) {
-    if (counts[r.name] > 1) {
-      seen[r.name] = (seen[r.name] || 0) + 1;
-      labels[r.id] = `${seen[r.name]}. ${r.type}-${r.name}`;
-    } else {
-      labels[r.id] = `${r.type}-${r.name}`;
-    }
-  }
-  const keyboard = [];
-  for (let i = 0; i < slice.length; i += 3) {
-    const row = [];
-    for (let j = i; j < i + 3; j++) {
-      if (j < slice.length) {
-        const r = slice[j];
-        row.push({ text: labels[r.id], callback_data: `e:${token}:${r.id}` });
-      } else {
-        row.push(EMPTY_BTN);
-      }
-    }
-    keyboard.push(row);
-  }
-  keyboard.push([
-    { text: "➕ افزودن", callback_data: `addz:${token}` },
-    { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
-  ]);
-  const nav = [];
-  nav.push(page > 0 ? { text: "◀️", callback_data: `ap:${token}:${page - 1}` } : EMPTY_BTN);
-  nav.push({ text: "🔙 بازگشت", callback_data: backCb || "arvan" });
-  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `ap:${token}:${page + 1}` } : EMPTY_BTN);
-  keyboard.push(nav);
-  await edit(`📋 ${domain} — صفحه ${page + 1} از ${pages}`, keyboard);
-}
-
 async function renderSettingsGroup(token, session, accounts, edit, title, keys) {
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   const map = await getSettingsMap(zone, accounts);
@@ -6282,7 +5819,7 @@ async function renderAdmins(admins, mainAdmin, send) {
   await send(text, keyboard);
 }
 
-async function showAccounts(accounts, arvanAccounts, send) {
+async function showAccounts(accounts, send) {
   let text = "";
   const keyboard = [];
   if (accounts.length > 0) {
@@ -6293,18 +5830,9 @@ async function showAccounts(accounts, arvanAccounts, send) {
   } else {
     text += "👤 کلودفلر: هیچ اکانتی ثبت نشده\n\n";
   }
-  if (arvanAccounts.length > 0) {
-    text += "🇮🇷 اکانت‌های آروان کلاد:\n\n";
-    arvanAccounts.forEach((a, i) => {
-      text += `${i + 1}) ${a.name}\n   کلید: ${maskArvanToken(a.token)}\n\n`;
-    });
-  } else {
-    text += "🇮🇷 آروان کلاد: هیچ اکانتی ثبت نشده\n\n";
-  }
-  // accadd: افزودن اکانت کلودفلر | arvanaccadd: افزودن اکانت آروان | accdel: حذف اکانت | menu: منوی اصلی
+  // accadd: افزودن اکانت کلودفلر | accdel: حذف اکانت | menu: منوی اصلی
   keyboard.push([{ text: "➕ افزودن اکانت کلودفلر", callback_data: "accadd" }]);
-  keyboard.push([{ text: "➕ افزودن اکانت آروان", callback_data: "arvanaccadd" }]);
-  if (accounts.length > 0 || arvanAccounts.length > 0) {
+  if (accounts.length > 0) {
     keyboard.push([{ text: "🗑 حذف اکانت", callback_data: "accdel" }]);
   }
   keyboard.push([{ text: "🏠 منو", callback_data: "menu" }]);
@@ -6500,20 +6028,6 @@ async function renderSearchResults(token, results, query, field, send) {
 
 async function addRecordFromPending(pending, content, accounts, kv, chatId, send) {
   await kv.delete(`pend:${chatId}`);
-  if (pending.provider === "arvan") {
-    const domain = pending.domain;
-    const acc = { token: await arvanToken(kv, pending.acc) };
-    const res = await arvanCreateRecord(acc.token, domain, pending.rtype, pending.name, content, false, kv, env);
-    if (res.success !== false) {
-      await send(
-        `✅ رکورد ساخته شد:\n${pending.rtype}-${pending.name} → ${code(content)}\n${domain}`,
-        [[{ text: "🇮🇷 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]]
-      );
-    } else {
-      await send("❌ خطا:\n" + cfErrText(res));
-    }
-    return;
-  }
   const fullName = normalizeName(pending.name, pending.zone_name);
   const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
     method: "POST",
@@ -6554,7 +6068,7 @@ async function cnameTargetPickerData(accounts, kv, name, page = 0) {
   };
 }
 
-async function resolvePending(pending, value, chatId, accounts, arvanAccounts, send, kv, botToken, env) {
+async function resolvePending(pending, value, chatId, accounts, send, kv, botToken, env) {
   const type = pending.type;
   const txt = value.trim();
 
@@ -6738,24 +6252,6 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     await invalidateCache(kv, null);
     await send(`✅ اکانت «${pending.name}» اضافه شد.`, [
       [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "📋 دامنه‌ها", callback_data: "zones" }],
-    ]);
-    return;
-  }
-
-  if (type === "arvan_acc_name") {
-    if (!txt) return send("⚠️ نام معتبری وارد کنید.");
-    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_token", name: txt }), { expirationTtl: 600 });
-    await send(`🔑 حالا API Key اکانت آروان «${txt}» را بفرستید:`);
-    return;
-  }
-
-  if (type === "arvan_acc_token") {
-    await kv.delete(`pend:${chatId}`);
-    const token = txt;
-    arvanAccounts.push({ name: pending.name, token });
-    await kvPutCached(kv, "arvan_accounts", JSON.stringify(arvanAccounts));
-    await send(`✅ اکانت آروان «${pending.name}» اضافه شد.\n\n⚠️ در صورت خطا، کلید از تنظیمات اصلاح شود.`, [
-      [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🇮🇷 آروان", callback_data: "arvan" }],
     ]);
     return;
   }
@@ -7007,11 +6503,7 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     const ttl = ref.ttl || 1;
     let ok = false;
     let errText = "";
-    if (session.provider === "arvan") {
-      const res = await arvanCreateRecord(await arvanToken(kv, session.acc), session.domain, type0, pending.name, val, proxied, kv, env);
-      ok = res.success !== false;
-      if (!ok) errText = cfErrText(res);
-    } else {
+    {
       const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records`, {
         method: "POST",
         headers: hdr(accounts[session.acc].token),
@@ -7061,33 +6553,6 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
       }
     }
     await kv.delete(`pend:${chatId}`);
-    if (pending.provider === "arvan") {
-      const records = await arvanGetAllRecords(arvanAccounts[pending.acc].token, pending.domain, kv, env);
-      const prev = records.find((r) => r.id === pending.record_id);
-      if (!prev) {
-        await send("❌ رکورد پیدا نشد.");
-        return;
-      }
-      if (type === "edit_ttl") {
-        await send("⚠️ تغییر TTL در آروان کلاد به صورت مستقیم پشتیبانی نمی‌شود.");
-        return;
-      }
-      prev.content = txt;
-      const res = await arvanUpdateRecord(arvanAccounts[pending.acc].token, pending.domain, prev, txt, kv, env);
-      if (res.success !== false) {
-        const summary = diffSummary(prev.name, prev.content, txt);
-        if (pending.msgId) {
-          await editMessage(botToken, chatId, pending.msgId, summary, []);
-          await sleep(2000);
-          await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
-        } else {
-          await send(summary, [[{ text: "🇮🇷 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]]);
-        }
-      } else {
-        await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(res));
-      }
-      return;
-    }
     const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
     const body = {};
     if (type === "edit_ttl") body.ttl = Number(txt) || 1;
@@ -7378,7 +6843,7 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     }
     await kv.put(`pend:${chatId}`, JSON.stringify({ ...pending, type: "qan_confirm", name }), { expirationTtl: 600 });
     const rtype = isIpv6(pending.ip) ? "AAAA" : "A";
-    const zoneName = pending.provider === "arvan" ? pending.domain : pending.zone_name;
+    const zoneName = pending.zone_name;
     const text =
       `➕ تأیید ساخت ساب\n\n` +
       `📛 نام: ${code(name)}\n` +
@@ -7431,21 +6896,10 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
   if (type === "search_zone") {
     await kv.delete(`pend:${chatId}`);
     let results = [];
-    if (pending.provider === "arvan") {
-      const records = await arvanGetAllRecords(await arvanToken(kv, pending.acc), pending.domain, kv, env);
-      const q = txt.toLowerCase();
-      for (const r of records) {
-        const hay = pending.field === "name" ? r.name : r.content;
-        if (hay.toLowerCase().includes(q)) {
-          results.push({ zone_id: "arvan:" + pending.domain, zone_name: pending.domain, record: r, acc: pending.acc, provider: "arvan", domain: pending.domain });
-        }
-      }
-    } else {
-      const zone = await getZoneById(pending.zone_id, pending.acc, accounts);
-      results = await searchRecords(accounts, pending.field, txt, zone, kv);
-      for (const r of results) {
-        r.provider = "cloudflare";
-      }
+    const zone = await getZoneById(pending.zone_id, pending.acc, accounts);
+    results = await searchRecords(accounts, pending.field, txt, zone, kv);
+    for (const r of results) {
+      r.provider = "cloudflare";
     }
     const token = makeToken();
     await kv.put(
@@ -8142,7 +7596,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
   }
 
   const accounts = await getAccounts(kv, env);
-  const arvanAccounts = await getArvanAccounts(kv);
   const lnAccounts = await getLnAccounts(kv);
   const hzAccounts = await getHzAccounts(kv);
   const admins = await getAdmins(kv, env);
@@ -8176,7 +7629,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // hqi: راهنمای «جای‌گذاری سریع»
       await edit(HELP_GUIDE.hqi, helpGuideKb());
     } else if (data.startsWith("hg:")) {
-      // hg:<key>: نمایش راهنمای همان بخش (cf/arvan/prov/mons/...)
+      // hg:<key>: نمایش راهنمای همان بخش (cf/prov/mons/...)
       await edit(HELP_GUIDE[data.slice(3)] || "ℹ️ راهنمای این بخش موجود نیست.", helpGuideKb());
     } else if (data === "admins_menu") {
       // admins_menu: لیست ادمین‌ها (فقط ادمین اصلی)
@@ -8223,36 +7676,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "zones") {
       // zones: لیست دامنه‌های کلودفلر (همهٔ اکانت‌ها)
       await showZones(0, "all", accounts, edit, kv, chatId);
-    } else if (data === "arvan") {
-      // arvan: لیست دامنه‌های آروان | arvnsync: همگام‌سازی دوباره | arvpage:<page>: صفحه‌بندی
-      await showArvanDomains(0, arvanAccounts, edit, kv, env);
-    } else if (data.startsWith("arvacc:")) {
-      await showArvanDomains(0, arvanAccounts, edit, kv, env);
-    } else if (data === "arvnsync") {
-      await kvDeleteCached(kv, "arvan:cached:domains");
-      await edit("🔄 در حال همگام‌سازی با آروان...", [[{ text: "⏳ لطفا صبر کنید", callback_data: "noop" }]]);
-      await showArvanDomains(0, arvanAccounts, edit, kv, env);
-    } else if (data.startsWith("arvpage:")) {
-      const page = Number(data.slice(10));
-      await showArvanDomains(page, arvanAccounts, edit, kv, env);
-    } else if (data.startsWith("arv:")) {
-      // arv:<acc>:<domain>: ورود به دامنهٔ آروان و نمایش رکوردها
-      const parts = data.split(":");
-      const accIdx = Number(parts[1]);
-      const domain = parts[2];
-      const token = makeToken();
-      await kv.put(`s:${token}`, JSON.stringify({ domain, acc: accIdx, provider: "arvan" }), { expirationTtl: 86400 });
-      await showArvanRecords(domain, accIdx, token, arvanAccounts, edit, kv, env);
-    } else if (data.startsWith("ap:")) {
-      const parts = data.split(":");
-      const token = parts[1];
-      const page = Number(parts[2]);
-      const session = await kv.get(`s:${token}`, "json");
-      if (!session || session.provider !== "arvan") return edit("⏳ نشست منقضی شده.");
-      session.page = page;
-      await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
-      const records = await arvanGetAllRecords(arvanAccounts[session.acc].token, session.domain, kv, env);
-      await renderArvanRecords(session.domain, records, token, page, edit, "arvan");
     } else if (data.startsWith("zf:")) {
       const parts = data.split(":");
       const flt = parts[1];
@@ -8271,18 +7694,17 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         [[{ text: "🏠 منو", callback_data: "menu" }]]
       );
     } else if (data === "accounts") {
-      // accounts: نمایش اکانت‌های کلودفلر/آروان | accadd: افزودن اکانت کلودفلر | arvanaccadd: افزودن اکانت آروان
-      await showAccounts(accounts, arvanAccounts, edit);
+      // accounts: نمایش اکانت‌های کلودفلر | accadd: افزودن اکانت کلودفلر
+      await showAccounts(accounts, edit);
     } else if (data === "accadd") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "acc_name" }), { expirationTtl: 600 });
       await edit("👤 افزودن اکانت کلودفلر\n\nنام دلخواه اکانت را بفرستید (مثلاً: اصلی، بکاپ):", [
         [{ text: "🏠 منو", callback_data: "menu" }],
       ]);
     } else if (data === "accdel") {
-      if (accounts.length === 0 && arvanAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      if (accounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
       const kb = [];
       for (let i = 0; i < accounts.length; i++) kb.push([{ text: `☁️ 🗑 ${accounts[i].name}`, callback_data: `dacc:${i}` }]);
-      for (let i = 0; i < arvanAccounts.length; i++) kb.push([{ text: `🇮🇷 🗑 ${arvanAccounts[i].name}`, callback_data: `darvan:${i}` }]);
       kb.push([{ text: "⬅️ بازگشت", callback_data: "accounts" }]);
       await edit("🗑 کدام اکانت حذف شود؟", kb);
     } else if (data.startsWith("dacc:")) {
@@ -8301,43 +7723,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(`✅ اکانت «${acc.name}» حذف شد.`, [
         [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🏠 منو", callback_data: "menu" }],
       ]);
-    } else if (data === "arvanaccadd") {
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_name" }), { expirationTtl: 600 });
-      await edit("🇮🇷 افزودن اکانت آروان کلاد\n\nنام دلخواه اکانت را بفرستید (مثلاً: اصلی، بکاپ):", [
-        [{ text: "🏠 منو", callback_data: "menu" }],
-      ]);
-    } else if (data === "arvanaccdel") {
-      if (arvanAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
-      const kb = arvanAccounts.map((a, i) => [{ text: `🗑 ${a.name}`, callback_data: `darvan:${i}` }]);
-      kb.push([{ text: "⬅️ بازگشت", callback_data: "accounts" }]);
-      await edit("🗑 کدام اکانت آروان حذف شود؟", kb);
-    } else if (data.startsWith("darvan:")) {
-      const idx = Number(data.slice(7));
-      const acc = arvanAccounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
-      await edit(`⚠️ مطمئنید اکانت «${acc.name}» حذف شود؟\nکلید: ${maskArvanToken(acc.token)}`, [
-        [{ text: "✅ بله", callback_data: `darvany:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
-      ]);
-    } else if (data.startsWith("darvany:")) {
-      const idx = Number(data.slice(9));
-      const acc = arvanAccounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
-      arvanAccounts.splice(idx, 1);
-      await kvPutCached(kv, "arvan_accounts", JSON.stringify(arvanAccounts));
-      await edit(`✅ اکانت «${acc.name}» حذف شد.`, [
-        [{ text: "👤 اکانت‌ها", callback_data: "accounts" }, { text: "🏠 منو", callback_data: "menu" }],
-      ]);
     } else if (data === "addrec") {
-      // addrec: انتخاب دامنه (کلودفلر/آروان) برای ساخت رکورد جدید
-      // arz:<acc>:<zoneId> برای کلودفلر و arvrec:<acc>:<domain> برای آروان
+      // addrec: انتخاب دامنه (کلودفلر) برای ساخت رکورد جدید
+      // arz:<acc>:<zoneId> برای کلودفلر
       const zones = await getAllZones(accounts, kv);
-      const arvanDomains = await getArvanDomainsCached(kv, arvanAccounts, env);
       const allItems = [];
       for (const z of zones) {
         allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
-      }
-      for (const d of arvanDomains) {
-        allItems.push({ text: `🟢 🇮🇷 ${d.domain}`, cb: `arvrec:${d.acc}:${d.domain}` });
       }
       if (allItems.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
       const kb = [];
@@ -8349,13 +7741,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       }
       kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
       await edit("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
-    } else if (data.startsWith("arvrec:")) {
-      const parts = data.split(":");
-      const accIndex = Number(parts[1]);
-      const domain = parts[2];
-      const token = makeToken();
-      await kv.put(`s:${token}`, JSON.stringify({ domain, acc: accIndex, provider: "arvan" }), { expirationTtl: 86400 });
-      await edit(`➕ ساخت رکورد در ${domain}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
     } else if (data.startsWith("arz:")) {
       const parts = data.split(":");
       const accIndex = Number(parts[1]);
@@ -8371,12 +7756,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      if (session.provider === "arvan") {
-        await edit(`➕ ساخت رکورد در ${session.domain}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
-      } else {
-        const zone = await getZoneById(session.zone_id, session.acc, accounts);
-        await edit(`➕ ساخت رکورد در ${zone.name}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
-      }
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      await edit(`➕ ساخت رکورد در ${zone.name}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
     } else if (data.startsWith("at:")) {
       const parts = data.split(":");
       const token = parts[1];
@@ -8452,11 +7833,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      const zoneName = session.provider === "arvan" ? session.domain : session.zone_name;
+      const zoneName = session.zone_name;
       await edit(`🔍 جستجو در ${zoneName}\n\nبر اساس چه چیزی جستجو کنیم؟`, [
         [{ text: "🔤 بر اساس نام/دامنه", callback_data: `zsf:${token}:name` }],
         [{ text: "🌐 بر اساس IP/مقدار", callback_data: `zsf:${token}:content` }],
-        [{ text: "⬅️ بازگشت", callback_data: session.provider === "arvan" ? `rback:${token}` : `rback:${token}` }],
+        [{ text: "⬅️ بازگشت", callback_data: `rback:${token}` }],
       ]);
     } else if (data.startsWith("zsf:")) {
       const parts = data.split(":");
@@ -8471,7 +7852,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       );
       await edit(
         field === "name" ? "🔤 نام یا بخشی از آن را بفرستید:" : "🌐 IP یا بخشی از مقدار را بفرستید:",
-        [[{ text: "⬅️ انصراف", callback_data: session.provider === "arvan" ? `rback:${token}` : `rback:${token}` }]]
+        [[{ text: "⬅️ انصراف", callback_data: `rback:${token}` }]]
       );
     } else if (data.startsWith("zset:")) {
       const token = data.slice(5);
@@ -8659,10 +8040,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       const rpage = Number(session.page) || 0;
-      if (session.provider === "arvan") {
-        const records = await arvanGetAllRecords(arvanAccounts[session.acc].token, session.domain, kv, env);
-        return renderArvanRecords(session.domain, records, token, rpage, edit, "arvan");
-      }
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -8837,24 +8214,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
       const res = stored.results[idx];
       const record = res.record;
-      if (res.provider === "arvan") {
-        const records = await arvanGetAllRecords(await arvanToken(kv, res.acc), res.domain, kv, env);
-        const orig = records.find((r) => r.id === record.id);
-        if (!orig) return edit("❌ رکورد پیدا نشد.");
-        orig.proxied = !record.proxied;
-        const r2 = await arvanUpdateRecord(await arvanToken(kv, res.acc), res.domain, orig, orig.content, kv, env);
-        if (r2.success !== false) {
-          const sum =
-            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
-            `🔴 Proxy قبلی: ${!orig.proxied ? "روشن" : "خاموش"}\n` +
-            `🟢 Proxy فعلی: ${orig.proxied ? "روشن" : "خاموش"}`;
-          await edit(sum, []);
-          await sleep(2000);
-          await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
-        } else {
-          await edit("❌ خطا:\n" + cfErrText(r2));
-        }
-      } else {
+      {
         const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${record.id}`, {
           method: "PATCH",
           headers: hdr(accounts[res.acc].token),
@@ -8925,10 +8285,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
       const res = stored.results[idx];
       let delData;
-      if (res.provider === "arvan") {
-        const r = await arvanDeleteRecord(await arvanToken(kv, res.acc), res.domain, res.record.id, kv, env);
-        delData = r;
-      } else {
+      {
         const del = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
           method: "DELETE",
           headers: hdr(accounts[res.acc].token),
@@ -8936,7 +8293,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         delData = await del.json();
       }
       if (delData.success || delData.success !== false) {
-        if (res.provider !== "arvan") await invalidateCache(kv, res.zone_id);
+        await invalidateCache(kv, res.zone_id);
         const gone = res.record;
         stored.results.splice(idx, 1);
         await kv.put(`sr:${token}`, JSON.stringify(stored), { expirationTtl: 3600 });
@@ -8953,7 +8310,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
       const page = session && Number(session.page) ? Number(session.page) : 0;
-      const backCb = session && session.provider === "arvan" ? `ap:${token}:${page}` : `p:${token}:${page}`;
+      const backCb = `p:${token}:${page}`;
       await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId, backCb }), { expirationTtl: 86400 });
       await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env);
     } else if (data.startsWith("ev:") || data.startsWith("et:")) {
@@ -8965,7 +8322,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!session) return edit("⏳ نشست منقضی شده.");
       await kv.put(
         `pend:${chatId}`,
-        JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: session.provider === "arvan" ? `ap:${token}:${Number(session.page) || 0}` : `p:${token}:${Number(session.page) || 0}` }),
+        JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
         { expirationTtl: 600 }
       );
       await edit(
@@ -8980,14 +8337,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
       const rp = Number(session.page) || 0;
-      if (session.provider === "arvan") {
-        try {
-          const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-          await renderArvanRecords(session.domain, records, token, rp, edit, "arvan");
-        } catch (e) {
-          await showArvanDomains(0, arvanAccounts, edit, kv, env);
-        }
-      } else {
+      {
         const zone = await getZoneById(session.zone_id, session.acc, accounts);
         const records = await getRecords(zone, accounts, kv);
         await renderRecords(zone, records, token, rp, edit, undefined, session.zback);
@@ -9031,11 +8381,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       let record;
-      if (session.provider === "arvan") {
-        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-        record = records.find((r) => r.id === recordId);
-        if (!record) return edit("❌ رکورد پیدا نشد.");
-      } else {
+      {
         const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           headers: hdr(accounts[session.acc].token),
         });
@@ -9043,22 +8389,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         if (!recData.success) return edit("❌ رکورد پیدا نشد.");
         record = recData.result;
       }
-      if (session.provider === "arvan") {
-        const newProxied = !record.proxied;
-        record.proxied = newProxied;
-        const res = await arvanUpdateRecord(await arvanToken(kv, session.acc), session.domain, record, record.content, kv, env);
-        if (res.success !== false) {
-          const sum =
-            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
-            `🔴 Proxy قبلی: ${!newProxied ? "روشن" : "خاموش"}\n` +
-            `🟢 Proxy فعلی: ${newProxied ? "روشن" : "خاموش"}`;
-          await edit(sum, []);
-          await sleep(2000);
-          await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
-        } else {
-          await edit("❌ خطا:\n" + cfErrText(res));
-        }
-      } else {
+      {
         const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "PATCH",
           headers: hdr(accounts[session.acc].token),
@@ -9085,11 +8416,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       let record;
-      if (session.provider === "arvan") {
-        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-        record = records.find((r) => r.id === recordId);
-        if (!record) return edit("❌ رکورد پیدا نشد.");
-      } else {
+      {
         const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           headers: hdr(accounts[session.acc].token),
         });
@@ -9106,14 +8433,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      if (session.provider === "arvan") {
-        const res = await arvanDeleteRecord(await arvanToken(kv, session.acc), session.domain, recordId, kv, env);
-        if (res.success !== false) {
-          await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
-        } else {
-          await edit("❌ خطا در حذف:\n" + cfErrText(res));
-        }
-      } else {
+      {
         const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "DELETE",
           headers: hdr(accounts[session.acc].token),
@@ -9162,15 +8482,10 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
       if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
-      const arvan = ctx.session.provider === "arvan";
       let ok = false;
       let errText = "";
       if (e.on) {
-        if (arvan) {
-          const res = await arvanDeleteRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, e.id, kv, env);
-          ok = res.success !== false;
-          if (!ok) errText = cfErrText(res);
-        } else {
+        {
           const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records/${e.id}`, {
             method: "DELETE",
             headers: hdr(accounts[ctx.session.acc].token),
@@ -9187,11 +8502,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         const ref = ctx.group[0] || {};
         const proxied = e.proxied != null ? !!e.proxied : !!ref.proxied;
         const ttl = e.ttl || ref.ttl || 1;
-        if (arvan) {
-          const res = await arvanCreateRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, e.type, ctx.name, e.content, proxied, kv, env);
-          ok = res.success !== false;
-          if (!ok) errText = cfErrText(res);
-        } else {
+        {
           const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records`, {
             method: "POST",
             headers: hdr(accounts[ctx.session.acc].token),
@@ -9214,17 +8525,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const want = parts[2] === "on";
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
       if (ctx.error) return edit(ctx.error, [[{ text: "🏠 منو", callback_data: "menu" }]]);
-      const arvan = ctx.session.provider === "arvan";
       let ok = 0;
       let fail = 0;
       for (const r of ctx.group) {
         if (!lbIsLbRecord(r)) continue;
-        if (arvan) {
-          const rec = { ...r, proxied: want };
-          const res = await arvanUpdateRecord(await arvanToken(kv, ctx.session.acc), ctx.session.domain, rec, r.content, kv, env);
-          if (res.success !== false) ok++;
-          else fail++;
-        } else {
+        {
           const res = await fetch(`${CF_API}/zones/${ctx.session.zone_id}/dns_records/${r.id}`, {
             method: "PATCH",
             headers: hdr(accounts[ctx.session.acc].token),
@@ -9236,7 +8541,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           else fail++;
         }
       }
-      if (!arvan) await invalidateCache(kv, ctx.session.zone_id);
+      await invalidateCache(kv, ctx.session.zone_id);
       await renderLbSettings(kv, accounts, edit, chatId, gid, env);
       if (fail) await send(`⚠️ Proxy برای ${ok} رکورد اعمال شد و ${fail} مورد ناموفق بود.`);
     } else if (data.startsWith("selba:") || data.startsWith("selbs:")) {
@@ -10202,7 +9507,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const pg = data.includes(":") ? Number(data.split(":")[1]) || 0 : 0;
       await renderDomExpiryHome(kv, edit, pg);
     } else if (data === "domexpall") {
-      // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌های کلودفلر/آروان یک‌جا
+      // domexpall: افزودن همهٔ دامنه‌های همهٔ اکانت‌های کلودفلر یک‌جا
       await domExpiryAddAll(kv, edit, env);
     } else if (data === "domexpkey") {
       // domexpkey: صفحهٔ تنظیمات کلید API انقضای دامنه (WhoisXMLAPI)
@@ -10301,13 +9606,12 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await saveDomExpiry(kv, list);
       await edit(`✅ «${removed.domain}» از مانیتور حذف شد.`, [[{ text: "🗓 مانیتور انقضای دامنه", callback_data: "domexpp:0" }]]);
     } else if (data === "providers") {
-      // hz: هتزنر | ln: لینود | arvan: آروان | menu: منوی اصلی
+      // hz: هتزنر | ln: لینود | menu: منوی اصلی
       await edit("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
         [
           { text: "🇩🇪 هتزنر", callback_data: "hz" },
           { text: "🟢 لینود", callback_data: "ln" },
         ],
-        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
         [{ text: "🏠 منو", callback_data: "menu" }],
       ]);
     } else if (data === "hz") {
@@ -12036,21 +11340,9 @@ async function renderQanZonePicker(io, page) {
   const { kv, accounts, edit, send } = io;
   const fn = edit || send;
   const zones = await getAllZones(accounts, kv);
-  const arvanAccounts = await getArvanAccounts(kv);
   const items = [];
   for (const z of zones) {
     items.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, callback_data: `qanz:${z._acc}:${z.id}` });
-  }
-  for (let i = 0; i < arvanAccounts.length; i++) {
-    let domains = [];
-    try {
-      domains = await arvanGetAllDomains(arvanAccounts[i].token, io.kv, io.env);
-    } catch (e) {
-      domains = [];
-    }
-    for (const d of domains) {
-      items.push({ text: `🇮🇷 ${d.domain}`, callback_data: `qana:${i}:${d.domain}` });
-    }
   }
   if (!items.length) {
     return fn("📭 هیچ دامنه‌ای برای ساخت ساب وجود ندارد.", [[{ text: "🏠 منو", callback_data: "menu" }]]);
@@ -12059,7 +11351,7 @@ async function renderQanZonePicker(io, page) {
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
   const slice = items.slice(page * ZONE_PAGE_SIZE, page * ZONE_PAGE_SIZE + ZONE_PAGE_SIZE);
-  // qanz:<acc>:<zoneId> ساخت ساب در کلودفلر | qana:<acc>:<domain> ساخت ساب در آروان
+  // qanz:<acc>:<zoneId> ساخت ساب در کلودفلر
   const kb = grid2(slice);
   if (pages > 1) {
     // qanp:<page>: صفحه‌بندی لیست دامنه‌ها در ویزارد افزودن ساب
@@ -12080,15 +11372,6 @@ async function createQaSub(pending, io) {
   const name = pending.name;
   const rtype = isIpv6(ip) ? "AAAA" : "A";
   const note = `✅ ساب ساخته شد: ${code(rtype + "-" + name)}\n\n`;
-  if (pending.provider === "arvan") {
-    const token = await arvanToken(kv, pending.acc);
-    const res = await arvanCreateRecord(token, pending.domain, rtype, name, ip, false, kv, io.env);
-    if (res.success === false) return edit("❌ خطا در ساخت ساب:\n" + cfErrText(res));
-    await kv.delete(`pend:${chatId}`);
-    await kvDeleteCached(kv, "arvan:cached:domains");
-    await refreshIpMenu({ kv, accounts, edit, chatId }, ip, note);
-    return;
-  }
   const fullName = normalizeName(name, pending.zone_name);
   const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
     method: "POST",
@@ -12326,19 +11609,13 @@ async function dispatchFavQa(data, io) {
     const session = await kv.get(`s:${token}`, "json");
     if (!session) return edit("⏳ نشست منقضی شده.");
     const favs = await getFavs(kv, chatId);
-    const zoneIdForFav = session.provider === "arvan" ? "arvan:" + session.domain : session.zone_id;
-    const zoneNameForFav = session.provider === "arvan" ? session.domain : session.zone_name;
+    const zoneIdForFav = session.zone_id;
+    const zoneNameForFav = session.zone_name;
     if (favExists(favs, zoneIdForFav, recordId)) {
       const keep = favs.filter((f) => !(f.zone_id === zoneIdForFav && f.record_id === recordId));
       await saveFavs(kv, chatId, keep);
     } else {
-      let rec;
-      if (session.provider === "arvan") {
-        const records = await arvanGetAllRecords(await arvanToken(kv, session.acc), session.domain, kv, env);
-        rec = records.find((r) => r.id === recordId);
-      } else {
-        rec = await getRecordById(session.acc, session.zone_id, recordId, accounts);
-      }
+      const rec = await getRecordById(session.acc, session.zone_id, recordId, accounts);
       if (!rec) return edit("❌ رکورد پیدا نشد.");
       favs.push({ zone_id: zoneIdForFav, zone_name: zoneNameForFav, acc: session.acc, record_id: recordId, name: rec.name, type: rec.type });
       await saveFavs(kv, chatId, favs);
@@ -12573,25 +11850,6 @@ async function dispatchFavQa(data, io) {
       { expirationTtl: 600 }
     );
     await edit(`➕ افزودن ساب در ${code(zone.name)}\n\n🌐 آی‌پی: ${code(qa.ip)}\n\nنام ساب را بفرستید (مثلاً test یا @):`, [
-      [{ text: "❌ لغو", callback_data: "qacancel" }],
-    ]);
-    return true;
-  }
-  if (data.startsWith("qana:")) {
-    const parts = data.split(":");
-    const accIndex = Number(parts[1]);
-    const domain = parts.slice(2).join(":");
-    const qa = await kv.get(`qa:${chatId}`, "json");
-    if (!qa || !qa.ip) {
-      await edit("⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", mainMenuKeyboard());
-      return true;
-    }
-    await kv.put(
-      `pend:${chatId}`,
-      JSON.stringify({ type: "qan_name", ip: qa.ip, acc: accIndex, domain, provider: "arvan", msgId: messageId }),
-      { expirationTtl: 600 }
-    );
-    await edit(`➕ افزودن ساب در ${code(domain)}\n\n🌐 آی‌پی: ${code(qa.ip)}\n\nنام ساب را بفرستید (مثلاً test یا @):`, [
       [{ text: "❌ لغو", callback_data: "qacancel" }],
     ]);
     return true;
