@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.13";
+const BOT_VERSION = "9.14";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,10 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.14": [
+    "🔧 رفع باگ بازنشدن «جزئیات رکورد» (پیام «رکورد پیدا نشد»): حالا وقتی کلادفلر رکورد را برنگرداند، کش همین زون را خودکار باطل و یک‌بار تازه می‌کند؛ و اگر باز هم نیامد به‌جای پیام کلی، متن دقیق خطای API کلادفلر (با راهنمای توکن) نمایش داده می‌شود تا علت واقعی معلوم شود",
+    "🔧 رفع دکمهٔ «🔙 بازگشت» در مسیر کلیلک روی رکورد (کالبک backCb درست پاس داده می‌شد؛ قبلاً به‌جای آن آبجکت env می‌رفت و دکمه کار نمی‌کرد)",
+  ],
   "9.13": [
     "🔧 رفع فرمت درخواست زمان‌بندهای کلادفلر در خاموش/روشن‌کردن موقت کرون (بدنه باید آرایهٔ خام باشد) — حالا خاموش‌کردن موقت کرون‌ها درست کار می‌کند",
   ],
@@ -2466,11 +2470,42 @@ async function fetchRecordForSession(kv, accounts, session, recordId, env) {
   return recData && recData.success ? recData.result : null;
 }
 
+// جزئیات خطای کلادفلر هنگام بازنکردن یک رکورد (برای پیام دقیق بهجای «رکورد پیدا نشد»)
+async function cfRecordErr(kv, accounts, session, recordId) {
+  try {
+    const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+      headers: hdr(accounts[session.acc].token),
+      signal: withTimeout(),
+    });
+    const data = await res.json();
+    if (!data || data.success) return "";
+    let out = JSON.stringify(data.errors || data, null, 2).substring(0, 1200);
+    if (/9109|1000|auth/i.test(out)) {
+      out +=
+        "\n\n🔑 این معمولاً یعنی توکن این اکانت به این زون/رکورد دسترسی ندارد یا دسترسی DNS ندارد." +
+        "\nاز «👤 اکانت‌ها» یک توکن جدید با مجوز Zone → DNS (Read/Edit) بده.";
+    }
+    return out;
+  } catch (e) {
+    return "";
+  }
+}
+
 async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env) {
   const session = await kv.get(`s:${token}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
-  const r = await fetchRecordForSession(kv, accounts, session, recordId, env);
-  if (!r) return edit("❌ رکورد پیدا نشد.");
+  let r = await fetchRecordForSession(kv, accounts, session, recordId, env);
+  if (!r && session.provider !== "arvan") {
+    await invalidateCache(kv, session.zone_id).catch(() => {});
+    r = await fetchRecordForSession(kv, accounts, session, recordId, env);
+  }
+  if (!r) {
+    const cfErr = session.provider !== "arvan" ? await cfRecordErr(kv, accounts, session, recordId) : "";
+    return edit(
+      "❌ رکورد پیدا نشد." +
+        (cfErr ? "\n\n📄 خطای کلادفلر:\n" + code(cfErr) : "")
+    );
+  }
   let ipBlock = "";
   if (r.type === "CNAME") {
     const ips = await resolveIPs(r.content, kv);
@@ -8533,7 +8568,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const page = session && Number(session.page) ? Number(session.page) : 0;
       const backCb = session && session.provider === "arvan" ? `ap:${token}:${page}` : `p:${token}:${page}`;
       await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId, backCb }), { expirationTtl: 86400 });
-      await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, env);
+      await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env);
     } else if (data.startsWith("ev:") || data.startsWith("et:")) {
       const parts = data.split(":");
       const token = parts[1];
