@@ -164,8 +164,8 @@ t() {
     en:done_title)             printf '%s' "Install complete — Cloud Guardian is live" ;;
     fa:done_worker)            printf '%s' "ورکر:" ;;
     en:done_worker)            printf '%s' "Worker:" ;;
-    fa:done_bot)               printf '%s' "از تلگرام به ربات پیام بده و /start بزن." ;;
-    en:done_bot)               printf '%s' "Open Telegram, message the bot and press /start." ;;
+    fa:done_bot)               printf '%s' "از تلگرام به این ربات پیام بده و /start بزن:" ;;
+    en:done_bot)               printf '%s' "Open Telegram, message this bot and press /start:" ;;
     fa:done_cfg)               printf '%s' "تنظیمات (محرمانه):" ;;
     en:done_cfg)               printf '%s' "Config (secret):" ;;
     fa:done_status)            printf '%s' "وضعیت:" ;;
@@ -278,8 +278,8 @@ t() {
     en:menu_choose)            printf '%s' "Choose an option: " ;;
     fa:menu_invalid)           printf '%s' "گزینهٔ نامعتبر." ;;
     en:menu_invalid)           printf '%s' "Invalid option." ;;
-    fa:menu_back)              printf '%s' "برای بازگشت به منو Enter بزن…" ;;
-    en:menu_back)              printf '%s' "Press Enter to return to the menu…" ;;
+    fa:menu_back)              printf '%s' "اینتر بزن تا به منو برگردی" ;;
+    en:menu_back)              printf '%s' "Press Enter to return to the menu" ;;
     fa:offer_install)          printf '%s' "می‌خواهی الان نصب کامل انجام شود؟ [y/N] " ;;
     en:offer_install)          printf '%s' "Start a full install now? [y/N] " ;;
     *)                         printf '%s' "$1" ;;
@@ -364,6 +364,10 @@ detect_account() {
 workers_subdomain() {
   curl -sS --max-time 30 -H "Authorization: Bearer $1" "$API/accounts/$2/workers/subdomain" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print((d.get('result') or {}).get('subdomain',''))" 2>/dev/null || true
+}
+bot_username() {
+  curl -sS --max-time 15 "https://api.telegram.org/bot$1/getMe" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print((d.get('result') or {}).get('username',''))" 2>/dev/null || true
 }
 public_ip() {
   local ip=""
@@ -588,18 +592,17 @@ do_install() {
   sub="$(workers_subdomain "$TOKEN" "$ACC")"
   url="https://$WORKER.$sub.workers.dev"
 
-  if [ -z "${NO_RELAY:-}" ] && [ "$(id -u)" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then
-    printf '\n'
-    read -rp "  🖥 $(t relay_ask)" r
-    if [[ "${r,,}" == "y" ]]; then do_relay; fi
-  fi
-
   printf '\n'
   printf "${GREEN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
   printf "${GREEN}${BOLD}  │${RST}  🎉 ${GREEN}${BOLD}%s${RST}\n" "$(t done_title)"
   printf "${GREEN}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  • %s %s\n" "$(t done_worker)" "$(link "$url")"
-  printf "  • %s\n" "$(t done_bot)"
+  local BU; BU="$(bot_username "$BOT")"
+  if [ -n "$BU" ]; then
+    printf "  • %s %s\n" "$(t done_bot)" "$(link "https://t.me/$BU")"
+  else
+    printf "  • %s\n" "$(t done_bot)"
+  fi
   printf "  • %s %s\n" "$(t done_cfg)" "$CFG"
   printf "  • %s bash install.sh status\n" "$(t done_status)"
   printf "  • %s bash install.sh uninstall\n" "$(t done_remove)"
@@ -771,7 +774,10 @@ main_menu() {
       *) err "$(t menu_invalid)"; continue ;;
     esac
     printf '\n'
-    read -rp "  $(t menu_back)" _ 2>/dev/null || exit 0
+    printf "${DIM}  ──────────────────────────── ${RST}"
+    printf "${CYAN}${BOLD}⏎ %s${RST}" "$(t menu_back)"
+    printf "${DIM} ────────────────────────────${RST}\n"
+    read -rp '' _ 2>/dev/null || exit 0
   done
 }
 
