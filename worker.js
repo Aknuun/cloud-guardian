@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.17";
+const BOT_VERSION = "9.18";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,9 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.18": [
+    "🏷 نمایش ساب‌ها حالا «نام-نوع» است (مثلاً `dl2-cname` به‌جای `cn-dl2`) — هم در فهرست رکوردها و هم در ساب‌های منتخب",
+  ],
   "9.17": [
     "🏷 آپدیت خودکار حالا تگ‌محور است: فقط وقتی در مخزن گیت‌هاب یک تگ نسخهٔ جدید ساخته شود آپدیت می‌شود (نه با هر پوش روی main)",
     "⏱ بررسی تگ جدید هر ۱۰ دقیقه انجام می‌شود",
@@ -2290,8 +2293,8 @@ async function getServersPicker(kv, force) {
 function recordLabel(r, zoneName) {
   let name = r.name;
   if (zoneName && name.endsWith("." + zoneName)) name = name.slice(0, -(zoneName.length + 1));
-  const typeLabel = r.type === "CNAME" ? "cn" : r.type;
-  return `${typeLabel}-${name}`;
+  const typeLabel = r.type === "CNAME" ? "cname" : String(r.type || "").toLowerCase();
+  return `${name}-${typeLabel}`;
 }
 
 function escHtml(s) {
@@ -2575,7 +2578,7 @@ function favShortName(f) {
 }
 
 function favTypeShort(f) {
-  return f.type === "CNAME" ? "cn" : f.type;
+  return f.type === "CNAME" ? "cname" : String(f.type || "").toLowerCase();
 }
 
 async function getRecordById(acc, zoneId, recordId, accounts) {
@@ -2607,7 +2610,7 @@ async function renderFavsScreen(kv, chatId, accounts, edit) {
     );
   } else {
     // favopen:<index>: باز کردن جزئیات همان ساب منتخب برای ویرایش مقدار/نوع/TTL/Proxy
-    kb.push(...grid2(favs.map((f, i) => ({ text: `${favTypeShort(f)} ${favShortName(f)} — ${f.zone_name}`, callback_data: `favopen:${i}` }))));
+    kb.push(...grid2(favs.map((f, i) => ({ text: `${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, callback_data: `favopen:${i}` }))));
     lines.push(`تعداد: ${favs.length}\nبرای باز کردن و تغییر روی هر کدام بزنید.`);
   }
   // favpickzone: افزودن ساب جدید (انتخاب دامنه) | favdel: حذف از منتخب‌ها | zones: بازگشت به صفحهٔ کلودفلر
@@ -12172,7 +12175,7 @@ async function dispatchFavQa(data, io) {
   if (data === "favdel") {
     const favs = await getFavs(kv, chatId);
     if (!favs.length) return edit("📭 سابی در منتخب‌ها نیست.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
-    const kb = favs.map((f, i) => [{ text: `🗑 ${favTypeShort(f)} ${favShortName(f)} — ${f.zone_name}`, callback_data: `favdelx:${i}` }]);
+    const kb = favs.map((f, i) => [{ text: `🗑 ${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, callback_data: `favdelx:${i}` }]);
     kb.push([{ text: "🔙 ساب‌های منتخب", callback_data: "favs" }]);
     await edit("🗑 کدام ساب از منتخب‌ها حذف شود؟", kb);
     return true;
