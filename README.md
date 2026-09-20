@@ -107,6 +107,8 @@ bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main
 bash install.sh <command>
 ```
 
+> اگر **بدون دستور** اجرا کنی، اول زبان (فارسی/English) و بعد **منوی اصلی** نمایش داده می‌شود. با دادن دستور مستقیم (مثل `bash install.sh status`) منو رد می‌شود.
+
 | دستور | کار |
 |---|---|
 | `install` | نصب/بازنصب کامل روی کلادفلر (KV + bindings + ورکر + کرون + workers.dev + وبهوک) — پیش‌فرض |

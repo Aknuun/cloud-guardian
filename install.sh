@@ -270,6 +270,16 @@ t() {
     en:perm_continue)          printf '%s' "Continue anyway? [y/N] " ;;
     fa:perm_abort)             printf '%s' "نصب متوقف شد. توکن را درست کن و دوباره اجرا کن." ;;
     en:perm_abort)             printf '%s' "Install aborted. Fix the token and run again." ;;
+    fa:menu_title)             printf '%s' "نگهبان ابری — منوی اصلی" ;;
+    en:menu_title)             printf '%s' "Cloud Guardian — main menu" ;;
+    fa:menu_exit)              printf '%s' "خروج" ;;
+    en:menu_exit)              printf '%s' "Exit" ;;
+    fa:menu_choose)            printf '%s' "یک گزینه انتخاب کن: " ;;
+    en:menu_choose)            printf '%s' "Choose an option: " ;;
+    fa:menu_invalid)           printf '%s' "گزینهٔ نامعتبر." ;;
+    en:menu_invalid)           printf '%s' "Invalid option." ;;
+    fa:menu_back)              printf '%s' "برای بازگشت به منو Enter بزن…" ;;
+    en:menu_back)              printf '%s' "Press Enter to return to the menu…" ;;
     *)                         printf '%s' "$1" ;;
   esac
 }
@@ -718,10 +728,52 @@ usage() {
 }
 
 # ============================================================
+# main menu
+# ============================================================
+main_menu() {
+  while :; do
+    printf '\n'
+    printf "${CYAN}${BOLD}  ╭──────────────────────────────────────────────────────────╮${RST}\n"
+    printf "${CYAN}${BOLD}  │${RST}  🛡️  ${BOLD}%s${RST}\n" "$(t menu_title)"
+    printf "${CYAN}${BOLD}  ╰──────────────────────────────────────────────────────────╯${RST}\n"
+    printf "    ${GREEN}1)${RST} %s\n" "$(t cmd_install)"
+    printf "    ${GREEN}2)${RST} %s\n" "$(t cmd_update)"
+    printf "    ${GREEN}3)${RST} %s\n" "$(t cmd_uninstall)"
+    printf "    ${GREEN}4)${RST} %s\n" "$(t cmd_relay)"
+    printf "    ${GREEN}5)${RST} %s\n" "$(t cmd_status)"
+    printf "    ${GREEN}6)${RST} %s\n" "$(t cmd_check)"
+    printf "    ${GREEN}7)${RST} %s\n" "$(t cmd_help)"
+    printf "    ${RED}0)${RST} %s\n\n" "$(t menu_exit)"
+    local c
+    read -rp "  $(t menu_choose)" c || { printf '\n'; exit 0; }
+    case "$c" in
+      1) do_install ;;
+      2) do_update ;;
+      3) do_uninstall ;;
+      4) do_relay ;;
+      5) do_status ;;
+      6) do_check ;;
+      7) usage ;;
+      0|q|exit|خروج) printf '\n'; exit 0 ;;
+      *) err "$(t menu_invalid)"; continue ;;
+    esac
+    printf '\n'
+    read -rp "  $(t menu_back)" _ 2>/dev/null || exit 0
+  done
+}
+
+# ============================================================
 # dispatch
 # ============================================================
-cmd="install"
+cmd=""
 if [ "$#" -gt 0 ]; then cmd="$1"; shift; fi
+if [ -z "$cmd" ]; then
+  if [ -t 0 ] && [ -t 1 ]; then
+    main_menu
+    exit 0
+  fi
+  cmd="install"
+fi
 case "$cmd" in
   install|i)           do_install "$@" ;;
   update|u|deploy)     do_update ;;
