@@ -16,6 +16,94 @@ SCHEDULES = [
 ]
 
 
+# ============================================================
+# i18n — language comes from env CG_LANG (fa|en), default fa
+# ============================================================
+LANG = os.environ.get("CG_LANG", "fa")
+if LANG not in ("fa", "en"):
+    LANG = "fa"
+
+_S = {
+    "kv_routing":      ("KV namespaces API روی این اکانت routable نیست: %s…", "KV namespaces API is not routable on this account: %s…"),
+    "kv_reuse":        ("استفادهٔ مجدد از KV namespace موجود: %s", "Reusing an existing KV namespace: %s"),
+    "kv_create_fail":  (
+        'ساخت KV از API ممکن نشد و namespace آماده‌ای هم روی اکانت پیدا نشد.\n'
+        'در داشبورد کلادفلر (Workers & Pages → KV → Create a namespace) یکی بساز و id آن را '
+        'در ~/.cloud-guardian/config.json در فیلد "kv_namespace_id" بگذار و دوباره اجرا کن.',
+        'Could not create KV via the API and no existing namespace was found.\n'
+        'Create one in the Cloudflare dashboard (Workers & Pages → KV → Create a namespace), put its id '
+        'in ~/.cloud-guardian/config.json under "kv_namespace_id" and run again.'),
+    "workers_dev_warn": ("[!] هشدار workers.dev: %s", "[!] workers.dev WARN: %s"),
+    "sched_min":       ("[!] فقط کرون‌های ضروری نصب شدند (سقف پلن رایگان): %s", "[!] Only essential crons installed (free plan limit): %s"),
+    "sched_warn":      ("[!] هشدار کرون: %s", "[!] SCHED WARN: %s"),
+    "cfg_not_found":   ("config.json پیدا نشد: %s", "config.json not found: %s"),
+    "token_missing":   ("token در config نیست.", "token is missing from config."),
+    "worker_missing":  ("worker.js کنار config نیست.", "worker.js not found next to config."),
+    "status_active":   ("فعال", "active"),
+    "status_invalid":  ("نامعتبر — %s", "invalid — %s"),
+    "s_present":       ("✅ موجود", "✅ present"),
+    "s_absent":        ("❌ پیدا نشد", "❌ not found"),
+    "subdomain_none":  ("زیردامنه پیدا نشد", "subdomain not found"),
+    "s_disabled":      ("(غیرفعال) %s", "(disabled) %s"),
+    "tg_err":          ("خطا در ارتباط با تلگرام", "error talking to Telegram"),
+    "ck_token":        ("توکن کلادفلر", "Cloudflare token"),
+    "ck_account":      ("دسترسی به اکانت (Accounts Read)", "Account access (Accounts Read)"),
+        "ck_accts":        ("اکانت: %s", "accounts: %s"),
+    "ck_noacct":       ("بدون اکانت", "no account"),
+    "ck_zones":        ("زون‌ها: %s", "zones: %s"),
+    "ck_nozone":       ("بدون زون", "no zones"),
+    "wh_deleted":      ("حذف وبهوک تلگرام", "Telegram webhook deleted"),
+    "wh_fail":         ("حذف وبهوک ناموفق (نادیده گرفته شد)", "Failed to delete webhook (ignored)"),
+    "worker_deleted":  ("✅ ورکر حذف شد: %s", "✅ Worker deleted: %s"),
+    "worker_del_fail": ("❌ حذف ورکر: %s", "❌ Failed to delete worker: %s"),
+    "kv_deleted":      ("✅ KV namespace حذف شد: %s", "✅ KV namespace deleted: %s"),
+    "kv_del_fail":     ("⚠️ حذف KV ناموفق: %s", "⚠️ Failed to delete KV: %s"),
+    "kv_kept":         ("ℹ️ KV namespace نگه داشته شد: %s", "ℹ️ KV namespace kept: %s"),
+    "kv_not_found":    ("❌ KV namespace پیدا نشد.", "❌ KV namespace not found."),
+    "saved_kv":        ("✅ ذخیره شد در KV: %s", "✅ Saved to KV: %s"),
+    "deleted_kv":      ("✅ حذف شد از KV: %s", "✅ Deleted from KV: %s"),
+    "relay_no_token":  ("⚠️ توکن رله داده نشده؛ فقط آدرس ذخیره شد.", "⚠️ No relay token given; only the URL was saved."),
+    "relay_registered":("✅ رله در ربات ثبت شد: %s", "✅ Relay registered in the bot: %s"),
+    "zones_fail":      ("❌ گرفتن زون‌ها ناموفق: %s", "❌ Failed to fetch zones: %s"),
+    "no_active_zone":  ("❌ هیچ زون فعالی پیدا نشد.", "❌ No active zone found."),
+    "domain_not_found":("❌ دامنه پیدا نشد در اکانت: %s", "❌ Domain not found in the account: %s"),
+    "rec_ok":          ("ℹ️ رکورد از قبل درست است: %s", "ℹ️ Record already correct: %s"),
+    "rec_updated":     ("✅ رکورد به‌روزرسانی شد: %s", "✅ Record updated: %s"),
+    "rec_created":     ("✅ رکورد ساخته شد: %s", "✅ Record created: %s"),
+    "rec_update_fail": ("❌ به‌روزرسانی رکورد: %s", "❌ Failed to update record: %s"),
+    "rec_create_fail": ("❌ ساخت رکورد: %s", "❌ Failed to create record: %s"),
+    "ck_token_inactive": ("توکن غیرفعال/نامعتبر است", "Token is inactive/invalid"),
+    "ck_workers":      ("Account · Workers Scripts · Edit", "Account · Workers Scripts · Edit"),
+    "ck_kv":           ("Account · Workers KV Storage · Edit", "Account · Workers KV Storage · Edit"),
+    "ck_zones_perm":   ("Zone · DNS · Edit (دسترسی به زون‌ها)", "Zone · DNS · Edit (zone access)"),
+    "ck_dns":          ("Zone · DNS · Edit (خواندن رکوردها)", "Zone · DNS · Edit (record read)"),
+    "ck_settings":     ("Zone · Zone Settings · Edit", "Zone · Zone Settings · Edit"),
+    "ck_cache_note":   ("Cache Purge بدون اجرای واقعی قابل تست نیست؛ مطمئن شو دسترسی Purge را هم داده‌ای.",
+                        "Cache Purge cannot be tested without a real purge; make sure the Purge permission is granted."),
+    "ck_fail_title":   ("دسترسی‌های توکن کلادفلر ناقص است", "Cloudflare token permissions are incomplete"),
+    "ck_fail_body":    ("این دسترسی‌ها درست نیستند یا کم هستند:", "These permissions are missing or wrong:"),
+    "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۵ دسترسی لازم را بده:", "Edit/create the token here and grant the 5 required permissions:"),
+}
+
+
+_USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+def _col(c):
+    return c if _USE_COLOR else ""
+GREEN = _col("\033[1;32m"); RED = _col("\033[1;31m"); YELLOW = _col("\033[1;33m")
+BLUE = _col("\033[1;34m"); UB = _col("\033[4m"); BOLD = _col("\033[1m"); RST = _col("\033[0m")
+
+
+def T(key, *args):
+    v = _S.get(key)
+    if not v:
+        return key
+    s = v[0] if LANG == "fa" else v[1]
+    return s % args if args else s
+
+
+SEP = "، " if LANG == "fa" else ", "
+
+
 def req(tok, method, url, body=None, ctype=None):
     r = urllib.request.Request(url, method=method, data=body)
     r.add_header("Authorization", "Bearer " + tok)
@@ -89,12 +177,10 @@ def ensure_kv(cfg, tok):
             cfg["kv_namespace_id"] = found
             with open(CFG, "w") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
-            print(f"[*] KV namespaces API on this account is not routable: {err[:120]}…")
-            print(f"[*] Reusing existing KV namespace from another worker: {found}")
+            print("[*] " + T("kv_routing", err[:120]))
+            print("[*] " + T("kv_reuse", found))
             return found, None
-        return None, (err + " — ساخت KV از API ممکن نشد و namespace آماده‌ای هم روی اکانت پیدا نشد.\n"
-                      "در داشبورد کلادفلر (Workers & Pages → KV → Create a namespace) یکی بسازید و id آن را "
-                      "در ~/.cloud-guardian/config.json در فیلد \"kv_namespace_id\" بگذارید و دوباره اجرا کنید.")
+        return None, (err + " — " + T("kv_create_fail"))
     if err:
         return None, err
     cfg["kv_namespace_id"] = res["id"]
@@ -126,7 +212,7 @@ def enable_workers_dev(cfg, tok):
                   json.dumps({"enabled": True, "previews_enabled": True}).encode("utf-8"), "application/json")
     res, err = json_ok(st, out)
     if err:
-        print(f"[!] WORKERS.DEV WARN: {err}", file=sys.stderr)
+        print(T("workers_dev_warn", err), file=sys.stderr)
 
 
 def install(cfg, tok, code):
@@ -159,10 +245,10 @@ def install(cfg, tok, code):
         for subset in (["*/10 * * * *", "*/5 * * * *"], ["*/10 * * * *"], ["*/5 * * * *"]):
             res, err = set_schedules(cfg, tok, subset)
             if not err:
-                print(f"[!] فقط کرون‌های ضروری نصب شدند (سقف پلن رایگان): {'، '.join(subset)}", file=sys.stderr)
+                print(T("sched_min", SEP.join(subset)), file=sys.stderr)
                 break
     if err:
-        print(f"[!] SCHED WARN: {err}", file=sys.stderr)
+        print(T("sched_warn", err), file=sys.stderr)
     return None
 
 
@@ -194,12 +280,12 @@ def update(cfg, tok, code):
 
 def load_cfg(require_token=True):
     if not os.path.exists(CFG):
-        print("config.json پیدا نشد: " + CFG, file=sys.stderr)
+        print(T("cfg_not_found", CFG), file=sys.stderr)
         sys.exit(1)
     with open(CFG) as f:
         cfg = json.load(f)
     if require_token and not cfg.get("token"):
-        print("token در config نیست.", file=sys.stderr)
+        print(T("token_missing"), file=sys.stderr)
         sys.exit(1)
     return cfg
 
@@ -207,7 +293,7 @@ def load_cfg(require_token=True):
 def load_worker_code():
     wpath = os.path.join(here, "worker.js")
     if not os.path.exists(wpath):
-        print("worker.js کنار config نیست.", file=sys.stderr)
+        print(T("worker_missing"), file=sys.stderr)
         sys.exit(1)
     with open(wpath, "rb") as f:
         return f.read()
@@ -251,27 +337,27 @@ def cmd_status(cfg, tok):
     print("account    : " + str(aid))
     st, out = req(tok, "GET", f"{API}/user/tokens/verify")
     res, err = json_ok(st, out)
-    print("token      : " + ("فعال" if (res and res.get("status") == "active") else "نامعتبر — " + str(err)[:120]))
+    print("token      : " + (T("status_active") if (res and res.get("status") == "active") else T("status_invalid", str(err)[:120])))
     st, out = req(tok, "GET", f"{API}/accounts/{aid}/workers/scripts")
     res, err = json_ok(st, out)
     exists = None if err else any((w.get("id") == name) for w in res or [])
     if exists:
-        print("script     : ✅ موجود")
+        print("script     : " + T("s_present"))
     elif exists is False:
-        print("script     : ❌ پیدا نشد")
+        print("script     : " + T("s_absent"))
     else:
         print("script     : ? " + str(err)[:150])
     if exists:
         crons, e = get_schedules(cfg, tok)
-        print("schedules  : " + (("، ".join(crons) if crons else "—") if not e else "ERR " + str(e)[:120]))
+        print("schedules  : " + ((SEP.join(crons) if crons else "—") if not e else "ERR " + str(e)[:120]))
     url = script_url(cfg, tok)
     if url:
         st, out = req(tok, "GET", f"{API}/accounts/{aid}/workers/scripts/{name}/subdomain")
         res, err = json_ok(st, out)
         enabled = bool((res or {}).get("enabled"))
-        print("workers.dev: " + (url if enabled else "(غیرفعال) " + url))
+        print("workers.dev: " + (url if enabled else T("s_disabled", url)))
     else:
-        print("workers.dev: زیردامنه پیدا نشد")
+        print("workers.dev: " + T("subdomain_none"))
     print("KV binding : " + (find_kv_id(cfg, tok) or "—"))
     print("version    : " + (str(cfg.get("version")) if cfg.get("version") else "?"))
     bt = cfg.get("bot_token")
@@ -284,37 +370,84 @@ def cmd_status(cfg, tok):
             if info.get("last_error_message"):
                 print("webhook err: " + str(info.get("last_error_message")))
         except Exception:
-            print("webhook    : خطا در ارتباط با تلگرام")
+            print("webhook    : " + T("tg_err"))
 
 
-def cmd_check(cfg, tok):
-    def line(ok, label, detail=""):
-        print(("✅ " if ok else "❌ ") + label + ((" — " + detail) if detail else ""))
+def _perm_summary(failures):
+    if not failures:
+        return
+    print()
+    print(RED + BOLD + "  ╭──────────────────────────────────────────────────────────╮" + RST)
+    print(RED + BOLD + "  │" + RST + "  ⛔ " + BOLD + T("ck_fail_title") + RST)
+    print(RED + BOLD + "  ╰──────────────────────────────────────────────────────────╯" + RST)
+    print()
+    print("  " + T("ck_fail_body"))
+    for f in failures:
+        print("    " + RED + "•" + RST + " " + f)
+    print()
+    print("  " + T("ck_fail_fix"))
+    print("    " + BLUE + UB + "https://dash.cloudflare.com/profile/api-tokens" + RST)
+    print()
+
+
+def cmd_check(cfg, tok, show_box=True):
+    failures = []
+
+    def line(good, critical, label, detail="", note=""):
+        mark = (GREEN + "✅" + RST) if good else (RED + "❌" + RST)
+        extra = (" — " + detail) if detail else ""
+        if note:
+            extra += " " + YELLOW + note + RST
+        print(mark + " " + label + extra)
+        if not good and critical:
+            failures.append(label)
 
     st, out = req(tok, "GET", f"{API}/user/tokens/verify")
     res, err = json_ok(st, out)
-    line(bool(res and res.get("status") == "active"), "توکن فعال", "" if not err else str(err)[:120])
+    active = bool(res and res.get("status") == "active")
+    line(active, True, T("ck_token"), "" if active else T("ck_token_inactive") + ((" " + str(err)[:120]) if err else ""))
+    if not active:
+        if show_box:
+            _perm_summary(failures)
+        return 1
 
     st, out = req(tok, "GET", f"{API}/accounts?per_page=50")
     res, err = json_ok(st, out)
     accts = [a.get("id") for a in (res or [])] if not err else []
-    line(not err and bool(accts), "Account · Workers Scripts (خواندن اکانت)",
-         ("اکانت: " + ", ".join([a for a in accts[:3] if a])) if accts else str(err or "بدون اکانت")[:150])
+    line(not err and bool(accts), True, T("ck_account"),
+         (T("ck_accts", ", ".join([a for a in accts[:3] if a]))) if accts else str(err or T("ck_noacct"))[:160])
 
     acc = cfg.get("account_id") or (accts[0] if accts else "")
     if acc:
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/workers/scripts")
         _, err = json_ok(st, out)
-        line(not err, "Account · Workers Scripts · Edit", "" if not err else str(err)[:150])
+        line(not err, True, T("ck_workers"), "" if not err else str(err)[:160])
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces")
         _, err = json_ok(st, out)
-        line(not err, "Account · Workers KV Storage · Edit", "" if not err else str(err)[:150])
+        line(not err, True, T("ck_kv"), "" if not err else str(err)[:160])
 
     st, out = req(tok, "GET", f"{API}/zones?per_page=50")
     res, err = json_ok(st, out)
-    zones = [z.get("name") for z in (res or [])] if not err else []
-    line(not err and bool(zones), "Zone · DNS / Zone Settings / Cache Purge",
-         ("زون‌ها: " + ", ".join([z for z in zones[:5] if z])) if zones else str(err or "بدون زون")[:150])
+    if err:
+        line(False, True, T("ck_zones_perm"), str(err)[:160])
+    else:
+        zones = [z for z in (res or []) if z.get("name")]
+        if not zones:
+            line(True, False, T("ck_zones_perm"), "", T("ck_nozone"))
+        else:
+            line(True, False, T("ck_zones_perm"), T("ck_zones", ", ".join(z["name"] for z in zones[:5])))
+            z = zones[0]
+            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/dns_records?per_page=1")
+            _, err = json_ok(st, out)
+            line(not err, True, T("ck_dns"), "" if not err else str(err)[:160])
+            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/settings")
+            _, err = json_ok(st, out)
+            line(not err, True, T("ck_settings"), "" if not err else str(err)[:160])
+
+    print(YELLOW + "ℹ️ " + RST + T("ck_cache_note"))
+    if show_box:
+        _perm_summary(failures)
+    return 1 if failures else 0
 
 
 def cmd_uninstall(cfg, tok, keep_kv=False, keep_webhook=False):
@@ -327,30 +460,30 @@ def cmd_uninstall(cfg, tok, keep_kv=False, keep_webhook=False):
             r = urllib.request.Request(f"https://api.telegram.org/bot{bt}/deleteWebhook", data=data)
             with urllib.request.urlopen(r, timeout=20) as resp:
                 d = json.loads(resp.read().decode("utf-8", "replace"))
-            print(("✅" if d.get("ok") else "⚠️") + " حذف وبهوک تلگرام")
+            print(("✅ " if d.get("ok") else "⚠️ ") + T("wh_deleted"))
         except Exception:
-            print("⚠️ حذف وبهوک ناموفق (نادیده گرفته شد)")
+            print("⚠️ " + T("wh_fail"))
     st, out = req(tok, "DELETE", f"{API}/accounts/{aid}/workers/scripts/{name}")
     _, err = json_ok(st, out)
     if err:
-        print("❌ حذف ورکر: " + str(err)[:200])
+        print(T("worker_del_fail", str(err)[:200]))
         rc = 1
     else:
-        print("✅ ورکر حذف شد: " + name)
+        print(T("worker_deleted", name))
     kv = find_kv_id(cfg, tok)
     if kv and not keep_kv:
         st, out = req(tok, "DELETE", f"{API}/accounts/{aid}/storage/kv/namespaces/{kv}")
         _, err = json_ok(st, out)
-        print(("⚠️ حذف KV ناموفق: " + str(err)[:200]) if err else ("✅ KV namespace حذف شد: " + kv))
+        print(T("kv_del_fail", str(err)[:200]) if err else T("kv_deleted", kv))
     elif kv:
-        print("ℹ️ KV namespace نگه داشته شد: " + kv)
+        print(T("kv_kept", kv))
     return rc
 
 
 def cmd_set_kv(cfg, tok, key, value):
     kv = find_kv_id(cfg, tok)
     if not kv:
-        print("❌ KV namespace پیدا نشد.", file=sys.stderr)
+        print(T("kv_not_found"), file=sys.stderr)
         return 1
     url = f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces/{kv}/values/{urllib.parse.quote(key)}"
     st, out = req(tok, "PUT", url, value.encode("utf-8"), "text/plain")
@@ -358,14 +491,14 @@ def cmd_set_kv(cfg, tok, key, value):
     if err:
         print("❌ " + str(err)[:200], file=sys.stderr)
         return 1
-    print("✅ ذخیره شد در KV: " + key)
+    print(T("saved_kv", key))
     return 0
 
 
 def cmd_del_kv(cfg, tok, key):
     kv = find_kv_id(cfg, tok)
     if not kv:
-        print("❌ KV namespace پیدا نشد.", file=sys.stderr)
+        print(T("kv_not_found"), file=sys.stderr)
         return 1
     url = f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces/{kv}/values/{urllib.parse.quote(key)}"
     st, out = req(tok, "DELETE", url)
@@ -373,7 +506,7 @@ def cmd_del_kv(cfg, tok, key):
     if err:
         print("❌ " + str(err)[:200], file=sys.stderr)
         return 1
-    print("✅ حذف شد از KV: " + key)
+    print(T("deleted_kv", key))
     return 0
 
 
@@ -387,20 +520,20 @@ def cmd_relay_register(cfg, tok, address, token, domain="", port=8788, dry_run=F
         if token:
             rc |= cmd_set_kv(cfg, tok, "srv_relay_token", token)
         else:
-            print("⚠️ توکن رله داده نشده؛ فقط آدرس ذخیره شد.")
-        print("✅ رله در ربات ثبت شد: " + url)
+            print("⚠️ " + T("relay_no_token"))
+        print(T("relay_registered", url))
         return rc
 
     ip = address
     st, out = req(tok, "GET", f"{API}/zones?per_page=50")
     res, err = json_ok(st, out)
     if err:
-        print("❌ گرفتن زون‌ها ناموفق: " + str(err)[:150], file=sys.stderr)
+        print(T("zones_fail", str(err)[:150]), file=sys.stderr)
         return 1
     zones = [z for z in (res or []) if z.get("status") == "active" and z.get("name")]
     zones.sort(key=lambda z: z["name"])
     if not zones:
-        print("❌ هیچ زون فعالی پیدا نشد.", file=sys.stderr)
+        print(T("no_active_zone"), file=sys.stderr)
         return 1
     zone = None
     if domain:
@@ -409,7 +542,7 @@ def cmd_relay_register(cfg, tok, address, token, domain="", port=8788, dry_run=F
                 zone = z
                 break
         if not zone:
-            print("❌ دامنه پیدا نشد در اکانت: " + domain, file=sys.stderr)
+            print(T("domain_not_found", domain), file=sys.stderr)
             return 1
     else:
         zone = zones[0]
@@ -424,55 +557,56 @@ def cmd_relay_register(cfg, tok, address, token, domain="", port=8788, dry_run=F
     res, err = json_ok(st, out)
     rec = (res or [None])[0] if (res and not err) else None
     if rec and rec.get("content") == ip and not rec.get("proxied"):
-        print("ℹ️ رکورد از قبل درست است: " + rec_name)
+        print(T("rec_ok", rec_name))
     elif rec:
         body = json.dumps({"type": "A", "name": rec_name, "content": ip, "ttl": 120, "proxied": False}).encode("utf-8")
         st, out = req(tok, "PUT", f"{API}/zones/{zone['id']}/dns_records/{rec['id']}", body, "application/json")
         _, err = json_ok(st, out)
         if err:
-            print("❌ به‌روزرسانی رکورد: " + str(err)[:150], file=sys.stderr)
+            print(T("rec_update_fail", str(err)[:150]), file=sys.stderr)
             return 1
-        print("✅ رکورد به‌روزرسانی شد: " + rec_name)
+        print(T("rec_updated", rec_name))
     else:
         body = json.dumps({"type": "A", "name": rec_name, "content": ip, "ttl": 120, "proxied": False}).encode("utf-8")
         st, out = req(tok, "POST", f"{API}/zones/{zone['id']}/dns_records", body, "application/json")
         _, err = json_ok(st, out)
         if err:
-            print("❌ ساخت رکورد: " + str(err)[:150], file=sys.stderr)
+            print(T("rec_create_fail", str(err)[:150]), file=sys.stderr)
             return 1
-        print("✅ رکورد ساخته شد: " + rec_name)
+        print(T("rec_created", rec_name))
 
     url = f"http://{rec_name}:{port}"
     rc = cmd_set_kv(cfg, tok, "srv_relay_url", url)
     if token:
         rc |= cmd_set_kv(cfg, tok, "srv_relay_token", token)
     else:
-        print("⚠️ توکن رله داده نشده؛ فقط آدرس ذخیره شد.")
-    print("✅ رله در ربات ثبت شد: " + url)
+        print("⚠️ " + T("relay_no_token"))
+    print(T("relay_registered", url))
     return rc
 
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="deploy-tool.py", description="ابزار نصب/مدیریت نگهبان ابری روی کلادفلر")
+    p = argparse.ArgumentParser(prog="deploy-tool.py", description="Cloud Guardian installer/manager on Cloudflare")
     sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("install", help="نصب/بازنصب کامل ورکر (KV + bindings + cron + workers.dev)")
-    sub.add_parser("update", help="آپدیت ورکر از فایل محلی worker.js (بدون تغییر bindings)")
-    sub.add_parser("status", help="نمایش وضعیت ورکر، کرون‌ها، KV و وبهوک")
-    sub.add_parser("check", help="بررسی دسترسی‌های توکن کلادفلر")
-    u = sub.add_parser("uninstall", help="حذف ورکر (و به‌صورت پیش‌فرض KV و وبهوک)")
-    u.add_argument("--keep-kv", action="store_true", help="KV namespace حذف نشود")
-    u.add_argument("--keep-webhook", action="store_true", help="وبهوک تلگرام حذف نشود")
-    s = sub.add_parser("set-kv", help="نوشتن یک مقدار در KV ربات")
+    sub.add_parser("install", help="Full install/reinstall of the worker (KV + bindings + cron + workers.dev)")
+    sub.add_parser("update", help="Update the worker from the local worker.js (keeps bindings)")
+    sub.add_parser("status", help="Show worker, cron, KV and webhook status")
+    c = sub.add_parser("check", help="Check Cloudflare token permissions")
+    c.add_argument("--no-box", action="store_true", help="do not print the summary box")
+    u = sub.add_parser("uninstall", help="Delete the worker (KV and webhook by default)")
+    u.add_argument("--keep-kv", action="store_true", help="keep the KV namespace")
+    u.add_argument("--keep-webhook", action="store_true", help="keep the Telegram webhook")
+    s = sub.add_parser("set-kv", help="write a value into the bot KV")
     s.add_argument("key")
     s.add_argument("value")
-    d = sub.add_parser("del-kv", help="حذف یک کلید از KV ربات")
+    d = sub.add_parser("del-kv", help="delete a key from the bot KV")
     d.add_argument("key")
-    r = sub.add_parser("relay-register", help="ثبت رله در ربات (آدرس/آی‌پی + توکن)")
-    r.add_argument("address", help="URL یا آی‌پی سرور رله")
-    r.add_argument("--token", default=os.environ.get("SRV_RELAY_TOKEN", ""), help="توکن رله")
-    r.add_argument("--domain", default="", help="دامنهٔ زون برای ساخت rel.<domain> (اختیاری)")
-    r.add_argument("--port", type=int, default=8788, help="پورت رله (پیش‌فرض 8788)")
-    r.add_argument("--dry-run", action="store_true", help="فقط نمایش، بدون تغییر")
+    r = sub.add_parser("relay-register", help="register the relay in the bot (address + token)")
+    r.add_argument("address", help="relay server URL or IP")
+    r.add_argument("--token", default=os.environ.get("SRV_RELAY_TOKEN", ""), help="relay token")
+    r.add_argument("--domain", default="", help="zone domain to create rel.<domain> (optional)")
+    r.add_argument("--port", type=int, default=8788, help="relay port (default 8788)")
+    r.add_argument("--dry-run", action="store_true", help="print only, no changes")
     return p
 
 
@@ -496,8 +630,7 @@ def main():
 
     if cmd == "check":
         cfg = load_cfg(require_token=False)
-        cmd_check(cfg, cfg.get("token", ""))
-        return
+        sys.exit(cmd_check(cfg, cfg.get("token", ""), show_box=not args.no_box))
 
     cfg = load_cfg()
     tok = cfg["token"]
