@@ -24,8 +24,8 @@ except Exception:
 PY
 )
 
-# آخرین تگ نسخه‌ای مخزن (بزرگ‌ترین نسخه)
-LATEST=$(curl -fsSL --max-time 90 -H 'Accept: application/vnd.github+json' \
+# آخرین تگ نسخه‌ای مخزن (بزرگ‌ترین نسخه) — تگ می‌تواند با v شروع شود (مثل v1.0.3)
+LATEST_TAG=$(curl -fsSL --max-time 90 -H 'Accept: application/vnd.github+json' \
   "https://api.github.com/repos/${REPO}/tags?per_page=100" 2>/dev/null \
   | python3 -c '
 import sys,json,re
@@ -40,7 +40,10 @@ tags=[t.get("name","") for t in data if isinstance(t,dict)]
 tags=[t for t in tags if key(t)]
 print(max(tags, key=key) if tags else "")
 ' 2>/dev/null || true)
-[ -n "$LATEST" ] || exit 0
+[ -n "$LATEST_TAG" ] || exit 0
+
+# نسخهٔ عددی بدون پیشوند v برای مقایسه
+LATEST="${LATEST_TAG#v}"
 
 # اگر تگ جدیدی نسبت به نسخهٔ نصب‌شده نبود، کاری نکن
 [ "$LATEST" = "$OLDV" ] && exit 0
@@ -51,7 +54,7 @@ fi
 
 TMP="${DIR}/worker.js.new"
 curl -fsSL --max-time 90 -o "$TMP" -H 'Accept: application/vnd.github.raw' \
-  "https://api.github.com/repos/${REPO}/contents/worker.js?ref=${LATEST}" || exit 0
+  "https://api.github.com/repos/${REPO}/contents/worker.js?ref=${LATEST_TAG}" || exit 0
 
 NEWV=$(sed -n 's/^const BOT_VERSION = "\([^"]*\)".*/\1/p' "$TMP" | head -1)
 
@@ -68,7 +71,7 @@ import json,sys
 c=json.load(open(sys.argv[1])); c["version"]=sys.argv[2]
 json.dump(c, open(sys.argv[1],"w"), ensure_ascii=False, indent=2)
 PY
-  echo "$(date) — به نسخهٔ $NEWV (تگ $LATEST) به‌روزرسانی شد."
+  echo "$(date) — به نسخهٔ $NEWV (تگ $LATEST_TAG) به‌روزرسانی شد."
 else
   echo "$(date) — به‌روزرسانی به $NEWV ناموفق بود (لاگ بالا)."
 fi
