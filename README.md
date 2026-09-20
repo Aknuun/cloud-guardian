@@ -77,12 +77,12 @@
 
 **دسترسیهای موردنیاز توکن کلادفلر:**
 
-**Account · Workers Scripts · Edit**
-**Account · Workers KV Storage · Edit**
-**Zone · DNS · Edit**
-**Zone · Zone Settings · Edit**
-**Zone · Cache Purge · Purge**
-**Account · Workers Subdomain · Edit**
+1. Account · Workers Scripts · Edit
+2. Account · Workers KV Storage · Edit
+3. Zone · DNS · Edit
+4. Zone · Zone Settings · Edit
+5. Zone · Cache Purge · Purge
+6. Account · Workers Subdomain · Edit
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
