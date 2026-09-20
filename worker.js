@@ -7321,8 +7321,18 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
       await send("❌ نام دامنه معتبر نیست. دوباره بفرستید:");
       return;
     }
-    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ssl_thr", host }), { expirationTtl: 600 });
-    await send(`🔐 «${host}» ثبت شد.\n\nچند روز قبل از انقضا هشدار بدهم؟ (پیش‌فرض ۵ — یک عدد بفرستید):`);
+    await kv.delete(`pend:${chatId}`);
+    const threshold = 5;
+    const monitors = await getSslMonitors(kv);
+    if (monitors.some((m) => m.host === host)) {
+      await send("❌ این دامنه از قبل در نظارت است.", [[{ text: "🔐 مانیتور SSL", callback_data: "sslm" }]]);
+      return;
+    }
+    monitors.push({ host, port: 443, threshold });
+    await saveSslMonitors(kv, monitors);
+    await send(`✅ «${host}» با آستانه ${threshold} روز به نظارت اضافه شد.`, [
+      [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
     return;
   }
 
