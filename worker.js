@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.18";
+const BOT_VERSION = "9.19";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,10 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.19": [
+    "🎛 هنگام ثبت پنل پاسارگارد، «مانیتور نود» خودکار ساخته و نودها همگام‌سازی می‌شوند و در پایان به‌جای صفحهٔ مانیتور نود، به «تعریف پنل پاسارگارد» برمی‌گردی",
+    "➕ «افزودن گروهی سرورها»: آی‌پی هر سرور را در یک خط و رمز آن را در خط بعدی بفرست؛ دکمه‌اش کنار «افزودن سرور» قرار گرفت",
+  ],
   "9.18": [
     "🏷 نمایش ساب‌ها حالا «نام-نوع» است (مثلاً `dl2-cname` به‌جای `cn-dl2`) — هم در فهرست رکوردها و هم در ساب‌های منتخب",
   ],
@@ -4411,6 +4415,59 @@ async function srvCompleteAdd(kv, d, txt) {
   return { item, authLabel };
 }
 
+// تجزیهٔ «افزودن گروهی سرور»: هر سرور = یک خط آی‌پی/هاست و خط بعدی‌اش رمز.
+// حالت «1.2.3.4 رمز» در یک خط هم پشتیبانی می‌شود. خطوط خالی و با # نادیده گرفته می‌شوند.
+function parseBulkServers(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+  const items = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let hostPart = line;
+    let passPart = "";
+    const sp = line.match(/^(\S+)\s+(.+)$/);
+    if (sp) {
+      hostPart = sp[1];
+      passPart = sp[2].trim();
+    } else {
+      passPart = i + 1 < lines.length ? lines[i + 1].trim() : "";
+      if (i + 1 < lines.length) i++;
+    }
+    let host = hostPart.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+    let port = 22;
+    const m = host.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
+    if (m) {
+      host = m[1];
+      port = Number(m[2]);
+    }
+    if (!host || !passPart) continue;
+    if (!/^[A-Za-z0-9._\-\[\]:]+$/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) continue;
+    items.push({ host, port, pass: passPart });
+  }
+  return items;
+}
+
+async function srvBulkAdd(kv, pairs) {
+  const list = await getServersList(kv);
+  const existing = new Set(list.map((s) => `${String(s.host).toLowerCase()}:${s.port || 22}`));
+  const addedHosts = [];
+  const skipped = [];
+  for (const it of pairs) {
+    const key = `${it.host.toLowerCase()}:${it.port}`;
+    if (existing.has(key)) {
+      skipped.push(it.host);
+      continue;
+    }
+    existing.add(key);
+    list.push({ id: makeToken() + makeToken(), name: it.host, host: it.host, port: it.port, user: "root", auth: "pass", password: it.pass, note: "", created: Date.now() });
+    addedHosts.push(it.host);
+  }
+  if (addedHosts.length) await saveServersList(kv, list);
+  return { added: addedHosts.length, addedHosts, skipped, total: pairs.length };
+}
+
 async function renderSrvPw(edit, kv) {
   const pws = await getSrvPasswords(kv);
   const lines = [
@@ -4548,9 +4605,10 @@ async function renderServersHome(edit, kv, env) {
   const srvBtns = list.map((s, i) => ({ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }));
   for (let i = 0; i < srvBtns.length; i += 2) kb.push(srvBtns.slice(i, i + 2));
   kb.push([
+    { text: "➕ افزودن گروهی", callback_data: "srvaddbulk" },
     { text: "➕ افزودن سرور", callback_data: "srvadd" },
-    ...(list.length ? [{ text: "🗑 حذف سرور", callback_data: "srvdel" }] : []),
   ]);
+  if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
   kb.push([
     { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
     { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
@@ -5572,6 +5630,53 @@ async function runNodePoll(env) {
   } catch (e) {
     console.error("NDPOLL", e && e.stack ? e.stack : String(e));
   }
+}
+
+// نمای صفحهٔ «تعریف پنل پاسارگارد» (لیست پنل‌ها + دکمه‌های ثبت/ویرایش/حذف)
+async function panelDefineView(kv) {
+  const panels = await getPanels(kv);
+  const lines = ["🎛 تعریف پنل پاسارگارد\n"];
+  if (panels.length) {
+    lines.push("🗂 پنل‌های ثبت‌شده:");
+    for (let i = 0; i < panels.length; i++) lines.push(`${i + 1}) ${escHtml(panels[i].name)} — ${escHtml(panels[i].url)}`);
+    lines.push("");
+  }
+  lines.push("ثبت، ویرایش یا حذف پنل‌های پاسارگارد:");
+  return {
+    text: lines.join("\n"),
+    kb: [
+      [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
+      [{ text: "✏️ ویرایش پنل", callback_data: "pnle" }],
+      [{ text: "🗑 حذف پنل", callback_data: "pnld" }],
+      [{ text: "🔙 بازگشت", callback_data: "nd" }],
+    ],
+  };
+}
+
+// ساخت خودکار «مانیتور نود» برای یک پنل تازه (اگر نباشد) و همگام‌سازی اولیهٔ نودها.
+async function ensureNodeMonitorForPanel(kv, panel, sync = true) {
+  const monitors = await getNodeMonitors(kv);
+  let m = monitors.find((x) => x.panel_id === panel.id);
+  let created = false;
+  if (!m) {
+    m = { id: makeToken() + makeToken(), panel_id: panel.id, name: panel.name, url: panel.url, token: makeToken() + makeToken(), enabled: true };
+    monitors.push(m);
+    created = true;
+  } else {
+    if (m.name !== panel.name) m.name = panel.name;
+    if (m.url !== panel.url) m.url = panel.url;
+  }
+  await saveNodeMonitors(kv, monitors);
+  let error = null;
+  if (sync) {
+    try {
+      const r = await nodeSyncFromPanel(m, kv);
+      if (r && r.error) error = r.error;
+    } catch (e) {
+      error = String(e && e.message ? e.message : e);
+    }
+  }
+  return { created, monitor: m, error };
 }
 
 // صفحهٔ اصلی «مانیتور نود پاسارگارد»: توضیح + وضعیت مستقیم نودهای همهٔ پنل‌ها + دکمه‌های مخصوص.
@@ -6735,6 +6840,24 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
     }
   }
 
+  if (type === "srv_bulk") {
+    // افزودن گروهی: تجزیهٔ «آی‌پی + رمز» به‌صورت جفتی و افزودن همه با هم
+    await kv.delete(`pend:${chatId}`);
+    const pairs = parseBulkServers(txt);
+    if (!pairs.length) {
+      return send(
+        "❌ هیچ سرور معتبری پیدا نشد.\nالگو: خط اول آی‌پی/هاست و خط بعد رمز. دوباره بفرستید یا انصراف بزنید.",
+        [[{ text: "⬅️ انصراف", callback_data: "srv" }]]
+      );
+    }
+    const r = await srvBulkAdd(kv, pairs);
+    const lines = [`✅ ${r.added} سرور از ${r.total} مورد اضافه شد.`];
+    if (r.addedHosts.length) lines.push("", "🖧 افزوده‌شده:", ...r.addedHosts.map((h) => "• " + code(h)));
+    if (r.skipped.length) lines.push("", `ℹ️ ${r.skipped.length} مورد تکراری بود و رد شد.`);
+    await send(lines.join("\n"), [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
   if (type === "srv_relay_set") {
     // ثبت/تغییر رلهٔ SSH توسط خود کاربر: آدرس → توکن → تست اتصال
     if (pending.step === "url") {
@@ -7360,7 +7483,8 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
   if (type === "p_pass") {
     await kv.delete(`pend:${chatId}`);
     const panels = await getPanels(kv);
-    panels.push({ id: makeToken(), name: pending.name, url: pending.url, username: pending.username, password: txt, enabled: true, last_error: null });
+    const panel = { id: makeToken(), name: pending.name, url: pending.url, username: pending.username, password: txt, enabled: true, last_error: null };
+    panels.push(panel);
     await savePanels(kv, panels);
     const apex = apexDomain(urlHost(pending.url));
     const sslAdded = await ensureSslMonitor(kv, apex, 5);
@@ -7369,9 +7493,17 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
         ? `\n🔐 دامنهٔ «${apex}» خودکار به مانیتور SSL اضافه شد.`
         : `\n🔐 دامنهٔ «${apex}» از قبل در مانیتور SSL بود.`
       : "";
-    await send(`✅ پنل «${pending.name}» ثبت شد.${sslNote}`, [
-      [{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }, { text: "🏠 منو", callback_data: "menu" }],
-    ]);
+    let monNote = "";
+    try {
+      const r = await ensureNodeMonitorForPanel(kv, panel, true);
+      monNote = r.error
+        ? `\n🖥 مانیتور نود خودکار ساخته شد؛ همگام‌سازی اولیه انجام نشد (${r.error}) — بعداً «🔄 همگام‌سازی» را بزن.`
+        : "\n🖥 مانیتور نود خودکار ساخته و نودها همگام‌سازی شدند.";
+    } catch (e) {
+      monNote = "\n🖥 مانیتور نود خودکار ساخته شد.";
+    }
+    const v = await panelDefineView(kv);
+    await send(`✅ پنل «${pending.name}» ثبت شد.${sslNote}${monNote}\n\n${v.text}`, v.kb);
     return;
   }
 
@@ -7398,10 +7530,10 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
       p.password = txt;
     }
     await savePanels(kv, panels);
+    await ensureNodeMonitorForPanel(kv, p, false);
     await kv.delete(`pend:${chatId}`);
-    await send(`✅ پنل «${p.name}» به‌روزرسانی شد.`, [
-      [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }, { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }],
-    ]);
+    const pv = await panelDefineView(kv);
+    await send(`✅ پنل «${p.name}» به‌روزرسانی شد.\n\n${pv.text}`, pv.kb);
     return;
   }
 
@@ -9132,20 +9264,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit("🌐 آدرس پنل پاسارگارد را بفرستید (مثلاً mypanel.com یا https://panel.mypanel.com — ساب‌دامنه هم لازم نیست):", [[{ text: "🔙 انصراف", callback_data: "nd" }]]);
     } else if (data === "pndef") {
       // تعریف پنل پاسارگارد: ثبت/ویرایش/حذف پنل در یک منوی جدا
-      const panels = await getPanels(kv);
-      const lines = ["🎛 تعریف پنل پاسارگارد\n"];
-      if (panels.length) {
-        lines.push("🗂 پنل‌های ثبت‌شده:");
-        for (let i = 0; i < panels.length; i++) lines.push(`${i + 1}) ${escHtml(panels[i].name)} — ${escHtml(panels[i].url)}`);
-        lines.push("");
-      }
-      lines.push("ثبت، ویرایش یا حذف پنل‌های پاسارگارد:");
-      await edit(lines.join("\n"), [
-        [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
-        [{ text: "✏️ ویرایش پنل", callback_data: "pnle" }],
-        [{ text: "🗑 حذف پنل", callback_data: "pnld" }],
-        [{ text: "🔙 بازگشت", callback_data: "nd" }],
-      ]);
+      const v = await panelDefineView(kv);
+      await edit(v.text, v.kb);
     } else if (data === "pnle") {
       // لیست پنل‌ها برای انتخاب ویرایش
       const panels = await getPanels(kv);
@@ -9316,6 +9436,16 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
       await edit("➕ افزودن سرور\n\n🌐 آی‌پی یا هاست سرور را بفرستید (پورت غیرپیش‌فرض را با : اضافه کنید، مثل 1.2.3.4:2222):", [[{ text: "⬅️ انصراف", callback_data: "srv" }]]);
+    } else if (data === "srvaddbulk") {
+      // افزودن گروهی سرورها: هر سرور یک خط آی‌پی/هاست و خط بعدی‌اش رمز
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_bulk" }), { expirationTtl: 1200 });
+      await edit(
+        "➕ افزودن گروهی سرورها\n\n" +
+          "آی‌پی/هاست هر سرور را در یک خط و رمز آن را در خط بعدی بفرستید؛ هر تعداد که خواستی:\n\n" +
+          code("1.2.3.4\nرمزِسرور\n5.6.7.8:2222\nرمزِسرور۲") +
+          "\n\n• پورت غیرپیش‌فرض را با : بنویسید.\n• نام هر سرور خودکار همان آی‌پی و کاربر root است.\n• سرورهای تکراری نادیده گرفته می‌شوند.",
+        [[{ text: "⬅️ انصراف", callback_data: "srv" }]]
+      );
     } else if (data === "srvpw") {
       await renderSrvPw(edit, kv);
     } else if (data === "srvpwadd") {
