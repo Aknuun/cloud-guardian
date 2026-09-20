@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.14";
+const BOT_VERSION = "9.15";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -1813,6 +1813,34 @@ async function editMessage(botToken, chatId, messageId, text, keyboard) {
   return tg(botToken, "editMessageText", body);
 }
 
+// نمایش خطا/هشدار روی همان پیامی که کاربر در حال کار با آن است:
+// متن خطا بالا و دکمهٔ عملگر پایین‌تر، تا موقع ادامهٔ کار گم نشود.
+async function valueErrorReply(pending, chatId, botToken, reason, extraText) {
+  const backToken = pending.srToken || pending.token;
+  const text = "❌ " + String(reason || "").trim() + (extraText ? "\n\n" + extraText : "");
+  const kb = [[{ text: "⬅️ انصراف", callback_data: backToken ? `cancel:${backToken}` : "menu" }]];
+  if (pending.msgId) {
+    await editMessage(botToken, chatId, pending.msgId, text, kb);
+  } else {
+    await sendMessage(botToken, chatId, text, kb);
+  }
+}
+
+// «هشدارِ بالای چت»: پیام هشدار را پین می‌کند تا موقع ادامهٔ کار از دید نرود.
+async function stickAlert(kv, botToken, chatId, messageId) {
+  if (!kv || !messageId) return;
+  const prev = await kv.get(`stick:${chatId}`);
+  if (prev) {
+    try {
+      await tg(botToken, "unpinChatMessage", { chat_id: chatId, message_id: Number(prev) });
+    } catch (e) {}
+  }
+  try {
+    await tg(botToken, "pinChatMessage", { chat_id: chatId, message_id: messageId, disable_notification: true });
+  } catch (e) {}
+  await kv.put(`stick:${chatId}`, String(messageId), { expirationTtl: 7200 });
+}
+
 async function getAllZones(accounts, kv) {
   if (kv) {
     const cached = await kvGetCached(kv, "cache:zones", "json", 3600000);
@@ -2236,9 +2264,39 @@ function isPermErrors(data) {
   return arr.some((e) => e && CF_PERM_CODES.includes(Number(e.code)));
 }
 
+// ترجمهٔ فارسی خطاهای پرتکرار کلادفلر با دلیل
+const CF_ERR_FA = {
+  0: "خطای ناشناخته‌ای از کلادفلر برگشت.",
+  1001: "درخواست نامعتبر است.",
+  9007: "مقدار (Content) رکورد CNAME نامعتبر است.\nدر CNAME باید یک نام دامنهٔ معتبر بگذارید (مثل sub.example.com)؛ عدد خام یا آی‌پی به‌عنوان مقدار CNAME پذیرفته نمی‌شود.",
+  9008: "رکورد تکراری یا ناسازگار است.",
+  9009: "مقدار TTL نامعتبر است.",
+  9017: "ساخت رکورد ناموفق بود؛ احتمالاً این نام از قبل وجود دارد، یا برای این نوع رکورد معتبر نیست.",
+  9106: "هدف مسیر Proxy نامعتبر است.",
+  81008: "این رکورد دیگر وجود ندارد (شاید قبلاً حذف شده و بافر کش قدیمی است؛ دوباره تلاش کنید).",
+  81044: "توکن به مجوز DNS کافی دسترسی ندارد.",
+  81057: "توکن به مجوز لازم دسترسی ندارد.",
+};
+
 function cfErrText(data) {
-  const errors = Array.isArray(data) ? data : (data && data.errors) || data;
-  let out = JSON.stringify(errors, null, 2).substring(0, 3000);
+  const raw = Array.isArray(data) ? data : (data && data.errors) || data;
+  const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const lines = [];
+  let unknown = 0;
+  for (const e of arr) {
+    const code = e && e.code;
+    const msg = e && e.message;
+    const fa = CF_ERR_FA[code];
+    if (fa) lines.push(`🔴 [${code}] ${fa}`);
+    else {
+      unknown++;
+      lines.push(`🔴 [${code || "-"}] ${msg || "خطای ناشناخته"}`);
+    }
+  }
+  let out = lines.length ? lines.join("\n") : "⚠️ خطای ناشناخته از کلادفلر.";
+  if (unknown) {
+    out += "\n\n📋 خروجی API:\n" + JSON.stringify(arr, null, 2).substring(0, 1500);
+  }
   if (isPermErrors(data)) {
     out =
       PERM_MARK +
@@ -2392,6 +2450,56 @@ function isIpLike(t) {
 
 function isNameLike(t) {
   return /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/.test(String(t).trim());
+}
+
+function plausibleHostname(s) {
+  const t = String(s).trim().toLowerCase().replace(/\.$/, "");
+  if (!t || t.length > 200) return false;
+  if (!/^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/.test(t)) return false;
+  if (!t.includes(".")) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return false;
+  return true;
+}
+
+// تشخیص زودهنگام دلیل نامعتبر بودن یک مقدار ورودی (قبل از ارسال به کلادفلر)
+function valueIssueHint(txt, targetType) {
+  const s = String(txt || "").trim();
+  const octets = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  const goodV4 = !!octets && octets.slice(1).every((o) => Number(o) <= 255);
+  const v6 = isIpv6(s);
+
+  if (!s) return "مقدار خالی است؛ یک IPv4 یا نام دامنهٔ معتبر بفرستید.";
+
+  if (octets && !goodV4) {
+    const bad = octets.slice(1).filter((o) => Number(o) > 255);
+    return (
+      "این مقدار شبیه IPv4 است ولی بخش «" + bad.join("، ") +
+      "» از ۲۵۵ بیشتر است. در IPv4 هر بخش باید بین ۰ تا ۲۵۵ باشد؛\n" +
+      "مثلاً «" + s.replace(/\.\d+$/, ".255") + "» قالبِ درستی دارد (ولی الزاماً آی‌پی سرور شما نیست)."
+    );
+  }
+
+  if (targetType === "CNAME") {
+    if (goodV4 || v6) return "برای رکورد CNAME باید نام دامنهٔ معتبر بفرستید (مثل sub.example.com)؛ آی‌پی خام به‌عنوان مقدار CNAME پذیرفته نمی‌شود.";
+    if (plausibleHostname(s)) return "";
+    return "برای رکورد CNAME باید نام دامنهٔ معتبر بفرستید (مثل sub.example.com)؛ مقدار فعلی نه آی‌پی است و نه نام دامنه.";
+  }
+
+  if (targetType === "A") {
+    if (v6) return "برای رکورد A باید IPv4 معتبر بفرستید (مثل 1.2.3.4)؛ مقدار ارسالی IPv6 است.";
+    if (goodV4) return "";
+    if (plausibleHostname(s)) return "برای رکورد A باید IPv4 معتبر بفرستید (مثل 1.2.3.4)؛ نام دامنه به‌عنوان مقدار A پذیرفته نمی‌شود.";
+    return "برای رکورد A باید IPv4 معتبر بفرستید (مثل 1.2.3.4).";
+  }
+
+  if (targetType === "AAAA") {
+    if (v6) return "";
+    if (goodV4) return "برای رکورد AAAA باید IPv6 معتبر بفرستید؛ مقدار ارسالی IPv4 است.";
+    return "برای رکورد AAAA باید IPv6 معتبر بفرستید.";
+  }
+
+  if (goodV4 || v6 || plausibleHostname(s)) return "";
+  return "این مقدار نه IPv4/IPv6 معتبر است و نه نام دامنهٔ معتبر.\nبرای رکورد A یک IPv4 (مثل 1.2.3.4) و برای رکورد CNAME یک نام دامنه (مثل sub.example.com) بفرستید.";
 }
 
 async function getFavs(kv, chatId) {
@@ -3476,7 +3584,8 @@ async function runSslMonitor(env) {
         `🏢 صادرکننده: ${code(r.issuer_common_name || "—")}`;
       for (const a of admins) {
         try {
-          await sendMessage(botToken, a, msg);
+          const r = await sendMessage(botToken, a, msg);
+          if (r && r.message_id) await stickAlert(kv, botToken, a, r.message_id);
         } catch (e) {
           console.error("SSL_ALERT", String(e));
         }
@@ -3967,19 +4076,22 @@ function chunkText(text, limit = 3800) {
   return chunks;
 }
 
-async function sendPanelMsg(botToken, chatId, text) {
+async function sendPanelMsg(botToken, chatId, text, kv) {
+  let head = null;
   for (const chunk of chunkText(text)) {
     try {
-      await tg(botToken, "sendMessage", {
+      const r = await tg(botToken, "sendMessage", {
         chat_id: chatId,
         text: chunk,
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
+      if (head === null && r && r.message_id) head = r.message_id;
     } catch (e) {
       console.error("PANEL_MSG", String(e));
     }
   }
+  if (head !== null) await stickAlert(kv, botToken, chatId, head);
 }
 
 async function panelLogin(p, timeoutMs) {
@@ -5331,7 +5443,7 @@ async function runNodePoll(env) {
               dir === "down"
                 ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? escHtml(String(n.reason)) : "—"}`
                 : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
-            for (const a of admins) await sendPanelMsg(botToken, a, msg);
+            for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
           }
         }
         st.nodes[name] = {
@@ -5594,7 +5706,7 @@ async function handleNodeEvent(token, payload, env, botToken) {
       (dir === "down"
         ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${reason ? escHtml(String(reason)) : "—"}`
         : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران${reason ? `\nℹ️ ${escHtml(String(reason))}` : ""}`);
-    for (const a of admins) await sendPanelMsg(botToken, a, msg);
+    for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
   } catch (e) {
     console.error("NDHOOK", e && e.stack ? e.stack : String(e));
   }
@@ -6711,6 +6823,13 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
   }
 
   if (type === "edit_value" || type === "edit_ttl") {
+    if (type === "edit_value") {
+      const hint = valueIssueHint(txt);
+      if (hint) {
+        await valueErrorReply(pending, chatId, botToken, hint, "پیام اصلاح‌شده را دوباره بفرستید؛ همین‌جا ویرایش می‌شود و دکمه‌های ادامه پایین‌تر از خطا می‌آیند.");
+        return;
+      }
+    }
     await kv.delete(`pend:${chatId}`);
     if (pending.provider === "arvan") {
       const records = await arvanGetAllRecords(arvanAccounts[pending.acc].token, pending.domain, kv, env);
@@ -6735,7 +6854,7 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
           await send(summary, [[{ text: "🇮🇷 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]]);
         }
       } else {
-        await send("❌ خطا:\n" + cfErrText(res));
+        await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(res));
       }
       return;
     }
@@ -6747,6 +6866,11 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
       if (pending.type === "edit_value" && prev) {
         const isIp = isIpv4(txt) || isIpv6(txt);
         if (prev.type === "A" && !isIp) {
+          const cnameHint = valueIssueHint(txt, "CNAME");
+          if (cnameHint) {
+            await valueErrorReply(pending, chatId, botToken, cnameHint);
+            return;
+          }
           await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
             method: "DELETE",
             headers: hdr(accounts[pending.acc].token),
@@ -6771,10 +6895,15 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
             }
             return;
           } else {
-            await send("❌ خطا در ساخت رکورد CNAME:\n" + cfErrText(newData));
+            await valueErrorReply(pending, chatId, botToken, "خطا در ساخت رکورد CNAME:\n\n" + cfErrText(newData));
             return;
           }
         } else if (prev.type === "CNAME" && isIp) {
+          const aHint = valueIssueHint(txt, "A");
+          if (aHint) {
+            await valueErrorReply(pending, chatId, botToken, aHint);
+            return;
+          }
           await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
             method: "DELETE",
             headers: hdr(accounts[pending.acc].token),
@@ -6799,7 +6928,7 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
             }
             return;
           } else {
-            await send("❌ خطا در ساخت رکورد A:\n" + cfErrText(newData));
+            await valueErrorReply(pending, chatId, botToken, "خطا در ساخت رکورد A:\n\n" + cfErrText(newData));
             return;
           }
         }
@@ -6845,13 +6974,18 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
         await send(summary, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
       }
     } else {
-      await send("❌ خطا:\n" + cfErrText(data));
+      await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(data));
     }
     return;
   }
 
   if (type === "change_type") {
     const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    const ctHint = valueIssueHint(txt, pending.new_type);
+    if (ctHint) {
+      await valueErrorReply(pending, chatId, botToken, ctHint);
+      return;
+    }
     await kv.delete(`pend:${chatId}`);
     const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
       method: "PATCH",
@@ -6889,7 +7023,7 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
         await send(summary, [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 منو", callback_data: "menu" }]]);
       }
     } else {
-      await send("❌ خطا:\n" + cfErrText(data));
+      await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(data));
     }
     return;
   }
