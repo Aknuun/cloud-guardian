@@ -168,6 +168,8 @@ t() {
     en:done_bot)               printf '%s' "Open Telegram, message this bot and press /start:" ;;
     fa:done_sending)           printf '%s' "ارسال /start به ربات مشتری…" ;;
     en:done_sending)           printf '%s' "Sending /start to the customer's bot…" ;;
+    fa:done_tg_msg)            printf '%s' "✅ نصب نگهبان ابری کامل شد. برای دیدن منو و دکمه‌ها /start بزن." ;;
+    en:done_tg_msg)            printf '%s' "✅ Cloud Guardian installed. Press /start to see the menu and buttons." ;;
     fa:done_cfg)               printf '%s' "تنظیمات (محرمانه):" ;;
     en:done_cfg)               printf '%s' "Config (secret):" ;;
     fa:done_status)            printf '%s' "وضعیت:" ;;
@@ -371,6 +373,14 @@ trigger_start() {
   curl -sS --max-time 20 -X POST "$url" -H 'content-type: application/json' \
     -d "{\"update_id\":1,\"message\":{\"message_id\":1,\"date\":$epoch,\"chat\":{\"id\":$admin,\"type\":\"private\"},\"from\":{\"id\":$admin,\"is_bot\":false,\"first_name\":\"admin\"},\"text\":\"/start\"}}" \
     >/dev/null 2>&1 || true
+}
+# پیام متنی مستقیم از طرف ربات به مدیر
+tg_send_text() {
+  local tok="$1" chat="$2" text="$3" payload
+  payload="$(CHAT="$chat" TEXT="$text" python3 -c 'import json,os; print(json.dumps({"chat_id": os.environ["CHAT"], "text": os.environ["TEXT"]}, ensure_ascii=False))' 2>/dev/null || true)"
+  [ -n "$payload" ] || return 0
+  curl -sS --max-time 20 -X POST "https://api.telegram.org/bot$tok/sendMessage" \
+    -H 'content-type: application/json' -d "$payload" >/dev/null 2>&1 || true
 }
 public_ip() {
   local ip=""
@@ -603,6 +613,7 @@ do_install() {
   url="https://$WORKER.$sub.workers.dev"
 
   b "$(t done_sending)"
+  tg_send_text "$BOT" "${ADMIN%%,*}" "$(t done_tg_msg)"
   trigger_start "$url/tg" "${ADMIN%%,*}"
 
   printf '\n'
