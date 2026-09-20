@@ -240,20 +240,20 @@ t() {
 
     fa:usage_title)            printf '%s' "نگهبان ابری — راهنما" ;;
     en:usage_title)            printf '%s' "Cloud Guardian — help" ;;
-    fa:cmd_install)            printf '%s' "نصب/بازنصب کامل روی کلادفلر (پیش‌فرض)" ;;
-    en:cmd_install)            printf '%s' "Full install/reinstall on Cloudflare (default)" ;;
-    fa:cmd_update)             printf '%s' "آپدیت ورکر به آخرین نسخهٔ گیت‌هاب" ;;
-    en:cmd_update)             printf '%s' "Update the worker to the latest GitHub version" ;;
-    fa:cmd_uninstall)          printf '%s' "حذف ورکر (و KV و وبهوک)" ;;
-    en:cmd_uninstall)          printf '%s' "Delete the worker (and KV and webhook)" ;;
-    fa:cmd_relay)              printf '%s' "نصب رلهٔ SSH روی همین سرور (+ ثبت خودکار)" ;;
-    en:cmd_relay)              printf '%s' "Install the SSH relay on this server (+ auto-register)" ;;
-    fa:cmd_status)             printf '%s' "نمایش وضعیت ورکر، کرون، KV و وبهوک" ;;
-    en:cmd_status)             printf '%s' "Show worker, cron, KV and webhook status" ;;
-    fa:cmd_check)              printf '%s' "بررسی دسترسی‌های توکن کلادفلر" ;;
-    en:cmd_check)              printf '%s' "Check the Cloudflare token permissions" ;;
-    fa:cmd_help)               printf '%s' "همین راهنما" ;;
-    en:cmd_help)               printf '%s' "This help" ;;
+    fa:cmd_install)            printf '%s' "نصب کامل" ;;
+    en:cmd_install)            printf '%s' "Full install" ;;
+    fa:cmd_update)             printf '%s' "آپدیت" ;;
+    en:cmd_update)             printf '%s' "Update" ;;
+    fa:cmd_uninstall)          printf '%s' "حذف" ;;
+    en:cmd_uninstall)          printf '%s' "Uninstall" ;;
+    fa:cmd_relay)              printf '%s' "رلهٔ SSH" ;;
+    en:cmd_relay)              printf '%s' "SSH relay" ;;
+    fa:cmd_status)             printf '%s' "وضعیت" ;;
+    en:cmd_status)             printf '%s' "Status" ;;
+    fa:cmd_check)              printf '%s' "بررسی توکن" ;;
+    en:cmd_check)              printf '%s' "Check token" ;;
+    fa:cmd_help)               printf '%s' "راهنما" ;;
+    en:cmd_help)               printf '%s' "Help" ;;
     fa:usage_cf)               printf '%s' "توکن کلادفلر:" ;;
     en:usage_cf)               printf '%s' "Cloudflare token:" ;;
     fa:usage_oneline)          printf '%s' "نصب یک‌خطی:" ;;
@@ -304,7 +304,7 @@ set_language() {
   case "${LANG_SEL:-}" in
     en|EN|En|English|english)       CG_L=en ;;
     fa|FA|fa_ir|Fa|Persian|persian) CG_L=fa ;;
-    *)                              CG_L=fa ;;
+    *)                              CG_L=en ;;
   esac
 }
 LANG_SEL="${CG_LANG:-$LANG_ARG}"
