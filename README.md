@@ -70,10 +70,9 @@
 
 | # | پیشنیاز | راهنما |
 |---|---|---|
-| ۱ | یک حساب کلادفلر برای مدیریت DNS | داشبورد › My Profile › API Tokens |
-| ۲ | توکن API کلادفلر | [ساخت توکن](https://dash.cloudflare.com/profile/api-tokens) · [آموزش تصویری](docs/cloudflare-api-token.md) |
-| ۳ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
-| ۴ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
+| ۱ | توکن API کلادفلر | [ساخت توکن](https://dash.cloudflare.com/profile/api-tokens) · [آموزش تصویری](docs/cloudflare-api-token.md) |
+| ۲ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
+| ۳ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
 **دسترسیهای موردنیاز توکن کلادفلر:**
 
@@ -84,8 +83,6 @@
 5. Zone · Cache Purge · Purge
 
 🔗 **ساخت توکن کلادفلر:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` (Account Resources = All accounts، Zone Resources = All zones).
-
-> نصب‌کننده قبل از دیپلوی، همین دسترسی‌ها را چک می‌کند و اگر ناقص/اشتباه باشند، یک **خطای رنگی** با فهرست دسترسی‌های لازم و لینک اصلاح نشان می‌دهد و نصب را متوقف می‌کند (با `--force` می‌توان رد شد).
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
