@@ -4987,7 +4987,7 @@ async function runUsageMonitor(env, opts) {
       if (alerts.length) {
         alerts.sort((a, b) => b.gb - a.gb);
         const shown = alerts.slice(0, 30);
-        const lines = [`🚨 مصرف بالا در یک ساعت (احتمال پخش لینک)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
+        const lines = [`🚨 مصرف بالا (احتمال پخش لینک)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
         for (const a of shown) {
           lines.push(`▪️ ${code(a.username)} — ${a.gb.toFixed(1)} GB (${a.label})`);
           lines.push(`   ادمین: ${escHtml(a.owner)} • ${a.flat ? "مصرف پیوسته 🔁" : "مصرف جهشی ⚡"}`);
