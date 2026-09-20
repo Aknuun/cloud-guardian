@@ -3,7 +3,7 @@
 # ابزار نصب/آپدیت نگهبان ابری روی کلادفلر ورکر
 # config.json کنار همین فایل باید باشد (نوشته‌شده توسط install.sh).
 # ============================================================
-import sys, os, json, uuid, urllib.request, urllib.error
+import sys, os, json, uuid, urllib.request, urllib.error, urllib.parse
 
 API = "https://api.cloudflare.com/client/v4"
 here = os.path.dirname(os.path.abspath(__file__))
@@ -51,12 +51,50 @@ def module_body(code, meta):
     return body, B
 
 
+def _kv_is_routing(err):
+    return ("7003" in (err or "")) or ("7000" in (err or ""))
+
+
+def find_existing_kv_id(tok, acc):
+    try:
+        st, out = req(tok, "GET", f"{API}/accounts/{acc}/workers/scripts")
+        res, err = json_ok(st, out)
+        if err:
+            return None
+        for w in res or []:
+            wid = w.get("id") or w.get("name")
+            if not wid:
+                continue
+            st2, out2 = req(tok, "GET", f"{API}/accounts/{acc}/workers/scripts/{urllib.parse.quote(wid)}/settings")
+            res2, err2 = json_ok(st2, out2)
+            if err2:
+                continue
+            for b in (res2 or {}).get("bindings") or []:
+                if b.get("type") == "kv_namespace" and b.get("namespace_id"):
+                    return b["namespace_id"]
+    except Exception:
+        pass
+    return None
+
+
 def ensure_kv(cfg, tok):
     if cfg.get("kv_namespace_id"):
         return cfg["kv_namespace_id"], None
     body = json.dumps({"title": f"{cfg['worker']}-kv"}).encode("utf-8")
     st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/workers/kv/namespaces", body, "application/json")
     res, err = json_ok(st, out)
+    if err and _kv_is_routing(err):
+        found = find_existing_kv_id(tok, cfg["account_id"])
+        if found:
+            cfg["kv_namespace_id"] = found
+            with open(CFG, "w") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            print(f"[*] KV namespaces API on this account is not routable: {err[:120]}…")
+            print(f"[*] Reusing existing KV namespace from another worker: {found}")
+            return found, None
+        return None, (err + " — ساخت KV از API ممکن نشد و namespace آماده‌ای هم روی اکانت پیدا نشد.\n"
+                      "در داشبورد کلادفلر (Workers & Pages → KV → Create a namespace) یکی بسازید و id آن را "
+                      "در ~/.cloud-guardian/config.json در فیلد \"kv_namespace_id\" بگذارید و دوباره اجرا کنید.")
     if err:
         return None, err
     cfg["kv_namespace_id"] = res["id"]
