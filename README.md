@@ -71,7 +71,7 @@
 | # | پیشنیاز | راهنما |
 |---|---|---|
 | ۱ | یک حساب کلادفلر برای مدیریت DNS | داشبورد › My Profile › API Tokens |
-| ۲ | توکن API کلادفلر | [آموزش تصویری ساخت توکن](docs/cloudflare-api-token.md) |
+| ۲ | توکن API کلادفلر | [ساخت توکن](https://dash.cloudflare.com/profile/api-tokens) · [آموزش تصویری](docs/cloudflare-api-token.md) |
 | ۳ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۴ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
@@ -83,6 +83,8 @@
 4. Zone · Zone Settings · Edit
 5. Zone · Cache Purge · Purge
 
+🔗 **ساخت توکن کلادفلر:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` (Account Resources = All accounts، Zone Resources = All zones).
+
 ---
 ## نصب (از طریق سرور روی کلادفلر)
 روی سرور موقت لینوکسی اجرا کنید:
@@ -93,6 +95,32 @@ bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main
 
 اسکریپت به ترتیب میپرسد: توکن API کلادفلر → نام ورکر (پیشفرض `cloud-guardian`) → توکن ربات → شناسهٔ مدیر. تنظیمات در `~/.cloud-guardian/config.json` (فقط شما) ذخیره میشود.
 > سرور فقط «ابزار نصب» است. بعد از نصب میتوانید آن را حذف کنید؛ ربات مستقل کار میکند.
+
+---
+## مدیریت و دستورها 🛠
+
+نصب‌کننده یک CLI کامل است. بعد از نصب، اسکریپت را در همان سرور (یا با دانلود مجدد) اجرا کنید:
+
+```bash
+bash install.sh <command>
+```
+
+| دستور | کار |
+|---|---|
+| `install` | نصب/بازنصب کامل روی کلادفلر (KV + bindings + ورکر + کرون + workers.dev + وبهوک) — پیش‌فرض |
+| `update` | آپدیت ورکر به آخرین نسخهٔ گیت‌هاب |
+| `uninstall` | حذف ورکر (و به‌صورت پیش‌فرض KV و وبهوک و کرون) |
+| `relay` | نصب/آپدیت رلهٔ SSH روی همین سرور + ثبت خودکار در ربات |
+| `status` | نمایش وضعیت ورکر، کرون‌ها، KV و وبهوک |
+| `check` | بررسی درست‌بودن دسترسی‌های توکن کلادفلر |
+| `help` | راهنما |
+
+**اجرای غیرتعاملی** (مناسب اسکریپت/CI) با متغیرهای محیطی:
+`CF_TOKEN` · `ACCOUNT_ID` · `WORKER_NAME` · `BOT_TOKEN` · `ADMIN_ID` — مثلاً:
+
+```bash
+CF_TOKEN=xxx ACCOUNT_ID=yyy WORKER_NAME=cloud-guardian BOT_TOKEN=123:AAA... ADMIN_ID=111 bash install.sh install --no-relay
+```
 
 ---
 ## آپدیت خودکار 🔄
