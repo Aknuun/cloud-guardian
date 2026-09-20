@@ -166,6 +166,8 @@ t() {
     en:done_worker)            printf '%s' "Worker:" ;;
     fa:done_bot)               printf '%s' "از تلگرام به این ربات پیام بده و /start بزن:" ;;
     en:done_bot)               printf '%s' "Open Telegram, message this bot and press /start:" ;;
+    fa:done_sending)           printf '%s' "ارسال /start به ربات مشتری…" ;;
+    en:done_sending)           printf '%s' "Sending /start to the customer's bot…" ;;
     fa:done_cfg)               printf '%s' "تنظیمات (محرمانه):" ;;
     en:done_cfg)               printf '%s' "Config (secret):" ;;
     fa:done_status)            printf '%s' "وضعیت:" ;;
@@ -361,6 +363,14 @@ workers_subdomain() {
 bot_username() {
   curl -sS --max-time 15 "https://api.telegram.org/bot$1/getMe" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print((d.get('result') or {}).get('username',''))" 2>/dev/null || true
+}
+# شبیه‌سازی پیام /start از طرف مدیر و فرستادن آن به وب‌هوک ربات
+trigger_start() {
+  local url="$1" admin="$2" epoch
+  epoch="$(date +%s)"
+  curl -sS --max-time 20 -X POST "$url" -H 'content-type: application/json' \
+    -d "{\"update_id\":1,\"message\":{\"message_id\":1,\"date\":$epoch,\"chat\":{\"id\":$admin,\"type\":\"private\"},\"from\":{\"id\":$admin,\"is_bot\":false,\"first_name\":\"admin\"},\"text\":\"/start\"}}" \
+    >/dev/null 2>&1 || true
 }
 public_ip() {
   local ip=""
@@ -592,6 +602,9 @@ do_install() {
   sub="$(workers_subdomain "$TOKEN" "$ACC")"
   url="https://$WORKER.$sub.workers.dev"
 
+  b "$(t done_sending)"
+  trigger_start "$url/tg" "${ADMIN%%,*}"
+
   printf '\n'
   printf "${GREEN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
   printf "${GREEN}${BOLD}  │${RST}  🎉 ${GREEN}${BOLD}%s${RST}\n" "$(t done_title)"
@@ -599,7 +612,7 @@ do_install() {
   printf "  • %s %s\n" "$(t done_worker)" "$(link "$url")"
   local BU; BU="$(bot_username "$BOT")"
   if [ -n "$BU" ]; then
-    printf "  • %s %s\n" "$(t done_bot)" "$(link "https://t.me/$BU")"
+    printf "  • %s @%s\n" "$(t done_bot)" "$(link "$BU")"
   else
     printf "  • %s\n" "$(t done_bot)"
   fi
