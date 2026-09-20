@@ -3563,6 +3563,11 @@ function urlHost(u) {
   }
 }
 
+function normalizePanelUrl(raw) {
+  const s = String(raw || "").trim().replace(/\/+$/, "");
+  return /^https?:\/\//i.test(s) ? s : "https://" + s;
+}
+
 function apexDomain(host) {
   const h = String(host || "").trim().toLowerCase().replace(/\.$/, "");
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return "";
@@ -7284,10 +7289,8 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
   }
 
   if (type === "p_url") {
-    const raw = String(txt || "").trim().replace(/\/+$/, "");
-    const hasScheme = /^https?:\/\//i.test(raw);
-    const url = (hasScheme ? "" : "https://") + raw.replace(/^https?:\/\//i, "");
-    if (!/^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9.\-_]*/.test(url)) return send("❌ آدرس معتبر نیست. دوباره بفرستید:\n(مثلاً sub.mypanel.com یا https://sub.mypanel.com)");
+    const url = normalizePanelUrl(txt);
+    if (!/^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9.\-_]*/.test(url)) return send("❌ آدرس معتبر نیست. دوباره بفرستید:\n(مثلاً mypanel.com یا https://mypanel.com — ساب‌دامنه هم لازم نیست)");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_user", name: pending.name, url }), { expirationTtl: 600 });
     await send("👤 نام‌کاربری ادمین پنل را بفرستید:");
     return;
@@ -7330,8 +7333,8 @@ async function resolvePending(pending, value, chatId, accounts, arvanAccounts, s
       if (!txt) return send("⚠️ نام معتبری وارد کنید.");
       p.name = txt;
     } else if (type === "p_eurl") {
-      const url = txt.replace(/\/+$/, "");
-      if (!/^https?:\/\//.test(url)) return send("❌ آدرس باید با http:// یا https:// شروع شود. دوباره بفرستید:");
+      const url = normalizePanelUrl(txt);
+      if (!/^https?:\/\/[a-zA-Z0-9][a-zA-Z0-9.\-_]*/.test(url)) return send("❌ آدرس معتبر نیست. دوباره بفرستید:\n(مثلاً mypanel.com یا https://mypanel.com)");
       p.url = url;
     } else if (type === "p_euser") {
       if (!txt) return send("⚠️ نام‌کاربری معتبری وارد کنید.");
