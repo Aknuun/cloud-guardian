@@ -107,8 +107,8 @@ t() {
     en:ok_deploy)              printf '%s' "Worker deployed successfully." ;;
     fa:ok_webhook)             printf '%s' "وبهوک تلگرام ست شد:" ;;
     en:ok_webhook)             printf '%s' "Telegram webhook set:" ;;
-    fa:ok_cron)                printf '%s' "کرون پشتیبانِ آپدیت خودکار نصب شد (هر ۳۰ دقیقه)." ;;
-    en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 30 min)." ;;
+    fa:ok_cron)                printf '%s' "کرون پشتیبانِ آپدیت خودکار نصب شد (هر ۱۰ دقیقه — فقط با تگ جدید)." ;;
+    en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 10 min — new tags only)." ;;
     fa:ok_updated)             printf '%s' "ورکر آپدیت شد به نسخهٔ" ;;
     en:ok_updated)             printf '%s' "Worker updated to version" ;;
     fa:ok_uninstalled)         printf '%s' "حذف کامل شد." ;;
@@ -457,7 +457,7 @@ install_cron_backup() {
   gh_raw "$REPO" "update.sh" > "$DIR/update.sh" 2>/dev/null || true
   chmod +x "$DIR/update.sh" 2>/dev/null || true
   if command -v crontab >/dev/null 2>&1 && [ -f "$DIR/update.sh" ]; then
-    ( crontab -l 2>/dev/null | grep -v "cloud-guardian/update.sh" ; echo "*/30 * * * * $DIR/update.sh >> $DIR/update.log 2>&1" ) | crontab - 2>/dev/null \
+    ( crontab -l 2>/dev/null | grep -v "cloud-guardian/update.sh" ; echo "*/10 * * * * $DIR/update.sh >> $DIR/update.log 2>&1" ) | crontab - 2>/dev/null \
       && ok "$(t ok_cron)" || warn "$(t w_cron)"
   fi
 }

@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 8.1 → 8.2) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "9.16";
+const BOT_VERSION = "9.17";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -37,6 +37,10 @@ const ARVAN_DOMAINS_CACHE_MS = 600000;
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "9.17": [
+    "🏷 آپدیت خودکار حالا تگ‌محور است: فقط وقتی در مخزن گیت‌هاب یک تگ نسخهٔ جدید ساخته شود آپدیت می‌شود (نه با هر پوش روی main)",
+    "⏱ بررسی تگ جدید هر ۱۰ دقیقه انجام می‌شود",
+  ],
   "9.16": [
     "🔄 آپدیت خودکار: حالا هر ۱۰ دقیقه مخزن گیت‌هاب چک می‌شود (قبلاً هر ۶ ساعت)؛ اگر نسخهٔ جدید باشد همان لحظه خودش را آپدیت می‌کند",
   ],
@@ -1113,10 +1117,37 @@ async function announceRelease(env, botToken, adminId) {
   _releaseAnnouncedFor = BOT_VERSION;
 }
 
-const SELF_UPDATE_URL = "https://api.github.com/repos/Aknuun/cloud-guardian/contents/worker.js?ref=main";
+const SELF_UPDATE_REPO = "Aknuun/cloud-guardian";
+const SELF_TAGS_URL = `https://api.github.com/repos/${SELF_UPDATE_REPO}/tags?per_page=100`;
 
-// آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از مخزن می‌گیرد و با همان توکن CF
-// خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور). فقط روی کرون ۱۰دقیقه‌ای، هر ۱۰ دقیقه.
+function selfVerParts(v) {
+  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/.exec(String(v || "").trim());
+  return m ? [Number(m[1]), Number(m[2] || 0), Number(m[3] || 0)] : null;
+}
+
+function selfVerGreater(a, b) {
+  const x = selfVerParts(a);
+  if (!x) return false;
+  const y = selfVerParts(b);
+  if (!y) return true;
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i] > y[i];
+  }
+  return false;
+}
+
+function selfLatestTag(names) {
+  let best = null;
+  for (const n of names || []) {
+    if (!selfVerParts(n)) continue;
+    if (best === null || selfVerGreater(n, best)) best = n;
+  }
+  return best;
+}
+
+// آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از «آخرین تگ نسخه» مخزن می‌گیرد و با همان
+// توکن CF خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور). فقط روی کرون ۱۰دقیقه‌ای
+// و فقط وقتی تگ نسخهٔ جدیدی در مخزن ساخته شده باشد.
 async function maybeSelfUpdate(env, botToken, adminId, opts) {
   const kv = env.BOT_KV;
   const aid = env.WORKER_ACCOUNT_ID || "";
@@ -1131,14 +1162,33 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     const accounts = await getAccounts(kv, env);
     const tok = accounts && accounts[0] && accounts[0].token;
     if (!tok) return;
-    const res = await fetch(SELF_UPDATE_URL, {
-      headers: { Accept: "application/vnd.github.raw" },
+
+    // فقط وقتی تگ نسخهٔ جدیدی در مخزن ساخته شده باشد
+    const tRes = await fetch(SELF_TAGS_URL, {
+      headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(30000),
     });
+    if (!tRes.ok) return;
+    let tags = [];
+    try {
+      tags = await tRes.json();
+    } catch (e) {
+      return;
+    }
+    const tag = selfLatestTag(Array.isArray(tags) ? tags.map((t) => t && t.name) : []);
+    if (!tag || !selfVerGreater(tag, BOT_VERSION)) return;
+
+    const res = await fetch(
+      `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
+      {
+        headers: { Accept: "application/vnd.github.raw" },
+        signal: AbortSignal.timeout(30000),
+      }
+    );
     if (!res.ok) return;
     const code = await res.text();
     const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
-    if (!m || m[1] === BOT_VERSION || !code.includes("export default {")) return;
+    if (!m || !selfVerGreater(m[1], BOT_VERSION) || !code.includes("export default {")) return;
     const base = `${CF_API}/accounts/${aid}/workers/scripts/${encodeURIComponent(wname)}`;
     const sRes = await fetch(base + "/settings", { headers: hdr(tok), signal: withTimeout() });
     const sData = await sRes.json();
