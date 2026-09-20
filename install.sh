@@ -300,22 +300,15 @@ while [ "$#" -gt 0 ]; do
 done
 if [ "${#POS[@]}" -gt 0 ]; then set -- "${POS[@]}"; else set --; fi
 
-choose_language() {
+set_language() {
   case "${LANG_SEL:-}" in
-    fa|FA|fa_ir|Fa|Persian|persian) CG_L=fa; return ;;
-    en|EN|En|English|english)       CG_L=en; return ;;
+    en|EN|En|English|english)       CG_L=en ;;
+    fa|FA|fa_ir|Fa|Persian|persian) CG_L=fa ;;
+    *)                              CG_L=fa ;;
   esac
-  if [ ! -t 0 ] || [ ! -t 1 ]; then CG_L=fa; return; fi
-  printf '\n'
-  printf "${CYAN}${BOLD}  🌐  Select language / انتخاب زبان${RST}\n\n"
-  printf "      ${GREEN}1)${RST} فارسی\n"
-  printf "      ${GREEN}2)${RST} English\n\n"
-  local a
-  read -rp "  [1/2] (1): " a
-  case "$a" in 2|en|EN|English|english) CG_L=en ;; *) CG_L=fa ;; esac
 }
 LANG_SEL="${CG_LANG:-$LANG_ARG}"
-choose_language
+set_language
 export CG_LANG="$CG_L"
 
 # ============================================================
@@ -449,24 +442,31 @@ install_cron_backup() {
   fi
 }
 
-cf_token_guide() {
-  printf '\n'
+_tk_guide_block() {
   printf "${CYAN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
   printf "${CYAN}${BOLD}  │${RST}  %s\n" "$(t tk_box)"
-  printf "${CYAN}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
-  printf "  ${BOLD}1)${RST} %s\n\n" "$(t tk_opens)"
-  printf "        %s\n\n" "$(link "$CF_TOKENS_URL")"
-  printf "  ${BOLD}2)${RST} %s\n\n" "$(t tk_create)"
-  printf "  ${BOLD}3)${RST} %s\n\n" "$(t tk_perms)"
+  printf "${CYAN}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n"
+  printf "  ${BOLD}1)${RST} %s\n" "$(t tk_opens)"
+  printf "        %s\n" "$(link "$CF_TOKENS_URL")"
+  printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
+  printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
   printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n\n"
-  printf "     %s\n\n" "$(t tk_res)"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "     %s\n" "$(t tk_res)"
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
-  printf "     ${DIM}%s %s${RST}\n\n" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
+  printf "     ${DIM}%s %s${RST}\n" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
+}
+cf_token_guide() {
+  local save="$CG_L"
+  printf '\n'
+  CG_L=fa; _tk_guide_block
   hr
+  CG_L=en; _tk_guide_block
+  hr
+  CG_L="$save"
 }
 
 # ─────────────── خطای رنگيِ دسترسی توکن کلادفلر ───────────────
