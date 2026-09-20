@@ -3,16 +3,16 @@
 # ابزار نصب/آپدیت نگهبان ابری روی کلادفلر ورکر
 # config.json کنار همین فایل باید باشد (نوشته‌شده توسط install.sh).
 # ============================================================
-import sys, os, json, uuid, urllib.request, urllib.error, urllib.parse
+import sys, os, json, time, uuid, urllib.request, urllib.error, urllib.parse
 
 API = "https://api.cloudflare.com/client/v4"
 here = os.path.dirname(os.path.abspath(__file__))
 CFG = os.path.join(here, "config.json")
 SCHEDULES = [
-    {"cron": "* * * * *"},
-    {"cron": "0 9 * * *"},
-    {"cron": "*/10 * * * *"},
-    {"cron": "*/5 * * * *"},
+    "* * * * *",
+    "0 9 * * *",
+    "*/10 * * * *",
+    "*/5 * * * *",
 ]
 
 
@@ -81,7 +81,7 @@ def ensure_kv(cfg, tok):
     if cfg.get("kv_namespace_id"):
         return cfg["kv_namespace_id"], None
     body = json.dumps({"title": f"{cfg['worker']}-kv"}).encode("utf-8")
-    st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/workers/kv/namespaces", body, "application/json")
+    st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces", body, "application/json")
     res, err = json_ok(st, out)
     if err and _kv_is_routing(err):
         found = find_existing_kv_id(tok, cfg["account_id"])
@@ -115,6 +115,20 @@ def bindings(cfg, kv_id):
     ]
 
 
+def set_schedules(cfg, tok, crons):
+    st, out = req(tok, "PUT", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}/schedules",
+                  json.dumps([{"cron": c} for c in crons]).encode("utf-8"), "application/json")
+    return json_ok(st, out)
+
+
+def enable_workers_dev(cfg, tok):
+    st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}/subdomain",
+                  json.dumps({"enabled": True, "previews_enabled": True}).encode("utf-8"), "application/json")
+    res, err = json_ok(st, out)
+    if err:
+        print(f"[!] WORKERS.DEV WARN: {err}", file=sys.stderr)
+
+
 def install(cfg, tok, code):
     kv_id, err = ensure_kv(cfg, tok)
     if err:
@@ -132,11 +146,23 @@ def install(cfg, tok, code):
     res, err = json_ok(st, out)
     if err:
         return f"SCRIPT ERR: {err}"
-    st, out = req(tok, "PUT", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}/schedules",
-                  json.dumps({"schedules": SCHEDULES}).encode("utf-8"), "application/json")
-    res, err = json_ok(st, out)
+    enable_workers_dev(cfg, tok)
+    res, err = set_schedules(cfg, tok, SCHEDULES)
+    # بلافاصله بعد از آپلود اسکریپت، این اندپوینت ممکن است موقتاً 10026 بدهد
+    for _ in range(3):
+        if not err or "10026" not in err:
+            break
+        time.sleep(2)
+        res, err = set_schedules(cfg, tok, SCHEDULES)
+    if err and "10072" in err:
+        # سقف کرون‌های پلن رایگان در کل اکانت پر شده؛ حداقل کرون‌های ضروری را نصب کن
+        for subset in (["*/10 * * * *", "*/5 * * * *"], ["*/10 * * * *"], ["*/5 * * * *"]):
+            res, err = set_schedules(cfg, tok, subset)
+            if not err:
+                print(f"[!] فقط کرون‌های ضروری نصب شدند (سقف پلن رایگان): {'، '.join(subset)}", file=sys.stderr)
+                break
     if err:
-        return f"SCHED WARN: {err}"
+        print(f"[!] SCHED WARN: {err}", file=sys.stderr)
     return None
 
 
