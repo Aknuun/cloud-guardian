@@ -280,6 +280,8 @@ t() {
     en:menu_invalid)           printf '%s' "Invalid option." ;;
     fa:menu_back)              printf '%s' "برای بازگشت به منو Enter بزن…" ;;
     en:menu_back)              printf '%s' "Press Enter to return to the menu…" ;;
+    fa:offer_install)          printf '%s' "می‌خواهی الان نصب کامل انجام شود؟ [y/N] " ;;
+    en:offer_install)          printf '%s' "Start a full install now? [y/N] " ;;
     *)                         printf '%s' "$1" ;;
   esac
 }
@@ -611,7 +613,7 @@ do_update() {
   printf "\n${MAG}${BOLD}🔄 %s${RST}\n" "$(t upd_title)"; hr
   need_tools
   load_cfg
-  [ -f "$CFG" ] || { err "$(t e_config_missing)"; exit 1; }
+  need_config_or_install || return 0
   [ -n "$CFG_TOKEN" ] || { err "$(t e_token_missing)"; exit 1; }
   mkdir -p "$DIR"; chmod 700 "$DIR" 2>/dev/null || true
   b "$(t upd_download)"
@@ -707,10 +709,21 @@ ensure_tool_only() {
     mkdir -p "$DIR"; chmod 700 "$DIR" 2>/dev/null || true
     gh_raw "$REPO" "deploy-tool.py" > "$DIR/deploy-tool.py"; chmod +x "$DIR/deploy-tool.py"
   fi
-  [ -f "$CFG" ] || { err "$(t e_config_missing)"; exit 1; }
+  return 0
 }
-do_status() { printf "\n${MAG}${BOLD}📊 %s${RST}\n" "$(t st_title)"; hr; ensure_tool_only; ( cd "$DIR" && python3 deploy-tool.py status ); printf '\n'; }
-do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; ( cd "$DIR" && python3 deploy-tool.py check ); printf '\n'; }
+# اگر config نیست، به‌جای خطا، نصب کامل را پیشنهاد بده
+need_config_or_install() {
+  if [ -f "$CFG" ]; then return 0; fi
+  warn "$(t e_config_missing)"
+  if [ -t 0 ]; then
+    local a; read -rp "  $(t offer_install)" a
+    if [[ "${a,,}" == "y" ]]; then do_install; else return 1; fi
+  else
+    return 1
+  fi
+}
+do_status() { printf "\n${MAG}${BOLD}📊 %s${RST}\n" "$(t st_title)"; hr; ensure_tool_only; need_config_or_install || return 0; ( cd "$DIR" && python3 deploy-tool.py status ); printf '\n'; }
+do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; need_config_or_install || return 0; ( cd "$DIR" && python3 deploy-tool.py check ); printf '\n'; }
 
 usage() {
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t usage_title)"; hr
