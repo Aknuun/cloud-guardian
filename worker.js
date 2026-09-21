@@ -4790,7 +4790,7 @@ async function renderServersHome(edit, kv, env) {
   const srvBtns = list.map((s, i) => ({ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }));
   for (let i = 0; i < srvBtns.length; i += 2) kb.push(srvBtns.slice(i, i + 2));
   kb.push([
-    { text: "➕ افزودن گروهی", callback_data: "srvaddbulk" },
+    { text: "📥 افزودن گروهی", callback_data: "srvaddbulk" },
     { text: "➕ افزودن سرور", callback_data: "srvadd" },
   ]);
   if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
@@ -4819,7 +4819,7 @@ async function renderSrvDetail(edit, kv, env, idx) {
     [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
-    [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}` }],
+    [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}`, style: "danger" }],
     [{ text: "🔙 سرورها", callback_data: "srv" }],
   ];
   await edit(lines.join("\n"), kb);
@@ -9441,7 +9441,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // افزودن گروهی سرورها: هر سرور یک خط آی‌پی/هاست و خط بعدی‌اش رمز
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_bulk" }), { expirationTtl: 1200 });
       await edit(
-        "➕ افزودن گروهی سرورها\n\n" +
+        "📥 افزودن گروهی سرورها\n\n" +
           "آی‌پی/هاست هر سرور را در یک خط و رمز آن را در خط بعدی بفرستید؛ هر تعداد که خواستی:\n\n" +
           code("1.2.3.4\nرمزِسرور\n5.6.7.8:2222\nرمزِسرور۲") +
           "\n\n• پورت غیرپیش‌فرض را با : بنویسید.\n• نام هر سرور خودکار همان آی‌پی و کاربر root است.\n• سرورهای تکراری نادیده گرفته می‌شوند.",
