@@ -970,16 +970,7 @@ async function processUpdate(payload, env, botToken, adminId) {
         await send("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
       }
     } else if (cmd === "/mons") {
-      await send("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", [
-        [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
-        [
-          { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
-          { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" },
-        ],
-        [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
-        [{ text: "⏰ یادآور", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
-        [{ text: "🏠 خانه", callback_data: "menu" }],
-      ]);
+      await send("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", monsKeyboard());
     } else if (cmd === "/providers") {
       await send("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
         [
@@ -1078,6 +1069,24 @@ function mainMenuKeyboard() {
   ];
 }
 
+// کیبورد مشترک منوی مانیتورها (دکمهٔ mons و دستور /mons) — یک‌جا و هماهنگ نگه داشته می‌شود
+function monsKeyboard() {
+  return [
+    [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
+    [
+      { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
+      { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" },
+    ],
+    [
+      { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
+      { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" },
+    ],
+    [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
+    [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
+  ];
+}
+
 // دکمه‌های صفحهٔ اصلی به‌صورت دستورات تلگرام (منوی ☰) — از همه‌جای ربات در دسترس
 const BOT_COMMANDS = [
   { command: "menu", description: "🏠 خانه" },
@@ -1161,7 +1170,7 @@ const HELP_GUIDE = {
   mons:
     "🖥 مانیتورها\n\n" +
     "• 🧭 تعویض خودکار ساب فیلتر: دامنه‌های هاست‌های پاسارگارد را دوره‌ای از داخل ایران بررسی می‌کند؛ اگر فیلتر شده بود دامنهٔ شماره‌دار جدید می‌سازد و خودکار جایگزین می‌کند.\n" +
-    "• 🖥 مانیتور نود پاسارگارد: هشدار قطع/وصل شدن نودهای پنل (به‌صورت رویدادی/وبهوک) + همگام‌سازی دستی.\n" +
+    "• 📡 مانیتور نود پاسارگارد: هشدار قطع/وصل شدن نودهای پنل (به‌صورت رویدادی/وبهوک) + همگام‌سازی دستی.\n" +
     "• 🔐 مانیتور SSL: هشدار نزدیک‌شدن به انقضای گواهی دامنه‌های تحت نظارت.\n" +
     "• 🗓 مانیتور انقضای دامنه: استعلام دامنه‌های .ir از whois.nic.ir و بقیه از RDAP؛ همهٔ دامنه‌های اکانت‌ها را یک‌جا اضافه کن و باقی‌مانده (سال/ماه/روز) را ببین.\n" +
     "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.",
@@ -5206,7 +5215,7 @@ async function srvFinishNodeInstall(kv, env, s, baseTxt) {
   }
   const panels = await getPanels(kv);
   if (!panels.length) {
-    return { txt: baseTxt + "\n\nℹ️ برای افزودن خودکار نود به پنل، ابتدا از «🖥 مانیتور نود پاسارگارد» یک پنل ثبت کن.", addKb: [] };
+    return { txt: baseTxt + "\n\nℹ️ برای افزودن خودکار نود به پنل، ابتدا از «📡 مانیتور نود پاسارگارد» یک پنل ثبت کن.", addKb: [] };
   }
   const tok = makeToken() + makeToken();
   await kv.put(`ndadd:${tok}`, JSON.stringify({ info, srvIdx: s._idx, srvName: s.name }), { expirationTtl: 3600 });
@@ -5858,7 +5867,7 @@ async function ensureNodeMonitorForPanel(kv, panel, sync = true) {
 async function renderNodeHome(edit, kv) {
   const panels = await getPanels(kv);
   const monitors = await getNodeMonitors(kv);
-  const lines = ["🖥 مانیتور نود پاسارگارد\n"];
+  const lines = ["📡 مانیتور نود پاسارگارد\n"];
   lines.push(
     "توضیح: هر پنل پاسارگاردی را ثبت کن و برایش «مانیتور نود» بساز؛ سپس همین‌جا وضعیت همهٔ نودها را مستقیم می‌بینی. اگر نودی قطع یا دوباره وصل شود، فوری به همهٔ ادمین‌ها خبر داده می‌شود.\n" +
       "پایش خودکار با فاصلهٔ قابل تنظیم (⏱) انجام می‌شود و با وبهوک هم کاملاً رویدادمحور است. نودهای دلخواه را می‌توانی «استثنا» کنی تا هشدار نگیرند.\n"
@@ -5973,7 +5982,7 @@ function nodeButtonRows(mi, m, st) {
 
 async function renderPanelDetail(panels, monitors, idx, edit, kv) {
   const p = panels[idx];
-  if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+  if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
   const m = monitors.find((x) => x.panel_id === p.id);
   const lines = ["🖥 پنل «" + escHtml(p.name) + "»"];
   lines.push("🌐 " + code(p.url));
@@ -7639,7 +7648,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     await saveNodeMonitors(kv, monitors);
     await kv.delete(`pend:${chatId}`);
     await send(`✅ فاصلهٔ پایش نودها برای «${m.name || ""}» به ${val} دقیقه تغییر کرد.\n\n⚠️ هرچه این بازه کوتاه‌تر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود. اگر ممکن است بازهٔ بزرگ‌تری انتخاب کن.`, [
-      [{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }],
+      [{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }],
     ]);
     return;
   }
@@ -9329,7 +9338,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const i = Number(data.slice(5));
       const panels = await getPanels(kv);
       const p = panels[i];
-      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       await edit(`⚠️ پنل «${escHtml(p.name)}» حذف شود؟ (مانیتور نودِ متصل به آن هم حذف می‌شود)`, [
         [{ text: "✅ بله", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
       ]);
@@ -9337,7 +9346,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const i = Number(data.slice(6));
       const panels = await getPanels(kv);
       const p = panels[i];
-      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       panels.splice(i, 1);
       await savePanels(kv, panels);
       const monitors = await getNodeMonitors(kv);
@@ -9354,20 +9363,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // sslm = مانیتور انقضای گواهی SSL
       // rem = یادآورها
       // um = مانیتور مصرف پاسارگارد (کشف کاربران پرمصرف)
-      await edit("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", [
-        [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
-        [
-          { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
-          { text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" },
-        ],
-        [
-          { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
-          { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" },
-        ],
-        [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
-        [{ text: "⏰ یادآور", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
-        [{ text: "🏠 خانه", callback_data: "menu" }],
-      ]);
+      await edit("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", monsKeyboard());
     } else if (data === "quota") {
       await renderQuotaMenu(edit, kv, env);
     } else if (data === "qtgauto") {
@@ -9822,7 +9818,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "nda") {
       const monitors = await getNodeMonitors(kv);
       const panels = await getPanels(kv);
-      if (!panels.length) return edit("📭 ابتدا از «🎛 تعریف پنل پاسارگارد» یک پنل پاسارگارد اضافه کنید.", [[{ text: "🖥 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
+      if (!panels.length) return edit("📭 ابتدا از «🎛 تعریف پنل پاسارگارد» یک پنل پاسارگارد اضافه کنید.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       const avail = panels.filter((p) => !monitors.some((mo) => mo.panel_id === p.id));
       if (!avail.length) return edit("✅ برای همه پنل‌های ثبت‌شده، مانیتور نود ساخته شده.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
       const kb = avail.map((p) => [{ text: `🖥 ${p.name}`, callback_data: `nda:${p.id}` }]);
