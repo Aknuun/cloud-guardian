@@ -9475,21 +9475,33 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         [{ text: "📊 ترافیک", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
       ]);
     } else if (data.startsWith("noproxy:")) {
-      // رکوردهای خاموش (A/AAAA/CNAME بدون پروکسی) با تیک آماده وارد حالت گروهی می‌شوند
+      // خاموش (بدون پروکسی) بودن برای ساب پنل عادی است؛ فقط خاموشِ بدون ترافیک تیک می‌خورد
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
-      const off = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !r.proxied).map((r) => r.id);
+      const off = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !r.proxied);
       if (!off.length) {
         return edit("✅ همهٔ رکوردهای این دامنه پروکسی (ابری) دارن؛ چیزی خاموش نیست.", [
           [{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
         ]);
       }
-      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids: off, page: 0 }), { expirationTtl: 3600 });
-      await renderRecords(zone, records, token, 0, edit, off, session.zback || "zones");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.");
+      const t = await fetchTrafficCounts(tok, session.zone_id);
+      if (t.needPerm) {
+        return edit(`🛰 ${off.length} رکورد خاموش هست ولی بدون آمار ترافیک نمی‌شود فهمید کدام در حال استفاده است.\nبه توکن این را اضافه کن:\n${code("Zone → Analytics → Read")}`, [
+          [{ text: "📊 ترافیک ساب‌ها", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
+        ]);
+      }
+      if (t.error) {
+        return edit("❌ خطا در آمار:\n" + t.error, [[{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }]]);
+      }
+      const ids = off.filter((r) => !(t.counts[String(r.name || "").toLowerCase()] || 0)).map((r) => r.id);
+      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids, page: 0 }), { expirationTtl: 3600 });
+      await renderRecords(zone, records, token, 0, edit, ids, session.zback || "zones");
     } else if (data.startsWith("selmode:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
