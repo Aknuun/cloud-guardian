@@ -6437,6 +6437,10 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
       { text: "➕ افزودن", callback_data: `addz:${token}` },
       { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
     ]);
+    // noproxy: رکوردهای بدون پروکسی (خاموش) با تیک آمادهٔ حذف گروهی
+    if (records.length) {
+      keyboard.push([{ text: "🛰 رکوردهای خاموش (بدون Proxy)", callback_data: `noproxy:${token}`, style: "success" }]);
+    }
   }
 
   // selp/p: صفحه‌بندی لیست (در حالت انتخاب گروهی از selp و در حالت عادی از p استفاده می‌شود)
@@ -6456,6 +6460,121 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
     ? `🗂 ${zone.name} — ${selSet.size} انتخاب شده`
     : `📋 ${zone.name}` + (pages > 1 ? ` — صفحه ${page + 1} از ${pages}` : "");
   await send(title, keyboard);
+}
+
+// ===================== ایمیل (Email Routing کلادفلر: آدرس شخصی + فوروارد) =====================
+// فوروارد است نه صندوق پستی؛ مقصدها در سطح اکانت‌اند و باید verify شده باشند.
+async function cfEmailGet(tok, path) {
+  const res = await fetch(`${CF_API}${path}`, { headers: hdr(tok), signal: withTimeout() });
+  return res.json();
+}
+async function cfEmailSend(tok, method, path, body) {
+  const res = await fetch(`${CF_API}${path}`, {
+    method,
+    headers: hdr(tok),
+    body: body ? JSON.stringify(body) : undefined,
+    signal: withTimeout(),
+  });
+  return res.json();
+}
+function isEmailLike(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
+}
+async function cfMailDests(accounts, session) {
+  const aid = await getAccountId(accounts, session.acc);
+  if (!aid) return { error: "شناسه اکانت پیدا نشد." };
+  const tok = accounts[session.acc] && accounts[session.acc].token;
+  if (!tok) return { error: "اکانت پیدا نشد." };
+  try {
+    const d = await cfEmailGet(tok, `/accounts/${aid}/email/routing/addresses`);
+    if (!d.success) return { error: cfErrText(d) };
+    return { aid, list: Array.isArray(d.result) ? d.result : [] };
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 150) };
+  }
+}
+
+async function renderEmailHome(edit, kv, accounts, token) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const tok = accounts[session.acc] && accounts[session.acc].token;
+  if (!tok) return edit("❌ اکانت پیدا نشد.");
+  let st = null;
+  try {
+    const s = await cfEmailGet(tok, `/zones/${session.zone_id}/email/routing`);
+    if (s.success && s.result) st = s.result;
+  } catch (e) {}
+  if (!st) {
+    return edit(
+      `✉️ ایمیل ${session.zone_name}\n\n❌ دسترسی به Email Routing نیست.\nبه توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}`,
+      [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]]
+    );
+  }
+  const enabled = !!st.enabled;
+  const lines = [`✉️ ایمیل ${session.zone_name}`, "", `وضعیت: ${enabled ? "✅ فعال" : "⏸ غیرفعال"}` + (st.status ? ` (${st.status})` : "")];
+  const kb = [];
+  if (!enabled) {
+    lines.push("", "با فعال‌سازی، رکوردهای MX/SPF لازم خودکار ساخته می‌شوند.");
+    kb.push([{ text: "✉️ فعال‌سازی ایمیل", callback_data: `zmailon:${token}`, style: "success" }]);
+  } else {
+    let rules = [];
+    let catchAll = null;
+    try {
+      const r = await cfEmailGet(tok, `/zones/${session.zone_id}/email/routing/rules`);
+      if (r.success && Array.isArray(r.result)) rules = r.result;
+    } catch (e) {}
+    try {
+      const c = await cfEmailGet(tok, `/zones/${session.zone_id}/email/routing/rules/catch_all`);
+      if (c.success && c.result) catchAll = c.result;
+    } catch (e) {}
+    const customs = rules.filter((r) => !(r.matchers || []).some((mm) => mm.type === "all"));
+    lines.push("", `📧 ${customs.length} آدرس شخصی (فوروارد؛ صندوق نیست):`);
+    for (const r of customs.slice(0, 12)) {
+      const m = (r.matchers || []).find((mm) => mm.type === "literal");
+      const a = (r.actions || [])[0] || {};
+      lines.push(`• ${(m && m.value) || r.name || "?"} → ${((a.value || []).join(",")) || a.type || "؟"}`);
+      kb.push([{ text: `🗑 ${((m && m.value) || r.name || r.id || "").slice(0, 32)}`, callback_data: `zmaildel:${token}:${r.id}` }]);
+    }
+    if (customs.length > 12) lines.push(`… و ${customs.length - 12} مورد دیگر`);
+    const ca = catchAll && (catchAll.actions || [])[0];
+    lines.push("", `📥 catch-all: ${catchAll ? (catchAll.enabled ? "✅ " + (((ca || {}).value || []).join(",") || (ca || {}).type) : "⏸ غیرفعال") : "—"}`);
+    kb.push([{ text: "➕ آدرس جدید", callback_data: `zmailadd:${token}`, style: "success" }]);
+    kb.push([
+      { text: "📥 catch-all", callback_data: `zmailcatch:${token}` },
+      { text: "📧 مقصدها", callback_data: `zmaildests:${token}` },
+    ]);
+  }
+  kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]);
+  await edit(lines.join("\n"), kb);
+}
+
+// انتخاب‌گر مقصد برای ساخت قانون (forCatch=false) یا catch-all (forCatch=true)
+async function renderMailDestPicker(edit, kv, accounts, token, forCatch, chatId) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const dd = await cfMailDests(accounts, session);
+  if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+  const verified = dd.list.filter((x) => x.verified);
+  const pending = dd.list.filter((x) => !x.verified);
+  let addrInfo = null;
+  if (!forCatch && chatId) {
+    try {
+      addrInfo = await kv.get(`zmailaddr:${chatId}`, "json");
+    } catch (e) {}
+  }
+  const lines = [forCatch ? `📥 مقصد catch-all در ${session.zone_name}:` : `📧 فوروارد ${addrInfo && addrInfo.addr ? code(addrInfo.addr) : ""} به کدام مقصد؟`, ""];
+  const kb = [];
+  verified.slice(0, 10).forEach((d, i) => {
+    kb.push([{ text: `✅ ${d.email}`, callback_data: forCatch ? `zmailcset:${token}:${i}` : `zmaildest:${token}:${i}` }]);
+  });
+  if (pending.length) {
+    lines.push(`⏳ در انتظار تأیید (${pending.length}): ${pending.slice(0, 3).map((d) => d.email).join("، ")}${pending.length > 3 ? "…" : ""}`);
+    lines.push("روی لینک داخل ایمیل تأیید کلیک کن، بعد برگرد.");
+  }
+  if (!verified.length) lines.push("هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.");
+  kb.push([{ text: "➕ مقصد جدید", callback_data: forCatch ? `zmailcnew:${token}` : `zmaildestnew:${token}` }]);
+  kb.push([{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]);
+  await edit(lines.join("\n"), kb);
 }
 
 async function renderSettingsGroup(token, session, accounts, edit, title, keys) {
@@ -8388,6 +8507,87 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  if (type === "mail_rule_addr") {
+    await kv.delete(`pend:${chatId}`);
+    const session = await kv.get(`s:${pending.token}`, "json");
+    if (!session) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    let addr = txt.toLowerCase();
+    if (!addr.includes("@")) addr = addr + "@" + session.zone_name;
+    if (!isEmailLike(addr)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ آدرس معتبر نیست. دوباره بفرستید (مثلاً info):");
+      return;
+    }
+    await kv.put(`zmailaddr:${chatId}`, JSON.stringify({ addr }), { expirationTtl: 900 });
+    await renderMailDestPicker(send, kv, accounts, pending.token, false, chatId);
+    return;
+  }
+
+  if (type === "mail_dest_new" || type === "mail_dest_new2") {
+    await kv.delete(`pend:${chatId}`);
+    const email = txt.trim().toLowerCase();
+    const session = await kv.get(`s:${pending.token}`, "json");
+    if (!session) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    if (!isEmailLike(email)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ ایمیل معتبر نیست. دوباره بفرستید:");
+      return;
+    }
+    const dd0 = await cfMailDests(accounts, session);
+    if (dd0.error) {
+      await send("❌ " + dd0.error);
+      return;
+    }
+    const tok = accounts[session.acc].token;
+    let created = null;
+    try {
+      const r = await cfEmailSend(tok, "POST", `/accounts/${dd0.aid}/email/routing/addresses`, { email });
+      if (r.success && r.result) created = r.result;
+      else {
+        await send("❌ خطا:\n" + cfErrText(r));
+        return;
+      }
+    } catch (e) {
+      await send("❌ خطا در ساخت مقصد.");
+      return;
+    }
+    if (type === "mail_dest_new2") {
+      await send(`✅ مقصد اضافه شد: ${code(email)}\n\nوضعیت: ${created.verified ? "✅ تأییدشده" : "⏳ در انتظار تأیید — روی لینک داخل ایمیل کلیک کن."}`, [
+        [{ text: "📧 مقصدها", callback_data: `zmaildests:${pending.token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
+      ]);
+      return;
+    }
+    // در جریان ساخت قانون: اگر مقصد از قبل تأییدشده است، مستقیم قانون را بساز
+    if (created.verified) {
+      const addrInfo = await kv.get(`zmailaddr:${chatId}`, "json");
+      if (addrInfo && addrInfo.addr) {
+        try {
+          const r = await cfEmailSend(tok, "POST", `/zones/${session.zone_id}/email/routing/rules`, {
+            name: addrInfo.addr.split("@")[0].slice(0, 60),
+            enabled: true,
+            matchers: [{ type: "literal", field: "to", value: addrInfo.addr }],
+            actions: [{ type: "forward", value: [email] }],
+          });
+          await kv.delete(`zmailaddr:${chatId}`);
+          await send(r.success ? `✅ ساخته شد:\n${code(addrInfo.addr)} → ${code(email)}` : "❌ خطا:\n" + cfErrText(r), [
+            [{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
+          ]);
+          return;
+        } catch (e) {}
+      }
+    }
+    await send(`✅ مقصد اضافه شد: ${code(email)}\n\n⏳ روی لینک تأیید داخل ایمیل کلیک کن، بعد برگرد و مقصد را انتخاب کن.`, [
+      [{ text: "📧 انتخاب مقصد", callback_data: `zmailpickback:${pending.token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
+    ]);
+    return;
+  }
+
   // fallback: حالت‌هایی که دکمه می‌خواهند (نه متن) — متن را بی‌صدا قورت نده
   await send("ℹ️ برای این مرحله از دکمه‌ها استفاده کنید (متن پذیرفته نیست).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
 }
@@ -8775,6 +8975,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           { text: "ℹ️ جزئیات دامنه", callback_data: `zd:${token}` },
           { text: "🧹 پاکسازی کامل کش", callback_data: `zpurge:${token}` },
           { text: "🚧 حالت توسعه", callback_data: `zdev:${token}` },
+          { text: "✉️ ایمیل (فوروارد)", callback_data: `zmail:${token}` },
           { text: zone.status === "active" ? "⏸️ توقف دامنه" : "▶️ فعال‌سازی دامنه", callback_data: `zpause:${token}` },
         ]),
         [{ text: "⬅️ بازگشت", callback_data: `rback:${token}` }],
@@ -8900,6 +9101,167 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       } else {
         await edit("❌ خطا:\n" + cfErrText(d));
       }
+    } else if (data.startsWith("zmail:")) {
+      // خانهٔ ایمیل دامنه (Email Routing: آدرس شخصی + فوروارد، نه صندوق)
+      await renderEmailHome(edit, kv, accounts, data.slice(6));
+    } else if (data.startsWith("zmailon:")) {
+      const token = data.slice(8);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await edit(
+        `✉️ ایمیل روی ${session.zone_name} فعال شود؟\n\nرکوردهای MX/SPF لازم خودکار ساخته می‌شوند.\n⚠️ اگر الان سرویس ایمیل دیگری (مثل گوگل) روی این دامنه داری، خراب می‌شود.`,
+        [
+          [{ text: "✅ بله، فعال کن", callback_data: `zmailony:${token}` }, { text: "❌ انصراف", callback_data: `zmail:${token}` }],
+        ]
+      );
+    } else if (data.startsWith("zmailony:")) {
+      const token = data.slice(9);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      let msg = "";
+      try {
+        const r = await cfEmailSend(tok, "POST", `/zones/${session.zone_id}/email/routing/enable`, {});
+        msg = r.success ? "✅ ایمیل فعال شد." : "❌ خطا:\n" + cfErrText(r);
+      } catch (e) {
+        msg = "❌ خطا در فعال‌سازی.";
+      }
+      await edit(msg, [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      if (msg.startsWith("✅")) {
+        await sleep(1500);
+        await renderEmailHome(edit, kv, accounts, token);
+      }
+    } else if (data.startsWith("zmailadd:")) {
+      const token = data.slice(9);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_rule_addr", token }), { expirationTtl: 600 });
+      await edit(`✉️ آدرس جدید در ${session.zone_name} را بفرستید (مثلاً info یا info@damane.com):`, [
+        [{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }],
+      ]);
+    } else if (data.startsWith("zmaildest:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const di = Number(parts[2]);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const addrInfo = await kv.get(`zmailaddr:${chatId}`, "json");
+      if (!addrInfo || !addrInfo.addr) return edit("⏳ آدرس انتخاب نشده. از اول تلاش کن.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      const dd = await cfMailDests(accounts, session);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+      const verified = dd.list.filter((x) => x.verified);
+      const dest = verified[di];
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+      const tok = accounts[session.acc].token;
+      let msg = "";
+      try {
+        const r = await cfEmailSend(tok, "POST", `/zones/${session.zone_id}/email/routing/rules`, {
+          name: addrInfo.addr.split("@")[0].slice(0, 60),
+          enabled: true,
+          matchers: [{ type: "literal", field: "to", value: addrInfo.addr }],
+          actions: [{ type: "forward", value: [dest.email] }],
+        });
+        msg = r.success ? `✅ ساخته شد:\n${code(addrInfo.addr)} → ${code(dest.email)}` : "❌ خطا:\n" + cfErrText(r);
+      } catch (e) {
+        msg = "❌ خطا در ساخت قانون.";
+      }
+      await kv.delete(`zmailaddr:${chatId}`);
+      await edit(msg, [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+    } else if (data.startsWith("zmaildestnew:")) {
+      const token = data.slice(13);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_dest_new", token }), { expirationTtl: 600 });
+      await edit("📧 ایمیل مقصد (مثلاً جیمیل خودت) را بفرست؛ لینک تأیید به همان ایمیل می‌رود:", [
+        [{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }],
+      ]);
+    } else if (data.startsWith("zmaildests:")) {
+      const token = data.slice(11);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const dd = await cfMailDests(accounts, session);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+      const lines = [`📧 مقصدهای اکانت (${dd.list.length}):`, ""];
+      for (const d of dd.list.slice(0, 15)) lines.push(`• ${d.email} — ${d.verified ? "✅ تأییدشده" : "⏳ در انتظار تأیید"}`);
+      if (dd.list.length > 15) lines.push(`… و ${dd.list.length - 15} مورد دیگر`);
+      await edit(lines.join("\n"), [
+        [{ text: "➕ مقصد جدید", callback_data: `zmaildestnew2:${token}` }],
+        [{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }],
+      ]);
+    } else if (data.startsWith("zmaildel:")) {
+      const m = data.match(/^zmaildel:([^:]+):(.+)$/);
+      if (!m) return edit("❌ درخواست نامعتبر است.");
+      await edit(`🗑 این قانون ایمیل حذف شود؟`, [
+        [{ text: "✅ بله، حذف کن", callback_data: `zmaildely:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `zmail:${m[1]}` }],
+      ]);
+    } else if (data.startsWith("zmaildely:")) {
+      const m = data.match(/^zmaildely:([^:]+):(.+)$/);
+      if (!m) return edit("❌ درخواست نامعتبر است.");
+      const session = await kv.get(`s:${m[1]}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      try {
+        const r = await cfEmailSend(tok, "DELETE", `/zones/${session.zone_id}/email/routing/rules/${m[2]}`, null);
+        await edit(r.success ? "✅ قانون حذف شد." : "❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${m[1]}` }]]);
+      } catch (e) {
+        await edit("❌ خطا در حذف.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${m[1]}` }]]);
+      }
+    } else if (data.startsWith("zmailcatch:")) {
+      const token = data.slice(11);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      let ca = null;
+      try {
+        const c = await cfEmailGet(tok, `/zones/${session.zone_id}/email/routing/rules/catch_all`);
+        if (c.success && c.result) ca = c.result;
+      } catch (e) {}
+      const act = ca && (ca.actions || [])[0];
+      await edit(`📥 catch-all در ${session.zone_name} (ایمیل‌هایی که قانون ندارند):\n\nوضعیت: ${ca ? (ca.enabled ? "✅ فعال → " + (((act || {}).value || []).join(",") || act.type) : "⏸ غیرفعال") : "—"}`, [
+        [{ text: "📩 فوروارد به مقصد", callback_data: `zmailcpick:${token}` }],
+        [{ text: "⏸ غیرفعال", callback_data: `zmailcoff:${token}` }, { text: "🔙 ایمیل", callback_data: `zmail:${token}` }],
+      ]);
+    } else if (data.startsWith("zmailcpick:")) {
+      await renderMailDestPicker(edit, kv, accounts, data.slice(11), true, chatId);
+    } else if (data.startsWith("zmailpickback:")) {
+      await renderMailDestPicker(edit, kv, accounts, data.slice(14), false, chatId);
+    } else if (data.startsWith("zmailcset:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const di = Number(parts[2]);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const dd = await cfMailDests(accounts, session);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+      const dest = dd.list.filter((x) => x.verified)[di];
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]]);
+      const tok = accounts[session.acc].token;
+      try {
+        const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, {
+          enabled: true,
+          actions: [{ type: "forward", value: [dest.email] }],
+        });
+        await edit(r.success ? `✅ catch-all به ${code(dest.email)} فوروارد می‌شود.` : "❌ خطا:\n" + cfErrText(r), [
+          [{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }],
+        ]);
+      } catch (e) {
+        await edit("❌ خطا.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      }
+    } else if (data.startsWith("zmailcoff:")) {
+      const token = data.slice(11);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      try {
+        const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, { enabled: false });
+        await edit(r.success ? "✅ catch-all غیرفعال شد." : "❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      } catch (e) {
+        await edit("❌ خطا.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      }
+    } else if (data.startsWith("zmailcnew:")) {
+      const token = data.slice(10);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_dest_new2", token }), { expirationTtl: 600 });
+      await edit("📧 ایمیل مقصد را بفرست؛ لینک تأیید به همان ایمیل می‌رود:", [
+        [{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }],
+      ]);
     } else if (data.startsWith("zpause:")) {
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
@@ -8962,6 +9324,22 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
       await renderRecords(zone, records, token, rpage, edit, undefined, session.zback);
+    } else if (data.startsWith("noproxy:")) {
+      // رکوردهای خاموش (A/AAAA/CNAME بدون پروکسی) با تیک آماده وارد حالت گروهی می‌شوند
+      const token = data.slice(8);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const records = await getRecords(zone, accounts, kv);
+      const off = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !r.proxied).map((r) => r.id);
+      if (!off.length) {
+        return edit("✅ همهٔ رکوردهای این دامنه پروکسی (ابری) دارن؛ چیزی خاموش نیست.", [
+          [{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
+        ]);
+      }
+      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids: off, page: 0 }), { expirationTtl: 3600 });
+      await renderRecords(zone, records, token, 0, edit, off, session.zback || "zones");
     } else if (data.startsWith("selmode:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
