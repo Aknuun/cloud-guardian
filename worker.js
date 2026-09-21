@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.8";
+const BOT_VERSION = "1.3.9";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.9": [
+    "📊 تله‌متری ناشناس: شمارش نصب‌های فعال فقط در تنظیمات ربات اصلی (بدون هیچ دیتای شخصی)",
+    "📢 ارسال پیام همگانی از تنظیمات ربات اصلی: با دکمه پاسخ/تایید برای ادمین‌ها",
+  ],
   "1.3.8": [
     "✉️ «ایمیل‌ها» شد «ایمیل سازمانی»",
     "📢 پیام همگانی سازنده: پیام‌های مهم سازنده به همه ادمین‌ها می‌رسد؛ با «↩️ پاسخ» می‌توانی جواب بدهی یا «✅ تایید» بزنی",
@@ -511,6 +515,31 @@ const RELEASE_NOTES = {
 const CREATOR_CONTACT_URL = "https://cloud-guardian.yaram169.workers.dev/contact";
 const CREATOR_CONTACT_KEY = "cg-creator-9f3a7c1b2e64d8a0";
 
+// 📊 تله‌متری و پیام همگانی — هاب = ربات اصلی سازنده.
+// نصب‌های مشتری روزی یک پینگ ناشناس (آیدی تصادفی + نسخه، بدون هیچ دیتای شخصی)
+// به هاب می‌فرستند؛ آمار فقط در تنظیمات همین ربات اصلی دیده می‌شود.
+const HUB_BASE = "https://cloud-guardian.yaram169.workers.dev";
+const HUB_TELEMETRY_URL = HUB_BASE + "/telemetry";
+const HUB_ANNOUNCE_URL = HUB_BASE + "/announcements";
+const MAKER_BOT_USERNAME = "CloudGardianBot";
+const TM_MIN_MS = 24 * 3600000;
+async function isHubWorker(env, botToken, kv) {
+  try {
+    const c = kv ? await kv.get("hub_self", "json") : null;
+    if (c && c.u && Date.now() - (c.t || 0) < 24 * 3600000) return c.u === MAKER_BOT_USERNAME;
+  } catch (e) {}
+  try {
+    const me = await (await fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: withTimeout() })).json();
+    const u = (me && me.result && me.result.username) || "";
+    try {
+      if (kv) await kv.put("hub_self", JSON.stringify({ u, t: Date.now() }), { expirationTtl: 2 * 86400 });
+    } catch (e) {}
+    return u === MAKER_BOT_USERNAME;
+  } catch (e) {
+    return false;
+  }
+}
+
 // فقط مقصدهای امن (https، میزبان عمومی واقعی) برای پاسخ سازنده پذیرفته می‌شود
 function safeReplyUrl(u) {
   const s = String(u || "").trim();
@@ -794,6 +823,36 @@ export default {
       return ok();
     }
 
+    // 📊 تله‌متری ناشناس: پینگ روزانهٔ نصب‌ها (آیدی تصادفی + نسخه؛ بدون دیتای شخصی)
+    if (request.method === "POST" && url.pathname === "/telemetry") {
+      let b = {};
+      try {
+        b = await request.json();
+      } catch (e) {}
+      const iid = String((b && b.install_id) || "").slice(0, 64);
+      if (/^[A-Za-z0-9_-]{8,64}$/.test(iid)) {
+        try {
+          await kv.put(
+            `tm:${iid}`,
+            JSON.stringify({ v: String(b.version || "").slice(0, 20), ts: Date.now(), ev: String(b.event || "").slice(0, 20) }),
+            { expirationTtl: 45 * 86400 }
+          );
+        } catch (e) {}
+      }
+      return ok();
+    }
+
+    // 📢 فید پیام‌های همگانی هاب (برای همه نصب‌ها؛ fallback فایل گیت‌هاب است)
+    if (request.method === "GET" && url.pathname === "/announcements") {
+      let arr = [];
+      try {
+        arr = (await kv.get("hub_ann", "json")) || [];
+      } catch (e) {}
+      return new Response(JSON.stringify(Array.isArray(arr) ? arr : []), {
+        headers: { "content-type": "application/json; charset=utf-8" },
+      });
+    }
+
     // لینک‌های بدون وب‌هوک: روشن‌کردن فوری ربات و خاموش‌کردن موقت کرون‌جاب‌ها
     if (request.method === "GET" && (url.pathname === "/qresume" || url.pathname === "/qcron")) {
       const token = await getQuotaToken(kv);
@@ -882,6 +941,10 @@ export default {
           if (!cs.ann || now - cs.ann >= ANN_MIN_MS) {
             patch.ann = now;
             jobs.push(runAnnFetch(env, botToken).catch((e) => console.error("ANN", String(e))));
+          }
+          if (!cs.tm || now - cs.tm >= TM_MIN_MS) {
+            patch.tm = now;
+            jobs.push(runTelemetryPing(env).catch((e) => console.error("TM", String(e))));
           }
           jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
           jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
@@ -1427,6 +1490,19 @@ function settingsHomeKb() {
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
+// نسخهٔ هاب (فقط ربات اصلی): ردیف آمار نصب‌ها + پیام همگانی اضافه می‌شود
+async function settingsHomeKbFor(env, botToken, kv) {
+  const kb = settingsHomeKb();
+  try {
+    if (await isHubWorker(env, botToken, kv)) {
+      kb.splice(kb.length - 1, 0, [
+        { text: "📊 آمار نصب‌ها", callback_data: "hubstats" },
+        { text: "📢 پیام همگانی", callback_data: "hubann", style: "success" },
+      ]);
+    }
+  } catch (e) {}
+  return kb;
+}
 
 function parseAccounts(env) {
   const raw = env.CF_ACCOUNTS || "[]";
@@ -1506,20 +1582,54 @@ async function getPromo(kv, env) {
 // قالب announcements.json: [{"id":"msg-01","text":"...","until":"2026-12-01","reply":true}]
 const ANNOUNCE_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/announcements.json";
 const ANN_MIN_MS = 60 * 60000;
+// 📊 پینگ ناشناس روزانه به هاب (آیدی تصادفی نصب + نسخه؛ بدون هیچ دیتای شخصی).
+// خاموش‌کردن برای مشتری: set-kv کلید telemetry_off به 1 (راهنما در README).
+async function runTelemetryPing(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  try {
+    if (String((await kv.get("telemetry_off", "text")) || "") === "1") return;
+  } catch (e) {}
+  let iid = "";
+  try {
+    iid = String((await kv.get("install_id", "text")) || "");
+  } catch (e) {}
+  if (!iid) {
+    iid = (makeToken() || "i") + Date.now().toString(36);
+    try {
+      await kv.put("install_id", iid.slice(0, 64));
+    } catch (e) {}
+  }
+  try {
+    await fetch(HUB_TELEMETRY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ install_id: iid.slice(0, 64), version: BOT_VERSION, event: "heartbeat" }),
+      signal: withTimeout(15000),
+    });
+  } catch (e) {}
+}
+async function fetchAnnItems(url) {
+  try {
+    const res = await fetch(url, { signal: withTimeout(20000) });
+    if (!res.ok) return [];
+    const a = JSON.parse(String(await res.text() || "").slice(0, 20000));
+    return Array.isArray(a) ? a : [];
+  } catch (e) {
+    return [];
+  }
+}
 async function runAnnFetch(env, botToken) {
   const kv = env.BOT_KV;
   if (!kv || !botToken) return;
   try {
-    const url = (env && env.ANNOUNCE_URL) || ANNOUNCE_URL_DEFAULT;
-    const res = await fetch(url, { signal: withTimeout(20000) });
-    if (!res.ok) return;
-    let items = [];
-    try {
-      items = JSON.parse(String(await res.text() || "").slice(0, 20000));
-    } catch (e) {
-      return;
+    const hubUrl = (env && env.ANNOUNCE_URL) || HUB_ANNOUNCE_URL;
+    let items = await fetchAnnItems(hubUrl);
+    if (!items.length) {
+      const fileUrl = (env && env.ANNOUNCE_FILE_URL) || ANNOUNCE_URL_DEFAULT;
+      if (fileUrl !== hubUrl) items = await fetchAnnItems(fileUrl);
     }
-    if (!Array.isArray(items) || !items.length) return;
+    if (!items.length) return;
     let seen = [];
     try {
       seen = (await kv.get("ann_seen", "json")) || [];
@@ -7669,6 +7779,34 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  // 📢 هاب: ساخت پیام همگانی جدید (فقط ربات اصلی)
+  if (type === "hub_ann_new") {
+    await kv.delete(`pend:${chatId}`);
+    if (!(await isHubWorker(env, botToken, kv))) {
+      await send("❌ فقط در ربات اصلی.", mainMenuKeyboard());
+      return;
+    }
+    if (!txt || txt.length < 2) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ متن خیلی کوتاه است. دوباره بفرست:");
+      return;
+    }
+    let arr = [];
+    try {
+      arr = (await kv.get("hub_ann", "json")) || [];
+    } catch (e) {}
+    if (!Array.isArray(arr)) arr = [];
+    const id = "h" + Date.now().toString(36);
+    arr.unshift({ id, text: txt.slice(0, 3000), until: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10), reply: true });
+    try {
+      await kv.put("hub_ann", JSON.stringify(arr.slice(0, 10)), { expirationTtl: 90 * 86400 });
+    } catch (e) {}
+    await send(`📢 ذخیره شد (آیدی ${code(id)}).\n\nتا ~۱ ساعت بعد به همه ادمین‌های همه نصب‌ها می‌رسد؛ زیرش دکمه «↩️ پاسخ» و «✅ تایید» هست. انقضا: ۳۰ روز.`, [
+      [{ text: "📢 پیام همگانی", callback_data: "hubann" }, { text: "🏠 خانه", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
   // ↩️ سازنده در حال پاسخ به مشتری است
   if (type === "creator_reply") {
     await kv.delete(`pend:${chatId}`);
@@ -9432,7 +9570,63 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(mainMenuText(), mainMenuKeyboard());
     } else if (data === "settings") {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
-      await edit(settingsHomeText(), settingsHomeKb());
+      await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
+    } else if (data === "hubstats") {
+      // هاب (فقط ربات اصلی): آمار نصب‌های فعال از پینگ‌های ناشناس
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      let keys = [];
+      try {
+        const l = await kv.list({ prefix: "tm:", limit: 1000 });
+        keys = (l && l.keys) || [];
+      } catch (e) {}
+      const byVer = {};
+      for (const k of keys) {
+        try {
+          const v = await kv.get(k.name, "json");
+          const ver = (v && v.v) || "؟";
+          byVer[ver] = (byVer[ver] || 0) + 1;
+        } catch (e) {}
+      }
+      const lines = ["📊 آمار نصب‌ها", "", `🟢 نصب فعال (۴۵ روز اخیر): ${keys.length}`, ""];
+      const vers = Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      for (const [v, n] of vers) lines.push(`• v${v}: ${n}`);
+      if (!vers.length) lines.push("هنوز پینگی ثبت نشده (نصب‌ها روزی یک‌بار خبر می‌دهند).");
+      lines.push("", "ناشناس: فقط آیدی تصادفی + نسخه؛ بدون هیچ دیتای شخصی.");
+      await edit(lines.join("\n").slice(0, 3500), [[{ text: "🔙 تنظیمات", callback_data: "settings" }]]);
+    } else if (data === "hubann") {
+      // هاب: لیست پیام‌های همگانی + ساخت جدید
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      let arr = [];
+      try {
+        arr = (await kv.get("hub_ann", "json")) || [];
+      } catch (e) {}
+      if (!Array.isArray(arr)) arr = [];
+      const lines = ["📢 پیام همگانی", "", "پیام اینجا ساخته می‌شود و تا ~۱ ساعت بعد به همه ادمین‌های همه نصب‌ها می‌رسد (با دکمه پاسخ/تایید)."];
+      const kb = [];
+      if (!arr.length) lines.push("", "📭 پیامی نیست.");
+      for (const a of arr.slice(0, 10)) {
+        lines.push(`• ${(a.id || "?")} — ${(a.text || "").slice(0, 60)}${a.reply === false ? " (بدون پاسخ)" : ""}`);
+        kb.push([{ text: `🗑 ${(a.id || "?").slice(0, 28)}`, callback_data: `hubanndel:${a.id}` }]);
+      }
+      kb.push([{ text: "➕ پیام جدید", callback_data: "hubannadd", style: "success" }]);
+      kb.push([{ text: "🔙 تنظیمات", callback_data: "settings" }]);
+      await edit(lines.join("\n").slice(0, 3500), kb);
+    } else if (data === "hubannadd") {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hub_ann_new" }), { expirationTtl: 600 });
+      await edit("📢 متن پیام همگانی را بفرست (زیر ۳۰۰۰ کاراکتر):", [[{ text: "⬅️ انصراف", callback_data: "hubann" }]]);
+    } else if (data.startsWith("hubanndel:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      const id = data.slice(10);
+      let arr = [];
+      try {
+        arr = (await kv.get("hub_ann", "json")) || [];
+      } catch (e) {}
+      arr = (Array.isArray(arr) ? arr : []).filter((a) => String(a.id) !== id);
+      try {
+        await kv.put("hub_ann", JSON.stringify(arr), { expirationTtl: 90 * 86400 });
+      } catch (e) {}
+      await edit("📩 پیام همگانی حذف شد (از این به بعد پخش نمی‌شود).", [[{ text: "📢 پیام همگانی", callback_data: "hubann" }]]);
     } else if (data === "settingsrelay") {
       // تنظیم رله از داخل «تنظیمات و راهنما» — بازگشت به همان صفحه
       await setRelayBack(kv, chatId, "settings");
