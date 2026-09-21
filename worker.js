@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.12";
+const BOT_VERSION = "1.0.13";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.13": [
+    "🧹 تمیزی چت: وقتی چیزی تایپ می‌کنی (مثل آی‌پی جدید رکورد)، پیام خودت بعد از ثبت پاک می‌شود و زیر دکمه‌ها نمی‌ماند — شامل توکن‌ها و رمزها هم می‌شود (امن‌تر)",
+  ],
   "1.0.12": [
     "🛠 رفع باگ مرگبار آپدیت خودکار: دیپلوی با بایندینگ خالی (بدون BOT_KV/BOT_TOKEN) که ربات را از کار می‌انداخت — حالا بایندینگ‌ها همیشه از نو ساخته می‌شوند و زمان‌بندها هم حفظ می‌شوند",
     "🔄 آپدیت خودکارِ سرور (کرون) حالا deploy-tool را هم از همان تگ می‌گیرد و اگر نسخهٔ کد جدیدتر نباشد دیپلوی تکراری نمی‌کند",
@@ -673,6 +676,7 @@ async function processUpdate(payload, env, botToken, adminId) {
       return res;
     };
     const text = payload.message.text.trim();
+    const userMsgId = payload.message.message_id;
 
     if (!kv) {
       await send("⚠️ KV با نام BOT_KV لازم است.");
@@ -684,6 +688,8 @@ async function processUpdate(payload, env, botToken, adminId) {
 
     if (pending && !text.startsWith("/")) {
       await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
+      // ورودی کاربر مصرف شد — پیامش را پاک کن تا زیر دکمه‌ها نماند و چت شلوغ نشود
+      await deleteMessage(botToken, chatId, userMsgId);
       return;
     }
 
@@ -700,6 +706,8 @@ async function processUpdate(payload, env, botToken, adminId) {
       } else {
         await quickNameSearch(text.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv);
       }
+      // ورودی کاربر مصرف شد — پیامش را پاک کن تا زیر دکمه‌ها نماند
+      await deleteMessage(botToken, chatId, userMsgId);
       return;
     }
 
@@ -1929,6 +1937,15 @@ async function editMessage(botToken, chatId, messageId, text, keyboard) {
   if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
   if (t.includes("<code>")) body.parse_mode = "HTML";
   return tg(botToken, "editMessageText", body);
+}
+
+// پاک‌کردن پیامِ خودِ کاربر بعد از اینکه ربات ورودی را مصرف کرد تا چت شلوغ نشود.
+// (در چت خصوصی برای پیام کاربر هم جواب می‌دهد؛ خطا نادیده گرفته می‌شود.)
+async function deleteMessage(botToken, chatId, messageId) {
+  if (!botToken || !chatId || !messageId) return;
+  try {
+    await tg(botToken, "deleteMessage", { chat_id: chatId, message_id: messageId });
+  } catch (e) {}
 }
 
 // نمایش خطا/هشدار روی همان پیامی که کاربر در حال کار با آن است:
