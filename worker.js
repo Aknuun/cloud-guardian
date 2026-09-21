@@ -7393,6 +7393,51 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  // تغییر مقدار گروهی از صفحهٔ نتایج آیپی (چندزونه: کلودفلر + آروان)
+  if (type === "ip_bulk_edit") {
+    await kv.delete(`pend:${chatId}`);
+    const stored = await kv.get(`ips:${pending.token}`, "json");
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    if (!stored || !st || st.token !== pending.token || !(st.idxs || []).length) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    const aa = await getArvanAccounts(kv);
+    let okCount = 0;
+    const cfZones = new Set();
+    for (const idx of st.idxs) {
+      const res = stored.results[idx];
+      if (!res) continue;
+      try {
+        if (res.provider === "arvan") {
+          const t = aa[res.acc] && aa[res.acc].token;
+          if (!t) continue;
+          await arvanUpdateRecord(t, res.domain, res.record, txt, kv, env);
+          okCount++;
+        } else {
+          const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
+            method: "PATCH",
+            headers: hdr(accounts[res.acc].token),
+            body: JSON.stringify({ content: txt }),
+          });
+          const d = await r.json();
+          if (d.success) {
+            okCount++;
+            cfZones.add(res.zone_id);
+          }
+        }
+      } catch (e) {}
+    }
+    for (const z of cfZones) await invalidateCache(kv, z);
+    await kv.delete(`ipsel:${chatId}`);
+    // ساب‌ها حالا آیپی جدید را دارند — صفحهٔ نتایج آیپی جدید را بفرست
+    const nres = await ipExactResults(txt, accounts, kv, env);
+    const ntoken = makeToken();
+    await kv.put(`ips:${ntoken}`, JSON.stringify({ ip: txt, results: nres }), { expirationTtl: 3600 });
+    await renderIpSearchMenu({ kv, send, accounts, env, chatId }, ntoken, 0, `✅ ${okCount} از ${st.idxs.length} ساب به ${code(txt)} تغییر کرد.\n\n`);
+    return;
+  }
+
   if (type === "bulk_type_convert") {
     await kv.delete(`pend:${chatId}`);
     let okCount = 0;
@@ -13818,8 +13863,14 @@ async function renderIpSearchMenu(io, token, page, note) {
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
   const slice = results.slice(page * CZ_PAGE_SIZE, page * CZ_PAGE_SIZE + CZ_PAGE_SIZE);
+  // حالت انتخاب گروهی (مثل 🗂 گروهی داخل دامنه): ipsel:<chatId> = {token, idxs, page}
+  const chatId = io.chatId;
+  const selState = chatId ? await kv.get(`ipsel:${chatId}`, "json") : null;
+  const selMode = !!(selState && selState.token === token);
+  const selSet = new Set((selMode && selState.idxs) || []);
   const lines = [`🌐 آیپی: ${code(ip)}`, ""];
   if (!results.length) lines.push("📭 هیچ سابی با این آیپی پیدا نشد.");
+  else if (selMode) lines.push(`🗂 ${selSet.size} انتخاب شده:`);
   else lines.push(`✅ ${results.length} ساب با این آیپی پیدا شد:`);
   const kb = [];
   for (let i = 0; i < slice.length; i += 2) {
@@ -13827,10 +13878,16 @@ async function renderIpSearchMenu(io, token, page, note) {
     for (let j = i; j < i + 2; j++) {
       const res = slice[j];
       if (res) {
+        const gidx = page * CZ_PAGE_SIZE + j;
         const flag = res.provider === "arvan" ? "🇮🇷 " : "";
         const label = `${flag}${res.record.type} ${nameShortStr(res.record.name, res.zone_name)}`;
-        // ipd:<token>:<index>: باز کردن جزئیات سابی که با این آی‌پی پیدا شده
-        row.push({ text: label, callback_data: `ipd:${token}:${page * CZ_PAGE_SIZE + j}` });
+        if (selMode) {
+          // ipsel:<token>:<index>: تیک/برداشتن تیک در حالت گروهی
+          row.push({ text: `${selSet.has(gidx) ? "✅ " : "⬜ "}${label}`, callback_data: `ipsel:${token}:${gidx}` });
+        } else {
+          // ipd:<token>:<index>: باز کردن جزئیات سابی که با این آی‌پی پیدا شده
+          row.push({ text: label, callback_data: `ipd:${token}:${gidx}` });
+        }
       } else {
         row.push(EMPTY_BTN);
       }
@@ -13839,12 +13896,27 @@ async function renderIpSearchMenu(io, token, page, note) {
   }
   if (pages > 1) {
     const nav = [];
-    nav.push(page > 0 ? { text: "◀️", callback_data: `ipsp:${token}:${page - 1}` } : EMPTY_BTN);
+    const pgCb = selMode ? `ipselpg:${token}:` : `ipsp:${token}:`;
+    nav.push(page > 0 ? { text: "◀️", callback_data: `${pgCb}${page - 1}` } : EMPTY_BTN);
     nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
-    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `ipsp:${token}:${page + 1}` } : EMPTY_BTN);
+    nav.push(page < pages - 1 ? { text: "▶️", callback_data: `${pgCb}${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   }
-  kb.push([{ text: "➕ افزودن ساب جدید", callback_data: "qanadd", style: "danger" }]);
+  if (selMode) {
+    if (selSet.size > 0) {
+      // ipbulkdel: حذف گروهی | ipbulkedit: تغییر مقدار گروهی | ipbulkfav: افزودن به منتخب‌ها
+      kb.push([
+        { text: "🗑 حذف انتخاب‌ها", callback_data: `ipbulkdel:${token}` },
+        { text: "✏️ تغییر مقدار", callback_data: `ipbulkedit:${token}` },
+      ]);
+      kb.push([{ text: "⭐ افزودن به منتخب‌ها", callback_data: `ipbulkfav:${token}` }]);
+    }
+    // ipseldone: خروج از حالت انتخاب
+    kb.push([{ text: "❌ لغو انتخاب", callback_data: `ipseldone:${token}` }]);
+  } else {
+    if (results.length) kb.push([{ text: "🗂 گروهی", callback_data: `ipselmode:${token}` }]);
+    kb.push([{ text: "➕ افزودن ساب جدید", callback_data: "qanadd", style: "danger" }]);
+  }
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await fn((note || "") + lines.join("\n"), kb);
 }
@@ -14388,6 +14460,132 @@ async function dispatchFavQa(data, io) {
   if (data.startsWith("ipback:") || data.startsWith("ipsp:")) {
     const parts = data.split(":");
     await renderIpSearchMenu(io, parts[1], Number(parts[2]) || 0);
+    return true;
+  }
+  // ===== حالت گروهی نتایج آیپی =====
+  if (data.startsWith("ipselmode:")) {
+    const token = data.slice(10);
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!stored || !(stored.results || []).length) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    await kv.put(`ipsel:${chatId}`, JSON.stringify({ token, idxs: [], page: 0 }), { expirationTtl: 3600 });
+    await renderIpSearchMenu(io, token, 0);
+    return true;
+  }
+  if (data.startsWith("ipselpg:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const page = Number(parts[2]) || 0;
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    if (!st || st.token !== token) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    st.page = page;
+    await kv.put(`ipsel:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+    await renderIpSearchMenu(io, token, page);
+    return true;
+  }
+  if (data.startsWith("ipselback:")) {
+    const token = data.slice(10);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    if (!st || st.token !== token) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    await renderIpSearchMenu(io, token, st.page || 0);
+    return true;
+  }
+  if (data.startsWith("ipseldone:")) {
+    const token = data.slice(11);
+    await kv.delete(`ipsel:${chatId}`);
+    await renderIpSearchMenu(io, token, 0);
+    return true;
+  }
+  if (data.startsWith("ipsel:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const idx = Number(parts[2]);
+    const stored = await kv.get(`ips:${token}`, "json");
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    if (!stored || !stored.results[idx] || !st || st.token !== token) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    const set = new Set(st.idxs || []);
+    if (set.has(idx)) set.delete(idx);
+    else set.add(idx);
+    st.idxs = [...set];
+    st.page = Math.floor(idx / CZ_PAGE_SIZE);
+    await kv.put(`ipsel:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+    await renderIpSearchMenu(io, token, st.page);
+    return true;
+  }
+  if (data.startsWith("ipbulkdel:")) {
+    const token = data.slice(10);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
+    await edit(`⚠️ ${st.idxs.length} ساب حذف شود؟`, [
+      [{ text: "✅ بله، حذف کن", callback_data: `ipbulkdely:${token}` }, { text: "❌ انصراف", callback_data: `ipselback:${token}` }],
+    ]);
+    return true;
+  }
+  if (data.startsWith("ipbulkdely:")) {
+    const token = data.slice(11);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    const idxs = st.idxs || [];
+    const aa = await getArvanAccounts(kv);
+    let ok = 0;
+    const cfZones = new Set();
+    for (const idx of idxs) {
+      const res = stored.results[idx];
+      if (!res) continue;
+      try {
+        if (res.provider === "arvan") {
+          const t = aa[res.acc] && aa[res.acc].token;
+          if (!t) continue;
+          await arvanDeleteRecord(t, res.domain, res.record.id, kv, io.env);
+          ok++;
+        } else {
+          const del = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
+            method: "DELETE",
+            headers: hdr(accounts[res.acc].token),
+            signal: withTimeout(),
+          });
+          const d = await del.json();
+          if (d.success) {
+            ok++;
+            cfZones.add(res.zone_id);
+          }
+        }
+      } catch (e) {}
+    }
+    for (const z of cfZones) await invalidateCache(kv, z);
+    await kv.delete(`ipsel:${chatId}`);
+    await refreshIpMenu(io, stored.ip, `✅ ${ok} از ${idxs.length} ساب حذف شد.\n\n`);
+    return true;
+  }
+  if (data.startsWith("ipbulkfav:")) {
+    const token = data.slice(10);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
+    const favs = await getFavs(kv, chatId);
+    let added = 0;
+    for (const idx of st.idxs) {
+      const res = stored.results[idx];
+      if (!res) continue;
+      if (favExists(favs, res.zone_id, res.record.id)) continue;
+      favs.push({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc, record_id: res.record.id, name: res.record.name, type: res.record.type });
+      added++;
+    }
+    await saveFavs(kv, chatId, favs);
+    await kv.delete(`ipsel:${chatId}`);
+    await renderIpSearchMenu(io, token, 0, added > 0 ? `✅ ${added} ساب به منتخب‌ها اضافه شد.\n\n` : "ℹ️ این ساب‌ها از قبل در منتخب‌ها بودند.\n\n");
+    return true;
+  }
+  if (data.startsWith("ipbulkedit:")) {
+    const token = data.slice(11);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ip_bulk_edit", token }), { expirationTtl: 600 });
+    await edit(`✏️ مقدار جدید (آیپی) برای ${st.idxs.length} ساب انتخاب‌شده را بفرستید:`, [
+      [{ text: "⬅️ انصراف", callback_data: `ipselback:${token}` }],
+    ]);
     return true;
   }
   if (data === "qanadd") {
