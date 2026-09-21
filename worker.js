@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.4";
+const BOT_VERSION = "1.3.5";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.5": [
+    "📩 دریافت در ربات ساده شد: بدون تایپ آدرس، با یک دکمه همه ایمیل‌های همین دامنه (catch-all) به صندوق ورودی ربات وصل می‌شوند و در تلگرام می‌آیند",
+  ],
   "1.3.4": [
     "📥 دریافت ایمیل در ربات: علاوه بر فوروارد، می‌توانی یک آدرس را به «دریافت در ربات» وصل کنی تا متن ایمیل‌های ورودی در صندوق ورودی ربات ذخیره و نمایش داده شود (با اعلان خودکار به ادمین)",
   ],
@@ -6802,7 +6805,7 @@ async function renderInboxList(edit, kv, accounts, token) {
   const lines = [`📥 صندوق ورودی ${session.zone_name}`, ""];
   const kb = [];
   if (!items.length) {
-    lines.push("📭 هنوز ایمیلی در ربات دریافت نشده.", "", "برای دریافت: «📩 دریافت در ربات» را بزن و یک آدرس را به ورکر وصل کن.");
+    lines.push("📭 هنوز ایمیلی در ربات دریافت نشده.", "", "برای دریافت: «📩 دریافت در ربات» را بزن تا همه ایمیل‌های همین دامنه به صندوق وصل شوند.");
   } else {
     lines.push(`📬 ${items.length} ایمیل آخر:`);
     for (const m of items) {
@@ -8867,52 +8870,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
-  if (type === "mail_worker_addr") {
-    await kv.delete(`pend:${chatId}`);
-    const session = await kv.get(`s:${pending.token}`, "json");
-    if (!session) {
-      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
-      return;
-    }
-    let addr = txt.trim().toLowerCase();
-    if (!addr.includes("@")) addr = addr + "@" + session.zone_name;
-    if (!isEmailLike(addr)) {
-      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
-      await send("❌ آدرس معتبر نیست. دوباره بفرستید (مثلاً info):");
-      return;
-    }
-    const wname = (env && (env.WORKER_NAME || "")) || "";
-    if (!wname) {
-      await send("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن تا بایندینگ‌ها کامل شوند.", [
-        [{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
-      ]);
-      return;
-    }
-    const tok = accounts[session.acc] && accounts[session.acc].token;
-    if (!tok) {
-      await send("❌ اکانت پیدا نشد.");
-      return;
-    }
-    try {
-      const r = await cfEmailSend(tok, "POST", `/zones/${session.zone_id}/email/routing/rules`, {
-        name: addr.split("@")[0].slice(0, 60),
-        enabled: true,
-        matchers: [{ type: "literal", field: "to", value: addr }],
-        actions: [{ type: "worker", value: [wname] }],
-      });
-      if (r.success) {
-        await send(`✅ دریافت در ربات فعال شد:\n${code(addr)} → 📥 صندوق ورودی\n\nیک ایمیل تست به این آدرس بفرست؛ متن آن اینجا در «📥 صندوق ورودی» می‌آید و به ادمین هم اعلان می‌رسد.`, [
-          [{ text: "📥 صندوق ورودی", callback_data: `zmailinbox:${pending.token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
-        ]);
-      } else {
-        await send("❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }]]);
-      }
-    } catch (e) {
-      await send("❌ خطا در ساخت قانون worker.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }]]);
-    }
-    return;
-  }
-
   if (type === "mail_dest_new" || type === "mail_dest_new2") {
     await kv.delete(`pend:${chatId}`);
     const email = txt.trim().toLowerCase();
@@ -9602,8 +9559,10 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         if (c.success && c.result) ca = c.result;
       } catch (e) {}
       const act = ca && (ca.actions || [])[0];
-      await edit(`📥 catch-all در ${session.zone_name} (ایمیل‌هایی که قانون ندارند):\n\nوضعیت: ${ca ? (ca.enabled ? "✅ فعال → " + (((act || {}).value || []).join(",") || act.type) : "⏸ غیرفعال") : "—"}`, [
+      const actDesc = !ca ? "—" : !ca.enabled ? "⏸ غیرفعال" : (act || {}).type === "worker" ? "📥 دریافت در ربات" : "✅ " + ((((act || {}).value || []).join(",")) || act.type);
+      await edit(`📥 catch-all در ${session.zone_name} (ایمیل‌هایی که قانون ندارند):\n\nوضعیت: ${actDesc}`, [
         [{ text: "📩 فوروارد به مقصد", callback_data: `zmailcpick:${token}` }],
+        [{ text: "📥 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" }],
         [{ text: "⏸ غیرفعال", callback_data: `zmailcoff:${token}` }, { text: "🔙 ایمیل", callback_data: `zmail:${token}` }],
       ]);
     } else if (data.startsWith("zmailcpick:")) {
@@ -9665,15 +9624,34 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await sleep(800);
       await renderInboxList(edit, kv, accounts, m[1]);
     } else if (data.startsWith("zmailwadd:")) {
+      // دریافت در ربات برای کل دامنه (بدون تایپ آدرس): catch-all به ورکر وصل می‌شود.
       const token = data.slice(10);
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      const wname = (env && (env.WORKER_NAME || env.WORKER_NAME)) || "";
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_worker_addr", token }), { expirationTtl: 600 });
-      await edit(
-        `📩 دریافت در ربات — ${session.zone_name}\n\nآدرس را بفرست (مثلاً info یا info@damane.com).\nایمیل‌های این آدرس در «📥 صندوق ورودی» ربات ذخیره می‌شوند و به ادمین اعلان می‌آید.${wname ? "" : "\n\n⚠️ نام ورکر (WORKER_NAME) در بایندینگ‌ها پیدا نشد؛ ممکن است ساخت قانون fail شود."}`,
-        [[{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }]]
-      );
+      const wname = (env && env.WORKER_NAME) || "";
+      if (!wname) {
+        return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [
+          [{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }],
+        ]);
+      }
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.");
+      try {
+        const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, {
+          enabled: true,
+          actions: [{ type: "worker", value: [wname] }],
+        });
+        if (r.success) {
+          await edit(
+            `✅ دریافت در ربات فعال شد:\n\nهمه ایمیل‌های ${code(session.zone_name)} که قانون جدا ندارند، از این به بعد در «📥 صندوق ورودی» ذخیره می‌شوند و اعلانش به ادمین می‌آید.\n\nیک ایمیل تست به هر آدرس همین دامنه بفرست (مثلاً info@${session.zone_name}) و در صندوق ببین.\n\n⚠️ آدرس‌هایی که قبلاً قانون فوروارد جدا دارند، هنوز فوروارد می‌شوند؛ اگر می‌خواهی آن‌ها هم به ربات بیایند، قانونشان را حذف کن تا catch-all بگیردشان.`,
+            [[{ text: "📥 صندوق ورودی", callback_data: `zmailinbox:${token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]
+          );
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+        }
+      } catch (e) {
+        await edit("❌ خطا در فعال‌سازی.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+      }
     } else if (data.startsWith("zmailwgo:")) {
       // ساخت قانون worker (رزرو؛ جریان اصلی از pend می‌آید)
       const token = data.slice(9);
