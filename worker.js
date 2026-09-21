@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.7";
+const BOT_VERSION = "1.3.8";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.8": [
+    "✉️ «ایمیل‌ها» شد «ایمیل سازمانی»",
+    "📢 پیام همگانی سازنده: پیام‌های مهم سازنده به همه ادمین‌ها می‌رسد؛ با «↩️ پاسخ» می‌توانی جواب بدهی یا «✅ تایید» بزنی",
+  ],
   "1.3.7": [
     "✨ «🖥 مانیتورها» شد «✨ فیچرهای جدید» (دکمه، دستور و راهنما؛ بازگشت‌ها سالم)",
     "✉️ صفحه جدید «ایمیل‌ها» داخل فیچرهای جدید: وصل چند دامنه با یک دکمه، صندوق جدا هر دامنه، بدون گیجی سمت دامنه",
@@ -875,6 +879,10 @@ export default {
             patch.selfup = now;
             jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
           }
+          if (!cs.ann || now - cs.ann >= ANN_MIN_MS) {
+            patch.ann = now;
+            jobs.push(runAnnFetch(env, botToken).catch((e) => console.error("ANN", String(e))));
+          }
           jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
           jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
           jobs.push(ensureBotCommands(env, botToken, ckv).catch(() => {}));
@@ -928,6 +936,11 @@ export default {
       const botToken = env.BOT_TOKEN || BOT_TOKEN;
       const adminId = Number(env.ADMIN_ID || ADMIN_ID);
       if (botToken && adminId) {
+        let boxCb = "fmail";
+        try {
+          const flag = kv && dom ? await kv.get(`fmail_on:${dom}`, "json") : null;
+          if (flag && flag.zone_id) boxCb = `fmailview:${flag.acc}:${flag.zone_id}:${id}`;
+        } catch (e) {}
         const lines = [
           `📥 ایمیل جدید در ${dom || to}`,
           "",
@@ -936,10 +949,8 @@ export default {
           `📌 موضوع: ${(subject || "—").slice(0, 200)}`,
           "",
           (preview || "—").slice(0, 1500),
-          "",
-          "برای دیدن کامل: دامنه ← ✉️ ایمیل ← 📥 صندوق ورودی",
         ];
-        ctx.waitUntil(sendMessage(botToken, adminId, lines.join("\n").slice(0, 3900)));
+        ctx.waitUntil(sendMessage(botToken, adminId, lines.join("\n").slice(0, 3900), [[{ text: "📥 مشاهده در صندوق", callback_data: boxCb }]]));
       }
     } catch (e) {
       console.error("INBOX_EMAIL", String((e && e.stack) || e));
@@ -1189,7 +1200,7 @@ function monsKeyboard() {
     ],
     [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
-    [{ text: "✉️ ایمیل‌ها", callback_data: "fmail", style: "success" }],
+    [{ text: "✉️ ایمیل سازمانی", callback_data: "fmail", style: "success" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -1281,7 +1292,7 @@ const HELP_GUIDE = {
     "• 🔐 مانیتور SSL: هشدار نزدیک‌شدن به انقضای گواهی دامنه‌های تحت نظارت.\n" +
     "• 🗓 مانیتور انقضای دامنه: استعلام دامنه‌های .ir از whois.nic.ir و بقیه از RDAP؛ همهٔ دامنه‌های اکانت‌ها را یک‌جا اضافه کن و باقی‌مانده (سال/ماه/روز) را ببین.\n" +
     "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.\n" +
-    "• ✉️ ایمیل‌ها: دریافت ایمیل‌های دامنه‌هایت در ربات — هر دامنه را با یک دکمه وصل کن و متن ایمیل‌ها را در تلگرام ببین.",
+    "• ✉️ ایمیل سازمانی: دریافت ایمیل‌های دامنه‌هایت در ربات — هر دامنه را با یک دکمه وصل کن و متن ایمیل‌ها را در تلگرام ببین.",
   ssl:
     "🔐 مانیتور SSL\n\n" +
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
@@ -1327,7 +1338,7 @@ const HELP_GUIDE = {
     "روی هر دکمه بزنی راهنمای همان بخش را می‌بینی:\n\n" +
     "🌐 دامنه و DNS: کلودفلر · افزودن رکورد · جست‌وجو · ساب‌های منتخب · عملیات گروهی\n" +
     "🖥 سرور و دیتاسنتر: سرورها · رله · دیتاسنترها (هتزنر/لینود) · آروان\n" +
-    "✨ فیچرهای جدید: مانیتورها · مانیتور SSL · ایمیل‌ها\n" +
+    "✨ فیچرهای جدید: مانیتورها · مانیتور SSL · ایمیل سازمانی\n" +
     "⚙️ مدیریت: تنظیمات · مدیریت ادمین\n\n" +
     "💡 رنگ دکمه‌ها: قرمز = مهم/خطرناک · آبی = دو یا چند ستونه · سبز = تک‌ستونه یا سه‌ستونه · خاکستری = ساده",
 };
@@ -1488,6 +1499,79 @@ async function getPromo(kv, env) {
     console.error("PROMO_ERR", String(e));
   }
   return (env && env.PROMO_TEXT) || PROMO_DEFAULT;
+}
+
+// 📢 پیام همگانی سازنده: فایل مرکزی مخزن هر ~۱ ساعت خوانده می‌شود؛
+// پیام‌های ندیده به همه ادمین‌ها ارسال می‌شود (با دکمهٔ پاسخ/تایید).
+// قالب announcements.json: [{"id":"msg-01","text":"...","until":"2026-12-01","reply":true}]
+const ANNOUNCE_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/announcements.json";
+const ANN_MIN_MS = 60 * 60000;
+async function runAnnFetch(env, botToken) {
+  const kv = env.BOT_KV;
+  if (!kv || !botToken) return;
+  try {
+    const url = (env && env.ANNOUNCE_URL) || ANNOUNCE_URL_DEFAULT;
+    const res = await fetch(url, { signal: withTimeout(20000) });
+    if (!res.ok) return;
+    let items = [];
+    try {
+      items = JSON.parse(String(await res.text() || "").slice(0, 20000));
+    } catch (e) {
+      return;
+    }
+    if (!Array.isArray(items) || !items.length) return;
+    let seen = [];
+    try {
+      seen = (await kv.get("ann_seen", "json")) || [];
+    } catch (e) {}
+    if (!Array.isArray(seen)) seen = [];
+    const now = Date.now();
+    let admins = [];
+    try {
+      admins = (await getAdmins(kv, env)) || [];
+    } catch (e) {}
+    let changed = false;
+    for (const it of items.slice(0, 10)) {
+      const id = String((it && it.id) || "").slice(0, 60);
+      const msg = String((it && it.text) || "").slice(0, 3000);
+      if (!id || !msg || seen.includes(id)) continue;
+      if (it.until) {
+        try {
+          if (now > Date.parse(it.until)) {
+            seen.push(id);
+            changed = true;
+            continue;
+          }
+        } catch (e) {}
+      }
+      const kb = [];
+      if (it.reply === false) kb.push([{ text: "✅ تایید", callback_data: `annok:${id}` }]);
+      else kb.push([{ text: "↩️ پاسخ", callback_data: `annreply:${id}`, style: "primary" }, { text: "✅ تایید", callback_data: `annok:${id}` }]);
+      kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+      let okAny = false;
+      for (const a of admins) {
+        try {
+          const r = await sendMessage(botToken, a, `📢 پیام سازنده نگهبان ابری\n\n${msg}`, kb);
+          if (r && r.ok) okAny = true;
+        } catch (e) {}
+        await sleep(400);
+      }
+      try {
+        await kv.put(`ann:${id}`, JSON.stringify({ text: msg }), { expirationTtl: 90 * 86400 });
+      } catch (e) {}
+      if (okAny || !admins.length) {
+        seen.push(id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      try {
+        await kv.put("ann_seen", JSON.stringify(seen.slice(-50)), { expirationTtl: 180 * 86400 });
+      } catch (e) {}
+    }
+  } catch (e) {
+    console.error("ANN", String(e));
+  }
 }
 
 // اعلان نسخهٔ جدید: برای هر نسخه فقط یک‌بار به همهٔ ادمین‌ها فرستاده می‌شود.
@@ -6827,13 +6911,38 @@ function decodePartBody(body, encoding, isHtml) {
   const enc = String(encoding || "").toLowerCase();
   let t = String(body || "");
   if (enc.includes("base64")) {
-    const d = b64ToUtf8(t);
+    const compact = t.replace(/\s+/g, "");
+    let padded = compact;
+    while (padded.length % 4) padded += "=";
+    const d = /^[A-Za-z0-9+/=]+$/.test(padded) ? b64ToUtf8(padded) : "";
     if (d) t = d;
   } else if (enc.includes("quoted-printable") || enc.includes("quotedprintable")) {
     t = decodeQP(t);
   }
   if (isHtml) t = stripHtmlToText(t);
   return t.replace(/\s+/g, " ").trim();
+}
+// بلوک‌های base64 که بعد از هدر Content-Transfer-Encoding می‌آیند (برای multipartهایی که boundaryشان گم شده)
+function extractBase64Bodies(t) {
+  const out = [];
+  try {
+    const re = /Content-Transfer-Encoding:\s*base64[^\n]*\n(?:[^\n]*\n)*?\r?\n([A-Za-z0-9+/\r\n= ]{40,})/gi;
+    let m;
+    while ((m = re.exec(String(t || ""))) && out.length < 5) out.push(m[1]);
+  } catch (e) {}
+  return out;
+}
+function tryDecodeB64Block(b) {
+  try {
+    const compact = String(b || "").replace(/\s+/g, "");
+    if (compact.length < 20) return "";
+    let padded = compact;
+    while (padded.length % 4) padded += "=";
+    if (!/^[A-Za-z0-9+/=]+$/.test(padded)) return "";
+    const d = b64ToUtf8(padded.slice(0, 12000));
+    if (d && /[\u0600-\u06FFA-Za-z]/.test(d) && d.trim().length > 5) return d.replace(/\s+/g, " ").trim();
+  } catch (e) {}
+  return "";
 }
 // استخراج متن خوانا از raw ایمیل: text/plain با دیکد base64/QP، وگرنه html تمیز.
 function parseEmailPreview(rawText) {
@@ -6880,16 +6989,20 @@ function parseEmailPreview(rawText) {
       return decodePartBody(m[1].trim(), enc, false).slice(0, 3000);
     }
   } catch (e) {}
+  // تلاش آخر: بلوک‌های base64 داخل بدنه (multipart با boundary خراب یا چندتکه)
+  try {
+    for (const b of extractBase64Bodies(t)) {
+      const d = tryDecodeB64Block(b);
+      if (d) return d.slice(0, 3000);
+    }
+  } catch (e) {}
   let out = body;
   if (/<[a-z][^>]*>/i.test(out) && out.length > 50) out = stripHtmlToText(out);
   else {
-    // ممکن است کل بدنه base64 باشد (مثل نمونه کاربر)
-    const compact = out.replace(/\s+/g, "");
-    if (compact.length > 20 && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0) {
-      const d = b64ToUtf8(compact.slice(0, 8000));
-      if (d && /[\u0600-\u06FFA-Za-z]/.test(d)) out = d;
-    }
-    out = out.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+    // ممکن است کل بدنه base64 باشد
+    const d = tryDecodeB64Block(out);
+    if (d) out = d;
+    else out = out.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
   }
   return out.replace(/\s+/g, " ").trim().slice(0, 3000);
 }
@@ -6950,11 +7063,8 @@ function decodeStoredPreview(p) {
   if (!t || t === "—") return t;
   t = decodeRfc2047(t);
   // ایمیل‌های قدیمی با پارسر قبلی به‌صورت base64 خام ذخیره شده‌اند
-  const compact = t.replace(/\s+/g, "");
-  if (compact.length > 20 && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0) {
-    const d = b64ToUtf8(compact.slice(0, 8000));
-    if (d && /[\u0600-\u06FFA-Za-z]/.test(d)) return d.slice(0, 3000);
-  }
+  const d = tryDecodeB64Block(t);
+  if (d) return d.slice(0, 3000);
   return t;
 }
 async function renderInboxOne(edit, kv, accounts, token, id) {
@@ -7001,7 +7111,7 @@ async function fmailActive(kv) {
 }
 async function renderFmailHome(edit, kv, accounts, env) {
   const act = await fmailActive(kv);
-  const lines = ["✉️ ایمیل‌ها", "", "ایمیل‌های دامنه‌هایت را اینجا در تلگرام ببین. هر دامنه را با یک دکمه وصل کن؛ چند دامنه همزمان می‌شود."];
+  const lines = ["✉️ ایمیل سازمانی", "", "ایمیل‌های دامنه‌هایت را اینجا در تلگرام ببین. هر دامنه را با یک دکمه وصل کن؛ چند دامنه همزمان می‌شود."];
   const kb = [];
   if (!act.length) {
     lines.push("", "📭 هنوز دامنه‌ای وصل نیست.");
@@ -7047,12 +7157,12 @@ async function renderFmailAdd(edit, kv, accounts) {
     }
     if (rest.length > 20) lines.push("", `… و ${rest.length - 20} دامنه دیگر`);
   }
-  kb.push([{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]);
+  kb.push([{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
   const dom = String(zone.name || "").toLowerCase();
   const items = await inboxList(kv, dom, 10);
   const lines = [`📥 ${zone.name}`, ""];
@@ -7068,12 +7178,12 @@ async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
       kb.push([{ text: `📨 ${(decodeRfc2047(m.subject || m.from || m.id)).slice(0, 32)}`, callback_data: `fmailview:${acc}:${zoneId}:${m.id}` }]);
     }
   }
-  kb.push([{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]);
+  kb.push([{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
   const dom = String(zone.name || "").toLowerCase();
   let m = null;
   try {
@@ -7091,7 +7201,7 @@ async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
   ];
   await edit(lines.join("\n").slice(0, 3900), [
     [{ text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" }],
-    [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل‌ها", callback_data: "fmail" }],
+    [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
   ]);
 }
 
@@ -7509,6 +7619,51 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       sent
         ? "✅ پیامت برای سازنده ارسال شد. ممنون 🙏"
         : "⚠️ ارسال پیام الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
+      [[{ text: "🏠 خانه", callback_data: "menu" }]]
+    );
+    return;
+  }
+
+  // ↩️ پاسخ ادمین به پیام همگانی سازنده: از همان کانال ارتباط با سازنده می‌رود
+  if (type === "ann_reply") {
+    await kv.delete(`pend:${chatId}`);
+    const annId = (pending && pending.annId) || "";
+    let uname = "";
+    try {
+      const me = await (await fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: withTimeout() })).json();
+      uname = (me && me.result && me.result.username) || "";
+    } catch (e) {}
+    const tid = makeToken();
+    const replyUrl = String((await kv.get("self_url")) || "").replace(/\/+$/, "");
+    try {
+      await kv.put(`ct:${tid}`, JSON.stringify({ chat_id: chatId, active: true }), { expirationTtl: 7 * 86400 });
+    } catch (e) {}
+    const payload = {
+      key: CREATOR_CONTACT_KEY,
+      message: `[پاسخ به پیام همگانی ${annId}]\n\n${txt}`,
+      tid,
+      reply_url: replyUrl,
+      bot_username: uname,
+      version: BOT_VERSION,
+      name: (pending.sender && pending.sender.name) || "",
+      username: (pending.sender && pending.sender.username) || "",
+      chat_id: chatId,
+      admin_id: (env && env.ADMIN_ID) || "",
+    };
+    let sent = false;
+    try {
+      const r = await fetch(CREATOR_CONTACT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: withTimeout(15000),
+      });
+      sent = r && (r.ok || r.status === 200);
+    } catch (e) {}
+    await send(
+      sent
+        ? "✅ پاسخت برای سازنده ارسال شد. ممنون 🙏"
+        : "⚠️ ارسال پاسخ الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
       [[{ text: "🏠 خانه", callback_data: "menu" }]]
     );
     return;
@@ -9319,6 +9474,25 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const tid = data.slice(8);
       try { await kv.delete(`ct:${tid}`); } catch (e) {}
       await edit("✅ گفتگو بسته شد. خوش باشی 👋", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data.startsWith("annreply:")) {
+      // ادمین: پاسخ به پیام همگانی سازنده (از همان کانال ارتباط با سازنده می‌رود)
+      const id = data.slice(9);
+      const nm = [cb.from && cb.from.first_name, cb.from && cb.from.last_name].filter(Boolean).join(" ");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "ann_reply", annId: id, sender: { name: nm, username: (cb.from && cb.from.username) || "" } }),
+        { expirationTtl: 900 }
+      );
+      await edit("↩️ پاسخت به سازنده را بنویس و بفرست:", [[{ text: "⬅️ انصراف", callback_data: "menu" }]]);
+    } else if (data.startsWith("annok:")) {
+      // ادمین: تایید پیام همگانی (فقط محلی؛ چیزی برای سازنده فرستاده نمی‌شود)
+      const id = data.slice(6);
+      let orig = "";
+      try {
+        const a = await kv.get(`ann:${id}`, "json");
+        orig = (a && a.text) || "";
+      } catch (e) {}
+      await edit(`✅ تایید شد. ممنون 🙏${orig ? "\n\n—\n" + String(orig).slice(0, 2000) : ""}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "help") {
       // help: نمایش صفحهٔ راهنما
       await edit(helpText(), helpKeyboard());
@@ -10685,25 +10859,25 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       const wname = (env && env.WORKER_NAME) || "";
-      if (!wname) return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      if (!wname) return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       try {
         const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, {
           enabled: true,
           actions: [{ type: "worker", value: [wname] }],
         });
-        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
         try {
           await kv.put(`fmail_on:${String(zone.name).toLowerCase()}`, JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name }), { expirationTtl: 90 * 86400 });
         } catch (e) {}
         await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند. یک ایمیل تست بفرست و در صندوق ببین.`, [
-          [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل‌ها", callback_data: "fmail" }],
+          [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
         ]);
       } catch (e) {
-        await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+        await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       }
     } else if (data.startsWith("fmailoff:")) {
       const parts = data.split(":");
@@ -10711,17 +10885,17 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       try {
         const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, { enabled: false });
-        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       } catch (e) {
-        return edit("❌ خطا.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+        return edit("❌ خطا.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       }
       try {
         await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
       } catch (e) {}
-      await edit(`📩 دریافت ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      await edit(`📩 دریافت ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data.startsWith("fmailbox:")) {
@@ -10736,7 +10910,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const zoneId = parts[2];
       const id = parts[3];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await inboxDel(kv, zone.name, id);
       await edit("🗑 ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }]]);
       await sleep(800);
@@ -10767,7 +10941,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           }
         } catch (e) {}
       }
-      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه وصل است.`, [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه وصل است.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "quota") {
