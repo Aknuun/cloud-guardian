@@ -15675,7 +15675,7 @@ async function renderHostFilterHome(edit, kv, env) {
   // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود (دکمه وسط هم جابه‌جا می‌کند)
   kb.push([
     { text: (isCh ? "✅ " : "") + "🌐 چک‌هاست", callback_data: "hfprov:checkhost" },
-    { text: "◀️ انتخاب ▶️", callback_data: "hfsetprov" },
+    { text: "▶️ انتخاب ◀️", callback_data: "hfsetprov" },
     { text: (!isCh ? "✅ " : "") + "📡 گلوبال‌پینگ", callback_data: "hfprov:globalping" },
   ]);
   // hfcheck: اجرای فوری بررسی فیلترشدن | hfhist: تاریخچهٔ تعویض‌ها
