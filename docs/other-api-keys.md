@@ -67,4 +67,4 @@
 sudo bash -c "$(curl -sL -H 'Accept: application/vnd.github.raw' 'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main')"
 ```
 
-سپس در ربات: «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» — فقط آیپی را بفرستید؛ ربات خودش `rel.دامنه → آیپی` را میسازد.
+سپس در ربات: «ℹ️ راهنما ← 🌐 راهنمای رله» — فقط آیپی را بفرستید؛ ربات خودش `rel.دامنه → آیپی` را میسازد.

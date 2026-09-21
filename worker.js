@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.18";
+const BOT_VERSION = "1.0.19";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.19": [
+    "🧹 دکمهٔ «ℹ️ راهنمای رله» از صفحهٔ «🖥 سرورها» حذف شد — مدیریت رله حالا از «ℹ️ راهنما ← 🌐 راهنمای رله» انجام می‌شود",
+  ],
   "1.0.18": [
     "ℹ️ صفحهٔ راهنما بخش‌بندی شد: 🌐 دامنه و DNS · 🖥 سرور، رله و دیتاسنتر · 🖥 مانیتورها · ⚙️ مدیریت",
     "🌐 مدیریت رله داخل راهنما با دکمه‌های قرمز: «🔧 تنظیم مجدد رله»، «🌐 انتخاب رله پیش‌فرض» و «🗑 حذف رله فعلی»",
@@ -4577,7 +4580,6 @@ async function renderServersHome(edit, kv, env) {
     { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
     { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
   ]);
-  kb.push([{ text: "ℹ️ راهنمای رله", callback_data: "srvrelayhelp" }]);
   kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
@@ -9706,7 +9708,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const parts = data.split(":");
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
-        return edit("⚠️ «چک هاست» هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» رله را ثبت کن، سپس دوباره تست کن.", [
+        return edit("⚠️ «چک هاست» هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن، سپس دوباره تست کن.", [
           [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
           [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
           [{ text: "🔙 بازگشت به لیست", callback_data: "hflist" }],
@@ -9738,7 +9740,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "hfforeign") {
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
-        return edit("⚠️ بررسی دسترسی خارج هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «🖥 سرورها ← ℹ️ راهنمای رله ← 🔧 تنظیم رله» رله را ثبت کن.", [
+        return edit("⚠️ بررسی دسترسی خارج هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن.", [
           [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
           [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
           [{ text: "🔙 بازگشت", callback_data: "hfset" }],
