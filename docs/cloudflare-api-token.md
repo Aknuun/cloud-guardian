@@ -4,7 +4,7 @@
 
 > 🔗 **لینک مستقیم ساخت توکن:** https://dash.cloudflare.com/profile/api-tokens
 
-> عکسهای هر مرحله در `docs/images/` گذاشته میشود. فعلاً جای آنها خالی است؛ اگر عکسی گرفتید فایل را با همان نام در آن پوشه قرار دهید.
+> عکس هر مرحله زیر همان مرحله آمده است (پوشهٔ `docs/images/`). اگر از داشبورد خودتان اسکرین‌شات گرفتید، با همین نام‌ها جایگزین کنید.
 
 ---
 
@@ -14,7 +14,7 @@
 2. از منوی بالای سمت راست روی **My Profile** کلیک کنید.
 3. از منوی کناری **API Tokens** را بزنید — یا مستقیم: https://dash.cloudflare.com/profile/api-tokens
 
-📷 `docs/images/cf-token-01.png`
+![مرحلهٔ 1](images/cf-token-01.svg)
 
 ---
 
@@ -23,7 +23,7 @@
 1. روی دکمهٔ **Create Token** کلیک کنید.
 2. در پایین صفحه گزینهٔ **Create Custom Token** را بزنید.
 
-📷 `docs/images/cf-token-02.png`
+![مرحلهٔ 2](images/cf-token-02.svg)
 
 ---
 
@@ -40,7 +40,7 @@
 | Zone | Zone Settings | Edit | مشاهده/تغییر تنظیمات هر زون (TLS/کش/…) |
 | Zone | Cache Purge | Purge | دکمهٔ «پاککردن کش» زون |
 
-📷 `docs/images/cf-token-03.png`
+![مرحلهٔ 3](images/cf-token-03.svg)
 
 > ⚠️ کار با سابدامنهٔ `workers.dev` جداگانه نیست؛ زیرمجموعهٔ دسترسی **Account → Workers Scripts → Edit** است و در فهرست پنل ابری به این اسم دیده نمیشود.
 > ⚠️ این پنج دسترسی، **دقیقاً** همانهایی هستند که ربات استفاده میکند.
@@ -48,7 +48,7 @@
 3. بخش **Account Resources** را روی **Include → All accounts** بگذارید.
 4. بخش **Zone Resources** را روی **Include → All zones** بگذارید.
 
-📷 `docs/images/cf-token-04.png`
+![مرحلهٔ 4](images/cf-token-04.svg)
 
 ---
 
@@ -58,7 +58,7 @@
 2. دسترسیها را چک کنید و **Create Token** را بزنید.
 3. توکن فقط **یکبار** نمایش داده میشود؛ آن را کپی و امن نگه دارید.
 
-📷 `docs/images/cf-token-05.png`
+![مرحلهٔ 5](images/cf-token-05.svg)
 
 > ⚠️ توکن را به هیچکس ندهید و داخل ریپو/فایل عمومی نگذارید. فقط در همان ربات یا فایل `~/.cloud-guardian/config.json` (روی سرور خودتان) باشد.
 
@@ -71,7 +71,7 @@
 1. صفحهٔ اصلی `dash.cloudflare.com`.
 2. سمت راست — باکس **API** — رشتهٔ `Account ID` را کپی کنید.
 
-📷 `docs/images/cf-token-06.png`
+![مرحلهٔ 6](images/cf-token-06.svg)
 
 > در بیشتر موارد نصبکننده بهصورت خودکار شناسه را از خود توکن پیدا میکند و نیازی به وارد کردن نیست.
 
