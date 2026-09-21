@@ -813,8 +813,8 @@ async function processUpdate(payload, env, botToken, adminId) {
         [
           { text: "🇩🇪 هتزنر", callback_data: "hz" },
           { text: "🟢 لینود", callback_data: "ln" },
+          { text: "🇮🇷 آروان", callback_data: "arvan" },
         ],
-        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
         [{ text: "🏠 منو", callback_data: "menu" }],
       ]);
     } else if (cmd === "/srv") {
@@ -893,12 +893,12 @@ function mainMenuKeyboard() {
     [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
     // search: جست‌وجوی سراسری رکورد در همهٔ اکانت‌ها (قرمز = تک‌ستونه)
     [{ text: "🔍 جست و جو در همه", callback_data: "search", style: "danger" }],
-    // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) مستقیم در منوی اصلی — سبز
+    // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) کنار هم در یک ردیف — سبز
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
+      { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
-    [{ text: "🇮🇷 آروان", callback_data: "arvan", style: "success" }],
     // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی مانیتورها — در یک ردیف
     [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🖥 مانیتورها", callback_data: "mons" }],
     // help: راهنمای بخش‌ها | admins_menu: مدیریت ادمین‌های ربات (فقط ادمین اصلی) — هر دو خاکستری
@@ -10985,8 +10985,18 @@ async function handleArvanCallback(data, ctx) {
   if (data === "arvan") return arvanHome(ctx);
   if (data === "arvanacc") return arvanAccountsView(ctx);
   if (data === "arvanaccadd") {
-    await kvPutPend({ type: "arvan_acc_name" });
-    return edit("👤 نام اکانت را بفرستید (مثلاً main):", [[{ text: "⬅️ انصراف", callback_data: "arvanacc" }]]);
+    await kvPutPend({ type: "arvan_acc_key" });
+    return edit(
+      `🔑 افزودن اکانت آروان\n\n` +
+        `۱) دکمهٔ «👤 ماشین‌یوزرها» را بزن، New User بساز (نام لاتین کوچک، ۵ تا ۱۰۰ حرف) و کلید نمایش داده‌شده را کپی کن — فقط یک‌بار نشان داده می‌شود.\n\n` +
+        `۲) دکمهٔ «📦 مدیریت منابع» را بزن، روی + اول بزن تا وارد میز کار (Workspace) بشوی، بعد «قانون دسترسی» تعریف کن: همهٔ قوانین — یا حداقل CDN و Cloud Server — را انتخاب کن.\n\n` +
+        `۳) کلید را همین‌جا بفرست. پیامت بعد از ثبت پاک می‌شود و کلید جایی نمایش داده نمی‌شود.`,
+      [
+        [{ text: "👤 ماشین‌یوزرها", url: "https://panel.arvancloud.ir/profile/iam/machine-users" }],
+        [{ text: "📦 مدیریت منابع", url: "https://panel.arvancloud.ir/profile/iam/resource-management" }],
+        [{ text: "⬅️ انصراف", callback_data: "arvanacc" }],
+      ]
+    );
   }
   let m = data.match(/^arvanaccdel:(\d+)$/);
   if (m) {
@@ -11067,21 +11077,6 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
   const editId = (t, kb) => editMessage(botToken, chatId, pending.msgId, t, kb);
   const arvanAccounts = await getArvanAccounts(kv);
 
-  if (type === "arvan_acc_name") {
-    if (!txt) return send("⚠️ نام معتبر نیست.");
-    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_key", name: txt, msgId: pending.msgId }), { expirationTtl: 600 });
-    return editId(
-      `🔑 ساخت کلید ماشین‌یوزر آروان\n\n` +
-        `۱) دکمهٔ «👤 ماشین‌یوزرها» را بزن، New User بساز (نام لاتین کوچک، ۵ تا ۱۰۰ حرف) و کلید نمایش داده‌شده را کپی کن — فقط یک‌بار نشان داده می‌شود.\n\n` +
-        `۲) دکمهٔ «📦 مدیریت منابع» را بزن، روی + اول بزن تا وارد میز کار (Workspace) بشوی، بعد «قانون دسترسی» تعریف کن: همهٔ قوانین — یا حداقل CDN و Cloud Server — را انتخاب کن.\n\n` +
-        `۳) کلید را همین‌جا بفرست. پیامت بعد از ثبت پاک می‌شود و کلید جایی نمایش داده نمی‌شود.`,
-      [
-        [{ text: "👤 ماشین‌یوزرها", url: "https://panel.arvancloud.ir/profile/iam/machine-users" }],
-        [{ text: "📦 مدیریت منابع", url: "https://panel.arvancloud.ir/profile/iam/resource-management" }],
-        [{ text: "⬅️ انصراف", callback_data: "arvanacc" }],
-      ]
-    );
-  }
   if (type === "arvan_acc_key") {
     const key = arvanNormKey(txt);
     if (!key) {
@@ -11104,9 +11099,14 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
       ]);
     }
     const list = await getArvanAccounts(kv);
-    list.push({ name: pending.name || "main", token: key });
+    // نام ردیفی خودکار: آروان ۱، آروان ۲، ...
+    const used = new Set(list.map((a) => a.name));
+    let n = list.length + 1;
+    while (used.has(`آروان ${n}`)) n++;
+    const autoName = `آروان ${n}`;
+    list.push({ name: autoName, token: key });
     await saveArvanAccounts(kv, list);
-    return editId(`✅ اکانت «${code(pending.name || "main")}» اضافه شد.`, [
+    return editId(`✅ اکانت «${code(autoName)}» اضافه شد.`, [
       [{ text: "🌐 دامنه‌ها", callback_data: "arvdoms" }, { text: "👤 اکانت‌ها", callback_data: "arvanacc" }],
     ]);
   }
