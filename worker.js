@@ -422,7 +422,34 @@ const HETZNER_API = "https://api.hetzner.cloud/v1";
 const ARVAN_API = "https://napi.arvancloud.ir/cdn/4.0";
 const ARVAN_ECC = "https://napi.arvancloud.ir/ecc/v1";
 // ریجن‌های شناخته‌شدهٔ سرور ابری آروان + امکان ورود دستی ریجن دلخواه
-const ARVAN_REGIONS = ["ir-thr-c2", "ir-thr-ba1", "ir-tbz-sh1"];
+// (فهرست اصلی همیشه زنده از API خوانده می‌شود؛ این فقط fallback است)
+const ARVAN_REGIONS = ["ir-thr-ba1", "ir-thr-fr1", "ir-tbz-sh1", "ir-thr-si1", "ir-southwest1-a", "eu-west1-a"];
+
+// نام فارسی کشور/شهر/دیتاسنترهای آروان
+const ARVAN_FA = {
+  Iran: "ایران", Germany: "آلمان", Netherlands: "هلند",
+  Tehran: "تهران", Tabriz: "تبریز", Ahwaz: "اهواز", Isfahan: "اصفهان", Shiraz: "شیراز", Mashhad: "مشهد", Karlsruhe: "کارلسروهه", Amsterdam: "آمستردام",
+  Bamdad: "بامداد", Foroogh: "فروغ", Forough: "فروغ", Shahriar: "شهریار", Qeysar: "قیصر", Simin: "سیمین", Goethe: "گوته", Atieh: "عطیه",
+};
+
+function arvanRegionFa(r) {
+  const t = (s) => ARVAN_FA[s] || s || "";
+  const loc = [t(r.country), t(r.city), t(r.dc)].filter(Boolean).join(" ـ ");
+  return loc || r.code || "";
+}
+
+// فهرست زندهٔ ریجن‌ها از API (فقط visible و قابل ساخت)
+async function arvanGetRegions(token, kv, env) {
+  try {
+    const d = await arvanFetch(token, "/regions", {}, 30000, kv, env, ARVAN_ECC);
+    const arr = arvanEccList(d) || [];
+    const live = arr
+      .filter((r) => r && r.code && r.visible !== false && r.create !== false)
+      .map((r) => ({ code: r.code, fa: arvanRegionFa(r), def: !!r.default }));
+    if (live.length) return live;
+  } catch (e) {}
+  return ARVAN_REGIONS.map((c) => ({ code: c, fa: c, def: false }));
+}
 const RECORD_TYPES = ["A", "AAAA", "CNAME"];
 const PAGE_SIZE = 8;
 const RECORD_PAGE_SIZE = 18;
@@ -10915,9 +10942,37 @@ async function arvanRecordDetail(ctx, t, rid) {
   ]);
 }
 
+// فهرست یکجای ایمیج‌ها: اول توزیع‌ها (اوبونتو/دبیان/...)، بعد ایمیج‌های شخصی، بعد مارکت‌پلیس
+async function arvanFetchImages(token, region, kv, env) {
+  const imgs = [];
+  try {
+    const d0 = await arvanEcc(token, region, "/images?per_page=100&type=distributions", {}, kv, env);
+    for (const g of arvanEccList(d0) || []) {
+      for (const im of (g && g.images) || []) {
+        if (im && im.id && imgs.length < 60) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
+      }
+    }
+  } catch (e) {}
+  try {
+    const d1 = await arvanEcc(token, region, "/images?per_page=100", {}, kv, env);
+    for (const im of arvanEccList(d1) || []) {
+      if (im && im.id && imgs.length < 80) imgs.push({ id: im.id, name: im.name || im.distribution || im.id });
+    }
+  } catch (e) {}
+  try {
+    const d2 = await arvanEcc(token, region, "/images/marketplaces", {}, kv, env);
+    for (const g of arvanEccList(d2) || []) {
+      for (const im of (g && g.images) || []) {
+        if (im && im.id && imgs.length < 100) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
+      }
+    }
+  } catch (e) {}
+  return imgs;
+}
+
 // ---------- رابط سرورهای ابری آروان (ECC) ----------
 async function arvanRegions(ctx) {
-  const { edit, arvanAccounts } = ctx;
+  const { edit, kv, env, arvanAccounts } = ctx;
   if (!arvanAccounts.length) {
     return edit("🖥 سرورهای ابری آروان\n\n📭 اکانتی ثبت نشده.", [
       [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
@@ -10926,8 +10981,9 @@ async function arvanRegions(ctx) {
   }
   const kb = [];
   for (let i = 0; i < arvanAccounts.length; i++) {
-    for (const r of ARVAN_REGIONS) {
-      kb.push([{ text: `🖥 ${arvanAccounts[i].name} — ${r}`, callback_data: `arvreg:${i}:${r}` }]);
+    const regs = await arvanGetRegions(arvanAccounts[i].token, kv, env);
+    for (const r of regs) {
+      kb.push([{ text: `🖥 ${arvanAccounts[i].name} — ${r.fa}${r.def ? " ✅" : ""} (${r.code})`, callback_data: `arvreg:${i}:${r.code}` }]);
     }
   }
   kb.push([{ text: "⌨️ ریجن دستی", callback_data: "arvregcustom" }]);
@@ -11668,15 +11724,7 @@ async function arvanServerCallback(data, ctx) {
     const session = await kv.get(`s:${m[1]}`, "json");
     if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
     const a = arvanAccounts[session.acc];
-    const imgs = [];
-    try {
-      const d1 = await arvanEcc(a.token, session.region, "/images?per_page=100", {}, kv, env);
-      for (const im of arvanEccList(d1) || []) if (im && im.id) imgs.push({ id: im.id, name: im.name || im.id });
-    } catch (e) {}
-    try {
-      const d2 = await arvanEcc(a.token, session.region, "/images/marketplaces", {}, kv, env);
-      for (const g of arvanEccList(d2) || []) for (const im of (g && g.images) || []) if (im && im.id && imgs.length < 30) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
-    } catch (e) {}
+    const imgs = await arvanFetchImages(a.token, session.region, kv, env);
     if (!imgs.length) return edit("❌ ایمیجی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
     session.images = imgs.slice(0, 30);
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
@@ -11897,21 +11945,7 @@ async function arvanMkImages(ctx, t) {
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
   const a = arvanAccounts[session.acc];
-  const imgs = [];
-  try {
-    const d1 = await arvanEcc(a.token, session.region, "/images?per_page=100", {}, kv, env);
-    for (const im of arvanEccList(d1) || []) {
-      if (im && im.id) imgs.push({ id: im.id, name: im.name || im.distribution || im.id });
-    }
-  } catch (e) {}
-  try {
-    const d2 = await arvanEcc(a.token, session.region, "/images/marketplaces", {}, kv, env);
-    for (const g of arvanEccList(d2) || []) {
-      for (const im of (g && g.images) || []) {
-        if (im && im.id && imgs.length < 40) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
-      }
-    }
-  } catch (e) {}
+  const imgs = await arvanFetchImages(a.token, session.region, kv, env);
   session.images = imgs.slice(0, 40);
   await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
   const kb = [];
@@ -15156,9 +15190,10 @@ async function renderHostFilterHome(edit, kv, env) {
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
-  // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود
+  // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود (دکمه وسط هم جابه‌جا می‌کند)
   kb.push([
     { text: (isCh ? "✅ " : "") + "🌐 چک‌هاست", callback_data: "hfprov:checkhost" },
+    { text: "◀️ انتخاب ▶️", callback_data: "hfsetprov" },
     { text: (!isCh ? "✅ " : "") + "📡 گلوبال‌پینگ", callback_data: "hfprov:globalping" },
   ]);
   // hfcheck: اجرای فوری بررسی فیلترشدن | hfhist: تاریخچهٔ تعویض‌ها
