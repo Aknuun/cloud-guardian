@@ -6467,10 +6467,10 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
       { text: "➕ افزودن", callback_data: `addz:${token}` },
       { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
     ]);
-    // noproxy: رکوردهای بدون پروکسی (خاموش) با تیک آمادهٔ حذف گروهی | ztraf: ترافیک هر ساب در ۷ روز گذشته
+    // zmail: ایمیل دامنه (فوروارد) | ztraf: ترافیک هر ساب در ۷ روز گذشته
     if (records.length) {
       keyboard.push([
-        { text: "🛰 خاموش‌ها", callback_data: `noproxy:${token}` },
+        { text: "✉️ ایمیل", callback_data: `zmail:${token}` },
         { text: "📊 ترافیک ساب‌ها", callback_data: `ztraf:${token}` },
       ]);
     }
@@ -9474,34 +9474,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(`✅ ${ok} از ${zeros.length} رکورد بدون ترافیک حذف شد.`, [
         [{ text: "📊 ترافیک", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
       ]);
-    } else if (data.startsWith("noproxy:")) {
-      // خاموش (بدون پروکسی) بودن برای ساب پنل عادی است؛ فقط خاموشِ بدون ترافیک تیک می‌خورد
-      const token = data.slice(8);
-      const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
-      const zone = await getZoneById(session.zone_id, session.acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.");
-      const records = await getRecords(zone, accounts, kv);
-      const off = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !r.proxied);
-      if (!off.length) {
-        return edit("✅ همهٔ رکوردهای این دامنه پروکسی (ابری) دارن؛ چیزی خاموش نیست.", [
-          [{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
-        ]);
-      }
-      const tok = accounts[session.acc] && accounts[session.acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.");
-      const t = await fetchTrafficCounts(tok, session.zone_id);
-      if (t.needPerm) {
-        return edit(`🛰 ${off.length} رکورد خاموش هست ولی بدون آمار ترافیک نمی‌شود فهمید کدام در حال استفاده است.\nبه توکن این را اضافه کن:\n${code("Zone → Analytics → Read")}`, [
-          [{ text: "📊 ترافیک ساب‌ها", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
-        ]);
-      }
-      if (t.error) {
-        return edit("❌ خطا در آمار:\n" + t.error, [[{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }]]);
-      }
-      const ids = off.filter((r) => !(t.counts[String(r.name || "").toLowerCase()] || 0)).map((r) => r.id);
-      await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids, page: 0 }), { expirationTtl: 3600 });
-      await renderRecords(zone, records, token, 0, edit, ids, session.zback || "zones");
     } else if (data.startsWith("selmode:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
