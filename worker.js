@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.26";
+const BOT_VERSION = "1.0.27";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.27": [
+    "🗑 «حذف رله فعلی» حالا همیشه در دسترس است؛ با تأیید، رله حذف می‌شود و پیام «✅ رله حذف شد» با وضعیت جدید نمایش داده می‌شود",
+  ],
   "1.0.26": [
     "🎨 رنگ دکمه‌های رله اصلاح شد: «🔧 تنظیم مجدد رله» آبی، «🌐 انتخاب رله پیش‌فرض» سبز و فقط «🗑 حذف رله فعلی» قرمز",
     "🧹 دکمهٔ «🗑 حذف رله فعلی» فقط وقتی نمایش داده می‌شود که رلهٔ شخصی داشته باشی (پیام اشتباه «رلهٔ شخصی نداری» حذف شد)",
@@ -4353,7 +4356,7 @@ async function renderRelayHome(render, kv, env, back) {
     "⚙️ مدیریت",
     "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
     "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
-    ...(fromKv ? ["• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار"] : []),
+    "• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار",
     "",
     "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.",
     "",
@@ -4363,14 +4366,12 @@ async function renderRelayHome(render, kv, env, back) {
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
   ];
   const kb = [
-    // مدیریت رله: تنظیم مجدد (آبی) / پیش‌فرض (سبز) / حذف (قرمز، فقط اگر رلهٔ شخصی داری)
+    // مدیریت رله: تنظیم مجدد (آبی) / پیش‌فرض (سبز) / حذف (قرمز)
     [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }],
-    fromKv
-      ? [
-          { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
-          { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
-        ]
-      : [{ text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" }],
+    [
+      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
+      { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
+    ],
     // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
     mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto", style: "primary" }],
     [relayBackButton(back)],
@@ -9204,18 +9205,21 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "srvrelayclear") {
       const back = await getRelayBack(kv, chatId);
       const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
-      if (!hasKv) {
-        // رلهٔ شخصی وجود ندارد؛ فقط صفحه را تازه کن (دکمهٔ حذف در این حالت نمایش داده نمی‌شود)
-        return renderRelayHome(edit, kv, env, back);
-      }
-      await edit("🗑 رلهٔ شخصی حذف شود؟ (می‌روی روی حالت خودکار: رلهٔ رایگان)", [
-        [{ text: "✅ بله", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: back }],
-      ]);
+      await edit(
+        hasKv
+          ? "🗑 رلهٔ شخصی حذف شود؟ (برمی‌گردی به حالت خودکار: رلهٔ رایگان)"
+          : "🗑 رله حذف شود و به حالت خودکار برگردی؟",
+        [[{ text: "✅ بله، حذف کن", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: back }]]
+      );
     } else if (data === "srvrelaycleary") {
+      const back = await getRelayBack(kv, chatId);
       await kvDeleteCached(kv, RELAY_URL_KEY);
       await kvDeleteCached(kv, RELAY_TOKEN_KEY);
       await setRelayMode(kv, "auto");
-      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
+      await edit("✅ رله حذف شد.\n\nحالت فعلی: 🔀 خودکار (اگر رلهٔ شخصی نداشته باشی، از رلهٔ رایگان استفاده می‌شود).", [
+        [{ text: "🌐 صفحهٔ رله", callback_data: "srvrelayhelp" }],
+        [relayBackButton(back)],
+      ]);
     } else if (data === "srvadd") {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
