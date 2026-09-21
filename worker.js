@@ -8407,7 +8407,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = accounts[idx];
       if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "⬅️ بازگشت", callback_data: "accounts" }]]);
       await edit(`⚠️ مطمئنید اکانت «${acc.name}» حذف شود؟\nتوکن: ${maskToken(acc.token)}`, [
-        [{ text: "✅ بله", callback_data: `daccy:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `daccy:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
       ]);
     } else if (data.startsWith("daccy:")) {
       const idx = Number(data.slice(6));
@@ -8980,11 +8980,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         const t = arvanSessId();
         await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain: res.domain, acc: res.acc }), { expirationTtl: 3600 });
         return edit(`🗑 این رکورد حذف شود؟\n\n${res.record.type} — ${res.record.name} → ${res.record.content}`, [
-          [{ text: "✅ بله", callback_data: `arvdelok:${t}:${res.record.id}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
+          [{ text: "✅ بله، حذف کن", callback_data: `arvdelok:${t}:${res.record.id}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
         ]);
       }
       await edit(`⚠️ مطمئنید حذف شود؟\n\n${res.record.type} — ${res.record.name} → ${res.record.content}`, [
-        [{ text: "✅ بله", callback_data: `sdy:${token}:${idx}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
+        [{ text: "✅ بله، حذف کن", callback_data: `sdy:${token}:${idx}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
       ]);
     } else if (data.startsWith("sdy:")) {
       const parts = data.split(":");
@@ -9340,7 +9340,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const p = panels[i];
       if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       await edit(`⚠️ پنل «${escHtml(p.name)}» حذف شود؟ (مانیتور نودِ متصل به آن هم حذف می‌شود)`, [
-        [{ text: "✅ بله", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
       ]);
     } else if (data.startsWith("pnlxx:")) {
       const i = Number(data.slice(6));
@@ -9457,7 +9457,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const pws = await getSrvPasswords(kv);
       if (!pws[i]) return renderSrvPw(edit, kv);
       await edit(`⚠️ «رمز ${i + 1}» حذف شود؟`, [
-        [{ text: "✅ بله", callback_data: `srvpwdely:${i}` }, { text: "❌ انصراف", callback_data: "srvpw" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `srvpwdely:${i}` }, { text: "❌ انصراف", callback_data: "srvpw" }],
       ]);
     } else if (data.startsWith("srvpwdely:")) {
       const i = Number(data.slice(10));
@@ -9865,7 +9865,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const m = monitors[i];
       if (!m) return edit("❌ مانیتور نود پیدا نشد.");
       await edit(`⚠️ مانیتور نود «${escHtml(m.name)}» حذف شود؟ (هشدارهای بعدی برای این پنل ارسال نمی‌شود)`, [
-        [{ text: "✅ بله", callback_data: `nddely:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `nddely:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
       ]);
     } else if (data.startsWith("nddely:")) {
       const i = Number(data.slice(7));
@@ -10344,7 +10344,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = hzAccounts[idx];
       if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
       await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
-        [{ text: "✅ بله", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hz" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hz" }],
       ]);
     } else if (data.startsWith("hzdy:")) {
       const idx = Number(data.slice(5));
@@ -10684,7 +10684,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const item = list.find((r) => r.id === id);
       if (!item) return edit("❌ پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "rem" }]]);
       await edit(`⚠️ این یادآور حذف شود؟\n🕒 ${fmtJalali(item.at)}\n📝 ${remPlain(item.text || "-")}`, [
-        [{ text: "✅ بله", callback_data: `remdely:${id}` }, { text: "❌ انصراف", callback_data: "rem" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `remdely:${id}` }, { text: "❌ انصراف", callback_data: "rem" }],
       ]);
     } else if (data.startsWith("remdely:")) {
       const id = data.slice(8);
@@ -10738,7 +10738,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = lnAccounts[idx];
       if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
       await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
-        [{ text: "✅ بله", callback_data: `lndy:${idx}` }, { text: "❌ انصراف", callback_data: "ln" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `lndy:${idx}` }, { text: "❌ انصراف", callback_data: "ln" }],
       ]);
     } else if (data.startsWith("lndy:")) {
       const idx = Number(data.slice(5));
@@ -11728,7 +11728,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvfwd:(\d+):(.+):(.+)$/);
   if (m) {
     return edit("🗑 این قانون فایروال حذف شود؟", [
-      [{ text: "✅ بله", callback_data: `arvwfdy:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvfws:${m[1]}:${m[2]}` }],
+      [{ text: "✅ بله، حذف کن", callback_data: `arvwfdy:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvfws:${m[1]}:${m[2]}` }],
     ]);
   }
   m = data.match(/^arvwfdy:(\d+):(.+):(.+)$/);
@@ -12255,7 +12255,7 @@ async function arvanServerCallback(data, ctx) {
     if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
     const f = session.floats[Number(m[2])];
     return edit(`🗑 آی‌پی شناور ${code(f.ip || f.id)} حذف شود؟`, [
-      [{ text: "✅ بله", callback_data: `arvfl-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvfloat:${session.acc}:${session.region}` }],
+      [{ text: "✅ بله، حذف کن", callback_data: `arvfl-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvfloat:${session.acc}:${session.region}` }],
     ]);
   }
   m = data.match(/^arvfl-del-ok:(.+):(\d+)$/);
@@ -12397,7 +12397,7 @@ async function arvanServerCallback(data, ctx) {
     if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
     const v = session.vols[Number(m[2])];
     return edit(`🗑 دیسک «${code(v.name)}» حذف شود؟`, [
-      [{ text: "✅ بله", callback_data: `arvvol-delok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
+      [{ text: "✅ بله، حذف کن", callback_data: `arvvol-delok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
     ]);
   }
   m = data.match(/^arvvol-delok:(.+):(\d+)$/);
@@ -13232,7 +13232,7 @@ async function hzSnapshotDispatch(hzAccounts, i, imageId, step, edit, kv, chatId
     return edit("✏️ نام جدید اسنپ‌شات را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `hzni:${i}:${imageId}` }]]);
   }
   return edit("⚠️ مطمئنید اسنپ‌شات حذف شود؟", [
-    [{ text: "✅ بله", callback_data: `hzno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `hzni:${i}:${imageId}` }],
+    [{ text: "✅ بله، حذف کن", callback_data: `hzno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `hzni:${i}:${imageId}` }],
   ]);
 }
 
@@ -13655,7 +13655,7 @@ async function lnSnapshotDispatch(lnAccounts, i, imageId, step, edit, kv, chatId
     return edit("✏️ نام جدید اسنپ‌شات را بفرستید:", [[{ text: "🔙 انصراف", callback_data: `lnni:${i}:${imageId}` }]]);
   }
   return edit("⚠️ مطمئنید اسنپ‌شات حذف شود؟", [
-    [{ text: "✅ بله", callback_data: `lnno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `lnni:${i}:${imageId}` }],
+    [{ text: "✅ بله، حذف کن", callback_data: `lnno:${i}:${imageId}:del` }, { text: "❌ انصراف", callback_data: `lnni:${i}:${imageId}` }],
   ]);
 }
 
