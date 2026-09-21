@@ -11041,8 +11041,15 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     if (!txt) return send("⚠️ نام معتبر نیست.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_key", name: txt, msgId: pending.msgId }), { expirationTtl: 600 });
     return editId(
-      `🔑 کلید ماشین‌یوزر اکانت «${code(txt)}» را بفرستید:\n\nساخت کلید: پنل آروان → Settings → Machine User → New User\nبعد دسترسی‌های CDN و Cloud Server را به آن بدهید.\n(کلید با همین پیام پاک می‌شود و جایی نمایش داده نمی‌شود)`,
-      [[{ text: "⬅️ انصراف", callback_data: "arvanacc" }]]
+      `🔑 ساخت کلید ماشین‌یوزر آروان\n\n` +
+        `۱) دکمهٔ «👤 ماشین‌یوزرها» را بزن، New User بساز (نام لاتین کوچک، ۵ تا ۱۰۰ حرف) و کلید نمایش داده‌شده را کپی کن — فقط یک‌بار نشان داده می‌شود.\n\n` +
+        `۲) دکمهٔ «📦 مدیریت منابع» را بزن، روی + اول بزن تا وارد میز کار (Workspace) بشوی، بعد «قانون دسترسی» تعریف کن: همهٔ قوانین — یا حداقل CDN و Cloud Server — را انتخاب کن.\n\n` +
+        `۳) کلید را همین‌جا بفرست. پیامت بعد از ثبت پاک می‌شود و کلید جایی نمایش داده نمی‌شود.`,
+      [
+        [{ text: "👤 ماشین‌یوزرها", url: "https://panel.arvancloud.ir/profile/iam/machine-users" }],
+        [{ text: "📦 مدیریت منابع", url: "https://panel.arvancloud.ir/profile/iam/resource-management" }],
+        [{ text: "⬅️ انصراف", callback_data: "arvanacc" }],
+      ]
     );
   }
   if (type === "arvan_acc_key") {
