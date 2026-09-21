@@ -13257,7 +13257,7 @@ async function showLnHome(lnAccounts, edit) {
     kb.push(row);
   }
   kb.push([{ text: "➕ افزودن اکانت لینود", callback_data: "lna" }]);
-  kb.push([{ text: "🗑 حذف اکانت", callback_data: "lndel" }]);
+  if (lnAccounts.length) kb.push([{ text: "🗑 حذف اکانت", callback_data: "lndel" }]);
   kb.push([{ text: "🔙 دیتاسنترها", callback_data: "providers" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit("🟢 اکانت‌های لینود\n\nیک اکانت را انتخاب کنید:", kb);
 }
