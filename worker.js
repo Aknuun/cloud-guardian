@@ -6197,12 +6197,11 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
     keyboard.push(row);
   }
 
-  // addzone: ساخت دامنهٔ جدید در کلودفلر | accadd: افزودن اکانت کلودفلر جدید (توکن) | accounts: مدیریت اکانت‌ها
+  // addzone: ساخت دامنهٔ جدید در کلودفلر | accounts: مدیریت اکانت‌ها (افزودن/حذف)
   keyboard.push([
     { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
-    { text: "👤 افزودن اکانت کلودفلر", callback_data: "accadd" },
+    { text: "👤 اکانت‌ها", callback_data: "accounts" },
   ]);
-  keyboard.push([{ text: "👤 اکانت‌ها", callback_data: "accounts" }]);
 
   // zf:<filter>:<page>: صفحه‌بندی لیست دامنه‌ها (فقط وقتی بیش از یک صفحه است) | menu: خانه
   if (pages > 1) {
