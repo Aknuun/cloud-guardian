@@ -6539,7 +6539,7 @@ async function renderEmailHome(edit, kv, accounts, token) {
   } catch (e) {}
   if (!st) {
     return edit(
-      `✉️ ایمیل ${session.zone_name}\n\n❌ دسترسی به Email Routing نیست.\nبه توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}`,
+      `✉️ ایمیل ${session.zone_name}\n\n❌ دسترسی به Email Routing نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`,
       [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]]
     );
   }
