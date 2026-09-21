@@ -11873,10 +11873,10 @@ async function arvanServerCallback(data, ctx) {
     if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
     const v = session.vols[Number(m[2])];
     return edit(`🗑 دیسک «${code(v.name)}» حذف شود؟`, [
-      [{ text: "✅ بله", callback_data: `arvvol-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
+      [{ text: "✅ بله", callback_data: `arvvol-delok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
     ]);
   }
-  m = data.match(/^arvvol-del-ok:(.+):(\d+)$/);
+  m = data.match(/^arvvol-delok:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
