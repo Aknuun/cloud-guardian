@@ -6555,9 +6555,18 @@ async function addRecordFromPending(pending, content, accounts, kv, chatId, send
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, pending.zone_id);
+    const kb = [];
+    if (data.result.proxied === false && ["A", "AAAA", "CNAME"].includes(data.result.type)) {
+      const token = makeToken();
+      await kv.put(`s:${token}`, JSON.stringify({ zone_id: pending.zone_id, zone_name: pending.zone_name, acc: pending.acc }), {
+        expirationTtl: 86400,
+      });
+      kb.push([{ text: "🛰 روشن‌کردن Proxy", callback_data: `ep:${token}:${data.result.id}` }]);
+    }
+    kb.push([{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]);
     await send(
       `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار`,
-      [[{ text: "⬅️ دامنه‌ها", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]
+      kb
     );
   } else {
     await send("❌ خطا:\n" + cfErrText(data));
@@ -8830,7 +8839,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const selState = await kv.get(`sel:${chatId}`, "json");
       if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
       await edit("🔄 نوع جدید برای رکوردهای انتخاب‌شده:", [
-        ...RECORD_TYPES.map((t) => [{ text: t, callback_data: `bulktypev:${token}:${t}` }]),
+        RECORD_TYPES.map((t) => ({ text: t, callback_data: `bulktypev:${token}:${t}` })),
         [{ text: "⬅️ انصراف", callback_data: `selmode:${token}` }],
       ]);
     } else if (data.startsWith("bulktypev:")) {
@@ -10896,7 +10905,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
 // انتخاب نوع رکورد در ویزارد افزودن رکورد.
 // at:<token>:<type> = انتخاب نوع (A/AAAA/CNAME) | p:<token>:<page> = بازگشت به صفحهٔ قبل
 function typeKeyboard(token, backPage) {
-  const kb = RECORD_TYPES.map((t) => [{ text: t, callback_data: `at:${token}:${t}` }]);
+  const kb = [RECORD_TYPES.map((t) => ({ text: t, callback_data: `at:${token}:${t}` }))];
   kb.push([{ text: "⬅️ بازگشت", callback_data: `p:${token}:${backPage}` }]);
   return kb;
 }
