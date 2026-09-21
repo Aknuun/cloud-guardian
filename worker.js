@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.9";
+const BOT_VERSION = "1.4.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.4.0": [
+    "↪️ فوروارد ایمیل در «ایمیل سازمانی»: هر ایمیل با یک دکمه به هر چت/یوزر (شناسه عددی یا @یوزرنیم، چند مقصد) فوروارد می‌شود",
+    "🔗 لینک‌های داخل ایمیل قابل کلیک شدند + نمایش امن متن ایمیل (بدون خطای HTML)",
+    "🐛 رفع خطای «actions: must have actions» موقع زدن دکمه قطع در «ایمیل سازمانی»",
+  ],
   "1.3.9": [
     "📊 تله‌متری ناشناس: شمارش نصب‌های فعال فقط در تنظیمات ربات اصلی (بدون هیچ دیتای شخصی)",
     "📢 ارسال پیام همگانی از تنظیمات ربات اصلی: با دکمه پاسخ/تایید برای ادمین‌ها",
@@ -3029,6 +3034,19 @@ function escHtml(s) {
 
 function code(s) {
   return `<code>${escHtml(s)}</code>`;
+}
+
+// متن امن برای HTML + لینک‌کردن URLها (ایمیل‌ها): تلگرام لینک bare را در حالت HTML لینک نمی‌کند
+function linkifyAndEscape(s) {
+  const t = String(s || "");
+  return t
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/https?:\/\/[^\s<]+/g, (m) => {
+      const href = m.replace(/&amp;/g, "&").replace(/"/g, "&quot;");
+      return `<a href="${href}">${m}</a>`;
+    });
 }
 
 // ============================================================
@@ -7186,14 +7204,15 @@ async function renderInboxOne(edit, kv, accounts, token, id) {
     m = await kv.get(`inbox:${dom}:${id}`, "json");
   } catch (e) {}
   if (!m) return edit("❌ ایمیل پیدا نشد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${token}` }]]);
+  const body = decodeStoredPreview(m.preview) || "—";
   const lines = [
     `📨 ${(decodeRfc2047(m.subject) || "—").slice(0, 200)}`,
     "",
-    `✉️ از: ${decodeRfc2047(m.from) || "—"}`,
-    `📮 به: ${m.to || "—"}`,
+    `✉️ از: ${code(decodeRfc2047(m.from) || "—")}`,
+    `📮 به: ${code(m.to || "—")}`,
     `🕒 ${m.date || "—"}`,
     "",
-    (decodeStoredPreview(m.preview) || "—").slice(0, 3000),
+    linkifyAndEscape(body.slice(0, 2600)),
   ];
   await edit(lines.join("\n").slice(0, 3900), [
     [{ text: "🗑 حذف", callback_data: `zmailvdel:${token}:${id}`, style: "danger" }],
@@ -7300,17 +7319,21 @@ async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
     m = await kv.get(`inbox:${dom}:${id}`, "json");
   } catch (e) {}
   if (!m) return edit("❌ ایمیل پیدا نشد.", [[{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }]]);
+  const body = decodeStoredPreview(m.preview) || "—";
   const lines = [
     `📨 ${(decodeRfc2047(m.subject) || "—").slice(0, 200)}`,
     "",
-    `✉️ از: ${decodeRfc2047(m.from) || "—"}`,
-    `📮 به: ${m.to || "—"}`,
+    `✉️ از: ${code(decodeRfc2047(m.from) || "—")}`,
+    `📮 به: ${code(m.to || "—")}`,
     `🕒 ${m.date || "—"}`,
     "",
-    (decodeStoredPreview(m.preview) || "—").slice(0, 3000),
+    linkifyAndEscape(body.slice(0, 2600)),
   ];
   await edit(lines.join("\n").slice(0, 3900), [
-    [{ text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" }],
+    [
+      { text: "↪️ فوروارد", callback_data: `fmailfwd:${acc}:${zoneId}:${id}`, style: "primary" },
+      { text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" },
+    ],
     [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
   ]);
 }
@@ -7804,6 +7827,62 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     await send(`📢 ذخیره شد (آیدی ${code(id)}).\n\nتا ~۱ ساعت بعد به همه ادمین‌های همه نصب‌ها می‌رسد؛ زیرش دکمه «↩️ پاسخ» و «✅ تایید» هست. انقضا: ۳۰ روز.`, [
       [{ text: "📢 پیام همگانی", callback_data: "hubann" }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
+    return;
+  }
+
+  // ↪️ فوروارد ایمیل از «ایمیل سازمانی» به چت/یوزر دیگر
+  if (type === "fmail_fwd") {
+    await kv.delete(`pend:${chatId}`);
+    const fw = (pending && pending.fw) || {};
+    const targets = String(txt)
+      .split(/[\s,،;]+/)
+      .filter(Boolean)
+      .map((x) => x.trim());
+    const parsed = targets.filter((x) => /^@\w{3,}$/.test(x) || /^-?\d{5,}$/.test(x));
+    if (!parsed.length) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 900 });
+      await send(
+        "❌ مقصد معتبر نیست. دوباره بفرست: @یوزرنیم یا شناسه عددی (چند تا با فاصله).",
+        [[{ text: "⬅️ انصراف", callback_data: `fmailview:${fw.acc}:${fw.zone}:${fw.id}` }]]
+      );
+      return;
+    }
+    let m = null;
+    try {
+      m = await kv.get(`inbox:${String(fw.dom || "").toLowerCase()}:${fw.id}`, "json");
+    } catch (e) {}
+    if (!m) {
+      await send("❌ ایمیل در صندوق نیست (حذف/منقضی شده).", [[{ text: "📥 صندوق", callback_data: `fmailbox:${fw.acc}:${fw.zone}` }]]);
+      return;
+    }
+    const body = decodeStoredPreview(m.preview) || "—";
+    const text = [
+      "📨 فوروارد ایمیل",
+      "",
+      `✉️ از: ${code(decodeRfc2047(m.from) || "—")}`,
+      `📮 به: ${code(m.to || "—")}`,
+      `📌 موضوع: ${code((decodeRfc2047(m.subject) || "—").slice(0, 150))}`,
+      `🕒 ${m.date || "—"}`,
+      "",
+      linkifyAndEscape(body.slice(0, 2600)),
+    ]
+      .join("\n")
+      .slice(0, 4000);
+    let ok = 0;
+    for (const d of parsed.slice(0, 8)) {
+      try {
+        const chat = /^-?\d+$/.test(d) ? Number(d) : d;
+        if (await (await sendMessage(botToken, chat, text)).ok) ok++;
+      } catch (e) {}
+    }
+    const kb = [
+      [{ text: "📥 صندوق", callback_data: `fmailbox:${fw.acc}:${fw.zone}` }, { text: "🏠 خانه", callback_data: "menu" }],
+    ];
+    if (ok) {
+      await send(`📩 برای ${ok} مقصد فوروارد شد${ok < parsed.length ? `؛ ${parsed.length - ok} ناموفق بود.` : ""}.`, kb);
+    } else {
+      await send("⚠️ فوروارد ناموفق بود (مقصد را از اول بفرست یا از دکمه برگرد).", kb);
+    }
     return;
   }
 
@@ -11081,7 +11160,10 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const tok = accounts[acc] && accounts[acc].token;
       if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       try {
-        const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, { enabled: false });
+        // کلادفلر حتی برای «کات» هم یک actions معتبر لازم دارد؛ همان ورکر را بتون‌درستی بفرست تا ۲۰۰۷ ندهد
+        const wname = (env && env.WORKER_NAME) || "";
+        const actions = wname ? [{ type: "worker", value: [wname] }] : [{ type: "drop", value: [] }];
+        const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, { enabled: false, actions });
         if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       } catch (e) {
         return edit("❌ خطا.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
@@ -11092,6 +11174,23 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(`📩 دریافت ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
+    } else if (data.startsWith("fmailfwd:")) {
+      // ↪️ فوروارد ایمیل به چت/یوزر دیگر (شناسه عددی یا @یوزرنیم، چند مقصد)
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const id = parts[3];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "fmail_fwd", fw: { acc, zone: zoneId, id, dom: String(zone.name).toLowerCase() } }),
+        { expirationTtl: 900 }
+      );
+      await edit(
+        "↪️ فوروارد ایمیل\n\nشناسه مقصد را بفرست (چند تا با فاصله یا کاما):\n• برای گروه خصوصی: شناسه عددی (منفی)\n• برای یوزر/کانال: @یوزرنیم\n• برای چت خصوصی: شناسه عددی",
+        [[{ text: "⬅️ انصراف", callback_data: `fmailview:${acc}:${zoneId}:${id}` }]]
+      );
     } else if (data.startsWith("fmailbox:")) {
       const parts = data.split(":");
       await renderFmailBox(edit, kv, Number(parts[1]), parts[2], accounts);
