@@ -398,6 +398,14 @@ const RELEASE_NOTES = {
   ],
 };
 
+// ============================================================
+// 📌 قانون چیدمان دکمه‌ها — برای هر ویرایش آیندهٔ این فایل (انسان یا هوش مصنوعی):
+// ۱) دکمه‌ها همیشه کنار هم در ردیف چیده شوند؛ هر دکمه در یک ردیف جدا ممنوع.
+// ۲) اگر متن دکمه‌ها کوتاه است: ۳ تا ۴ دکمه در هر ردیف (با grid4/grid3/grid2).
+// ۳) فقط اگر متن دکمه خیلی بلند است: آن دکمه تنها در یک ردیف باشد.
+// ۴) استثنا: جفت تأییدی (بله/انصراف) دوتایی در یک ردیف می‌ماند.
+// هدف: چت تمیز و جلوگیری از انباشت پیام‌های بلند.
+// ============================================================
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LINODE_API = "https://api.linode.com/v4";
 const HETZNER_API = "https://api.hetzner.cloud/v1";
@@ -477,6 +485,28 @@ function grid2(buttons) {
   for (let i = 0; i < buttons.length; i += 2) {
     const row = [buttons[i]];
     row.push(buttons[i + 1] || EMPTY_BTN);
+    rows.push(row);
+  }
+  return rows;
+}
+// چیدمان ۳ و ۴ ستونه برای دکمه‌های کوتاه (طبق قانون چیدمان بالای فایل)
+function grid3(buttons) {
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 3) {
+    const row = [buttons[i]];
+    row.push(buttons[i + 1] || EMPTY_BTN);
+    row.push(buttons[i + 2] || EMPTY_BTN);
+    rows.push(row);
+  }
+  return rows;
+}
+function grid4(buttons) {
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 4) {
+    const row = [buttons[i]];
+    row.push(buttons[i + 1] || EMPTY_BTN);
+    row.push(buttons[i + 2] || EMPTY_BTN);
+    row.push(buttons[i + 3] || EMPTY_BTN);
     rows.push(row);
   }
   return rows;
