@@ -6437,9 +6437,12 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
       { text: "➕ افزودن", callback_data: `addz:${token}` },
       { text: "🔍 جستجو", callback_data: `zsearch:${token}` },
     ]);
-    // noproxy: رکوردهای بدون پروکسی (خاموش) با تیک آمادهٔ حذف گروهی
+    // noproxy: رکوردهای بدون پروکسی (خاموش) با تیک آمادهٔ حذف گروهی | ztraf: ترافیک هر ساب در ۷ روز گذشته
     if (records.length) {
-      keyboard.push([{ text: "🛰 رکوردهای خاموش (بدون Proxy)", callback_data: `noproxy:${token}`, style: "success" }]);
+      keyboard.push([
+        { text: "🛰 خاموش‌ها", callback_data: `noproxy:${token}` },
+        { text: "📊 ترافیک ساب‌ها", callback_data: `ztraf:${token}` },
+      ]);
     }
   }
 
@@ -6575,6 +6578,84 @@ async function renderMailDestPicker(edit, kv, accounts, token, forCatch, chatId)
   kb.push([{ text: "➕ مقصد جدید", callback_data: forCatch ? `zmailcnew:${token}` : `zmaildestnew:${token}` }]);
   kb.push([{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]);
   await edit(lines.join("\n"), kb);
+}
+
+// ===================== ترافیک ساب‌ها (DNS Analytics: کوئری هر ساب در ۷ روز) =====================
+async function cfGraphql(tok, query) {
+  const res = await fetch("https://api.cloudflare.com/client/v4/graphql", {
+    method: "POST",
+    headers: hdr(tok),
+    body: JSON.stringify({ query }),
+    signal: withTimeout(30000),
+  });
+  return res.json();
+}
+
+// برمی‌گرداند {counts} یا {needPerm} یا {error} — counts: نام کامل کوچک → تعداد کوئری
+async function fetchTrafficCounts(tok, zoneId) {
+  const now = new Date();
+  const week = new Date(now.getTime() - 7 * 86400000);
+  const fmt = (d) => d.toISOString().slice(0, 19) + "Z";
+  try {
+    const q =
+      `{ viewer { zones(filter: {zoneTag: "${zoneId}"}) { dnsAnalyticsAdaptiveGroups(limit: 1000, ` +
+      `filter: {datetime_geq: "${fmt(week)}", datetime_leq: "${fmt(now)}"}, orderBy: [count_DESC]) { count dimensions { queryName } } } } }`;
+    const d = await cfGraphql(tok, q);
+    if (d.errors && d.errors.length) {
+      const msg = String((d.errors[0] && d.errors[0].message) || "");
+      if (/permission|authz|analytics\.read/i.test(msg)) return { needPerm: true };
+      return { error: msg.slice(0, 200) };
+    }
+    const z = d.data && d.data.viewer && d.data.viewer.zones && d.data.viewer.zones[0];
+    const groups = (z && z.dnsAnalyticsAdaptiveGroups) || [];
+    const counts = {};
+    for (const g of groups) {
+      const qn = String((g.dimensions && g.dimensions.queryName) || "").toLowerCase().replace(/\.$/, "");
+      if (qn) counts[qn] = (counts[qn] || 0) + (g.count || 0);
+    }
+    return { counts };
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 150) };
+  }
+}
+
+async function renderTrafficHome(edit, kv, accounts, token) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const tok = accounts[session.acc] && accounts[session.acc].token;
+  if (!tok) return edit("❌ اکانت پیدا نشد.");
+  const zone = await getZoneById(session.zone_id, session.acc, accounts);
+  if (!zone) return edit("❌ دامنه پیدا نشد.");
+  const t = await fetchTrafficCounts(tok, session.zone_id);
+  if (t.needPerm) {
+    return edit(`📊 ترافیک ${zone.name}\n\n❌ دسترسی Analytics نیست.\nبه توکن این را اضافه کن:\n${code("Zone → Analytics → Read")}`, [
+      [{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
+    ]);
+  }
+  if (t.error) {
+    return edit("❌ خطا در آمار:\n" + t.error, [[{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }]]);
+  }
+  const records = await getRecords(zone, accounts, kv);
+  const rows = records
+    .filter((r) => ["A", "AAAA", "CNAME"].includes(r.type))
+    .map((r) => ({ r, n: t.counts[String(r.name || "").toLowerCase()] || 0 }))
+    .sort((a, b) => b.n - a.n);
+  const lines = [`📊 ترافیک ۷ روز گذشته — ${zone.name}`, ""];
+  for (const { r, n } of rows.slice(0, 25)) {
+    const short = r.name === zone.name ? "@" : String(r.name).slice(0, -(zone.name.length + 1));
+    lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${Number(n).toLocaleString("en-US")} کوئری`);
+  }
+  if (rows.length > 25) lines.push(`… و ${rows.length - 25} مورد دیگر`);
+  const zeros = rows.filter((x) => x.n === 0);
+  lines.push("", "⚠️ سابی که خیلی به‌ندرت استفاده میشه هم صفر نشون میده؛ قبل از حذف مطمئن شو.");
+  const kb = [];
+  if (zeros.length) {
+    kb.push([{ text: `🗑 حذف ${zeros.length} رکورد بدون ترافیک`, callback_data: `ztrafdel:${token}`, style: "danger" }]);
+  } else if (rows.length) {
+    lines.push("✅ همهٔ ساب‌ها در ۷ روز گذشته ترافیک داشتن.");
+  }
+  kb.push([{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
 async function renderSettingsGroup(token, session, accounts, edit, title, keys) {
@@ -9324,6 +9405,45 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
       await renderRecords(zone, records, token, rpage, edit, undefined, session.zback);
+    } else if (data.startsWith("ztraf:")) {
+      const token = data.slice(6);
+      await edit("⏳ در حال خواندن آمار ۷ روزه…");
+      await renderTrafficHome(edit, kv, accounts, token);
+    } else if (data.startsWith("ztrafdel:")) {
+      const token = data.slice(9);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await edit("🗑 رکوردهای بدون ترافیک ۷ روز گذشته حذف شوند؟\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟", [
+        [{ text: "✅ بله، حذف کن", callback_data: `ztrafdely:${token}` }, { text: "❌ انصراف", callback_data: `ztraf:${token}` }],
+      ]);
+    } else if (data.startsWith("ztrafdely:")) {
+      const token = data.slice(10);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.");
+      const t = await fetchTrafficCounts(tok, session.zone_id);
+      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }]]);
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const records = await getRecords(zone, accounts, kv);
+      const zeros = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !(t.counts[String(r.name || "").toLowerCase()] || 0));
+      let ok = 0;
+      for (const r of zeros) {
+        try {
+          const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${r.id}`, {
+            method: "DELETE",
+            headers: hdr(tok),
+            signal: withTimeout(),
+          });
+          const d = await del.json();
+          if (d.success) ok++;
+        } catch (e) {}
+      }
+      await invalidateCache(kv, session.zone_id);
+      await edit(`✅ ${ok} از ${zeros.length} رکورد بدون ترافیک حذف شد.`, [
+        [{ text: "📊 ترافیک", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
+      ]);
     } else if (data.startsWith("noproxy:")) {
       // رکوردهای خاموش (A/AAAA/CNAME بدون پروکسی) با تیک آماده وارد حالت گروهی می‌شوند
       const token = data.slice(8);
