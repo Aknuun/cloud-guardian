@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.1";
+const BOT_VERSION = "1.3.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.3": [
+    "🔄 تعمیر آپدیت خودکار با تگ: چک نسخه با ETag انجام می‌شود تا سهمیهٔ ساعتی گیت‌هاب تمام نشود و تگ جدید همیشه دیده شود (دیگر نیازی به ریلیز نیست)",
+  ],
   "1.3.1": [
     "📥 وارد کردن سرورها از دیتاسنترها: همهٔ سرورهای هتزنر/لینود/آروان با یک دکمه وارد لیست سرورها می‌شوند (با رمز پیش‌فرض اختیاری)",
     "🗂 حالت عملیات گروهی در نتایج جست‌وجوی آیپی: انتخاب چند ساب + حذف/تغییر مقدار/افزودن به منتخب‌ها (چندزونه: کلودفلر + آروان)",
@@ -1503,11 +1506,28 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     if (!tok) return;
 
     // تریگر آپدیت: تگ نسخهٔ جدید یا ریلیز جدید (هر کدام جدیدتر باشد)
+    // با ETag/304 سهمیهٔ ۶۰تایی ساعتی گیت‌هاب (بدون احراز هویت، مشترک بین ورکرها) مصرف نمی‌شود
+    let tagEtag = null;
+    try {
+      tagEtag = await kv.get("selfup_etag_tags", "text");
+    } catch (e) {}
+    const tHeaders = { Accept: "application/vnd.github+json" };
+    if (tagEtag) tHeaders["If-None-Match"] = tagEtag;
     const tRes = await fetch(SELF_TAGS_URL, {
-      headers: { Accept: "application/vnd.github+json" },
+      headers: tHeaders,
       signal: AbortSignal.timeout(30000),
     });
+    if (tRes.status === 304) {
+      try {
+        await kv.put("selfup_last", String(Date.now()));
+      } catch (e) {}
+      return;
+    }
     if (!tRes.ok) return;
+    try {
+      const newEtag = tRes.headers.get("etag");
+      if (newEtag) await kv.put("selfup_etag_tags", newEtag);
+    } catch (e) {}
     let tags = [];
     try {
       tags = await tRes.json();
@@ -1518,11 +1538,21 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     // ریلیزها: درفت‌ها نادیده گرفته می‌شوند؛ پری‌ریلیزها هم نادیده (فقط ریلیز پایدار)
     let tagFromRelease = null;
     try {
+      let relEtag = null;
+      try {
+        relEtag = await kv.get("selfup_etag_rels", "text");
+      } catch (e) {}
+      const rHeaders = { Accept: "application/vnd.github+json" };
+      if (relEtag) rHeaders["If-None-Match"] = relEtag;
       const rRes = await fetch(SELF_RELEASES_URL, {
-        headers: { Accept: "application/vnd.github+json" },
+        headers: rHeaders,
         signal: AbortSignal.timeout(30000),
       });
       if (rRes.ok) {
+        try {
+          const newRelEtag = rRes.headers.get("etag");
+          if (newRelEtag) await kv.put("selfup_etag_rels", newRelEtag);
+        } catch (e) {}
         const rels = await rRes.json();
         const names = (Array.isArray(rels) ? rels : [])
           .filter((r) => r && !r.draft && !r.prerelease && r.tag_name)
