@@ -198,6 +198,9 @@ def bindings(cfg, kv_id):
         {"type": "plain_text", "name": "CF_ACCOUNTS", "text": json.dumps(accs, ensure_ascii=False)},
         {"type": "plain_text", "name": "WORKER_ACCOUNT_ID", "text": cfg["account_id"]},
         {"type": "plain_text", "name": "WORKER_NAME", "text": cfg["worker"]},
+        # شناسهٔ KV برای اینکه آپدیت خودکارِ داخل ورکر (maybeSelfUpdate) بتواند
+        # بایندینگ‌ها را بدون حدس زدن بازسازی کند.
+        {"type": "plain_text", "name": "KV_ID", "text": kv_id},
     ]
 
 
@@ -253,28 +256,46 @@ def install(cfg, tok, code):
 
 
 def update(cfg, tok, code):
-    base = f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}"
-    st, out = req(tok, "GET", base + "/settings")
-    s, err = json_ok(st, out)
-    if err:
-        return f"SETTINGS ERR: {err}"
+    # ⚠️ بایندینگ‌ها را از config بازسازی کن و با همان API نصب (PUT) دیپلوی کن.
+    # API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
+    # بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
+    kv_id = cfg.get("kv_namespace_id") or find_kv_id(cfg, tok)
+    if not kv_id:
+        return "KV ERR: kv_namespace_id در config نیست و پیدا هم نشد."
+    cfg["kv_namespace_id"] = kv_id
+    with open(CFG, "w") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
     meta = {
         "main_module": "worker.js",
         "modules": [{"name": "worker.js"}],
-        "compatibility_date": s.get("compatibility_date", "2024-11-01"),
-        "usage_model": s.get("usage_model", "standard"),
-        "bindings": s.get("bindings", []),
+        "compatibility_date": cfg.get("compatibility_date", "2024-11-01"),
+        "usage_model": cfg.get("usage_model", "standard"),
+        "bindings": bindings(cfg, kv_id),
     }
     body, B = module_body(code, meta)
-    st, out = req(tok, "POST", base + "/versions", body, f"multipart/form-data; boundary={B}")
+    st, out = req(tok, "PUT", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}",
+                  body, f"multipart/form-data; boundary={B}")
     res, err = json_ok(st, out)
     if err:
-        return f"UPLOAD ERR: {err}"
-    dep = json.dumps({"versions": [{"version_id": res["id"], "percentage": 100}]}).encode("utf-8")
-    st, out = req(tok, "POST", base + "/deployments", dep, "application/json")
-    res, err = json_ok(st, out)
+        return f"SCRIPT ERR: {err}"
+    enable_workers_dev(cfg, tok)
+    # PUT ممکن است زمان‌بندها را پاک کند — برگردان (مثل install)
+    res, err = set_schedules(cfg, tok, SCHEDULES)
+    # بلافاصله بعد از آپلود اسکریپت، این اندپوینت ممکن است موقتاً 10026 بدهد
+    for _ in range(3):
+        if not err or "10026" not in err:
+            break
+        time.sleep(2)
+        res, err = set_schedules(cfg, tok, SCHEDULES)
+    if err and "10072" in err:
+        # سقف کرون‌های پلن رایگان در کل اکانت پر شده؛ حداقل کرون‌های ضروری را نصب کن
+        for subset in (["*/10 * * * *", "*/5 * * * *"], ["*/10 * * * *"], ["*/5 * * * *"]):
+            res, err = set_schedules(cfg, tok, subset)
+            if not err:
+                print(T("sched_min", SEP.join(subset)), file=sys.stderr)
+                break
     if err:
-        return f"DEPLOY ERR: {err}"
+        print(T("sched_warn", err), file=sys.stderr)
     return None
 
 

@@ -61,17 +61,35 @@ if [ -n "$OLDV" ]; then
 fi
 
 TMP="${DIR}/worker.js.new"
+DTMP="${DIR}/deploy-tool.py.new"
 curl -fsSL --max-time 90 -o "$TMP" -H 'Accept: application/vnd.github.raw' \
   "https://api.github.com/repos/${REPO}/contents/worker.js?ref=${LATEST_TAG}" || exit 0
+# ابزار دیپلوی را هم از همان تگ بگیر؛ وگرنه نسخهٔ قدیمیِ deploy-tool بایندینگ‌ها را
+# خالی دیپلوی می‌کند و ربات می‌میرد. اگر دانلودش ناموفق بود، این دور را رد کن.
+curl -fsSL --max-time 90 -o "$DTMP" -H 'Accept: application/vnd.github.raw' \
+  "https://api.github.com/repos/${REPO}/contents/deploy-tool.py?ref=${LATEST_TAG}" || { rm -f "$TMP"; exit 0; }
 
 NEWV=$(sed -n 's/^const BOT_VERSION = "\([^"]*\)".*/\1/p' "$TMP" | head -1)
 
 if [ -z "$NEWV" ]; then
-  rm -f "$TMP"
+  rm -f "$TMP" "$DTMP"
   exit 0
+fi
+# deploy-tool باید سالم باشد
+grep -q "def update" "$DTMP" || { rm -f "$TMP" "$DTMP"; exit 0; }
+# اگر نسخهٔ داخل کد از نسخهٔ نصب‌شده جدیدتر نیست، دیپلوی نکن
+# (جلوگیری از حلقهٔ دیپلوی تکراری و دانگرید تصادفی)
+if [ -n "$OLDV" ]; then
+  NEWEST2=$(printf '%s\n%s\n' "$OLDV" "$NEWV" | sort -V | tail -1)
+  if [ "$NEWEST2" != "$NEWV" ] || [ "$NEWV" = "$OLDV" ]; then
+    rm -f "$TMP" "$DTMP"
+    exit 0
+  fi
 fi
 
 mv "$TMP" "${DIR}/worker.js"
+mv "$DTMP" "${DIR}/deploy-tool.py"
+chmod +x "${DIR}/deploy-tool.py" 2>/dev/null || true
 cd "$DIR"
 if python3 deploy-tool.py update; then
   python3 - "${CFG}" "$NEWV" <<'PY'

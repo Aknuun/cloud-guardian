@@ -646,6 +646,16 @@ do_update() {
   b "$(t upd_download)"
   if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/worker.js" ]; then
     cp "$SRC_DIR/worker.js" "$DIR/worker.js"
+    # ابزار دیپلوی را هم هم‌نسخه کن؛ وگرنه نسخهٔ قدیمیِ deploy-tool بایندینگ‌ها را
+    # خالی دیپلوی می‌کند و ربات می‌میرد.
+    if [ -f "$SRC_DIR/deploy-tool.py" ]; then
+      cp "$SRC_DIR/deploy-tool.py" "$DIR/deploy-tool.py"
+      chmod +x "$DIR/deploy-tool.py" 2>/dev/null || true
+    fi
+    if [ -f "$SRC_DIR/update.sh" ]; then
+      cp "$SRC_DIR/update.sh" "$DIR/update.sh"
+      chmod +x "$DIR/update.sh" 2>/dev/null || true
+    fi
   else
     gh_raw "$REPO" "worker.js" > "$DIR/worker.js"
     gh_raw "$REPO" "deploy-tool.py" > "$DIR/deploy-tool.py"

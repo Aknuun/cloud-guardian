@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.11";
+const BOT_VERSION = "1.0.12";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.12": [
+    "🛠 رفع باگ مرگبار آپدیت خودکار: دیپلوی با بایندینگ خالی (بدون BOT_KV/BOT_TOKEN) که ربات را از کار می‌انداخت — حالا بایندینگ‌ها همیشه از نو ساخته می‌شوند و زمان‌بندها هم حفظ می‌شوند",
+    "🔄 آپدیت خودکارِ سرور (کرون) حالا deploy-tool را هم از همان تگ می‌گیرد و اگر نسخهٔ کد جدیدتر نباشد دیپلوی تکراری نمی‌کند",
+  ],
   "1.0.11": [
     "🔒 رفتار REALITY/Fastly حالا قابل تنظیم است (پیش‌فرض بدون تغییر: فقط هشدار): از «🧭 تعویض خودکار ساب فیلتر ← ⚙️ تنظیمات» می‌توانی «تعویض REALITY/Fastly» را روشن کنی تا مثل هاست‌های عادی تعویض شوند",
   ],
@@ -1201,17 +1205,56 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     const code = await res.text();
     const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
     if (!m || !selfVerGreater(m[1], BOT_VERSION) || !code.includes("export default {")) return;
+    // ⚠️ بایندینگ‌ها را از env بازسازی کن و با API نصب (PUT) دیپلوی کن.
+    // API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
+    // بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
+    let kvId = env.KV_ID || "";
+    if (!kvId) {
+      try {
+        const kvRes = await fetch(`${CF_API}/accounts/${aid}/storage/kv/namespaces?per_page=100`, {
+          headers: hdr(tok),
+          signal: withTimeout(),
+        });
+        const kvData = await kvRes.json();
+        const list = (kvData.success && Array.isArray(kvData.result)) ? kvData.result : [];
+        const found = list.find((n) => n && n.title === `${wname}-kv`) || null;
+        if (found && found.id) kvId = found.id;
+      } catch (e) {}
+    }
+    if (!kvId) return;
+    let cfAccountsText = env.CF_ACCOUNTS || "";
+    if (!cfAccountsText) {
+      try {
+        cfAccountsText = JSON.stringify(accounts);
+      } catch (e) {}
+    }
+    const binds = [
+      { type: "kv_namespace", name: "BOT_KV", namespace_id: kvId },
+      { type: "plain_text", name: "BOT_TOKEN", text: env.BOT_TOKEN || botToken },
+      { type: "plain_text", name: "ADMIN_ID", text: String(env.ADMIN_ID ?? adminId) },
+      { type: "plain_text", name: "CF_ACCOUNTS", text: cfAccountsText },
+      { type: "plain_text", name: "WORKER_ACCOUNT_ID", text: aid },
+      { type: "plain_text", name: "WORKER_NAME", text: wname },
+      { type: "plain_text", name: "KV_ID", text: kvId },
+    ];
+    if (env.PROMO_URL) binds.push({ type: "plain_text", name: "PROMO_URL", text: String(env.PROMO_URL) });
+    if (env.REQUEST_LIMIT_DAILY) binds.push({ type: "plain_text", name: "REQUEST_LIMIT_DAILY", text: String(env.REQUEST_LIMIT_DAILY) });
     const base = `${CF_API}/accounts/${aid}/workers/scripts/${encodeURIComponent(wname)}`;
-    const sRes = await fetch(base + "/settings", { headers: hdr(tok), signal: withTimeout() });
-    const sData = await sRes.json();
-    if (!sData.success || !sData.result) return;
-    const s = sData.result;
+    // زمان‌بندهای فعلی را نگه دار چون PUT ممکن است پاکشان کند
+    let savedCrons = null;
+    try {
+      const scRes = await fetch(base + "/schedules", { headers: hdr(tok), signal: withTimeout() });
+      const scData = await scRes.json();
+      if (scData.success && scData.result && Array.isArray(scData.result.schedules)) {
+        savedCrons = scData.result.schedules.map((s) => s.cron).filter(Boolean);
+      }
+    } catch (e) {}
     const meta = {
       main_module: "worker.js",
       modules: [{ name: "worker.js" }],
-      compatibility_date: s.compatibility_date || "2024-11-01",
-      usage_model: s.usage_model || "standard",
-      bindings: s.bindings || [],
+      compatibility_date: "2024-11-01",
+      usage_model: "standard",
+      bindings: binds,
     };
     const boundary = "----negahban" + Math.random().toString(36).slice(2) + Date.now().toString(36);
     const bodyStr =
@@ -1219,22 +1262,32 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       `--${boundary}\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${code}\r\n` +
       `--${boundary}--\r\n`;
     const enc = new TextEncoder();
-    const upRes = await fetch(base + "/versions", {
-      method: "POST",
+    const upRes = await fetch(base, {
+      method: "PUT",
       headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
       body: enc.encode(bodyStr),
       signal: withTimeout(90000),
     });
     const upData = await upRes.json();
-    if (!upData.success || !upData.result || !upData.result.id) return;
-    const depRes = await fetch(base + "/deployments", {
-      method: "POST",
-      headers: hdr(tok),
-      body: JSON.stringify({ versions: [{ version_id: upData.result.id, percentage: 100 }] }),
-      signal: withTimeout(),
-    });
-    const depData = await depRes.json();
-    if (!depData.success) return;
+    if (!upData.success) return;
+    try {
+      await fetch(base + "/subdomain", {
+        method: "POST",
+        headers: hdr(tok),
+        body: JSON.stringify({ enabled: true, previews_enabled: true }),
+        signal: withTimeout(),
+      });
+    } catch (e) {}
+    if (savedCrons && savedCrons.length) {
+      try {
+        await fetch(base + "/schedules", {
+          method: "PUT",
+          headers: hdr(tok),
+          body: JSON.stringify(savedCrons.map((cron) => ({ cron }))),
+          signal: withTimeout(),
+        });
+      } catch (e) {}
+    }
     if (!skipGuard) await kv.put("selfup_last", String(Date.now()));
     try {
       await kv.put("release_seen", m[1]);
