@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.19";
+const BOT_VERSION = "1.0.20";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.20": [
+    "🔄 رفع باگ دکمهٔ «بازگشت» در بخش رله: حالا از هر مسیری وارد شوی (راهنما یا سرورها) دکمهٔ بازگشت به همان‌جا برمی‌گردد",
+    "🌐 صفحهٔ رله یکپارچه شد: وضعیت + مدیریت رله در «ℹ️ راهنما ← 🌐 راهنمای رله»؛ بعد از هر عملیات، همان صفحه با وضعیت تازه نشان داده می‌شود",
+  ],
   "1.0.19": [
     "🧹 دکمهٔ «ℹ️ راهنمای رله» از صفحهٔ «🖥 سرورها» حذف شد — مدیریت رله حالا از «ℹ️ راهنما ← 🌐 راهنمای رله» انجام می‌شود",
   ],
@@ -4265,6 +4269,78 @@ async function getRelayBase(kv, env) {
   return (await getSrvRelayCfg(kv, env)).url;
 }
 
+// مقصد دکمهٔ «بازگشت» در جریان رله — تا از هر جا وارد شدی، برگشت به همان‌جا برگردد
+const RELAY_HOME_CB = "hg:relay";
+async function setRelayBack(kv, chatId, cb) {
+  if (!kv || !chatId) return;
+  try {
+    await kv.put(`relayback:${chatId}`, String(cb || "help"), { expirationTtl: 7200 });
+  } catch (e) {}
+}
+async function getRelayBack(kv, chatId) {
+  try {
+    const b = kv && chatId ? await kv.get(`relayback:${chatId}`) : null;
+    return b || "help";
+  } catch (e) {
+    return "help";
+  }
+}
+function relayBackButton(back) {
+  if (back === "srv") return { text: "🔙 سرورها", callback_data: "srv" };
+  if (back === "help" || !back) return { text: "🔙 راهنما", callback_data: "help" };
+  if (back === RELAY_HOME_CB) return { text: "🔙 رله", callback_data: RELAY_HOME_CB };
+  return { text: "🔙 بازگشت", callback_data: back };
+}
+
+// صفحهٔ خانهٔ رله: وضعیت + مدیریت (تنظیم مجدد / پیش‌فرض / حذف)
+async function renderRelayHome(render, kv, env, back) {
+  const mode = await getRelayMode(kv);
+  const active = await getSrvRelayCfg(kv, env);
+  const def = getDefaultRelayCfg(env);
+  const fromKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
+  const modeFa = mode === "custom" ? "🔧 شخصی" : mode === "default" ? "🌐 پیش‌فرض رایگان" : "🔀 خودکار";
+  let defStat = "🔴 در دسترس نیست";
+  try {
+    const p = await relayPing(def.url, def.token);
+    defStat = p.ok ? "🟢 در دسترس" : "🔴 در دسترس نیست";
+  } catch (e) {}
+  const lines = [
+    "🌐 رلهٔ SSH",
+    "",
+    "🔎 چرا لازم است؟",
+    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس اتصال‌های SSH (سرورها، نصب نود، مانیتور سرورها، چک‌هاست و API آروان) از رله عبور می‌کنند.",
+    "",
+    "🧩 وضعیت فعلی",
+    "• حالت: " + modeFa,
+    "• " + (active.url ? "✅ رلهٔ فعال: " + code(active.url) : "❌ رلهٔ فعالی نیست.") + (fromKv && mode !== "default" ? " (شخصی)" : ""),
+    "• 🌐 رلهٔ رایگان پیش‌فرض: " + defStat,
+    "",
+    "⚙️ مدیریت (دکمه‌های قرمز پایین)",
+    "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
+    "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
+    "• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار",
+    "",
+    "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.",
+    "",
+    "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):",
+    code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"'),
+    "",
+    "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
+  ];
+  const kb = [
+    // مدیریت رله (قرمز): تنظیم مجدد / انتخاب پیش‌فرض / حذف رله فعلی
+    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "danger" }],
+    [
+      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "danger" },
+      { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
+    ],
+    // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
+    mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto" }],
+    [relayBackButton(back)],
+  ].filter((r) => r.length);
+  await render(lines.join("\n"), kb);
+}
+
 // اگر آدرس رله با آی‌پی ارسال شود، ورکر کلادفلر نمی‌تواند مستقیم وصل شود (خطای 1003)؛
 // این تابع خودکار یک ساب‌دامهٔ `rel.<اولین دامنهٔ فعال>` می‌سازد و آی‌پی را روی آن می‌گذارد.
 async function ensureRelaySubdomain(ip, port, kv, env) {
@@ -6681,14 +6757,15 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         u = sub.url;
         await send(`✅ چون آدرس با آی‌پی بود، خودکار این رکورد را ساختم:\n${code(sub.domain)} → ${code(sub.ip)} (بدون پروکسی)\nاز این آدرس استفاده می‌شود: ${code(u)}`);
       }
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "token", url: u }), { expirationTtl: 900 });
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "token", url: u, back: pending.back }), { expirationTtl: 900 });
       return send("🔑 توکن رله را بفرستید (همان X-SRV-Token که بعد از نصب رله در خروجی نمایش داده می‌شود):");
     }
     if (pending.step === "token") {
+      const back = pending.back || (await getRelayBack(kv, chatId));
       const u = String(pending.url || "").replace(/\/+$/, "");
       // پاک‌سازی کاراکترهای نامرئی (مثل ZWNJ/علامت RTL-LTR) که موقع کپی به توکن می‌چسبند
       let tok = String(txt || "").replace(/[\u200B-\u200D\u200E\u200F\u061C\uFEFF\u2060-\u206F\u00AD]/g, "").trim();
-      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: back }]]);
       // ۱) اول بررسی سادگیِ دسترسی به رله با /ping (بدون توکن)
       let ping;
       try {
@@ -6717,7 +6794,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         let isRelay = false;
         try { isRelay = /forbidden/i.test(String((await res.text()) || "")); } catch (e3) {}
         if (isRelay) {
-          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: back }]]);
         }
         return send("❌ رله کد 403 برگرداند اما نتوانستیم مطمئن شویم این پاسخ از خودِ رله است (شاید مسیر بین ورکر و رله مسدود شده). دوباره تلاش کنید:", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
       }
@@ -6727,9 +6804,8 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       await kvPutCached(kv, RELAY_URL_KEY, u);
       await kvPutCached(kv, RELAY_TOKEN_KEY, tok);
       await setRelayMode(kv, "custom");
-      return send(`✅ رلهٔ شخصی ثبت شد و اتصال با موفقیت تست شد (حالت: شخصی).\n🌐 ${code(u)}\n🔑 توکن: ذخیره شد`, [
-        [{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }, { text: "🖥 سرورها", callback_data: "srv" }],
-      ]);
+      await send(`✅ رلهٔ شخصی ثبت شد و اتصال با موفقیت تست شد (حالت: شخصی).\n🌐 ${code(u)}`);
+      return renderRelayHome(send, kv, env, back);
     }
   }
 
@@ -7970,9 +8046,15 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // hqi: راهنمای «جای‌گذاری سریع»
       await edit(HELP_GUIDE.hqi, helpGuideKb("hqi"));
     } else if (data.startsWith("hg:")) {
-      // hg:<key>: نمایش راهنمای همان بخش (cf/prov/mons/relay/arvan/...)
+      // hg:<key>: نمایش راهنمای همان بخش (cf/prov/mons/arvan/...)
       const hk = data.slice(3);
-      await edit(HELP_GUIDE[hk] || "ℹ️ راهنمای این بخش موجود نیست.", helpGuideKb(hk));
+      if (hk === "relay") {
+        // راهنمای رله = صفحهٔ خانهٔ رله (وضعیت + مدیریت)؛ بازگشت به راهنما
+        await setRelayBack(kv, chatId, "help");
+        await renderRelayHome(edit, kv, env, "help");
+      } else {
+        await edit(HELP_GUIDE[hk] || "ℹ️ راهنمای این بخش موجود نیست.", helpGuideKb(hk));
+      }
     } else if (data === "admins_menu") {
       // admins_menu: لیست ادمین‌ها (فقط ادمین اصلی)
       if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین‌ها را مدیریت کند.");
@@ -9050,94 +9132,48 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // بخش سرورها: مدیریت سرورهای لینوکسی از طریق رله
       await renderServersHome(edit, kv, env);
     } else if (data === "srvrelayhelp") {
-      const mode = await getRelayMode(kv);
-      const active = await getSrvRelayCfg(kv, env);
-      const def = getDefaultRelayCfg(env);
-      const fromKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
-      const modeFa = mode === "custom" ? "🔧 شخصی" : mode === "default" ? "🌐 پیش‌فرض رایگان" : "🔀 خودکار";
-      let defStat = "";
-      try {
-        const p = await relayPing(def.url, def.token);
-        defStat = p.ok ? "🟢 در دسترس" : "🔴 در دسترس نیست";
-      } catch (e) {
-        defStat = "🔴 در دسترس نیست";
-      }
-      const lines = [
-        "🌐 رلهٔ SSH",
-        "",
-        "🔎 چرا لازم است؟",
-        "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس اتصال‌های SSH (سرورها، نصب نود، مانیتور سرورها، چک‌هاست و API آروان) از رله عبور می‌کنند.",
-        "",
-        "🧩 وضعیت فعلی",
-        "• حالت: " + modeFa,
-        "• " + (active.url ? "✅ رلهٔ فعال: " + code(active.url) : "❌ رلهٔ فعالی نیست.") + (fromKv && mode !== "default" ? " (شخصی)" : ""),
-        "• 🌐 رلهٔ رایگان پیش‌فرض: " + defStat,
-        "",
-        "⚙️ مدیریت (دکمه‌های قرمز پایین)",
-        "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
-        "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
-        "• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار",
-        "",
-        "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی. رلهٔ پیش‌فرض با دامنه است؛ جابه‌جایی سرور فقط با عوض‌کردن DNS انجام می‌شود.",
-        "",
-        "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):",
-        code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"'),
-        "",
-        "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
-      ];
-      const kb = [
-        // مدیریت رله (قرمز): تنظیم مجدد / انتخاب پیش‌فرض / حذف رله فعلی
-        [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "danger" }],
-        [
-          { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "danger" },
-          { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
-        ],
-        // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
-        mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto" }],
-        [{ text: "🔙 سرورها", callback_data: "srv" }],
-      ].filter((r) => r.length);
-      await edit(lines.join("\n"), kb);
+      // صفحهٔ رله — برگشت به همان‌جایی که کاربر از آن وارد شد
+      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
     } else if (data === "srvusedefault") {
       // استفاده از رلهٔ رایگان پیش‌فرض (بعد از تست اتصال)
+      const back = await getRelayBack(kv, chatId);
       const def = getDefaultRelayCfg(env);
-      if (!def.url) return edit("❌ رلهٔ پیش‌فرض تنظیم نشده است.", [[{ text: "🔙 بازگشت", callback_data: "srvrelayhelp" }]]);
+      if (!def.url) return edit("❌ رلهٔ پیش‌فرض تنظیم نشده است.", [[relayBackButton(back)]]);
       await edit("⏳ در حال تست رلهٔ رایگان…");
       const p = await relayPing(def.url, def.token);
       if (!p.ok) {
         return edit(`❌ رلهٔ رایگان در دسترس نیست${p.status ? " (HTTP " + p.status + ")" : ""}.\nبعداً دوباره تلاش کن یا رلهٔ شخصی تنظیم کن.`, [
           [{ text: "🔧 رله شخصی", callback_data: "srvrelayset" }],
-          [{ text: "🔙 بازگشت", callback_data: "srvrelayhelp" }],
+          [relayBackButton(back)],
         ]);
       }
       await setRelayMode(kv, "default");
-      await edit(`✅ رلهٔ رایگان فعال شد و تست شد.\n🌐 ${code(def.url)}\n(رلهٔ شخصی‌ات پاک نشده؛ هر وقت خواستی از «🔀 خودکار» یا «🔧 رله شخصی» برگرد)`, [
-        [{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }, { text: "🖥 سرورها", callback_data: "srv" }],
-      ]);
+      await renderRelayHome(edit, kv, env, back);
     } else if (data === "srvmodeauto") {
       await setRelayMode(kv, "auto");
-      await edit("✅ حالت خودکار فعال شد (رلهٔ شخصی اگر هست، وگرنه رایگان + fallback خودکار).", [
-        [{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }, { text: "🖥 سرورها", callback_data: "srv" }],
-      ]);
+      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
     } else if (data === "srvrelayset") {
       // ثبت/تغییر رله توسط خود کاربر: آدرس → توکن → تست اتصال
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url" }), { expirationTtl: 900 });
-      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+      const back = await getRelayBack(kv, chatId);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url", back }), { expirationTtl: 900 });
+      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: back }]]);
     } else if (data === "srvrelayclear") {
+      const back = await getRelayBack(kv, chatId);
       const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
       if (!hasKv) {
         return edit("ℹ️ رلهٔ شخصی ذخیره‌ای نداری.\n\nحالت فعلی‌ات را از همین‌جا عوض کن: «🌐 رله رایگان» یا «🔀 خودکار».", [
           [{ text: "🌐 رله رایگان", callback_data: "srvusedefault" }, { text: "🔀 خودکار", callback_data: "srvmodeauto" }],
-          [{ text: "🔙 بازگشت", callback_data: "srvrelayhelp" }],
+          [relayBackButton(back)],
         ]);
       }
       await edit("🗑 رلهٔ شخصی حذف شود؟ (می‌روی روی حالت خودکار: رلهٔ رایگان)", [
-        [{ text: "✅ بله", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: "srvrelayhelp" }],
+        [{ text: "✅ بله", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: back }],
       ]);
     } else if (data === "srvrelaycleary") {
       await kvDeleteCached(kv, RELAY_URL_KEY);
       await kvDeleteCached(kv, RELAY_TOKEN_KEY);
       await setRelayMode(kv, "auto");
-      await edit("✅ رلهٔ شخصی پاک شد؛ حالت خودکار (رلهٔ رایگان) فعال است.", [[{ text: "ℹ️ رله", callback_data: "srvrelayhelp" }]]);
+      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
     } else if (data === "srvadd") {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
