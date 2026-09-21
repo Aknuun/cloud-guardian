@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.6";
+const BOT_VERSION = "1.3.7";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.7": [
+    "✨ «🖥 مانیتورها» شد «✨ فیچرهای جدید» (دکمه، دستور و راهنما؛ بازگشت‌ها سالم)",
+    "✉️ صفحه جدید «ایمیل‌ها» داخل فیچرهای جدید: وصل چند دامنه با یک دکمه، صندوق جدا هر دامنه، بدون گیجی سمت دامنه",
+  ],
   "1.3.6": [
     "🐞 رفع محو شدن صفحه دریافت در ربات (پیام موفقیت دیگر بعد ۳ ثانیه برنمی‌گردد)",
     "📩 دیکد صحیح ایمیل فارسی: موضوع و متن base64 و quoted-printable درست نمایش داده می‌شوند",
@@ -1072,7 +1076,7 @@ async function processUpdate(payload, env, botToken, adminId) {
         await send("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
       }
     } else if (cmd === "/mons") {
-      await send("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", monsKeyboard());
+      await send("✨ فیچرهای جدید\n\nیک بخش را انتخاب کنید:", monsKeyboard());
     } else if (cmd === "/providers") {
       await send("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
         [
@@ -1164,14 +1168,14 @@ function mainMenuKeyboard() {
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
       { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
-    // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی مانیتورها — در یک ردیف
-    [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🖥 مانیتورها", callback_data: "mons" }],
+    // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی فیچرهای جدید — در یک ردیف
+    [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "✨ فیچرهای جدید", callback_data: "mons" }],
     // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
     [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
   ];
 }
 
-// کیبورد مشترک منوی مانیتورها (دکمهٔ mons و دستور /mons) — یک‌جا و هماهنگ نگه داشته می‌شود
+// کیبورد مشترک منوی فیچرهای جدید (دکمهٔ mons و دستور /mons) — یک‌جا و هماهنگ نگه داشته می‌شود
 function monsKeyboard() {
   return [
     [{ text: "🎛 تعریف پنل پاسارگارد", callback_data: "pndef" }],
@@ -1181,10 +1185,11 @@ function monsKeyboard() {
     ],
     [
       { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
-      { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" },
+      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" },
     ],
-    [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
+    [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
+    [{ text: "✉️ ایمیل‌ها", callback_data: "fmail", style: "success" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -1197,7 +1202,7 @@ const BOT_COMMANDS = [
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
   { command: "search", description: "🔍 جست‌وجو در همه" },
-  { command: "mons", description: "🖥 مانیتورها" },
+  { command: "mons", description: "✨ فیچرهای جدید" },
   { command: "providers", description: "🏢 دیتاسنترها" },
   { command: "srv", description: "🖥 سرورها" },
   { command: "help", description: "ℹ️ راهنما" },
@@ -1227,7 +1232,7 @@ function helpText() {
 const HELP_GUIDE = {
   hqi:
     "⚡ جای‌گذاری سریع\n\n" +
-    "در هر بخش از ربات (کلودفلر، رکوردها، مانیتورها و...) کافی است متن را در چت بفرستی؛ ربات خودش تشخیص می‌دهد و حالت «جست‌وجوی سریع» را فعال می‌کند:\n\n" +
+    "در هر بخش از ربات (کلودفلر، رکوردها، فیچرهای جدید و...) کافی است متن را در چت بفرستی؛ ربات خودش تشخیص می‌دهد و حالت «جست‌وجوی سریع» را فعال می‌کند:\n\n" +
     "• آی‌پی بفرستی → رکوردها و دامنه‌های مرتبط با همان آی‌پی جست‌وجو می‌شوند.\n" +
     "• ساب‌دامنه یا نام دامنه بفرستی → رکوردهای آن پیدا می‌شود و امکان ویرایش/تغییر مقدار، نوع و TTL فراهم است.\n\n" +
     "از داخل نتایج می‌توانی ساب‌دامنه را تغییر دهی، Proxy را روشن/خاموش کنی یا مقدار را در «⭐ ساب‌های منتخب» ذخیره کنی.",
@@ -1270,12 +1275,13 @@ const HELP_GUIDE = {
     "ورود: صفحهٔ «☁️ کلودفلر» → دکمهٔ سبز «⭐ ساب‌های منتخب» (کنار «همه اکانت‌ها»).\n" +
     "افزودن: داخل رکوردهای یک دامنه → «🗂 گروهی» → انتخاب → «⭐ افزودن به منتخب‌ها».",
   mons:
-    "🖥 مانیتورها\n\n" +
+    "✨ فیچرهای جدید\n\n" +
     "• 🧭 تعویض خودکار ساب فیلتر: دامنه‌های هاست‌های پاسارگارد را دوره‌ای از داخل ایران بررسی می‌کند؛ اگر فیلتر شده بود دامنهٔ شماره‌دار جدید می‌سازد و خودکار جایگزین می‌کند.\n" +
     "• 📡 مانیتور نود پاسارگارد: هشدار قطع/وصل شدن نودهای پنل (به‌صورت رویدادی/وبهوک) + همگام‌سازی دستی.\n" +
     "• 🔐 مانیتور SSL: هشدار نزدیک‌شدن به انقضای گواهی دامنه‌های تحت نظارت.\n" +
     "• 🗓 مانیتور انقضای دامنه: استعلام دامنه‌های .ir از whois.nic.ir و بقیه از RDAP؛ همهٔ دامنه‌های اکانت‌ها را یک‌جا اضافه کن و باقی‌مانده (سال/ماه/روز) را ببین.\n" +
-    "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.",
+    "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.\n" +
+    "• ✉️ ایمیل‌ها: دریافت ایمیل‌های دامنه‌هایت در ربات — هر دامنه را با یک دکمه وصل کن و متن ایمیل‌ها را در تلگرام ببین.",
   ssl:
     "🔐 مانیتور SSL\n\n" +
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
@@ -1321,7 +1327,7 @@ const HELP_GUIDE = {
     "روی هر دکمه بزنی راهنمای همان بخش را می‌بینی:\n\n" +
     "🌐 دامنه و DNS: کلودفلر · افزودن رکورد · جست‌وجو · ساب‌های منتخب · عملیات گروهی\n" +
     "🖥 سرور و دیتاسنتر: سرورها · رله · دیتاسنترها (هتزنر/لینود) · آروان\n" +
-    "🖥 مانیتورها: مانیتورها · مانیتور SSL\n" +
+    "✨ فیچرهای جدید: مانیتورها · مانیتور SSL · ایمیل‌ها\n" +
     "⚙️ مدیریت: تنظیمات · مدیریت ادمین\n\n" +
     "💡 رنگ دکمه‌ها: قرمز = مهم/خطرناک · آبی = دو یا چند ستونه · سبز = تک‌ستونه یا سه‌ستونه · خاکستری = ساده",
 };
@@ -1370,10 +1376,10 @@ function helpKeyboard() {
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
     [{ text: "🌐 راهنمای رله", callback_data: "hg:relay" }],
 
-    // 🖥 مانیتورها
-    sec("— 🖥 مانیتورها —"),
+    // ✨ فیچرهای جدید
+    sec("— ✨ فیچرهای جدید —"),
     [
-      { text: "🖥 مانیتورها", callback_data: "hg:mons" },
+      { text: "✨ فیچرهای جدید", callback_data: "hg:mons" },
       { text: "🔐 مانیتور SSL", callback_data: "hg:ssl" },
     ],
 
@@ -2239,7 +2245,7 @@ async function renderQuotaMenu(edit, kv, env) {
     { text: "🔓 روشن‌کردن ربات", callback_data: "qresume" },
     { text: "🔄 بررسی مجدد", callback_data: "quota" },
   ]);
-  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -4249,7 +4255,7 @@ async function renderDomExpiryHome(kv, edit, page) {
   // domexp: استعلام دوبارهٔ همهٔ دامنه‌ها | domexpkey: تنظیمات کلید API انقضا
   kb.push([{ text: "🔄 استعلام دوبارهٔ همه", callback_data: "domexp" }]);
   kb.push([{ text: cfg.key ? "🔑 کلید API (ثبت‌شده ✅)" : "🔑 ثبت کلید API", callback_data: "domexpkey" }]);
-  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -5103,7 +5109,7 @@ async function renderSrvMonCfg(edit, kv) {
     [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
     [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
     [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
-    [{ text: "🔙 سرورها", callback_data: "srv" }],
+    [{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🔙 سرورها", callback_data: "srv" }],
   ];
   await edit(lines.join("\n"), kb);
 }
@@ -5817,8 +5823,8 @@ function umCfgKeyboard(cfg) {
       { text: `🧮 حداقل اسنپ‌شات: ${cfg.minGb}GB`, callback_data: "um:min" },
       { text: cfg.report ? "📊 گزارش: روشن" : "📊 گزارش: خاموش", callback_data: "um:report" },
     ],
-    // mons: بازگشت به منوی مانیتورها | menu: بازگشت به منوی اصلی
-    [{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
+    // mons: بازگشت به منوی فیچرهای جدید | menu: بازگشت به منوی اصلی
+    [{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 
@@ -6106,7 +6112,7 @@ async function renderNodeHome(edit, kv) {
   if (!panels.length) {
     lines.push(
       "📭 هنوز پنلی ثبت نشده.\n\n" +
-        "ابتدا از «🖥 مانیتورها» با دکمهٔ «🎛 تعریف پنل پاسارگارد» پنل خود را ثبت کنید، سپس برای همان پنل یک «مانیتور نود» بسازید تا قطع/وصل شدن نودهای آن به شما هشدار داده شود.\n"
+        "ابتدا از «✨ فیچرهای جدید» با دکمهٔ «🎛 تعریف پنل پاسارگارد» پنل خود را ثبت کنید، سپس برای همان پنل یک «مانیتور نود» بسازید تا قطع/وصل شدن نودهای آن به شما هشدار داده شود.\n"
     );
     kb.push([{ text: "🖥 برو به تعریف پنل پاسارگارد", callback_data: "pndef" }]);
   } else {
@@ -6160,8 +6166,8 @@ async function renderNodeHome(edit, kv) {
     // nda: ساخت مانیتور نود برای پنلی که هنوز مانیتور ندارد
     outKb.push([{ text: "➕ ساخت مانیتور نود", callback_data: "nda" }]);
   }
-  // mons: بازگشت به صفحهٔ مانیتورها | menu: منوی اصلی | ndhelp: راهنما
-  outKb.push([{ text: "🔙 بازگشت به مانیتورها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  // mons: بازگشت به صفحهٔ فیچرهای جدید | menu: منوی اصلی | ndhelp: راهنما
+  outKb.push([{ text: "🔙 بازگشت به فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   outKb.push([{ text: "ℹ️ راهنما", callback_data: "ndhelp" }]);
   await edit(lines.join("\n"), outKb);
 }
@@ -6972,6 +6978,120 @@ async function renderInboxOne(edit, kv, accounts, token, id) {
   await edit(lines.join("\n").slice(0, 3900), [
     [{ text: "🗑 حذف", callback_data: `zmailvdel:${token}:${id}`, style: "danger" }],
     [{ text: "📥 صندوق", callback_data: `zmailinbox:${token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${token}` }],
+  ]);
+}
+
+// ===================== ایمیل‌های جهانی (داخل ✨ فیچرهای جدید) =====================
+// ساختار ساده بدون گیجی سمت دامنه: هر دامنه با یک دکمه وصل/قطع می‌شود،
+// چند دامنه همزمان، صندوق هر دامنه جدا، و بازگشت همیشه به همین صفحه.
+// پرچم فعال بودن هر دامنه در KV است: fmail_on:<domain> = {acc, zone_id, zone_name}
+async function fmailActive(kv) {
+  const out = [];
+  try {
+    const l = await kv.list({ prefix: "fmail_on:", limit: 100 });
+    for (const k of (l && l.keys) || []) {
+      try {
+        const v = await kv.get(k.name, "json");
+        if (v && v.zone_id) out.push(v);
+      } catch (e) {}
+    }
+  } catch (e) {}
+  out.sort((a, b) => String(a.zone_name || "").localeCompare(String(b.zone_name || "")));
+  return out;
+}
+async function renderFmailHome(edit, kv, accounts, env) {
+  const act = await fmailActive(kv);
+  const lines = ["✉️ ایمیل‌ها", "", "ایمیل‌های دامنه‌هایت را اینجا در تلگرام ببین. هر دامنه را با یک دکمه وصل کن؛ چند دامنه همزمان می‌شود."];
+  const kb = [];
+  if (!act.length) {
+    lines.push("", "📭 هنوز دامنه‌ای وصل نیست.");
+  } else {
+    lines.push("", `📬 ${act.length} دامنه وصل است:`);
+    for (const a of act.slice(0, 20)) {
+      const dom = String(a.zone_name || "").toLowerCase();
+      let n = 0;
+      try {
+        n = await inboxCount(kv, dom);
+      } catch (e) {}
+      lines.push(`• ${a.zone_name}${n ? ` (${n} ✉️)` : ""}`);
+      kb.push([
+        { text: `📥 ${String(a.zone_name).slice(0, 24)}${n ? ` (${n})` : ""}`, callback_data: `fmailbox:${a.acc}:${a.zone_id}` },
+        { text: "❌ قطع", callback_data: `fmailoff:${a.acc}:${a.zone_id}` },
+      ]);
+    }
+    if (act.length > 20) lines.push(`… و ${act.length - 20} دامنه دیگر`);
+  }
+  kb.push([{ text: "➕ افزودن ایمیل (وصل دامنه جدید)", callback_data: "fmailadd", style: "success" }]);
+  kb.push([
+    { text: "🔄 همگام‌سازی", callback_data: "fmailsync" },
+    { text: "🔙 فیچرهای جدید", callback_data: "mons" },
+  ]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function renderFmailAdd(edit, kv, accounts) {
+  const act = await fmailActive(kv);
+  const onSet = new Set(act.map((a) => String(a.zone_id)));
+  let zones = [];
+  try {
+    zones = await getAllZones(accounts, kv);
+  } catch (e) {}
+  const rest = zones.filter((z) => !onSet.has(String(z.id)));
+  const lines = ["➕ وصل دامنه جدید", "", "یک دامنه را بزن تا همه ایمیل‌هایش به صندوق ربات بیایند:"];
+  const kb = [];
+  if (!rest.length) {
+    lines.push("", zones.length ? "همه دامنه‌ها وصل‌اند." : "📭 دامنه‌ای پیدا نشد.");
+  } else {
+    for (const z of rest.slice(0, 20)) {
+      kb.push([{ text: `➕ ${z.name}`, callback_data: `fmailon:${z._acc}:${z.id}`, style: "success" }]);
+    }
+    if (rest.length > 20) lines.push("", `… و ${rest.length - 20} دامنه دیگر`);
+  }
+  kb.push([{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
+  const zone = await getZoneById(zoneId, acc, accounts);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+  const dom = String(zone.name || "").toLowerCase();
+  const items = await inboxList(kv, dom, 10);
+  const lines = [`📥 ${zone.name}`, ""];
+  const kb = [];
+  if (!items.length) {
+    lines.push("📭 هنوز ایمیلی دریافت نشده.", "", `یک ایمیل تست به هر آدرس همین دامنه بفرست (مثلاً info@${zone.name}).`);
+  } else {
+    lines.push(`📬 ${items.length} ایمیل آخر:`);
+    for (const m of items) {
+      const subj = decodeRfc2047(m.subject || "—").slice(0, 40);
+      const from = decodeRfc2047(String(m.from || "?")).slice(0, 30);
+      lines.push(`• ${subj} — ${from}`);
+      kb.push([{ text: `📨 ${(decodeRfc2047(m.subject || m.from || m.id)).slice(0, 32)}`, callback_data: `fmailview:${acc}:${zoneId}:${m.id}` }]);
+    }
+  }
+  kb.push([{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
+  const zone = await getZoneById(zoneId, acc, accounts);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+  const dom = String(zone.name || "").toLowerCase();
+  let m = null;
+  try {
+    m = await kv.get(`inbox:${dom}:${id}`, "json");
+  } catch (e) {}
+  if (!m) return edit("❌ ایمیل پیدا نشد.", [[{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }]]);
+  const lines = [
+    `📨 ${(decodeRfc2047(m.subject) || "—").slice(0, 200)}`,
+    "",
+    `✉️ از: ${decodeRfc2047(m.from) || "—"}`,
+    `📮 به: ${m.to || "—"}`,
+    `🕒 ${m.date || "—"}`,
+    "",
+    (decodeStoredPreview(m.preview) || "—").slice(0, 3000),
+  ];
+  await edit(lines.join("\n").slice(0, 3900), [
+    [{ text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" }],
+    [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل‌ها", callback_data: "fmail" }],
   ]);
 }
 
@@ -9730,7 +9850,12 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const tok = accounts[session.acc] && accounts[session.acc].token;
       try {
         const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, { enabled: false });
-        await edit(r.success ? "✅ catch-all غیرفعال شد." : "❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
+        if (r.success) {
+          try {
+            await kv.delete(`fmail_on:${String(session.zone_name).toLowerCase()}`);
+          } catch (e) {}
+        }
+        await edit(r.success ? "📩 catch-all غیرفعال شد." : "❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
       } catch (e) {
         await edit("❌ خطا.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
       }
@@ -9774,6 +9899,9 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           actions: [{ type: "worker", value: [wname] }],
         });
         if (r.success) {
+          try {
+            await kv.put(`fmail_on:${String(session.zone_name).toLowerCase()}`, JSON.stringify({ acc: session.acc, zone_id: session.zone_id, zone_name: session.zone_name }), { expirationTtl: 90 * 86400 });
+          } catch (e) {}
           await edit(
             `📩 دریافت در ربات فعال شد:\n\nهمه ایمیل‌های ${code(session.zone_name)} که قانون جدا ندارند، از این به بعد در «📥 صندوق ورودی» ذخیره می‌شوند و اعلانش به ادمین می‌آید.\n\nیک ایمیل تست به هر آدرس همین دامنه بفرست (مثلاً info@${session.zone_name}) و در صندوق ببین.\n\n⚠️ آدرس‌هایی که قبلاً قانون فوروارد جدا دارند، هنوز فوروارد می‌شوند؛ اگر می‌خواهی آن‌ها هم به ربات بیایند، قانونشان را حذف کن تا catch-all بگیردشان.`,
             [[{ text: "📥 صندوق ورودی", callback_data: `zmailinbox:${token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]
@@ -10539,14 +10667,109 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(`✅ پنل «${escHtml(p.name)}» حذف شد.`);
       await renderNodeHome(edit, kv);
     } else if (data === "mons") {
-      // منوی اصلی مانیتورها؛ انتخاب هر دکمه کاربر را به بخش مربوطه می‌برد:
+      // منوی فیچرهای جدید؛ انتخاب هر دکمه کاربر را به بخش مربوطه می‌برد:
       // hf = مانیتور فیلترشدن ساب‌دامین هاست‌های پاسارگارد
       // nd = مانیتور نود پاسارگارد (هشدار قطع/وصل)
       // srvmon = مانیتور سرورها (CPU/RAM/دیسک از طریق رلهٔ SSH)
       // sslm = مانیتور انقضای گواهی SSL
       // rem = یادآورها
       // um = مانیتور مصرف پاسارگارد (کشف کاربران پرمصرف)
-      await edit("🖥 مانیتورها\n\nیک بخش را انتخاب کنید:", monsKeyboard());
+      await edit("✨ فیچرهای جدید\n\nیک بخش را انتخاب کنید:", monsKeyboard());
+    } else if (data === "fmail") {
+      await renderFmailHome(edit, kv, accounts, env);
+    } else if (data === "fmailadd") {
+      await renderFmailAdd(edit, kv, accounts);
+    } else if (data.startsWith("fmailon:")) {
+      // وصل دامنه جدید: catch-all به ورکر + پرچم KV (بدون ✅ تا صفحه نپرد)
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      const wname = (env && env.WORKER_NAME) || "";
+      if (!wname) return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      const tok = accounts[acc] && accounts[acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      try {
+        const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, {
+          enabled: true,
+          actions: [{ type: "worker", value: [wname] }],
+        });
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+        try {
+          await kv.put(`fmail_on:${String(zone.name).toLowerCase()}`, JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name }), { expirationTtl: 90 * 86400 });
+        } catch (e) {}
+        await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند. یک ایمیل تست بفرست و در صندوق ببین.`, [
+          [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل‌ها", callback_data: "fmail" }],
+        ]);
+      } catch (e) {
+        await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      }
+    } else if (data.startsWith("fmailoff:")) {
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      const tok = accounts[acc] && accounts[acc].token;
+      if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      try {
+        const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, { enabled: false });
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      } catch (e) {
+        return edit("❌ خطا.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      }
+      try {
+        await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
+      } catch (e) {}
+      await edit(`📩 دریافت ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      await sleep(800);
+      await renderFmailHome(edit, kv, accounts, env);
+    } else if (data.startsWith("fmailbox:")) {
+      const parts = data.split(":");
+      await renderFmailBox(edit, kv, Number(parts[1]), parts[2], accounts);
+    } else if (data.startsWith("fmailview:")) {
+      const parts = data.split(":");
+      await renderFmailOne(edit, kv, Number(parts[1]), parts[2], parts[3], accounts);
+    } else if (data.startsWith("fmaildel:")) {
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const id = parts[3];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      await inboxDel(kv, zone.name, id);
+      await edit("🗑 ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }]]);
+      await sleep(800);
+      await renderFmailBox(edit, kv, acc, zoneId, accounts);
+    } else if (data === "fmailsync") {
+      // همگام‌سازی پرچم‌ها با وضعیت واقعی catch-all روی کلادفلر
+      let zones = [];
+      try {
+        zones = await getAllZones(accounts, kv);
+      } catch (e) {}
+      let on = 0;
+      for (const z of zones) {
+        const tok = accounts[z._acc] && accounts[z._acc].token;
+        if (!tok) continue;
+        try {
+          const c = await cfEmailGet(tok, `/zones/${z.id}/email/routing/rules/catch_all`);
+          const ca = c.success && c.result ? c.result : null;
+          const act = ca && (ca.actions || [])[0];
+          if (ca && ca.enabled && act && act.type === "worker") {
+            on++;
+            try {
+              await kv.put(`fmail_on:${String(z.name).toLowerCase()}`, JSON.stringify({ acc: z._acc, zone_id: z.id, zone_name: z.name }), { expirationTtl: 90 * 86400 });
+            } catch (e) {}
+          } else {
+            try {
+              await kv.delete(`fmail_on:${String(z.name).toLowerCase()}`);
+            } catch (e) {}
+          }
+        } catch (e) {}
+      }
+      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه وصل است.`, [[{ text: "🔙 ایمیل‌ها", callback_data: "fmail" }]]);
+      await sleep(800);
+      await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "quota") {
       await renderQuotaMenu(edit, kv, env);
     } else if (data === "qtgauto") {
@@ -11801,7 +12024,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       } catch (e) {
         return edit("❌ خطا در خواندن سرورها: " + remPlain(e && e.message ? e.message : e), [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
       }
-      if (!servers || !servers.length) return edit("📭 سروری پیدا نشد.\n(ابتدا در «🖥 مانیتورهای پاسارگارد» پنل ثبت و نودها را همگام‌سازی کنید؛ سپس 🔄 بروزرسانی.)", [[{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }, { text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      if (!servers || !servers.length) return edit("📭 سروری پیدا نشد.\n(ابتدا در «✨ فیچرهای جدید» پنل ثبت و نودها را همگام‌سازی کنید؛ سپس 🔄 بروزرسانی.)", [[{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }, { text: "🔙 بازگشت", callback_data: "remnew" }]]);
       const token = makeToken();
       await kv.put(`rmsess:${token}`, JSON.stringify(servers), { expirationTtl: 1800 });
       await renderReminderServers(kv, token, 0, edit);
@@ -12139,7 +12362,7 @@ async function renderRemindersHome(kv, edit) {
   kb.push([{ text: "➕ یادآور جدید", callback_data: "remnew" }]);
   if (list.length) kb.push([{ text: "🗑 حذف یادآور", callback_data: "remdel" }]);
   kb.push([{ text: `⚙️ تنظیمات یادآور (${cfg.leadHours} ساعت قبل)`, callback_data: "remset" }]);
-  kb.push([{ text: "🔙 مانیتورها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 

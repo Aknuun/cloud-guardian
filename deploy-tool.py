@@ -78,11 +78,15 @@ _S = {
     "ck_zones_perm":   ("Zone · DNS · Edit (دسترسی به زون‌ها)", "Zone · DNS · Edit (zone access)"),
     "ck_dns":          ("Zone · DNS · Edit (خواندن رکوردها)", "Zone · DNS · Edit (record read)"),
     "ck_settings":     ("Zone · Zone Settings · Edit", "Zone · Zone Settings · Edit"),
+    "ck_mail":         ("Zone · Email Routing Rules · Edit (ایمیل‌ها و صندوق ورودی)", "Zone · Email Routing Rules · Edit (emails and inbox)"),
+    "ck_mailaddr":     ("Account · Email Routing Addresses · Read/Edit (مقصدهای ایمیل)", "Account · Email Routing Addresses · Read/Edit (email destinations)"),
     "ck_cache_note":   ("Cache Purge بدون اجرای واقعی قابل تست نیست؛ مطمئن شو دسترسی Purge را هم داده‌ای.",
                         "Cache Purge cannot be tested without a real purge; make sure the Purge permission is granted."),
+    "ck_analytics_note": ("Analytics بدون کوئری واقعی قابل تست نیست؛ این دو دسترسی را هم بده: Zone · Analytics · Read و Account · Account Analytics · Read.",
+                        "Analytics cannot be tested without a real query; also grant these two: Zone · Analytics · Read and Account · Account Analytics · Read."),
     "ck_fail_title":   ("دسترسی‌های توکن کلادفلر ناقص است", "Cloudflare token permissions are incomplete"),
     "ck_fail_body":    ("این دسترسی‌ها درست نیستند یا کم هستند:", "These permissions are missing or wrong:"),
-    "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۵ دسترسی لازم را بده:", "Edit/create the token here and grant the 5 required permissions:"),
+    "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۱۰ دسترسی لازم را بده:", "Edit/create the token here and grant the 10 required permissions:"),
 }
 
 
@@ -446,6 +450,9 @@ def cmd_check(cfg, tok, show_box=True):
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces")
         _, err = json_ok(st, out)
         line(not err, True, T("ck_kv"), "" if not err else str(err)[:160])
+        st, out = req(tok, "GET", f"{API}/accounts/{acc}/email/routing/addresses?per_page=1")
+        _, err = json_ok(st, out)
+        line(not err, True, T("ck_mailaddr"), "" if not err else str(err)[:160])
 
     st, out = req(tok, "GET", f"{API}/zones?per_page=50")
     res, err = json_ok(st, out)
@@ -464,8 +471,12 @@ def cmd_check(cfg, tok, show_box=True):
             st, out = req(tok, "GET", f"{API}/zones/{z['id']}/settings")
             _, err = json_ok(st, out)
             line(not err, True, T("ck_settings"), "" if not err else str(err)[:160])
+            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/email/routing")
+            _, err = json_ok(st, out)
+            line(not err, True, T("ck_mail"), "" if not err else str(err)[:160])
 
     print(YELLOW + "ℹ️ " + RST + T("ck_cache_note"))
+    print(YELLOW + "ℹ️ " + RST + T("ck_analytics_note"))
     if show_box:
         _perm_summary(failures)
     return 1 if failures else 0

@@ -185,8 +185,8 @@ t() {
     en:tk_opens)               printf '%s' "Open this link in your browser:" ;;
     fa:tk_create)              printf '%s' "دکمهٔ Create Token → Create Custom Token" ;;
     en:tk_create)              printf '%s' "Click Create Token → Create Custom Token" ;;
-    fa:tk_perms)               printf '%s' "این ۵ دسترسی را اضافه کن:" ;;
-    en:tk_perms)               printf '%s' "Add these 5 permissions:" ;;
+    fa:tk_perms)               printf '%s' "این ۱۰ دسترسی را اضافه کن:" ;;
+    en:tk_perms)               printf '%s' "Add these 10 permissions:" ;;
     fa:tk_res)                 printf '%s' "و در پایین: Account Resources = All accounts · Zone Resources = All zones" ;;
     en:tk_res)                 printf '%s' "Then below: Account Resources = All accounts · Zone Resources = All zones" ;;
     fa:tk_copy)                printf '%s' "Continue → Create Token، توکن را کپی کن و اینجا بچسبان." ;;
@@ -266,8 +266,8 @@ t() {
     en:step_perms)             printf '%s' "Checking Cloudflare token permissions" ;;
     fa:perm_box)               printf '%s' "دسترسی‌های توکن کلادفلر ناقص/اشتباه است" ;;
     en:perm_box)               printf '%s' "Cloudflare token permissions are missing or wrong" ;;
-    fa:perm_body)              printf '%s' "این ۵ دسترسی را روی توکن بده (Account Resources = All accounts · Zone Resources = All zones):" ;;
-    en:perm_body)              printf '%s' "Grant these 5 permissions on your token (Account Resources = All accounts · Zone Resources = All zones):" ;;
+    fa:perm_body)              printf '%s' "این ۱۰ دسترسی را روی توکن بده (Account Resources = All accounts · Zone Resources = All zones):" ;;
+    en:perm_body)              printf '%s' "Grant these 10 permissions on your token (Account Resources = All accounts · Zone Resources = All zones):" ;;
     fa:perm_fix)               printf '%s' "توکن را از این لینک ویرایش/بساز:" ;;
     en:perm_fix)               printf '%s' "Edit/create the token here:" ;;
     fa:perm_continue)          printf '%s' "با این حال ادامه بدهم؟ [y/N] " ;;
@@ -475,6 +475,11 @@ _tk_guide_block() {
   printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n"
   printf "     %s\n" "$(t tk_res)"
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
   printf "     ${DIM}%s %s${RST}\n" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
@@ -500,7 +505,12 @@ cf_perm_error() {
   printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
   printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n\n"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n\n"
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
