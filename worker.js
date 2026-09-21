@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.5";
+const BOT_VERSION = "1.3.6";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.6": [
+    "🐞 رفع محو شدن صفحه دریافت در ربات (پیام موفقیت دیگر بعد ۳ ثانیه برنمی‌گردد)",
+    "📩 دیکد صحیح ایمیل فارسی: موضوع و متن base64 و quoted-printable درست نمایش داده می‌شوند",
+  ],
   "1.3.5": [
     "📩 دریافت در ربات ساده شد: بدون تایپ آدرس، با یک دکمه همه ایمیل‌های همین دامنه (catch-all) به صندوق ورودی ربات وصل می‌شوند و در تلگرام می‌آیند",
   ],
@@ -893,12 +897,14 @@ export default {
   async email(message, env, ctx) {
     try {
       const kv = env.BOT_KV;
-      const from = String(message.from || "");
+      const fromRaw = String(message.from || "");
       const to = String(message.to || "");
-      let subject = "";
+      let subjectRaw = "";
       try {
-        subject = String((message.headers && message.headers.get("subject")) || "");
+        subjectRaw = String((message.headers && message.headers.get("subject")) || "");
       } catch (e) {}
+      const from = decodeRfc2047(fromRaw);
+      const subject = decodeRfc2047(subjectRaw);
       const dom = inboxDomainOf(to);
       const rawText = await readEmailRawText(message, 100 * 1024);
       const preview = parseEmailPreview(rawText);
@@ -6747,25 +6753,139 @@ async function inboxDel(kv, domain, id) {
     await kv.put(`inbox_idx:${dom}`, JSON.stringify(idx), { expirationTtl: 90 * 86400 });
   } catch (e) {}
 }
-// استخراج متن خوانا از raw ایمیل: سعی در text/plain، وگرنه snippet تمیز از raw.
+// دیکد base64 به UTF-8 (برای بدنه و subjectهای RFC2047)
+function b64ToUtf8(b64) {
+  try {
+    const clean = String(b64 || "").replace(/\s+/g, "");
+    if (!clean || clean.length % 4 === 1) return "";
+    const bin = atob(clean);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch (e) {
+    return "";
+  }
+}
+function decodeQP(s) {
+  try {
+    let t = String(s || "").replace(/=\r?\n/g, "");
+    t = t.replace(/=([0-9A-Fa-f]{2})/g, (m, h) => {
+      try {
+        return String.fromCharCode(parseInt(h, 16));
+      } catch (e) {
+        return m;
+      }
+    });
+    // بایت‌های latin1 به UTF-8
+    try {
+      const bytes = new Uint8Array(t.length);
+      for (let i = 0; i < t.length; i++) bytes[i] = t.charCodeAt(i) & 0xff;
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    } catch (e) {
+      return t;
+    }
+  } catch (e) {
+    return String(s || "");
+  }
+}
+// دیکد کلمات رمز شده در هدر (RFC2047): =?UTF-8?B?...?= و =?UTF-8?Q?...?=
+function decodeRfc2047(s) {
+  let t = String(s || "");
+  if (!t.includes("=?")) return t;
+  try {
+    t = t.replace(/=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g, (m, charset, enc, data) => {
+      try {
+        if (/b/i.test(enc)) {
+          const d = b64ToUtf8(data);
+          return d || m;
+        } else {
+          const q = String(data).replace(/_/g, " ");
+          return decodeQP(q);
+        }
+      } catch (e) {
+        return m;
+      }
+    });
+  } catch (e) {}
+  return t;
+}
+function stripHtmlToText(html) {
+  let t = String(html || "");
+  t = t.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ");
+  t = t.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p\s*>/gi, "\n").replace(/<\/div\s*>/gi, "\n");
+  t = t.replace(/<[^>]+>/g, " ");
+  t = t.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return t.replace(/\s+/g, " ").trim();
+}
+function decodePartBody(body, encoding, isHtml) {
+  const enc = String(encoding || "").toLowerCase();
+  let t = String(body || "");
+  if (enc.includes("base64")) {
+    const d = b64ToUtf8(t);
+    if (d) t = d;
+  } else if (enc.includes("quoted-printable") || enc.includes("quotedprintable")) {
+    t = decodeQP(t);
+  }
+  if (isHtml) t = stripHtmlToText(t);
+  return t.replace(/\s+/g, " ").trim();
+}
+// استخراج متن خوانا از raw ایمیل: text/plain با دیکد base64/QP، وگرنه html تمیز.
 function parseEmailPreview(rawText) {
   let t = String(rawText || "");
   if (!t) return "";
-  // جدا کردن بدنه از هدرها
   const sep = t.search(/\r?\n\r?\n/);
+  const head = sep >= 0 ? t.slice(0, sep) : "";
   let body = sep >= 0 ? t.slice(sep).trim() : t;
-  // اگر multipart است، اولین بخش text/plain را پیدا کن
   try {
-    const m = body.match(/Content-Type:\s*text\/plain[^\n]*\n(?:[^\n]*\n)*?\r?\n([\s\S]{0,8000}?)(?=\r?\n--|\r?\nContent-Type:|$)/i);
-    if (m && m[1] && m[1].trim().length > 10) body = m[1].trim();
+    const bMatch = head.match(/boundary="?([^"\s;]+)"?/i);
+    if (bMatch) {
+      const b = bMatch[1];
+      const parts = body.split(new RegExp("--" + b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:--)?"));
+      let plain = "";
+      let html = "";
+      for (const p of parts) {
+        const ps = p.search(/\r?\n\r?\n/);
+        if (ps < 0) continue;
+        const ph = p.slice(0, ps);
+        const pb = p.slice(ps).trim();
+        if (!pb) continue;
+        const ct = (ph.match(/Content-Type:\s*([^;\s]+)/i) || [])[1] || "";
+        const enc = (ph.match(/Content-Transfer-Encoding:\s*([^\s;]+)/i) || [])[1] || "";
+        const isPlain = /text\/plain/i.test(ct);
+        const isHtml = /text\/html/i.test(ct);
+        if (isPlain && !plain) plain = decodePartBody(pb.slice(0, 8000), enc, false);
+        else if (isHtml && !html) html = decodePartBody(pb.slice(0, 8000), enc, true);
+        if (plain && plain.length > 20) break;
+      }
+      if (plain) return plain.slice(0, 3000);
+      if (html) return html.slice(0, 3000);
+    }
   } catch (e) {}
-  // حذف تگ‌های HTML اگر html افتاد دستمان
-  body = body.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ");
-  if (/<[a-z][^>]*>/i.test(body) && body.length > 50) body = body.replace(/<[^>]+>/g, " ");
-  // decode چند entity رایج
-  body = body.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
-  body = body.replace(/\s+/g, " ").trim();
-  return body.slice(0, 3000);
+  // تک‌بخشی: encoding را از هدر بخوان
+  try {
+    const enc = (head.match(/Content-Transfer-Encoding:\s*([^\s;]+)/i) || [])[1] || "";
+    const ct = (head.match(/Content-Type:\s*([^;\s]+)/i) || [])[1] || "";
+    if (enc || /text\/html/i.test(ct)) {
+      const d = decodePartBody(body.slice(0, 8000), enc, /text\/html/i.test(ct));
+      if (d) return d.slice(0, 3000);
+    }
+    const m = body.match(/Content-Type:\s*text\/plain[^\n]*\n(?:[^\n]*\n)*?\r?\n([\s\S]{0,8000}?)(?=\r?\n--|\r?\nContent-Type:|$)/i);
+    if (m && m[1] && m[1].trim().length > 10) {
+      return decodePartBody(m[1].trim(), enc, false).slice(0, 3000);
+    }
+  } catch (e) {}
+  let out = body;
+  if (/<[a-z][^>]*>/i.test(out) && out.length > 50) out = stripHtmlToText(out);
+  else {
+    // ممکن است کل بدنه base64 باشد (مثل نمونه کاربر)
+    const compact = out.replace(/\s+/g, "");
+    if (compact.length > 20 && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0) {
+      const d = b64ToUtf8(compact.slice(0, 8000));
+      if (d && /[\u0600-\u06FFA-Za-z]/.test(d)) out = d;
+    }
+    out = out.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+  }
+  return out.replace(/\s+/g, " ").trim().slice(0, 3000);
 }
 async function readEmailRawText(message, maxBytes) {
   const lim = maxBytes || 100 * 1024;
@@ -9620,7 +9740,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const session = await kv.get(`s:${m[1]}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       await inboxDel(kv, session.zone_name, m[2]);
-      await edit("✅ ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${m[1]}` }]]);
+      await edit("🗑 ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${m[1]}` }]]);
       await sleep(800);
       await renderInboxList(edit, kv, accounts, m[1]);
     } else if (data.startsWith("zmailwadd:")) {
@@ -9643,7 +9763,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         });
         if (r.success) {
           await edit(
-            `✅ دریافت در ربات فعال شد:\n\nهمه ایمیل‌های ${code(session.zone_name)} که قانون جدا ندارند، از این به بعد در «📥 صندوق ورودی» ذخیره می‌شوند و اعلانش به ادمین می‌آید.\n\nیک ایمیل تست به هر آدرس همین دامنه بفرست (مثلاً info@${session.zone_name}) و در صندوق ببین.\n\n⚠️ آدرس‌هایی که قبلاً قانون فوروارد جدا دارند، هنوز فوروارد می‌شوند؛ اگر می‌خواهی آن‌ها هم به ربات بیایند، قانونشان را حذف کن تا catch-all بگیردشان.`,
+            `📩 دریافت در ربات فعال شد:\n\nهمه ایمیل‌های ${code(session.zone_name)} که قانون جدا ندارند، از این به بعد در «📥 صندوق ورودی» ذخیره می‌شوند و اعلانش به ادمین می‌آید.\n\nیک ایمیل تست به هر آدرس همین دامنه بفرست (مثلاً info@${session.zone_name}) و در صندوق ببین.\n\n⚠️ آدرس‌هایی که قبلاً قانون فوروارد جدا دارند، هنوز فوروارد می‌شوند؛ اگر می‌خواهی آن‌ها هم به ربات بیایند، قانونشان را حذف کن تا catch-all بگیردشان.`,
             [[{ text: "📥 صندوق ورودی", callback_data: `zmailinbox:${token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]
           );
         } else {
