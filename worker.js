@@ -6929,15 +6929,27 @@ async function renderInboxList(edit, kv, accounts, token) {
   } else {
     lines.push(`📬 ${items.length} ایمیل آخر:`);
     for (const m of items) {
-      const subj = (m.subject || "—").slice(0, 40);
-      const from = String(m.from || "?").slice(0, 30);
+      const subj = decodeRfc2047(m.subject || "—").slice(0, 40);
+      const from = decodeRfc2047(String(m.from || "?")).slice(0, 30);
       lines.push(`• ${subj} — ${from}`);
-      kb.push([{ text: `📨 ${(m.subject || m.from || m.id).slice(0, 32)}`, callback_data: `zmailview:${token}:${m.id}` }]);
+      kb.push([{ text: `📨 ${(decodeRfc2047(m.subject || m.from || m.id)).slice(0, 32)}`, callback_data: `zmailview:${token}:${m.id}` }]);
     }
   }
   kb.push([{ text: "📩 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" }]);
   kb.push([{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
+}
+function decodeStoredPreview(p) {
+  let t = String(p || "");
+  if (!t || t === "—") return t;
+  t = decodeRfc2047(t);
+  // ایمیل‌های قدیمی با پارسر قبلی به‌صورت base64 خام ذخیره شده‌اند
+  const compact = t.replace(/\s+/g, "");
+  if (compact.length > 20 && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length % 4 === 0) {
+    const d = b64ToUtf8(compact.slice(0, 8000));
+    if (d && /[\u0600-\u06FFA-Za-z]/.test(d)) return d.slice(0, 3000);
+  }
+  return t;
 }
 async function renderInboxOne(edit, kv, accounts, token, id) {
   const session = await kv.get(`s:${token}`, "json");
@@ -6949,13 +6961,13 @@ async function renderInboxOne(edit, kv, accounts, token, id) {
   } catch (e) {}
   if (!m) return edit("❌ ایمیل پیدا نشد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${token}` }]]);
   const lines = [
-    `📨 ${(m.subject || "—").slice(0, 200)}`,
+    `📨 ${(decodeRfc2047(m.subject) || "—").slice(0, 200)}`,
     "",
-    `✉️ از: ${m.from || "—"}`,
+    `✉️ از: ${decodeRfc2047(m.from) || "—"}`,
     `📮 به: ${m.to || "—"}`,
     `🕒 ${m.date || "—"}`,
     "",
-    (m.preview || "—").slice(0, 3000),
+    (decodeStoredPreview(m.preview) || "—").slice(0, 3000),
   ];
   await edit(lines.join("\n").slice(0, 3900), [
     [{ text: "🗑 حذف", callback_data: `zmailvdel:${token}:${id}`, style: "danger" }],
