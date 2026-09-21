@@ -5940,7 +5940,7 @@ async function renderNodeHome(edit, kv) {
 async function renderNodeExclusions(edit, kv, mi) {
   const monitors = await getNodeMonitors(kv);
   const m = monitors[mi];
-  if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+  if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
   const panels = await getPanels(kv);
   const p = panels.find((x) => x.id === m.panel_id);
   const st = await getNodeState(kv, m.id);
@@ -6031,7 +6031,7 @@ async function renderNodeMonitor(monitors, idx, edit, kv) {
   const panels = await getPanels(kv);
   const panel = panels.find((p) => p.id === m.panel_id);
   const st = await getNodeState(kv, m.id);
-  const lines = ["🖥 مانیتور نود «" + escHtml(m.name) + "»", "وضعیت: " + (m.enabled === false ? "⏸ متوقف" : "▶️ فعال")];
+  const lines = ["📡 مانیتور نود «" + escHtml(m.name) + "»", "وضعیت: " + (m.enabled === false ? "⏸ متوقف" : "▶️ فعال")];
   if (panel) lines.push(`🧠 پنل مرتبط: ${escHtml(panel.name)}`);
   if (st.ts) lines.push(`🕐 آخرین به‌روزرسانی: ${ndFmtTs(st.ts)}`);
   const names = sortedNodeNames(st);
@@ -7594,10 +7594,10 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     try {
       const r = await ensureNodeMonitorForPanel(kv, panel, true);
       monNote = r.error
-        ? `\n🖥 مانیتور نود خودکار ساخته شد؛ همگام‌سازی اولیه انجام نشد (${r.error}) — بعداً «🔄 همگام‌سازی» را بزن.`
-        : "\n🖥 مانیتور نود خودکار ساخته و نودها همگام‌سازی شدند.";
+        ? `\n📡 مانیتور نود خودکار ساخته شد؛ همگام‌سازی اولیه انجام نشد (${r.error}) — بعداً «🔄 همگام‌سازی» را بزن.`
+        : "\n📡 مانیتور نود خودکار ساخته و نودها همگام‌سازی شدند.";
     } catch (e) {
-      monNote = "\n🖥 مانیتور نود خودکار ساخته شد.";
+      monNote = "\n📡 مانیتور نود خودکار ساخته شد.";
     }
     const v = await panelDefineView(kv);
     await send(`✅ پنل «${pending.name}» ثبت شد.${sslNote}${monNote}\n\n${v.text}`, v.kb);
@@ -9783,7 +9783,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const mi = Number(data.slice(6));
       const monitors = await getNodeMonitors(kv);
       const m = monitors[mi];
-      if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!m) return edit("❌ مانیتور پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "p_interval", mi }), { expirationTtl: 600 });
       await edit("⏱ فاصلهٔ پایش خودکار نودها را به دقیقه بفرستید (مثلاً ۱۰، ۳۰ یا ۶۰):\n\n⚠️ هرچه این بازه کوتاه‌تر باشد، درخواست‌های بیشتری به کلادفلر و پنل فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود. اگر ممکن است زمان بزرگ‌تری انتخاب کن.\n\nفعلی: " + (m.intervalMin || 10) + " دقیقه", [
         [{ text: "⬅️ انصراف", callback_data: "nd" }],
@@ -9814,13 +9814,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         "",
         "• «⏸ توقف هشدار» هشدارهای این پنل را نگه می‌دارد اما وضعیت نودها همچنان ثبت می‌شود.",
       ];
-      await edit(lines.join("\n"), [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      await edit(lines.join("\n"), [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
     } else if (data === "nda") {
       const monitors = await getNodeMonitors(kv);
       const panels = await getPanels(kv);
       if (!panels.length) return edit("📭 ابتدا از «🎛 تعریف پنل پاسارگارد» یک پنل پاسارگارد اضافه کنید.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       const avail = panels.filter((p) => !monitors.some((mo) => mo.panel_id === p.id));
-      if (!avail.length) return edit("✅ برای همه پنل‌های ثبت‌شده، مانیتور نود ساخته شده.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!avail.length) return edit("✅ برای همه پنل‌های ثبت‌شده، مانیتور نود ساخته شده.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const kb = avail.map((p) => [{ text: `🖥 ${p.name}`, callback_data: `nda:${p.id}` }]);
       kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
       await edit("برای کدام پنل، مانیتور نود بسازم؟", kb);
@@ -9828,7 +9828,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const panelId = data.slice(4);
       const panels = await getPanels(kv);
       const panel = panels.find((p) => p.id === panelId);
-      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const monitors = await getNodeMonitors(kv);
       monitors.push({ id: makeToken() + makeToken(), panel_id: panel.id, name: panel.name, url: panel.url, token: makeToken() + makeToken(), enabled: true });
       await saveNodeMonitors(kv, monitors);
@@ -9840,13 +9840,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data.startsWith("ndd:")) {
       const i = Number(data.slice(4));
       const monitors = await getNodeMonitors(kv);
-      if (!monitors[i]) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!monitors[i]) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       await renderNodeMonitor(monitors, i, edit, kv);
     } else if (data.startsWith("ndsync:")) {
       const i = Number(data.slice(7));
       const monitors = await getNodeMonitors(kv);
       const m = monitors[i];
-      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       await edit("⏳ در حال همگام‌سازی نودها با پنل…");
       const r = await nodeSyncFromPanel(m, kv);
       if (r.error) return edit(`❌ ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
@@ -9875,7 +9875,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const rm = monitors.splice(i, 1);
       await saveNodeMonitors(kv, monitors);
       if (rm[0]) await kv.delete(`ndst:${rm[0].id}`);
-      await edit(`✅ مانیتور نود «${escHtml(m.name)}» حذف شد.`, [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      await edit(`✅ مانیتور نود «${escHtml(m.name)}» حذف شد.`, [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
     } else if (data.startsWith("ndadd:")) {
       // افزودن نود نصب‌شده به پنل انتخابی (نام = آیپی). توکن = اطلاعات نود در KV.
       const rest = data.slice(6);
@@ -9886,9 +9886,9 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!rec || !rec.info) return edit("⏳ اطلاعات نود منقضی شد؛ دوباره نود را نصب کن.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
       const panels = await getPanels(kv);
       const panel = panelId ? panels.find((p) => p.id === panelId) : panels[0];
-      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const idx = rec.srvIdx;
-      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]] : [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]];
+      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]] : [[{ text: "📡 مانیتور نود", callback_data: "nd" }]];
       await edit(`⏳ در حال افزودن نود «${escHtml(rec.info.ip)}» به پنل «${escHtml(panel.name)}»…`);
       const r = await pgPanelAddNode(panel, rec.info);
       if (r.error) {
@@ -9946,7 +9946,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const ni = Number(parts[2]);
       const monitors = await getNodeMonitors(kv);
       const m = monitors[mi];
-      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const st = await getNodeState(kv, m.id);
       const nm = sortedNodeNames(st)[ni];
       if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
@@ -9984,7 +9984,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const ni = Number(parts[2]);
       const monitors = await getNodeMonitors(kv);
       const m = monitors[mi];
-      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "🖥 مانیتور نود", callback_data: "nd" }]]);
+      if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const st = await getNodeState(kv, m.id);
       const nm = sortedNodeNames(st)[ni];
       if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
