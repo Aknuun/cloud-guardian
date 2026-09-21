@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.23";
+const BOT_VERSION = "1.0.24";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.24": [
+    "⚙️ دکمه‌های «راهنما» و «مدیریت ادمین» در یک دکمهٔ «تنظیمات و راهنما» ادغام شدند؛ داخلش دسته‌بندی: 🌐 تنظیم رله · 👥 مدیریت ادمین‌ها · ℹ️ راهنمای بخش‌ها",
+  ],
   "1.0.23": [
     "🔒 نصب رله با «توکن ثابت» به راهنمای رله اضافه شد (دستور --fixed با توکن پیش‌فرض رلهٔ رایگان) تا با آپدیت، توکن عوض نشود",
   ],
@@ -961,11 +964,8 @@ function mainMenuKeyboard() {
     ],
     // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی مانیتورها — در یک ردیف
     [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🖥 مانیتورها", callback_data: "mons" }],
-    // help: راهنمای بخش‌ها | admins_menu: مدیریت ادمین‌های ربات (فقط ادمین اصلی) — هر دو خاکستری
-    [
-      { text: "ℹ️ راهنما", callback_data: "help", style: "plain" },
-      { text: "👥 مدیریت ادمین", callback_data: "admins_menu", style: "plain" },
-    ],
+    // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
+    [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
   ];
 }
 
@@ -1175,12 +1175,31 @@ function helpKeyboard() {
       { text: "🔐 مانیتور SSL", callback_data: "hg:ssl" },
     ],
 
-    // ⚙️ مدیریت
-    sec("— ⚙️ مدیریت —"),
+    // ⚙️ مدیریت و راهنما
+    sec("— ⚙️ مدیریت و راهنما —"),
+    [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
+  ];
+}
+
+// صفحهٔ «⚙️ تنظیمات و راهنما» — دسته‌بندی: مدیریت (رله/ادمین) + راهنمای بخش‌ها
+function settingsHomeText() {
+  return (
+    "⚙️ تنظیمات و راهنما\n\n" +
+    "🧩 مدیریت\n" +
+    "• 🌐 تنظیم رله — وضعیت و مدیریت رلهٔ SSH (شخصی / رایگان / خودکار)\n" +
+    "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n\n" +
+    "📖 راهنما\n" +
+    "• راهنمای بخش‌ها — توضیح کامل هر بخش ربات"
+  );
+}
+function settingsHomeKb() {
+  return [
     [
-      { text: "ℹ️ راهنما", callback_data: "hg:help", style: "plain" },
-      { text: "👥 مدیریت ادمین", callback_data: "hg:admin", style: "plain" },
+      { text: "🌐 تنظیم رله", callback_data: "settingsrelay", style: "danger" },
+      { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
+    [{ text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -8060,6 +8079,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await kv.delete(`qa:${chatId}`);
       await kv.delete(`pend:${chatId}`);
       await edit(mainMenuText(), mainMenuKeyboard());
+    } else if (data === "settings") {
+      // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
+      await edit(settingsHomeText(), settingsHomeKb());
+    } else if (data === "settingsrelay") {
+      // تنظیم رله از داخل «تنظیمات و راهنما» — بازگشت به همان صفحه
+      await setRelayBack(kv, chatId, "settings");
+      await renderRelayHome(edit, kv, env, "settings");
     } else if (data === "help") {
       // help: نمایش صفحهٔ راهنما
       await edit(helpText(), helpKeyboard());
