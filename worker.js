@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.15";
+const BOT_VERSION = "1.0.16";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.16": [
+    "🇮🇷 آروان در جست‌وجوی سراسری، جست‌وجوی آی‌پی و ساب‌های منتخب (با پرچم 🇮🇷)",
+    "🧱 فایروال دامنه آروان (ساخت/حذف/روشن‌خاموش قانون) + وضعیت WAF و SSL + گزارش ترافیک ۲۴ ساعته",
+    "🖥 سرور آروان: تغییر سایز، ریبیلد با ایمیج، آی‌پی شناور (ساخت/اتصال/جدا/حذف) و دیسک (ساخت/اتصال/جدا/حذف)",
+  ],
   "1.0.15": [
     "🧭 منوی تعویض خودکار هاست خلوت شد: دو دکمهٔ «چک‌هاست / گلوبال‌پینگ» بالا — با زدن روی هر کدام همان سرویس فعال می‌شود؛ تنظیمات هر سرویس هم جداگانه است",
   ],
@@ -744,9 +749,9 @@ async function processUpdate(payload, env, botToken, adminId) {
       const qa = await kv.get(`qa:${chatId}`, "json");
       if (isIpLike(text)) {
         await kv.put(`qa:${chatId}`, JSON.stringify({ ip: text.trim() }), { expirationTtl: 3600 });
-        await sendQuickIpMenu(chatId, text.trim(), kv, accounts, send);
+        await sendQuickIpMenu(chatId, text.trim(), kv, accounts, send, env);
       } else {
-        await quickNameSearch(text.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv);
+        await quickNameSearch(text.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv, env);
       }
       // ورودی کاربر مصرف شد — پیامش را پاک کن تا زیر دکمه‌ها نماند
       await deleteMessage(botToken, chatId, userMsgId);
@@ -2732,7 +2737,7 @@ async function renderFavsScreen(kv, chatId, accounts, edit) {
     );
   } else {
     // favopen:<index>: باز کردن جزئیات همان ساب منتخب برای ویرایش مقدار/نوع/TTL/Proxy
-    kb.push(...grid2(favs.map((f, i) => ({ text: `${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, callback_data: `favopen:${i}` }))));
+    kb.push(...grid2(favs.map((f, i) => ({ text: `${f.zone_id && f.zone_id.startsWith("arvan:") ? "🇮🇷" : "☁️"} ${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, callback_data: `favopen:${i}` }))));
     lines.push(`تعداد: ${favs.length}\nبرای باز کردن و تغییر روی هر کدام بزنید.`);
   }
   // favpickzone: افزودن ساب جدید (انتخاب دامنه) | favdel: حذف از منتخب‌ها | zones: بازگشت به صفحهٔ کلودفلر
@@ -6150,15 +6155,16 @@ async function renderSearchResults(token, results, query, field, send) {
   const slice = results.slice(0, PAGE_SIZE);
   let text = `🔍 نتایج جستجوی «${escHtml(query)}» (${results.length} مورد):\n\n`;
   slice.forEach((res, i) => {
+    const flag = res.provider === "arvan" ? "🇮🇷" : "☁️";
     text +=
-      `${i + 1}) ${res.record.type}-${code(res.record.name)}\n` +
+      `${i + 1}) ${flag} ${res.record.type}-${code(res.record.name)}\n` +
       `   → ${code(res.record.content)}\n` +
       `   دامنه: ${code(res.zone_name)}\n\n`;
   });
 
   // se:<token>:<index> باز کردن/ویرایش رکورد نتیجه | sd:<token>:<index> حذف آن رکورد
   const keyboard = slice.map((res, i) => [
-    { text: `✏️ ${res.record.type}-${res.record.name}`, callback_data: `se:${token}:${i}` },
+    { text: `${res.provider === "arvan" ? "🇮🇷" : "✏️"} ${res.record.type}-${res.record.name}`, callback_data: `se:${token}:${i}` },
     { text: "🗑", callback_data: `sd:${token}:${i}` },
   ]);
   keyboard.push([{ text: "🔍 جستجوی جدید", callback_data: "search" }, { text: "🏠 منو", callback_data: "menu" }]);
@@ -6944,11 +6950,11 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     await kv.delete(`pend:${chatId}`);
     if (isIpLike(txt.trim())) {
       await kv.put(`qa:${chatId}`, JSON.stringify({ ip: txt.trim() }), { expirationTtl: 3600 });
-      await sendQuickIpMenu(chatId, txt.trim(), kv, accounts, send);
+      await sendQuickIpMenu(chatId, txt.trim(), kv, accounts, send, env);
       return;
     }
     const qa = await kv.get(`qa:${chatId}`, "json");
-    await quickNameSearch(txt.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv);
+    await quickNameSearch(txt.trim(), qa && qa.ip ? qa : null, chatId, accounts, send, kv, env);
     return;
   }
 
@@ -7028,6 +7034,35 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       seen.add(key);
       results.push(r);
     }
+    // آروان: جست‌وجو در دامنه‌ها و رکوردهای همهٔ اکانت‌ها (نام و مقدار)
+    try {
+      const arvanAccounts = await getArvanAccounts(kv);
+      const ql = q.toLowerCase();
+      for (let i = 0; i < arvanAccounts.length; i++) {
+        let domains = [];
+        try {
+          domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+        } catch (e) {
+          continue;
+        }
+        for (const d of domains) {
+          let records = [];
+          try {
+            records = await arvanGetAllRecords(arvanAccounts[i].token, d.domain, kv, env);
+          } catch (e) {
+            continue;
+          }
+          for (const r of records) {
+            if (r.name.toLowerCase().includes(ql) || String(r.content || "").toLowerCase().includes(ql)) {
+              const key = `arvan:${d.domain}:${r.id}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              results.push({ zone_id: `arvan:${d.domain}`, zone_name: d.domain, record: r, acc: i, provider: "arvan", domain: d.domain });
+            }
+          }
+        }
+      }
+    } catch (e) {}
     const token = makeToken();
     await kv.put(
       `sr:${token}`,
@@ -8324,6 +8359,12 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const stored = await kv.get(`sr:${token}`, "json");
       if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
       const res = stored.results[idx];
+      // نتیجهٔ آروانی: رفتن به جزئیات رکورد آروان
+      if (res.provider === "arvan") {
+        const t = arvanSessId();
+        await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain: res.domain, acc: res.acc }), { expirationTtl: 3600 });
+        return arvanRecordDetail({ edit, kv, env, arvanAccounts, chatId }, t, res.record.id);
+      }
       const kb = [
         [{ text: "✏️ تغییر مقدار", callback_data: `sev:${token}:${idx}` }],
         [{ text: "🔄 تغییر نوع", callback_data: `set:${token}:${idx}` }],
@@ -8420,6 +8461,14 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const stored = await kv.get(`sr:${token}`, "json");
       if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
       const res = stored.results[idx];
+      // نتیجهٔ آروانی: تأیید حذف در جریان آروان
+      if (res.provider === "arvan") {
+        const t = arvanSessId();
+        await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain: res.domain, acc: res.acc }), { expirationTtl: 3600 });
+        return edit(`🗑 این رکورد حذف شود؟\n\n${res.record.type} — ${res.record.name} → ${res.record.content}`, [
+          [{ text: "✅ بله", callback_data: `arvdelok:${t}:${res.record.id}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
+        ]);
+      }
       await edit(`⚠️ مطمئنید حذف شود؟\n\n${res.record.type} — ${res.record.name} → ${res.record.content}`, [
         [{ text: "✅ بله", callback_data: `sdy:${token}:${idx}` }, { text: "❌ انصراف", callback_data: `sr:${token}` }],
       ]);
@@ -10820,6 +10869,7 @@ async function arvanRecords(ctx, acc, domain, page = 0) {
     kb.push(row);
   }
   kb.push([{ text: "➕ افزودن رکورد", callback_data: `arvaadd:${t}` }]);
+  kb.push([{ text: "🛡 امنیت و فایروال", callback_data: `arvsec:${acc}:${domain}` }]);
   kb.push([
     page > 0 ? { text: "◀️", callback_data: `arvdom:${acc}:${domain}:${page - 1}` } : EMPTY_BTN,
     { text: "🔙 بازگشت", callback_data: "arvdoms" },
@@ -10851,10 +10901,16 @@ async function arvanRecordDetail(ctx, t, rid) {
     `☁️ ابری (CDN): ${rec.proxied ? "روشن" : "خاموش"}`,
     `⏱ TTL: ${rec.ttl === 120 || rec.ttl === 1 ? "پیش‌فرض" : rec.ttl}`,
   ];
+  let faved = false;
+  try {
+    const favs = await getFavs(ctx.kv, ctx.chatId);
+    faved = favExists(favs, "arvan:" + session.domain, rid);
+  } catch (e) {}
   await edit(lines.join("\n"), [
     [{ text: "✏️ تغییر مقدار (تعویض IP)", callback_data: `arvev:${t}:${rid}` }],
     [{ text: rec.proxied ? "☁️ خاموش‌کردن ابری" : "☁️ روشن‌کردن ابری", callback_data: `arvcloud:${t}:${rid}` }],
     [{ text: "🗑 حذف رکورد", callback_data: `arvdel:${t}:${rid}` }],
+    [{ text: faved ? "⭐ حذف از منتخب" : "⭐ افزودن به منتخب", callback_data: `arvfav:${t}:${rid}` }],
     [{ text: "🔙 رکوردها", callback_data: `arvdom:${session.acc}:${session.domain}` }],
   ]);
 }
@@ -10914,6 +10970,10 @@ async function arvanServersView(ctx, acc, region) {
     kb.push([{ text: `${dot} ${s.name} (${ip})`, callback_data: `arvs:${t}:${i}` }]);
   }
   kb.push([{ text: "➕ ساخت سرور جدید", callback_data: `arvnew:${t}` }]);
+  kb.push([
+    { text: "🌐 آی‌پی شناور", callback_data: `arvfloat:${acc}:${region}` },
+    { text: "💾 دیسک‌ها", callback_data: `arvvol:${acc}:${region}` },
+  ]);
   kb.push([{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]);
   await edit(`🖥 سرورهای ${code(region)} (${r.servers.length})`, kb);
 }
@@ -10957,6 +11017,10 @@ async function arvanServerDetail(ctx, t, idx) {
     [
       { text: "📷 اسنپ‌شات", callback_data: `arvsnap:${t}:${idx}` },
       { text: "✏️ تغییرنام", callback_data: `arvren:${t}:${idx}` },
+    ],
+    [
+      { text: "⬆️ تغییر سایز", callback_data: `arvsize:${t}:${idx}` },
+      { text: "🛠️ ریبیلد", callback_data: `arvbuild:${t}:${idx}` },
     ],
     [
       { text: "🔑 ریست رمز root", callback_data: `arvroot:${t}:${idx}` },
@@ -11070,6 +11134,22 @@ async function handleArvanCallback(data, ctx) {
     if (!arvanOk(res)) return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${m[1]}:${m[2]}` }]]);
     return arvanRecords(ctx, session.acc, session.domain, 0);
   }
+  m = data.match(/^arvfav:([^:]+):(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || session.provider !== "arvan") return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    const favs = await getFavs(kv, chatId);
+    const zid = "arvan:" + session.domain;
+    if (favExists(favs, zid, m[2])) {
+      await saveFavs(kv, chatId, favs.filter((f) => !(f.zone_id === zid && f.record_id === m[2])));
+    } else {
+      const found = await arvanFindRecord(ctx, m[1], m[2]);
+      if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      favs.push({ zone_id: zid, zone_name: session.domain, acc: session.acc, record_id: m[2], name: found.rec.name, type: found.rec.type, provider: "arvan", domain: session.domain });
+      await saveFavs(kv, chatId, favs);
+    }
+    return arvanRecordDetail(ctx, m[1], m[2]);
+  }
   m = data.match(/^arvaadd:(.+)$/);
   if (m) {
     return edit("➕ نوع رکورد جدید:", [
@@ -11082,6 +11162,68 @@ async function handleArvanCallback(data, ctx) {
   if (m) {
     await kvPutPend({ type: "arvan_rec_name", t: m[1], rtype: m[2] });
     return edit(`🔤 نام رکورد ${m[2]} را بفرستید (مثل sub یا @):`, [[{ text: "⬅️ انصراف", callback_data: "arvdoms" }]]);
+  }
+  m = data.match(/^arvsec:(\d+):(.+)$/);
+  if (m) return arvanSecMenu(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvfws:(\d+):(.+)$/);
+  if (m) return arvanFwList(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvwaf:(\d+):(.+)$/);
+  if (m) return arvanWafView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvssl:(\d+):(.+)$/);
+  if (m) return arvanSslView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvrep:(\d+):(.+)$/);
+  if (m) return arvanTrafficView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvwafset:(\d+):(.+):(on|off)$/);
+  if (m) {
+    const a = arvanAccounts[Number(m[1])];
+    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+    try {
+      await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/waf/settings`, { method: "PATCH", body: JSON.stringify({ is_enabled: m[3] === "on" }) }, 30000, kv, env);
+    } catch (e) {}
+    return arvanWafView(ctx, Number(m[1]), m[2]);
+  }
+  m = data.match(/^arvfwt:(\d+):(.+):(.+)$/);
+  if (m) {
+    const a = arvanAccounts[Number(m[1])];
+    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+    try {
+      const cur = await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/firewall/rules/${encodeURIComponent(m[3])}`, {}, 30000, kv, env);
+      const curOn = !(((cur.data || cur.result) || {}).is_enabled === false);
+      await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/firewall/rules/${encodeURIComponent(m[3])}`, { method: "PATCH", body: JSON.stringify({ is_enabled: !curOn }) }, 30000, kv, env);
+    } catch (e) {}
+    return arvanFwList(ctx, Number(m[1]), m[2]);
+  }
+  m = data.match(/^arvfwd:(\d+):(.+):(.+)$/);
+  if (m) {
+    return edit("🗑 این قانون فایروال حذف شود؟", [
+      [{ text: "✅ بله", callback_data: `arvwfdy:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvfws:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvwfdy:(\d+):(.+):(.+)$/);
+  if (m) {
+    const a = arvanAccounts[Number(m[1])];
+    if (a) {
+      try {
+        await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/firewall/rules/${encodeURIComponent(m[3])}`, { method: "DELETE" }, 30000, kv, env);
+      } catch (e) {}
+    }
+    return arvanFwList(ctx, Number(m[1]), m[2]);
+  }
+  m = data.match(/^arvwadd:(\d+):(.+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_fw_expr", acc: Number(m[1]), domain: m[2] });
+    return edit(`🧱 قانون جدید فایروال\n\nعبارت فیلتر را بفرستید (مثل Wireshark):\n${code('ip.src eq 1.2.3.4')}`, [
+      [{ text: "⬅️ انصراف", callback_data: `arvfws:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvfwact:([^:]+):(allow|deny|challenge|bypass)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || session.provider !== "arvan-fw") return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 آروان", callback_data: "arvan" }]]);
+    session.action = m[2];
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 900 });
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_fw_name", t: m[1], msgId: messageId }), { expirationTtl: 600 });
+    return edit(`🧱 اکشن: ${code(m[2])}\n\nنام قانون را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: `arvfws:${session.acc}:${session.domain}` }]]);
   }
   // ---- سرورها در بخش بعد ----
   return arvanServerCallback(data, ctx);
@@ -11177,6 +11319,64 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     await sleep(1500);
     const ctx2 = { edit: (t2, kb2) => editMessage(botToken, chatId, pending.msgId, t2, kb2), kv, env, arvanAccounts, chatId };
     return arvanRecords(ctx2, session.acc, session.domain, 0);
+  }
+  if (type === "arvan_fw_expr") {
+    if (!txt || txt.length < 3) return;
+    const t = arvanSessId();
+    await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-fw", acc: pending.acc, domain: pending.domain, expr: txt }), { expirationTtl: 900 });
+    await kv.delete(`pend:${chatId}`);
+    return editId(`🧱 فیلتر: ${code(txt)}\n\nاکشن قانون:`, [
+      [{ text: "✅ اجازه", callback_data: `arvfwact:${t}:allow` }, { text: "⛔ مسدود", callback_data: `arvfwact:${t}:deny` }],
+      [{ text: "🧩 چالش", callback_data: `arvfwact:${t}:challenge` }, { text: "⏭ عبور", callback_data: `arvfwact:${t}:bypass` }],
+      [{ text: "⬅️ انصراف", callback_data: `arvfws:${pending.acc}:${pending.domain}` }],
+    ]);
+  }
+  if (type === "arvan_fw_name") {
+    if (!txt) return;
+    const session = await kv.get(`s:${pending.t}`, "json");
+    if (!session || session.provider !== "arvan-fw") {
+      await kv.delete(`pend:${chatId}`);
+      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 آروان", callback_data: "arvan" }]]);
+    }
+    const a = arvanAccounts[session.acc];
+    let res = null;
+    try {
+      res = await arvanFetch(a.token, `/domains/${encodeURIComponent(session.domain)}/firewall/rules`, { method: "POST", body: JSON.stringify({ name: txt, filter_expr: session.expr, action: session.action, is_enabled: true }) }, 30000, kv, env);
+    } catch (e) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }]]);
+    }
+    await kv.delete(`pend:${chatId}`);
+    if (!arvanOk(res)) {
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }]]);
+    }
+    await editId(`✅ قانون «${code(txt)}» ساخته شد.`, []);
+    await sleep(1200);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanFwList(ctx2, session.acc, session.domain);
+  }
+  if (type === "arvan_vol_name") {
+    if (!txt || txt.length > 60) return;
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_vol_size", t: pending.t, name: txt, msgId: pending.msgId }), { expirationTtl: 600 });
+    return editId("💾 حجم دیسک به گیگابایت را بفرستید (مثلاً 50):", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  if (type === "arvan_vol_size") {
+    const n = Number(txt);
+    if (!Number.isInteger(n) || n < 1 || n > 2000) {
+      return editId("❌ حجم نامعتبر است (۱ تا ۲۰۰۰ گیگ). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+    }
+    const session = await kv.get(`s:${pending.t}`, "json");
+    if (!session) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    session.volNew = { name: pending.name, size: n };
+    await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    await kv.delete(`pend:${chatId}`);
+    return editId(`💾 دیسک «${code(pending.name)}» (${n}G)\n\nنوع دیسک:`, [
+      [{ text: "SSD", callback_data: `arvvolt:${pending.t}:ssd` }, { text: "HDD", callback_data: `arvvolt:${pending.t}:hdd` }],
+      [{ text: "⏭ پیش‌فرض", callback_data: `arvvolt:${pending.t}:skip` }],
+    ]);
   }
   // ورودی‌های سرور در ادامه
   return handleArvanServerPending(pending, txt, chatId, accounts, send, kv, botToken, env, arvanAccounts);
@@ -11424,6 +11624,268 @@ async function arvanServerCallback(data, ctx) {
     } catch (e) {}
     return edit("✅ درخواست حذف اسنپ‌شات ارسال شد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
   }
+  m = data.match(/^arvsize:([^:]+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    let sizes = [];
+    try {
+      const d = await arvanEcc(a.token, session.region, "/sizes?per_page=100", {}, kv, env);
+      sizes = arvanEccList(d) || [];
+    } catch (e) {}
+    if (!sizes.length) return edit("❌ پلنی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    const kb = [];
+    for (let i = 0; i < Math.min(sizes.length, 10); i++) {
+      const f = sizes[i];
+      const price = f.price_per_month ? ` ~ ${Number(f.price_per_month).toLocaleString("en-US")}/ماه` : "";
+      kb.push([{ text: `${f.name || f.id} (${f.cpu_count || "?"}CPU/${f.memory || "?"}G${price})`, callback_data: `arvsizego:${m[1]}:${m[2]}:${i}` }]);
+    }
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]);
+    session.flavors = sizes.slice(0, 10).map((s) => ({ id: s.id, name: s.name || s.id }));
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return edit(`⬆️ پلن جدید برای ${code(session.servers[Number(m[2])].name)}:`, kb);
+  }
+  m = data.match(/^arvsizego:([^:]+):(\d+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const f = session && session.flavors && session.flavors[Number(m[3])];
+    if (!f) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    return edit(`⬆️ پلن به «${code(f.name)}» تغییر کند؟\n(ممکن است سرور ریبوت شود)`, [
+      [{ text: "✅ بله", callback_data: `arvsizeok:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvsizeok:([^:]+):(\d+):(\d+)$/);
+  if (m) {
+    const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "resize", { flavor_id: (await kv.get(`s:${m[1]}`, "json")).flavors[Number(m[3])].id });
+    if (!r) return;
+    await edit("✅ دستور تغییر سایز ارسال شد (چند دقیقه طول می‌کشد).", []);
+    await sleep(2000);
+    return arvanServerDetail(ctx, m[1], Number(m[2]));
+  }
+  m = data.match(/^arvbuild:([^:]+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    const imgs = [];
+    try {
+      const d1 = await arvanEcc(a.token, session.region, "/images?per_page=100", {}, kv, env);
+      for (const im of arvanEccList(d1) || []) if (im && im.id) imgs.push({ id: im.id, name: im.name || im.id });
+    } catch (e) {}
+    try {
+      const d2 = await arvanEcc(a.token, session.region, "/images/marketplaces", {}, kv, env);
+      for (const g of arvanEccList(d2) || []) for (const im of (g && g.images) || []) if (im && im.id && imgs.length < 30) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
+    } catch (e) {}
+    if (!imgs.length) return edit("❌ ایمیجی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    session.images = imgs.slice(0, 30);
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    const kb = [];
+    for (let i = 0; i < Math.min(imgs.length, 10); i++) kb.push([{ text: `💿 ${imgs[i].name.slice(0, 30)}`, callback_data: `arvbuildgo:${m[1]}:${m[2]}:${i}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]);
+    return edit(`🛠️ ایمیج جدید برای ${code(session.servers[Number(m[2])].name)}:`, kb);
+  }
+  m = data.match(/^arvbuildgo:([^:]+):(\d+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const im = session && session.images && session.images[Number(m[3])];
+    if (!im) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    return edit(`⚠️ ریبیلد با «${code(im.name)}»؟\n\n❌ همهٔ داده‌های سرور پاک می‌شود!`, [
+      [{ text: "✅ بله، ریبیلد کن", callback_data: `arvbuildok:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvbuildok:([^:]+):(\d+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const im = session && session.images && session.images[Number(m[3])];
+    if (!im) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "rebuild", { image_id: im.id });
+    if (!r) return;
+    await edit("✅ دستور ریبیلد ارسال شد (نصب مجدد چند دقیقه طول می‌کشد).", []);
+    await sleep(2000);
+    return arvanServerDetail(ctx, m[1], Number(m[2]));
+  }
+  m = data.match(/^arvfloat:(\d+):(.+)$/);
+  if (m) return arvanFloatView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvvol:(\d+):(.+)$/);
+  if (m) return arvanVolView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvflnew:(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    let res;
+    try {
+      res = await arvanEcc(a.token, session.region, "/float-ips", { method: "POST", body: JSON.stringify({ description: "guardian" }) }, kv, env);
+    } catch (e) {
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+    }
+    if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+    }
+    return arvanFloatView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvfldel:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const f = session.floats[Number(m[2])];
+    return edit(`🗑 آی‌پی شناور ${code(f.ip || f.id)} حذف شود؟`, [
+      [{ text: "✅ بله", callback_data: `arvfl-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvfloat:${session.acc}:${session.region}` }],
+    ]);
+  }
+  m = data.match(/^arvfl-del-ok:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    try {
+      await arvanEcc(a.token, session.region, `/float-ips/${encodeURIComponent(session.floats[Number(m[2])].id)}`, { method: "DELETE" }, kv, env);
+    } catch (e) {}
+    return arvanFloatView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvfl-det:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    const f = session.floats[Number(m[2])];
+    // port_id از آبجکت تازه
+    let portId = "";
+    try {
+      const d = await arvanEcc(a.token, session.region, "/float-ips", {}, kv, env);
+      const cur = (arvanEccList(d) || []).find((x) => (x.id || x.uuid) === f.id);
+      portId = (cur && (cur.port_id || (cur.port && cur.port.id))) || "";
+    } catch (e) {}
+    if (!portId) return edit("❌ شناسه اتصال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+    try {
+      await arvanEcc(a.token, session.region, "/float-ips/detach", { method: "PATCH", body: JSON.stringify({ port_id: portId }) }, kv, env);
+    } catch (e) {}
+    return arvanFloatView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvflatt:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
+    if (r.error || !r.servers.length) {
+      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+    }
+    session.servers = r.servers.slice(0, 12);
+    session.flIdx = Number(m[2]);
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvflatto:${m[1]}:${i}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]);
+    return edit(`🔗 آی‌پی ${code(session.floats[Number(m[2])].ip || "?")} به کدام سرور وصل شود؟`, kb);
+  }
+  m = data.match(/^arvflatto:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const s = session && session.servers && session.servers[Number(m[2])];
+    const f = session && session.floats && session.floats[session.flIdx];
+    if (!s || !f) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    try {
+      await arvanEcc(a.token, session.region, `/float-ips/${encodeURIComponent(f.id)}/attach`, { method: "PATCH", body: JSON.stringify({ server_id: s.id }) }, kv, env);
+    } catch (e) {}
+    return arvanFloatView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvvolnew:(.+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_vol_name", t: m[1] });
+    return edit("💾 نام دیسک جدید را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  m = data.match(/^arvvolt:(.+):(ssd|hdd|skip)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.volNew) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    const body = { name: session.volNew.name, size: session.volNew.size };
+    if (m[2] !== "skip") body.type = m[2];
+    let res;
+    try {
+      res = await arvanEcc(a.token, session.region, "/volumes", { method: "POST", body: JSON.stringify(body) }, kv, env);
+    } catch (e) {
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+    }
+    if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+    }
+    return arvanVolView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvvolatt:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
+    if (r.error || !r.servers.length) {
+      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+    }
+    session.servers = r.servers.slice(0, 12);
+    session.volIdx = Number(m[2]);
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvvolatto:${m[1]}:${i}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]);
+    return edit(`🔗 دیسک «${code(session.vols[Number(m[2])].name)}» به کدام سرور وصل شود؟`, kb);
+  }
+  m = data.match(/^arvvolatto:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const s = session && session.servers && session.servers[Number(m[2])];
+    const v = session && session.vols && session.vols[session.volIdx];
+    if (!s || !v) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    try {
+      await arvanEcc(a.token, session.region, "/volumes/attach", { method: "PATCH", body: JSON.stringify({ server_id: s.id, volume_id: v.id }) }, kv, env);
+    } catch (e) {}
+    return arvanVolView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvvol-det:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
+    if (r.error || !r.servers.length) {
+      return edit("❌ سروری پیدا نشد." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+    }
+    session.servers = r.servers.slice(0, 12);
+    session.volIdx = Number(m[2]);
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvvol-detto:${m[1]}:${i}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]);
+    return edit(`❌ دیسک «${code(session.vols[Number(m[2])].name)}» از کدام سرور جدا شود؟`, kb);
+  }
+  m = data.match(/^arvvol-detto:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const s = session && session.servers && session.servers[Number(m[2])];
+    const v = session && session.vols && session.vols[session.volIdx];
+    if (!s || !v) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    try {
+      await arvanEcc(a.token, session.region, "/volumes/detach", { method: "PATCH", body: JSON.stringify({ server_id: s.id, volume_id: v.id }) }, kv, env);
+    } catch (e) {}
+    return arvanVolView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvvol-del:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const v = session.vols[Number(m[2])];
+    return edit(`🗑 دیسک «${code(v.name)}» حذف شود؟`, [
+      [{ text: "✅ بله", callback_data: `arvvol-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
+    ]);
+  }
+  m = data.match(/^arvvol-del-ok:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    try {
+      await arvanEcc(a.token, session.region, `/volumes/${encodeURIComponent(session.vols[Number(m[2])].id)}`, { method: "DELETE" }, kv, env);
+    } catch (e) {}
+    return arvanVolView(ctx, session.acc, session.region);
+  }
   // ویزارد ساخت سرور در ادامه
   return arvanMkCallback(data, ctx);
 }
@@ -11633,6 +12095,172 @@ async function arvanMkCallback(data, ctx) {
     return;
   }
   return edit("❓ دستور ناشناخته.", [[{ text: "🔙 آروان", callback_data: "arvan" }]]);
+}
+
+// ---------- امنیت دامنه آروان (فایروال، WAF، SSL، گزارش) ----------
+async function arvanSecMenu(ctx, acc, domain) {
+  const { edit } = ctx;
+  await edit(`🛡 امنیت ${code(domain)}`, [
+    [{ text: "🧱 قوانین فایروال", callback_data: `arvfws:${acc}:${domain}` }],
+    [{ text: "🛡 WAF", callback_data: `arvwaf:${acc}:${domain}` }, { text: "🔒 SSL", callback_data: `arvssl:${acc}:${domain}` }],
+    [{ text: "📊 ترافیک ۲۴ ساعت", callback_data: `arvrep:${acc}:${domain}` }],
+    [{ text: "🔙 رکوردها", callback_data: `arvdom:${acc}:${domain}` }],
+  ]);
+}
+
+async function arvanFwList(ctx, acc, domain) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  let rules = [];
+  try {
+    const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/firewall/rules?per_page=50`, {}, 30000, kv, env);
+    const arr = arvanEccList(d) || [];
+    rules = arr.map((r) => ({ id: r.id || "", name: r.name || "؟", action: r.action || "؟", expr: r.filter_expr || r.filter || "", enabled: r.is_enabled !== false }));
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  }
+  const kb = [];
+  for (const r of rules.slice(0, 12)) {
+    const st = r.enabled ? "🟢" : "⚪";
+    kb.push([
+      { text: `${st} ${r.name} (${r.action})`, callback_data: "noop" },
+      { text: r.enabled ? "⏸" : "▶️", callback_data: `arvfwt:${acc}:${domain}:${r.id}` },
+      { text: "🗑", callback_data: `arvfwd:${acc}:${domain}:${r.id}` },
+    ]);
+  }
+  kb.push([{ text: "➕ قانون جدید", callback_data: `arvwadd:${acc}:${domain}` }]);
+  kb.push([{ text: "🔙 امنیت", callback_data: `arvsec:${acc}:${domain}` }]);
+  await edit(`🧱 قوانین فایروال ${code(domain)} (${rules.length})`, kb);
+}
+
+async function arvanWafView(ctx, acc, domain) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  let s = null;
+  try {
+    const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/waf/settings`, {}, 30000, kv, env);
+    s = (d.data && typeof d.data === "object" ? d.data.data || d.data : d.result) || d.data || null;
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  }
+  const on = s ? s.is_enabled !== false : false;
+  const lines = [`🛡 WAF — ${code(domain)}`, "", `وضعیت: ${on ? "🟢 روشن" : "⚪ خاموش"}`];
+  if (s && s.mode) lines.push(`حالت: ${code(String(s.mode))}`);
+  await edit(lines.join("\n"), [
+    [{ text: on ? "⏸ خاموش‌کردن WAF" : "▶️ روشن‌کردن WAF", callback_data: `arvwafset:${acc}:${domain}:${on ? "off" : "on"}` }],
+    [{ text: "🔙 امنیت", callback_data: `arvsec:${acc}:${domain}` }],
+  ]);
+}
+
+async function arvanSslView(ctx, acc, domain) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  let s = null;
+  try {
+    const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/ssl`, {}, 30000, kv, env);
+    s = (d.data && typeof d.data === "object" && !Array.isArray(d.data) ? d.data : d.result) || null;
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  }
+  const lines = [`🔒 SSL — ${code(domain)}`, ""];
+  if (!s) lines.push("📭 اطلاعاتی برنگشت.");
+  else {
+    if (s.ssl_status != null) lines.push(`وضعیت SSL: ${s.ssl_status ? "🟢 فعال" : "⚪ غیرفعال"}`);
+    if (s.tls_version != null) lines.push(`حداقل TLS: ${code(String(s.tls_version) || "پیش‌فرض")}`);
+    if (s.hsts_status != null) lines.push(`HSTS: ${s.hsts_status ? "روشن" : "خاموش"}`);
+    if (s.certificate_mode) lines.push(`گواهی: ${code(String(s.certificate_mode))}`);
+    if (s.fingerprint_status != null) lines.push(`فینگرپرینت: ${s.fingerprint_status ? "روشن" : "خاموش"}`);
+  }
+  await edit(lines.join("\n"), [[{ text: "🔙 امنیت", callback_data: `arvsec:${acc}:${domain}` }]]);
+}
+
+async function arvanTrafficView(ctx, acc, domain) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  let d = null;
+  try {
+    d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/reports/traffics?period=24h`, {}, 30000, kv, env);
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 امنیت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  }
+  const lines = [`📊 ترافیک ۲۴ ساعت — ${code(domain)}`, ""];
+  const data = (d && d.data) || {};
+  let shown = 0;
+  for (const [k, v] of Object.entries(data)) {
+    if (v == null || typeof v === "object") continue;
+    lines.push(`${code(k)}: ${code(String(v))}`);
+    if (++shown >= 12) break;
+  }
+  if (!shown) lines.push("📭 داده‌ای برنگشت (یا ساختار متفاوت است).");
+  await edit(lines.join("\n"), [[{ text: "🔙 امنیت", callback_data: `arvsec:${acc}:${domain}` }]]);
+}
+
+// ---------- آی‌پی شناور و دیسک‌های آروان ----------
+function arvanNetSess(acc, region, extra) {
+  return { provider: "arvan-net", acc, region, ...(extra || {}) };
+}
+
+async function arvanFloatView(ctx, acc, region) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  let list = [];
+  try {
+    const d = await arvanEcc(a.token, region, "/float-ips", {}, kv, env);
+    list = arvanEccList(d) || [];
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 سرورها", callback_data: `arvreg:${acc}:${region}` }]]);
+  }
+  const t = arvanSessId();
+  await kv.put(`s:${t}`, JSON.stringify(arvanNetSess(acc, region, { floats: list.slice(0, 20).map((f) => ({ id: f.id || f.uuid || "", ip: f.ip || f.address || f.floating_ip || "", attached: !!(f.port_id || f.port || f.server_id || f.server || f.attached) })) })), { expirationTtl: 3600 });
+  const kb = [];
+  const shown = list.slice(0, 12);
+  for (let i = 0; i < shown.length; i++) {
+    const f = shown[i];
+    const ip = f.ip || f.address || f.floating_ip || f.id || "؟";
+    const attached = f.port_id || f.port || f.server_id || f.server || f.attached;
+    kb.push([
+      { text: `${attached ? "🔗" : "⚪"} ${ip}`, callback_data: "noop" },
+      attached ? { text: "❌ جداکردن", callback_data: `arvfl-det:${t}:${i}` } : { text: "🔗 اتصال", callback_data: `arvflatt:${t}:${i}` },
+      { text: "🗑", callback_data: `arvfldel:${t}:${i}` },
+    ]);
+  }
+  kb.push([{ text: "➕ ساخت آی‌پی شناور", callback_data: `arvflnew:${t}` }]);
+  kb.push([{ text: "🔙 سرورها", callback_data: `arvreg:${acc}:${region}` }]);
+  await edit(`🌐 آی‌پی‌های شناور ${code(region)} (${list.length})`, kb);
+}
+
+async function arvanVolView(ctx, acc, region) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  let list = [];
+  try {
+    const d = await arvanEcc(a.token, region, "/volumes", {}, kv, env);
+    list = arvanEccList(d) || [];
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 سرورها", callback_data: `arvreg:${acc}:${region}` }]]);
+  }
+  const t = arvanSessId();
+  await kv.put(`s:${t}`, JSON.stringify(arvanNetSess(acc, region, { vols: list.slice(0, 20).map((v) => ({ id: v.id || v.uuid || "", name: v.name || v.id || "؟", size: v.size || "", attached: !!(v.server_id || v.server || v.attachments) })) })), { expirationTtl: 3600 });
+  const kb = [];
+  for (let i = 0; i < Math.min(list.length, 12); i++) {
+    const v = list[i];
+    const nm = v.name || v.id || "؟";
+    kb.push([
+      { text: `💾 ${String(nm).slice(0, 16)}${v.size ? ` (${v.size}G)` : ""}`, callback_data: "noop" },
+      { text: "🔗", callback_data: `arvvolatt:${t}:${i}` },
+      { text: "❌", callback_data: `arvvol-det:${t}:${i}` },
+      { text: "🗑", callback_data: `arvvol-del:${t}:${i}` },
+    ]);
+  }
+  kb.push([{ text: "➕ ساخت دیسک", callback_data: `arvvolnew:${t}` }]);
+  kb.push([{ text: "🔙 سرورها", callback_data: `arvreg:${acc}:${region}` }]);
+  await edit(`💾 دیسک‌های ${code(region)} (${list.length})`, kb);
 }
 
 // ===================== Hetzner UI =====================
@@ -12639,7 +13267,7 @@ async function showBulkSelect(kv, accounts, edit, token, zone, page, selected) {
 }
 
 // ===================== تغییر سریع (فرستادن IP / نام در چت) =====================
-async function ipExactResults(ip, accounts, kv) {
+ async function ipExactResults(ip, accounts, kv, env) {
   let results = [];
   try {
     const all = await searchRecords(accounts, "content", ip, null, kv);
@@ -12648,12 +13276,38 @@ async function ipExactResults(ip, accounts, kv) {
   } catch (e) {
     console.error("IPS_SEARCH", String(e));
   }
+  // آروان هم: رکوردهایی که مقدارشان دقیقاً همین آی‌پی است
+  try {
+    const arvanAccounts = await getArvanAccounts(kv);
+    const target = String(ip).trim().toLowerCase();
+    for (let i = 0; i < arvanAccounts.length; i++) {
+      let domains = [];
+      try {
+        domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+      } catch (e) {
+        continue;
+      }
+      for (const d of domains) {
+        let records = [];
+        try {
+          records = await arvanGetAllRecords(arvanAccounts[i].token, d.domain, kv, env);
+        } catch (e) {
+          continue;
+        }
+        for (const r of records) {
+          if (String(r.content || "").trim().toLowerCase() === target) {
+            results.push({ zone_id: `arvan:${d.domain}`, zone_name: d.domain, record: r, acc: i, provider: "arvan", domain: d.domain });
+          }
+        }
+      }
+    }
+  } catch (e) {}
   return results;
 }
 
 async function showIpSubs(io, ip) {
   const { accounts, kv } = io;
-  const results = await ipExactResults(ip, accounts, kv);
+  const results = await ipExactResults(ip, accounts, kv, io.env);
   const token = makeToken();
   await kv.put(`ips:${token}`, JSON.stringify({ ip, results }), { expirationTtl: 3600 });
   await renderIpSearchMenu(io, token, 0);
@@ -12679,7 +13333,8 @@ async function renderIpSearchMenu(io, token, page, note) {
     for (let j = i; j < i + 2; j++) {
       const res = slice[j];
       if (res) {
-        const label = `${res.record.type} ${nameShortStr(res.record.name, res.zone_name)}`;
+        const flag = res.provider === "arvan" ? "🇮🇷 " : "";
+        const label = `${flag}${res.record.type} ${nameShortStr(res.record.name, res.zone_name)}`;
         // ipd:<token>:<index>: باز کردن جزئیات سابی که با این آی‌پی پیدا شده
         row.push({ text: label, callback_data: `ipd:${token}:${page * CZ_PAGE_SIZE + j}` });
       } else {
@@ -12700,13 +13355,13 @@ async function renderIpSearchMenu(io, token, page, note) {
   await fn((note || "") + lines.join("\n"), kb);
 }
 
-async function sendQuickIpMenu(chatId, ip, kv, accounts, send) {
-  await showIpSubs({ kv, accounts, send, chatId }, ip);
+async function sendQuickIpMenu(chatId, ip, kv, accounts, send, env) {
+  await showIpSubs({ kv, accounts, send, chatId, env }, ip);
 }
 
 async function refreshIpMenu(io, ip, note) {
   const { accounts, kv } = io;
-  const results = await ipExactResults(ip, accounts, kv);
+  const results = await ipExactResults(ip, accounts, kv, io.env);
   const token = makeToken();
   await kv.put(`ips:${token}`, JSON.stringify({ ip, results }), { expirationTtl: 3600 });
   await renderIpSearchMenu(io, token, 0, note);
@@ -12775,17 +13430,48 @@ async function renderQuickResults(token, results, query, qa, send) {
   for (let i = 0; i < slice.length; i++) {
     const res = slice[i];
     const short = nameShortStr(res.record.name, res.zone_name);
-    const label = `${res.record.type} ${short}`;
+    const flag = res.provider === "arvan" ? "🇮🇷" : "";
+    const label = `${flag}${flag ? " " : ""}${res.record.type} ${short}`;
     lines.push(`${i + 1}) ${label}\n   → ${code(res.record.content)}  [${code(res.zone_name)}]`);
     // qasel: در حالت جای‌گذاری سریع، همین رکورد برای تغییر مقدار انتخاب می‌شود | qn: باز کردن جزئیات رکورد
-    kb.push([{ text: qa && qa.ip ? `⚡ ${label}` : `✏️ ${label}`, callback_data: qa && qa.ip ? `qasel:${token}:${i}` : `qn:${token}:${i}` }]);
+    // رکورد آروانی همیشه با qn (جزئیات آروان) باز می‌شود
+    const useQasel = qa && qa.ip && res.provider !== "arvan";
+    kb.push([{ text: useQasel ? `⚡ ${label}` : `✏️ ${label}`, callback_data: useQasel ? `qasel:${token}:${i}` : `qn:${token}:${i}` }]);
   }
   kb.push([{ text: "🏠 منو", callback_data: "menu" }]);
   await send(lines.join("\n"), kb);
 }
 
-async function quickNameSearch(text, qa, chatId, accounts, send, kv) {
+ async function quickNameSearch(text, qa, chatId, accounts, send, kv, env) {
   const results = await searchRecords(accounts, "name", text, null, kv);
+  // آروان هم به نتایج اضافه شود
+  try {
+    const arvanAccounts = await getArvanAccounts(kv);
+    const ql = String(text).toLowerCase();
+    for (let i = 0; i < arvanAccounts.length; i++) {
+      let domains = [];
+      try {
+        domains = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+      } catch (e) {
+        continue;
+      }
+      for (const d of domains) {
+        let records = [];
+        try {
+          records = await arvanGetAllRecords(arvanAccounts[i].token, d.domain, kv, env);
+        } catch (e) {
+          continue;
+        }
+        for (const r of records) {
+          if (r.name.toLowerCase().includes(ql)) {
+            results.push({ zone_id: `arvan:${d.domain}`, zone_name: d.domain, record: r, acc: i, provider: "arvan", domain: d.domain });
+          }
+        }
+        if (results.length > 40) break;
+      }
+      if (results.length > 40) break;
+    }
+  } catch (e) {}
   const token = makeToken();
   await kv.put(`sr:${token}`, JSON.stringify({ field: "name", query: text, results }), { expirationTtl: 3600 });
   await renderQuickResults(token, results, text, qa, send);
@@ -13146,6 +13832,15 @@ async function dispatchFavQa(data, io) {
     const favs = await getFavs(kv, chatId);
     const f = favs[i];
     if (!f) return edit("❌ ساب پیدا نشد.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
+    // منتخب آروانی: جزئیات رکورد آروان
+    if (f.zone_id && f.zone_id.startsWith("arvan:")) {
+      const domain = f.zone_id.slice(6);
+      const aa = await getArvanAccounts(kv);
+      const t = arvanSessId();
+      await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain, acc: f.acc || 0 }), { expirationTtl: 86400 });
+      await arvanRecordDetail({ edit, kv, env: io.env, arvanAccounts: aa, chatId }, t, f.record_id);
+      return true;
+    }
     const token = makeToken();
     await kv.put(`s:${token}`, JSON.stringify({ zone_id: f.zone_id, zone_name: f.zone_name, acc: f.acc }), { expirationTtl: 86400 });
     await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId: f.record_id, backCb: "favs" }), { expirationTtl: 86400 });
@@ -13156,7 +13851,7 @@ async function dispatchFavQa(data, io) {
   // ===== تغییر سریع =====
   if (data === "qamenu") {
     const qa = await kv.get(`qa:${chatId}`, "json");
-    if (qa && qa.ip) await sendQuickIpMenu(chatId, qa.ip, kv, accounts, send);
+    if (qa && qa.ip) await sendQuickIpMenu(chatId, qa.ip, kv, accounts, send, io.env);
     else await edit(mainMenuText(), mainMenuKeyboard());
     return true;
   }
@@ -13181,6 +13876,14 @@ async function dispatchFavQa(data, io) {
       return true;
     }
     const res = stored.results[idx];
+    // نتیجهٔ آروانی: جزئیات رکورد آروان (بازگشت به همان منوی آی‌پی)
+    if (res.provider === "arvan") {
+      const stoken = arvanSessId();
+      await kv.put(`s:${stoken}`, JSON.stringify({ provider: "arvan", domain: res.domain, acc: res.acc }), { expirationTtl: 86400 });
+      const aa = await getArvanAccounts(kv);
+      await arvanRecordDetail({ edit, kv, env: io.env, arvanAccounts: aa, chatId }, stoken, res.record.id);
+      return true;
+    }
     const page = Math.floor(idx / CZ_PAGE_SIZE);
     const stoken = makeToken();
     await kv.put(`s:${stoken}`, JSON.stringify({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc }), { expirationTtl: 86400 });
@@ -13277,6 +13980,14 @@ async function dispatchFavQa(data, io) {
     const stored = await kv.get(`sr:${token}`, "json");
     if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
     const res = stored.results[idx];
+    // نتیجهٔ آروانی: جزئیات رکورد آروان
+    if (res.provider === "arvan") {
+      const stoken = arvanSessId();
+      await kv.put(`s:${stoken}`, JSON.stringify({ provider: "arvan", domain: res.domain, acc: res.acc }), { expirationTtl: 86400 });
+      const aa = await getArvanAccounts(kv);
+      await arvanRecordDetail({ edit, kv, env: io.env, arvanAccounts: aa, chatId }, stoken, res.record.id);
+      return true;
+    }
     const stoken = makeToken();
     await kv.put(
       `s:${stoken}`,
