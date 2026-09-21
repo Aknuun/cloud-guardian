@@ -6181,20 +6181,25 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
     keyboard.push(row);
   }
 
-  // addzone: ساخت دامنهٔ جدید در کلودفلر | accadd: افزودن اکانت کلودفلر جدید (توکن)
+  // addzone: ساخت دامنهٔ جدید در کلودفلر | accadd: افزودن اکانت کلودفلر جدید (توکن) | accounts: مدیریت اکانت‌ها
   keyboard.push([
     { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
     { text: "👤 افزودن اکانت کلودفلر", callback_data: "accadd" },
   ]);
+  keyboard.push([{ text: "👤 اکانت‌ها", callback_data: "accounts" }]);
 
-  // zf:<filter>:<page>: صفحه‌بندی لیست دامنه‌ها | menu: بازگشت به منوی اصلی
-  const nav = [];
-  if (page > 0) nav.push({ text: "⬅️", callback_data: `zf:${flt}:${page - 1}` });
-  else nav.push(EMPTY_BTN);
-  nav.push({ text: "🔙 بازگشت", callback_data: "menu" });
-  if (page < pages - 1) nav.push({ text: "➡️", callback_data: `zf:${flt}:${page + 1}` });
-  else nav.push(EMPTY_BTN);
-  keyboard.push(nav);
+  // zf:<filter>:<page>: صفحه‌بندی لیست دامنه‌ها (فقط وقتی بیش از یک صفحه است) | menu: خانه
+  if (pages > 1) {
+    const nav = [];
+    if (page > 0) nav.push({ text: "⬅️", callback_data: `zf:${flt}:${page - 1}` });
+    else nav.push(EMPTY_BTN);
+    nav.push({ text: "🏠 خانه", callback_data: "menu" });
+    if (page < pages - 1) nav.push({ text: "➡️", callback_data: `zf:${flt}:${page + 1}` });
+    else nav.push(EMPTY_BTN);
+    keyboard.push(nav);
+  } else {
+    keyboard.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  }
 
   const label = flt === "all" ? "همه اکانت‌ها" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `☁️ کلودفلر — ${label}`;
