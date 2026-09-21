@@ -1202,10 +1202,9 @@ const HELP_GUIDE = {
     "• 🔀 خودکار (پیش‌فرض): اگر رلهٔ شخصی داشته باشی از آن، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.\n" +
     "• 🌐 پیش‌فرض رایگان: فقط رلهٔ رایگان (بدون نصب).\n" +
     "• 🔧 شخصی: فقط رلهٔ خودت.\n\n" +
-    "⚙️ مدیریت (دکمه‌های قرمز پایین همین صفحه)\n" +
+    "⚙️ مدیریت (دکمه‌های پایین همین صفحه)\n" +
     "• 🔧 تنظیم مجدد رله: آدرس و توکن رلهٔ خودت را ثبت یا عوض کن.\n" +
-    "• 🌐 انتخاب رله پیش‌فرض: رلهٔ رایگان را فعال کن.\n" +
-    "• 🗑 حذف رله فعلی: رلهٔ شخصی را پاک کن (برمی‌گردد به حالت خودکار).\n\n" +
+    "• 🌐 انتخاب رله پیش‌فرض: رلهٔ رایگان را فعال کن.\n\n" +
     "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
     code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') + "\n\n" +
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.\n" +
@@ -1236,10 +1235,9 @@ const HELP_GUIDE = {
 function helpGuideKb(key) {
   const kb = [];
   if (key === "relay") {
-    kb.push([{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }]);
     kb.push([
       { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
-      { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
+      { text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" },
     ]);
   }
   kb.push([
@@ -4467,7 +4465,6 @@ async function renderRelayHome(render, kv, env, back) {
     "⚙️ مدیریت",
     "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
     "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
-    "• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار",
     "",
     "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.",
     "",
@@ -4477,11 +4474,10 @@ async function renderRelayHome(render, kv, env, back) {
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
   ];
   const kb = [
-    // مدیریت رله: تنظیم مجدد (آبی) / پیش‌فرض (سبز) / حذف (قرمز)
-    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }],
+    // مدیریت رله: پیش‌فرض (سبز) / تنظیم مجدد (آبی)
     [
       { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
-      { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
+      { text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" },
     ],
     // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
     mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto", style: "primary" }],
@@ -9421,24 +9417,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const back = await getRelayBack(kv, chatId);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url", back }), { expirationTtl: 900 });
       await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
-    } else if (data === "srvrelayclear") {
-      const back = await getRelayBack(kv, chatId);
-      const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
-      await edit(
-        hasKv
-          ? "🗑 رلهٔ شخصی حذف شود؟ (برمی‌گردی به حالت خودکار: رلهٔ رایگان)"
-          : "🗑 رله حذف شود و به حالت خودکار برگردی؟",
-        [[{ text: "✅ بله، حذف کن", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: "srvrelayhelp" }]]
-      );
-    } else if (data === "srvrelaycleary") {
-      const back = await getRelayBack(kv, chatId);
-      await kvDeleteCached(kv, RELAY_URL_KEY);
-      await kvDeleteCached(kv, RELAY_TOKEN_KEY);
-      await setRelayMode(kv, "auto");
-      await edit("✅ رله حذف شد.\n\nحالت فعلی: 🔀 خودکار (اگر رلهٔ شخصی نداشته باشی، از رلهٔ رایگان استفاده می‌شود).", [
-        [{ text: "🌐 صفحهٔ رله", callback_data: "srvrelayhelp" }],
-        [relayBackButton(back)],
-      ]);
     } else if (data === "srvadd") {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
