@@ -6992,7 +6992,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       const u = String(pending.url || "").replace(/\/+$/, "");
       // پاک‌سازی کاراکترهای نامرئی (مثل ZWNJ/علامت RTL-LTR) که موقع کپی به توکن می‌چسبند
       let tok = String(txt || "").replace(/[\u200B-\u200D\u200E\u200F\u061C\uFEFF\u2060-\u206F\u00AD]/g, "").trim();
-      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: back }]]);
+      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
       // ۱) اول بررسی سادگیِ دسترسی به رله با /ping (بدون توکن)
       let ping;
       try {
@@ -7021,7 +7021,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         let isRelay = false;
         try { isRelay = /forbidden/i.test(String((await res.text()) || "")); } catch (e3) {}
         if (isRelay) {
-          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: back }]]);
+          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
         }
         return send("❌ رله کد 403 برگرداند اما نتوانستیم مطمئن شویم این پاسخ از خودِ رله است (شاید مسیر بین ورکر و رله مسدود شده). دوباره تلاش کنید:", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
       }
@@ -9414,7 +9414,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // ثبت/تغییر رله توسط خود کاربر: آدرس → توکن → تست اتصال
       const back = await getRelayBack(kv, chatId);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url", back }), { expirationTtl: 900 });
-      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: back }]]);
+      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
     } else if (data === "srvrelayclear") {
       const back = await getRelayBack(kv, chatId);
       const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
@@ -9422,7 +9422,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         hasKv
           ? "🗑 رلهٔ شخصی حذف شود؟ (برمی‌گردی به حالت خودکار: رلهٔ رایگان)"
           : "🗑 رله حذف شود و به حالت خودکار برگردی؟",
-        [[{ text: "✅ بله، حذف کن", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: back }]]
+        [[{ text: "✅ بله، حذف کن", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: "srvrelayhelp" }]]
       );
     } else if (data === "srvrelaycleary") {
       const back = await getRelayBack(kv, chatId);
