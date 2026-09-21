@@ -3066,7 +3066,7 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
       { text: "✏️ تغییر مقدار", callback_data: `ev:${token}:${recordId}` },
       { text: "🔄 تغییر نوع", callback_data: `ct:${token}:${recordId}` },
       { text: "⏱ تغییر TTL", callback_data: `et:${token}:${recordId}` },
-      { text: "🔄 تغییر Proxy", callback_data: `ep:${token}:${recordId}` },
+      { text: "🛰 تغییر Proxy", callback_data: `ep:${token}:${recordId}` },
     ]),
   ];
   // دکمه‌های لود بالانسر (فقط برای A/AAAA/CNAME) با رنگ متفاوت از دکمه‌های بالایی
@@ -3079,7 +3079,7 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   }
   // d: حذف رکورد | cref: فهرست دامنه‌های CNAME‌شده به این رکورد | favtg: افزودن/حذف از ساب‌های منتخب | rback: بازگشت
   detailKb.push([
-    { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "primary" },
+    { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "danger" },
     { text: "🔗 CNAME به این", callback_data: `cref:${token}:${recordId}`, style: "primary" },
     { text: faved ? "⭐ حذف از منتخب" : "⭐ افزودن به منتخب", callback_data: `favtg:${token}:${recordId}`, style: "primary" },
   ]);
@@ -8864,7 +8864,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const kb = [
         [{ text: "✏️ تغییر مقدار", callback_data: `sev:${token}:${idx}` }],
         [{ text: "🔄 تغییر نوع", callback_data: `set:${token}:${idx}` }],
-        [{ text: "🔄 تغییر Proxy", callback_data: `sep:${token}:${idx}` }],
+        [{ text: "🛰 تغییر Proxy", callback_data: `sep:${token}:${idx}` }],
       ];
       if (lbIsLbRecord(res.record)) {
         kb.push([
