@@ -107,8 +107,8 @@ t() {
     en:ok_deploy)              printf '%s' "Worker deployed successfully." ;;
     fa:ok_webhook)             printf '%s' "وبهوک تلگرام ست شد:" ;;
     en:ok_webhook)             printf '%s' "Telegram webhook set:" ;;
-    fa:ok_cron)                printf '%s' "کرون پشتیبانِ آپدیت خودکار نصب شد (هر ۱۰ دقیقه — فقط با تگ جدید)." ;;
-    en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 10 min — new tags only)." ;;
+    fa:ok_cron)                printf '%s' "کرون پشتیبانِ آپدیت خودکار نصب شد (هر ۱۰ دقیقه — فقط با تگ/ریلیز جدید)." ;;
+    en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 10 min — new tags/releases only)." ;;
     fa:ok_updated)             printf '%s' "ورکر آپدیت شد به نسخهٔ" ;;
     en:ok_updated)             printf '%s' "Worker updated to version" ;;
     fa:ok_uninstalled)         printf '%s' "حذف کامل شد." ;;

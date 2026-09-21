@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # به‌روزرسانی خودکار نگهبان ابری — توسط کرون هر ۱۰ دقیقه اجرا می‌شود
-# فقط وقتی در مخزن گیت‌هاب «تگ نسخهٔ جدید» ساخته شده باشد دیپلوی می‌کند.
+# فقط وقتی در مخزن گیت‌هاب «تگ نسخهٔ جدید یا ریلیز جدید» ساخته شده باشد دیپلوی می‌کند.
 # ============================================================
 set -euo pipefail
 
@@ -24,28 +24,36 @@ except Exception:
 PY
 )
 
-# آخرین تگ نسخه‌ای مخزن (بزرگ‌ترین نسخه) — تگ می‌تواند با v شروع شود (مثل v1.0.3)
-LATEST_TAG=$(curl -fsSL --max-time 90 -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/${REPO}/tags?per_page=100" 2>/dev/null \
-  | python3 -c '
-import sys,json,re
-try:
-    data=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
+# آخرین نسخهٔ مخزن (بزرگ‌ترین نسخه از بین تگ‌ها و ریلیزها) — تگ می‌تواند با v شروع شود (مثل v1.0.3)
+# ریلیزهای درفت و پری‌ریلیز نادیده گرفته می‌شوند (فقط ریلیز پایدار)
+LATEST_TAG=$(python3 - <<'PY' 2>/dev/null || true
+import json, re, urllib.request
+REPO = "Aknuun/cloud-guardian"
+def fetch(url):
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "cloud-guardian-updater"})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return []
 def key(n):
-    m=re.match(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$", n.strip())
+    m = re.match(r"v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$", str(n).strip())
     return tuple(int(x or 0) for x in m.groups()) if m else None
-tags=[t.get("name","") for t in data if isinstance(t,dict)]
-tags=[t for t in tags if key(t)]
-print(max(tags, key=key) if tags else "")
-' 2>/dev/null || true)
+tags = [t.get("name", "") for t in fetch(f"https://api.github.com/repos/{REPO}/tags?per_page=100") if isinstance(t, dict)]
+tags = [t for t in tags if key(t)]
+rels = fetch(f"https://api.github.com/repos/{REPO}/releases?per_page=20")
+rel_tags = [r.get("tag_name", "") for r in rels if isinstance(r, dict) and not r.get("draft") and not r.get("prerelease")]
+rel_tags = [t for t in rel_tags if key(t)]
+all_tags = tags + rel_tags
+print(max(all_tags, key=key) if all_tags else "")
+PY
+)
 [ -n "$LATEST_TAG" ] || exit 0
 
 # نسخهٔ عددی بدون پیشوند v برای مقایسه
 LATEST="${LATEST_TAG#v}"
 
-# اگر تگ جدیدی نسبت به نسخهٔ نصب‌شده نبود، کاری نکن
+# اگر تگ/ریلیز جدیدی نسبت به نسخهٔ نصب‌شده نبود، کاری نکن
 [ "$LATEST" = "$OLDV" ] && exit 0
 if [ -n "$OLDV" ]; then
   NEWEST=$(printf '%s\n%s\n' "$OLDV" "$LATEST" | sort -V | tail -1)
@@ -71,7 +79,7 @@ import json,sys
 c=json.load(open(sys.argv[1])); c["version"]=sys.argv[2]
 json.dump(c, open(sys.argv[1],"w"), ensure_ascii=False, indent=2)
 PY
-  echo "$(date) — به نسخهٔ $NEWV (تگ $LATEST_TAG) به‌روزرسانی شد."
+  echo "$(date) — به نسخهٔ $NEWV (تگ/ریلیز $LATEST_TAG) به‌روزرسانی شد."
 else
   echo "$(date) — به‌روزرسانی به $NEWV ناموفق بود (لاگ بالا)."
 fi

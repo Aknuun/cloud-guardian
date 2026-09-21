@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.9";
+const BOT_VERSION = "1.0.11";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,13 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.11": [
+    "🔒 رفتار REALITY/Fastly حالا قابل تنظیم است (پیش‌فرض بدون تغییر: فقط هشدار): از «🧭 تعویض خودکار ساب فیلتر ← ⚙️ تنظیمات» می‌توانی «تعویض REALITY/Fastly» را روشن کنی تا مثل هاست‌های عادی تعویض شوند",
+  ],
+  "1.0.10": [
+    "🔄 آپدیت خودکار حالا ریلیزمحور هم هست: علاوه بر تگ جدید، با انتشار «Release» پایدار جدید در گیت‌هاب هم خودش آپدیت می‌شود (تگ یا ریلیز هر کدام جدیدتر باشد)",
+    "🛑 پیام «آی‌پی/سرور خاموش — تعویض انجام نشد» دیگر پشت‌سرهم نمی‌آید: هر ساب‌دامنه فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد (مثل پیام ساب فیلترشده)؛ بررسی دستی همیشه پیام می‌دهد",
+  ],
   "1.0.9": [
     "🗑 حذف کامل بخش «آروان» از ربات: مدیریت دامنه/رکورد آروان، سرور ابری آروان و اکانت‌های آروان — دیتاسنترها اکنون فقط «🇩🇪 هتزنر» و «🟢 لینود» هستند",
     "🧹 پاک‌سازی راهنما، دستورها و مستندات مربوط به آروان (بخش‌های کلودفلر، سرورها و مانیتورها بدون تغییر)",
@@ -1106,6 +1113,7 @@ async function announceRelease(env, botToken, adminId) {
 
 const SELF_UPDATE_REPO = "Aknuun/cloud-guardian";
 const SELF_TAGS_URL = `https://api.github.com/repos/${SELF_UPDATE_REPO}/tags?per_page=100`;
+const SELF_RELEASES_URL = `https://api.github.com/repos/${SELF_UPDATE_REPO}/releases?per_page=20`;
 
 function selfVerParts(v) {
   const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/.exec(String(v || "").trim());
@@ -1132,9 +1140,9 @@ function selfLatestTag(names) {
   return best;
 }
 
-// آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از «آخرین تگ نسخه» مخزن می‌گیرد و با همان
-// توکن CF خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور). فقط روی کرون ۱۰دقیقه‌ای
-// و فقط وقتی تگ نسخهٔ جدیدی در مخزن ساخته شده باشد.
+// آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از «آخرین تگ نسخه یا آخرین ریلیز» مخزن
+// می‌گیرد و با همان توکن CF خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور).
+// فقط روی کرون ۱۰دقیقه‌ای و فقط وقتی تگ نسخهٔ جدید یا ریلیز جدیدی در مخزن ساخته شده باشد.
 async function maybeSelfUpdate(env, botToken, adminId, opts) {
   const kv = env.BOT_KV;
   const aid = env.WORKER_ACCOUNT_ID || "";
@@ -1150,7 +1158,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     const tok = accounts && accounts[0] && accounts[0].token;
     if (!tok) return;
 
-    // فقط وقتی تگ نسخهٔ جدیدی در مخزن ساخته شده باشد
+    // تریگر آپدیت: تگ نسخهٔ جدید یا ریلیز جدید (هر کدام جدیدتر باشد)
     const tRes = await fetch(SELF_TAGS_URL, {
       headers: { Accept: "application/vnd.github+json" },
       signal: AbortSignal.timeout(30000),
@@ -1162,7 +1170,24 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     } catch (e) {
       return;
     }
-    const tag = selfLatestTag(Array.isArray(tags) ? tags.map((t) => t && t.name) : []);
+    const tagFromTags = selfLatestTag(Array.isArray(tags) ? tags.map((t) => t && t.name) : []);
+    // ریلیزها: درفت‌ها نادیده گرفته می‌شوند؛ پری‌ریلیزها هم نادیده (فقط ریلیز پایدار)
+    let tagFromRelease = null;
+    try {
+      const rRes = await fetch(SELF_RELEASES_URL, {
+        headers: { Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (rRes.ok) {
+        const rels = await rRes.json();
+        const names = (Array.isArray(rels) ? rels : [])
+          .filter((r) => r && !r.draft && !r.prerelease && r.tag_name)
+          .map((r) => r.tag_name);
+        tagFromRelease = selfLatestTag(names);
+      }
+    } catch (e) {}
+    let tag = tagFromTags;
+    if (tagFromRelease && (!tag || selfVerGreater(tagFromRelease, tag))) tag = tagFromRelease;
     if (!tag || !selfVerGreater(tag, BOT_VERSION)) return;
 
     const res = await fetch(
@@ -9383,6 +9408,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       cfg.provider = cfg.provider === "checkhost" ? "globalping" : "checkhost";
       await saveHostFilterCfg(kv, cfg);
       await renderHostFilterSettings(edit, kv);
+    } else if (data === "hfreal") {
+      const cfg = await getHostFilterCfg(kv);
+      cfg.realityRotate = !cfg.realityRotate;
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterSettings(edit, kv);
     } else if (data === "hfsettoken") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_gptoken" }), { expirationTtl: 600 });
       await edit(
@@ -11958,6 +11988,24 @@ const HOSTFILTER_FOREIGN_CITIES = ["Frankfurt", "Nuremberg", "Amsterdam", "Meppe
 const HOSTFILTER_IP_DOWN_FAILS = 4;
 const HOSTFILTER_DEFAULT_RECHECK = 1;
 const HOSTFILTER_DEFAULT_RECHECK_MIN = 1;
+// ضداسپم پیام «آی‌پی/سرور خاموش — تعویض انجام نشد»: هر ساب‌دامنه فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد
+// (مثل پیام ساب فیلترشده که یک‌بار می‌آید)؛ بعد از تعویض موفق یا بهبود، حافظه پاک می‌شود تا دفعهٔ بعد دوباره خبر بدهد.
+const HOSTFILTER_IP_NOTICE_TTL_MS = 24 * 3600000;
+
+async function getHostIpNoticeAll(kv) {
+  try {
+    const s = await kvGetCached(kv, "host_filter_ip_notice", "json", 30000);
+    return s && typeof s === "object" ? s : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+async function saveHostIpNoticeAll(kv, map) {
+  try {
+    await kvPutCached(kv, "host_filter_ip_notice", JSON.stringify(map || {}), undefined, 30000);
+  } catch (e) {}
+}
 
 async function getHostFilterCfg(kv) {
   let cfg = await kvGetCached(kv, "host_filter_cfg", "json", 30000);
@@ -11981,6 +12029,7 @@ async function getHostFilterCfg(kv) {
     batch: Math.max(1, Math.min(60, Number(cfg.batch) || HOSTFILTER_DEFAULT_BATCH)),
     maxChanges: Math.max(1, Math.min(20, Number(cfg.maxChanges) || 8)),
     backupKeep: Math.max(1, Math.min(10, Number(cfg.backupKeep) || 5)),
+    realityRotate: cfg.realityRotate === true,
     cursor: Number(cfg.cursor) || 0,
     last_run: cfg.last_run || null,
     last_attempt: cfg.last_attempt || null,
@@ -12819,6 +12868,8 @@ async function runHostFilter(env, opts = {}) {
   const states = await getHostStateAll(kv);
   const admins = await getAdmins(kv, env);
   const ipCache = {};
+  const ipNotices = await getHostIpNoticeAll(kv);
+  let ipNoticesDirty = false;
   const maxChanges = Math.max(1, Number(opts.maxChanges) || cfg.maxChanges);
   let changedCount = 0;
   let ipBlockedCount = 0;
@@ -12836,8 +12887,9 @@ async function runHostFilter(env, opts = {}) {
         const dv = String(v).toLowerCase();
         if (!filtered[dv] || repl[dv]) continue;
 
-        // REALITY / Fastly configs: alert only, never change.
-        if (hfIsReality(item.host) || hfIsFastly(item.host, dv)) {
+        // REALITY / Fastly configs: by default alert only, never change.
+        // If cfg.realityRotate is true, they rotate like normal hosts.
+        if (!cfg.realityRotate && (hfIsReality(item.host) || hfIsFastly(item.host, dv))) {
           const why = hfIsReality(item.host) ? "REALITY" : "Fastly";
           await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: why });
           await hfNotify(
@@ -12877,27 +12929,41 @@ async function runHostFilter(env, opts = {}) {
           if (diag.ipDown) ipDownCount++;
           else if (diag.iranAccess) iranAccessCount++;
           else ipBlockedCount++;
-          const head = diag.ipDown
-            ? "🛑 آی‌پی/سرور خاموش است — تعویض انجام نشد"
-            : diag.iranAccess
-              ? "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
-              : "🚫 آی‌پی فیلتر شده است (نه دامنه)";
-          const tail = diag.ipDown
-            ? "❌ از ایران و آلمان/هلند پاسخی نیامد (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ). احتمالاً سرور/IP خاموش است؛ تا روشن‌شدن سرور تعویض نکن."
-            : diag.iranAccess
-              ? "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست (ایران‌اکسس)."
-              : "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر ساب‌دامنهٔ این هاست قرار دارد.";
-          const txt =
-            head + "\n" +
-            "🖥 پنل: " + escHtml(item.panel.name) + "\n" +
-            "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
-            "🌐 آی‌پی: " + code(diag.ip || "?") + "\n" +
-            "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
-            "📝 " + tail + "\n" +
-            "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
-          await hfNotify(botToken, admins, txt);
           const kind = diag.ipDown ? "ip_down" : diag.iranAccess ? "iran_access" : "ip_blocked";
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
+          // ضداسپم: هر ساب‌دامنه برای همین وضعیت و همین آی‌پی فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد.
+          // بررسی دستی (manual/force) همیشه پیام می‌دهد تا نتیجهٔ همان لحظه دیده شود.
+          const prev = ipNotices[dv];
+          const fresh =
+            prev &&
+            prev.kind === kind &&
+            String(prev.ip || "") === String(diag.ip || "") &&
+            Number(prev.ts || 0) > 0 &&
+            Date.now() - Number(prev.ts) < HOSTFILTER_IP_NOTICE_TTL_MS;
+          const mustNotify = manual || opts.force || !fresh;
+          if (mustNotify) {
+            const head = diag.ipDown
+              ? "🛑 آی‌پی/سرور خاموش است — تعویض انجام نشد"
+              : diag.iranAccess
+                ? "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
+                : "🚫 آی‌پی فیلتر شده است (نه دامنه)";
+            const tail = diag.ipDown
+              ? "❌ از ایران و آلمان/هلند پاسخی نیامد (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ). احتمالاً سرور/IP خاموش است؛ تا روشن‌شدن سرور تعویض نکن."
+              : diag.iranAccess
+                ? "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست (ایران‌اکسس)."
+                : "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر ساب‌دامنهٔ این هاست قرار دارد.";
+            const txt =
+              head + "\n" +
+              "🖥 پنل: " + escHtml(item.panel.name) + "\n" +
+              "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
+              "🌐 آی‌پی: " + code(diag.ip || "?") + "\n" +
+              "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
+              "📝 " + tail + "\n" +
+              "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
+            await hfNotify(botToken, admins, txt);
+            await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
+            ipNotices[dv] = { kind, ip: diag.ip || "", ts: Date.now() };
+            ipNoticesDirty = true;
+          }
           continue;
         }
 
@@ -12966,8 +13032,27 @@ async function runHostFilter(env, opts = {}) {
     const kb = [[{ text: "↩️ دامنهٔ قبلی را جایگزین کن", callback_data: "hfrev:" + key }]];
     await hfNotify(botToken, admins, lines.join("\n"), kb);
     await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "rotated", panel_id: item.panel.id, host_id: item.host.id, remark: item.host.remark, events });
+    for (const ev of events) {
+      if (ipNotices[ev.from]) {
+        delete ipNotices[ev.from];
+        ipNoticesDirty = true;
+      }
+    }
   }
 
+  // پاک‌سازی حافظهٔ ضداسپم: ورودی‌های قدیمی‌تر از ۲۴ ساعت حذف می‌شوند تا در صورت ادامهٔ مشکل دوباره خبر بدهد
+  if (ipNoticesDirty || Object.keys(ipNotices).length) {
+    const nowMs = Date.now();
+    let pruned = false;
+    for (const k of Object.keys(ipNotices)) {
+      const e = ipNotices[k];
+      if (!e || !e.ts || nowMs - Number(e.ts) >= HOSTFILTER_IP_NOTICE_TTL_MS) {
+        delete ipNotices[k];
+        pruned = true;
+      }
+    }
+    if (ipNoticesDirty || pruned) await saveHostIpNoticeAll(kv, ipNotices);
+  }
   await saveHostStateAll(kv, states);
   cfg.last_run = new Date().toISOString();
   cfg.last_summary = `بررسی ${slice.length} دامنه — ${changedCount} تعویض، ${ipBlockedCount} آی‌پی فیلتر، ${ipDownCount} آی‌پی خاموش، ${iranAccessCount} ایران‌اکسس.`;
@@ -13002,13 +13087,14 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("📦 تعداد هر اجرا: " + cfg.batch + " · 🔁 حداکثر تعویض: " + cfg.maxChanges);
   lines.push("🔁 بررسی مجدد: " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار، هر " + cfg.recheckMin + " دقیقه" : "غیرفعال (تعویض فوری)"));
   lines.push("🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
+  lines.push("🔒 REALITY/Fastly: " + (cfg.realityRotate ? "🔄 تعویض فعال" : "فقط هشدار (پیش‌فرض)"));
   lines.push("💾 بکاپ‌های نگه‌داشته: " + backups.length + " (حداکثر " + cfg.backupKeep + ")");
   if (cfg.last_run) lines.push("🕐 آخرین اجرا: " + ndFmtTs(cfg.last_run) + " به وقت ایران");
   if (cfg.last_summary) lines.push("📝 " + escHtml(cfg.last_summary));
   if (cfg.checkhost_down) lines.push("⚠️ سرویس بررسی در دسترس نیست (از " + ndFmtTs(cfg.checkhost_down.ts) + ")");
   lines.push("🔁 هاست‌های تعویض‌شده: " + count);
   lines.push("");
-  lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. کانفیگ‌های REALITY/Fastly فقط هشدار می‌گیرند.");
+  lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. کانفیگ‌های REALITY/Fastly: " + (cfg.realityRotate ? "مثل بقیه تعویض می‌شوند." : "فقط هشدار می‌گیرند (پیش‌فرض)."));
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
@@ -13044,6 +13130,7 @@ async function renderHostFilterSettings(edit, kv) {
   lines.push("• 🔁 تعداد بررسی مجدد پس از تشخیص فیلتر: " + cfg.recheckCount + " (۰ = تعویض فوری)");
   lines.push("• ⏱ فاصلهٔ بررسی مجدد: هر " + cfg.recheckMin + " دقیقه");
   lines.push("• 🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
+  lines.push("• 🔒 کانفیگ‌های REALITY/Fastly: " + (cfg.realityRotate ? "🔄 تعویض" : "فقط هشدار (پیش‌فرض)"));
   lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
   lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
   lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
@@ -13066,6 +13153,8 @@ async function renderHostFilterSettings(edit, kv) {
   kb.push([{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }]);
   // recheck: تعداد بررسی مجدد پس از تشخیص فیلتر | recheckmin: فاصلهٔ بررسی مجدد
   kb.push([{ text: "♻️ تعداد بررسی مجدد", callback_data: "hfsetedit:recheck" }, { text: "⏱ فاصلهٔ بررسی مجدد", callback_data: "hfsetedit:recheckmin" }]);
+  // hfreal: روشن/خاموش کردن تعویض کانفیگ‌های REALITY/Fastly (پیش‌فرض: فقط هشدار)
+  kb.push([{ text: cfg.realityRotate ? "🔒 فقط هشدار REALITY/Fastly" : "🔄 تعویض REALITY/Fastly", callback_data: "hfreal" }]);
   // hfforeign: بررسی دسترسی خارج از ایران برای همهٔ ساب‌ها
   kb.push([{ text: "🌍 بررسی دسترسی خارج همهٔ ساب‌ها", callback_data: "hfforeign" }]);
   // hfsettoken: ثبت/حذف توکن Globalping (فقط وقتی سرویس Globalping است)
