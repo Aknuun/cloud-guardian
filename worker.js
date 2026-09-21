@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.25";
+const BOT_VERSION = "1.0.26";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.26": [
+    "🎨 رنگ دکمه‌های رله اصلاح شد: «🔧 تنظیم مجدد رله» آبی، «🌐 انتخاب رله پیش‌فرض» سبز و فقط «🗑 حذف رله فعلی» قرمز",
+    "🧹 دکمهٔ «🗑 حذف رله فعلی» فقط وقتی نمایش داده می‌شود که رلهٔ شخصی داشته باشی (پیام اشتباه «رلهٔ شخصی نداری» حذف شد)",
+  ],
   "1.0.25": [
     "🧹 متن مربوط به «نصب با توکن ثابت» از راهنمای رله در ربات حذف شد؛ فقط دستور نصب معمولی رله نمایش داده می‌شود",
   ],
@@ -1117,9 +1121,9 @@ const HELP_GUIDE = {
 function helpGuideKb(key) {
   const kb = [];
   if (key === "relay") {
-    kb.push([{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "danger" }]);
+    kb.push([{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }]);
     kb.push([
-      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "danger" },
+      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
       { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
     ]);
   }
@@ -1157,10 +1161,10 @@ function helpKeyboard() {
     ],
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
     [{ text: "🌐 راهنمای رله", callback_data: "hg:relay" }],
-    // مدیریت رله (قرمز): تنظیم مجدد / انتخاب پیش‌فرض / حذف رله فعلی
-    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "danger" }],
+    // مدیریت رله: تنظیم مجدد (آبی) / پیش‌فرض (سبز) / حذف (قرمز)
+    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }],
     [
-      { text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault", style: "danger" },
+      { text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
       { text: "🗑 حذف رله", callback_data: "srvrelayclear", style: "danger" },
     ],
 
@@ -1192,7 +1196,7 @@ function settingsHomeText() {
 function settingsHomeKb() {
   return [
     [
-      { text: "🌐 تنظیم رله", callback_data: "settingsrelay", style: "danger" },
+      { text: "🌐 تنظیم رله", callback_data: "settingsrelay", style: "primary" },
       { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
     [{ text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" }],
@@ -4346,10 +4350,10 @@ async function renderRelayHome(render, kv, env, back) {
     "• " + (active.url ? "✅ رلهٔ فعال: " + code(active.url) : "❌ رلهٔ فعالی نیست.") + (fromKv && mode !== "default" ? " (شخصی)" : ""),
     "• 🌐 رلهٔ رایگان پیش‌فرض: " + defStat,
     "",
-    "⚙️ مدیریت (دکمه‌های قرمز پایین)",
+    "⚙️ مدیریت",
     "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
     "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
-    "• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار",
+    ...(fromKv ? ["• 🗑 حذف رله فعلی — پاک‌کردن رلهٔ شخصی و بازگشت به حالت خودکار"] : []),
     "",
     "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.",
     "",
@@ -4359,14 +4363,16 @@ async function renderRelayHome(render, kv, env, back) {
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
   ];
   const kb = [
-    // مدیریت رله (قرمز): تنظیم مجدد / انتخاب پیش‌فرض / حذف رله فعلی
-    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "danger" }],
-    [
-      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "danger" },
-      { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
-    ],
+    // مدیریت رله: تنظیم مجدد (آبی) / پیش‌فرض (سبز) / حذف (قرمز، فقط اگر رلهٔ شخصی داری)
+    [{ text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" }],
+    fromKv
+      ? [
+          { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
+          { text: "🗑 حذف رله فعلی", callback_data: "srvrelayclear", style: "danger" },
+        ]
+      : [{ text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" }],
     // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
-    mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto" }],
+    mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto", style: "primary" }],
     [relayBackButton(back)],
   ].filter((r) => r.length);
   await render(lines.join("\n"), kb);
@@ -9199,10 +9205,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const back = await getRelayBack(kv, chatId);
       const hasKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
       if (!hasKv) {
-        return edit("ℹ️ رلهٔ شخصی ذخیره‌ای نداری.\n\nحالت فعلی‌ات را از همین‌جا عوض کن: «🌐 رله رایگان» یا «🔀 خودکار».", [
-          [{ text: "🌐 رله رایگان", callback_data: "srvusedefault" }, { text: "🔀 خودکار", callback_data: "srvmodeauto" }],
-          [relayBackButton(back)],
-        ]);
+        // رلهٔ شخصی وجود ندارد؛ فقط صفحه را تازه کن (دکمهٔ حذف در این حالت نمایش داده نمی‌شود)
+        return renderRelayHome(edit, kv, env, back);
       }
       await edit("🗑 رلهٔ شخصی حذف شود؟ (می‌روی روی حالت خودکار: رلهٔ رایگان)", [
         [{ text: "✅ بله", callback_data: "srvrelaycleary" }, { text: "❌ انصراف", callback_data: back }],
