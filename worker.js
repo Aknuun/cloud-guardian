@@ -6658,7 +6658,7 @@ async function renderTrafficHome(edit, kv, accounts, token) {
   if (!zone) return edit("❌ دامنه پیدا نشد.");
   const t = await fetchTrafficCounts(tok, session.zone_id);
   if (t.needPerm) {
-    return edit(`📊 ترافیک ${zone.name}\n\n❌ دسترسی Analytics نیست.\nبه توکن این را اضافه کن:\n${code("Zone → Analytics → Read")}`, [
+    return edit(`📊 ترافیک ${zone.name}\n\n❌ دسترسی Analytics نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Analytics → Read")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`, [
       [{ text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
     ]);
   }
