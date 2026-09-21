@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.13";
+const BOT_VERSION = "1.0.14";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.14": [
+    "🇮🇷 بازگشت بخش آروان با کلید ماشین‌یوزر جدید: مدیریت دامنه و رکوردهای DNS (تعویض IP، افزودن/حذف) + مدیریت کامل سرور ابری (لیست، روشن/خاموش، ریبوت، اسنپ‌شات، تغییرنام، ریست رمز، حذف و ویزارد ساخت سرور)",
+  ],
   "1.0.13": [
     "🧹 تمیزی چت: وقتی چیزی تایپ می‌کنی (مثل آی‌پی جدید رکورد)، پیام خودت بعد از ثبت پاک می‌شود و زیر دکمه‌ها نمی‌ماند — شامل توکن‌ها و رمزها هم می‌شود (امن‌تر)",
   ],
@@ -398,6 +401,12 @@ const RELEASE_NOTES = {
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LINODE_API = "https://api.linode.com/v4";
 const HETZNER_API = "https://api.hetzner.cloud/v1";
+// آروان: CDN/DNS نسخه ۴ + سرور ابری (ECC) نسخه ۱ — احراز هویت با کلید ماشین‌یوزر:
+// Authorization: Apikey <uuid> (بدون پیشوند اضافی؛ ورودی کاربر نرمالایز می‌شود)
+const ARVAN_API = "https://napi.arvancloud.ir/cdn/4.0";
+const ARVAN_ECC = "https://napi.arvancloud.ir/ecc/v1";
+// ریجن‌های شناخته‌شدهٔ سرور ابری آروان + امکان ورود دستی ریجن دلخواه
+const ARVAN_REGIONS = ["ir-thr-c2", "ir-thr-ba1", "ir-tbz-sh1"];
 const RECORD_TYPES = ["A", "AAAA", "CNAME"];
 const PAGE_SIZE = 8;
 const RECORD_PAGE_SIZE = 18;
@@ -775,6 +784,7 @@ async function processUpdate(payload, env, botToken, adminId) {
           { text: "🇩🇪 هتزنر", callback_data: "hz" },
           { text: "🟢 لینود", callback_data: "ln" },
         ],
+        [{ text: "🇮🇷 آروان", callback_data: "arvan" }],
         [{ text: "🏠 منو", callback_data: "menu" }],
       ]);
     } else if (cmd === "/srv") {
@@ -853,11 +863,12 @@ function mainMenuKeyboard() {
     [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
     // search: جست‌وجوی سراسری رکورد در همهٔ اکانت‌ها (قرمز = تک‌ستونه)
     [{ text: "🔍 جست و جو در همه", callback_data: "search", style: "danger" }],
-    // hz/ln: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود) مستقیم در منوی اصلی — سبز
+    // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) مستقیم در منوی اصلی — سبز
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
     ],
+    [{ text: "🇮🇷 آروان", callback_data: "arvan", style: "success" }],
     // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی مانیتورها — در یک ردیف
     [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🖥 مانیتورها", callback_data: "mons" }],
     // help: راهنمای بخش‌ها | admins_menu: مدیریت ادمین‌های ربات (فقط ادمین اصلی) — هر دو خاکستری
@@ -6167,6 +6178,12 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   const type = pending.type;
   const txt = value.trim();
 
+  // ورودی‌های بخش آروان (کلید اکانت، مقدار رکورد، ساخت رکورد/سرور و...)
+  if (type.startsWith("arvan_")) {
+    await handleArvanPending(pending, txt, chatId, accounts, send, kv, botToken, env);
+    return;
+  }
+
   if (type === "hf_gptoken") {
     await kv.delete(`pend:${chatId}`);
     const cfg = await getHostFilterCfg(kv);
@@ -7693,6 +7710,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
   const accounts = await getAccounts(kv, env);
   const lnAccounts = await getLnAccounts(kv);
   const hzAccounts = await getHzAccounts(kv);
+  const arvanAccounts = await getArvanAccounts(kv);
   const admins = await getAdmins(kv, env);
   if (!admins.includes(chatId)) return;
 
@@ -10106,6 +10124,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       r.notifiedAt = null;
       await saveReminders(kv, list);
       await edit(`✅ ${h} ساعت دیگر یادآوری می‌شود.`, [[{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🏠 منو", callback_data: "menu" }]]);
+    } else if (data === "arvan" || data.startsWith("arv")) {
+      await handleArvanCallback(data, { botToken, adminId, kv, env, chatId, messageId, edit, send, accounts, arvanAccounts });
     } else if (data === "ln") {
       await showLnHome(lnAccounts, edit);
     } else if (data === "lna") {
@@ -10357,6 +10377,1210 @@ async function renderReminderServers(kv, token, page, edit) {
   kb.push([{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }]);
   kb.push([{ text: "🔙 بازگشت", callback_data: "remnew" }]);
   await edit("🖥 یک سرور انتخاب کنید (ستون آدرس / ستون نام):", kb);
+}
+
+// ===================== ArvanCloud =====================
+// احراز هویت: کلید ماشین‌یوزر (npanel → Settings → IAM → Machine users)
+// هدر: Authorization: Apikey <uuid> — ورودی کاربر نرمالایز می‌شود (پیشوند apikey/Apikey حذف).
+// نکته: آی‌پی‌های خروجی کلادفلر ورکر ممکن است توسط آروان رد شوند؛ اگر رلهٔ SSH ثبت شده
+// باشد، فراخوانی‌ها از پروکسی HTTP رله (/http) عبور می‌کنند، وگرنه مستقیم تلاش می‌شود.
+function arvanNormKey(raw) {
+  let t = String(raw || "").trim();
+  t = t.replace(/^apikey\s+/i, "").trim();
+  return t;
+}
+
+function arvanHdr(token) {
+  return { Authorization: `Apikey ${token}`, "Content-Type": "application/json", Accept: "application/json" };
+}
+
+async function arvanFetch(token, path, opts = {}, timeoutMs = 30000, kv, env, base) {
+  const root = base || ARVAN_API;
+  let viaRelay = false;
+  try {
+    if (kv && env) {
+      const rl = await getSrvRelayCfg(kv, env);
+      if (rl && rl.url) {
+        const rprox = await fetch(rl.url.replace(/\/+$/, "") + "/http", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-SRV-Token": rl.token || "" },
+          body: JSON.stringify({
+            method: opts.method || "GET",
+            url: root + path,
+            headers: arvanHdr(token),
+            body: opts.body || null,
+            timeoutMs,
+          }),
+          signal: AbortSignal.timeout(Math.min(timeoutMs + 15000, 90000)),
+        });
+        if (rprox.ok) {
+          const j = await rprox.json().catch(() => ({}));
+          if (!j.error) {
+            viaRelay = true;
+            try {
+              return JSON.parse(j.body || "{}");
+            } catch {
+              return {};
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("ARVAN_RELAY_ERR", String(e));
+  }
+  if (viaRelay) return {};
+  const res = await fetch(root + path, { ...opts, headers: arvanHdr(token), signal: AbortSignal.timeout(timeoutMs) });
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text.slice(0, 300) };
+  }
+}
+
+function arvanOk(data) {
+  if (!data || typeof data !== "object") return false;
+  if (data.message === "Unauthenticated.") return false;
+  return true;
+}
+
+function arvanErrText(data) {
+  if (!data) return "پاسخ خالی از آروان.";
+  if (data.message === "Unauthenticated.") return "کلید نامعتبر است یا دسترسی ندارد (Unauthenticated).";
+  const errs = data.errors;
+  if (Array.isArray(errs) && errs.length) {
+    return errs.map((e) => (typeof e === "string" ? e : e.message || JSON.stringify(e))).join("\n").slice(0, 500);
+  }
+  if (typeof errs === "object" && errs) {
+    return Object.entries(errs).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join("\n").slice(0, 500);
+  }
+  return (data.message || "خطای نامشخص آروان.").toString().slice(0, 500);
+}
+
+// اکانت‌های آروان در KV (مثل before: [{name, token}])
+async function getArvanAccounts(kv) {
+  let list = await kvGetCached(kv, "arvan_accounts", "json");
+  if (!Array.isArray(list)) list = [];
+  return list.filter((a) => a && a.token);
+}
+
+async function saveArvanAccounts(kv, list) {
+  await kvPutCached(kv, "arvan_accounts", JSON.stringify(list));
+}
+
+function maskArvanKey(t) {
+  t = String(t || "");
+  if (t.length <= 12) return t.slice(0, 6) + "…";
+  return t.slice(0, 8) + "…" + t.slice(-4);
+}
+
+// ---------- CDN/DNS ----------
+async function arvanGetAllDomains(token, kv, env) {
+  const out = [];
+  let page = 1;
+  while (true) {
+    const data = await arvanFetch(token, `/domains?per_page=50&page=${page}`, {}, 30000, kv, env);
+    let arr = null;
+    if (data.data && Array.isArray(data.data)) arr = data.data;
+    else if (data.result && Array.isArray(data.result)) arr = data.result;
+    if (!arr || arr.length === 0) break;
+    for (const d of arr) {
+      const name = d.domain || d.name || d.domain_name || "";
+      if (name) out.push({ domain: name, ...d });
+    }
+    if (arr.length < 50) break;
+    page++;
+    if (page > 20) break;
+  }
+  return out;
+}
+
+function arvanRecValue(v) {
+  if (Array.isArray(v) && v.length) {
+    const f = v[0];
+    if (typeof f === "object" && f) return f.ip || f.host || f.text || f.value || f.content || "";
+    return String(f);
+  }
+  if (typeof v === "object" && v) return v.ip || v.host || v.text || v.value || v.content || "";
+  return v != null ? String(v) : "";
+}
+
+function normalizeArvanRecord(record, domain) {
+  const rawName = record.name || "@";
+  const fullName = rawName === "@" ? domain : (String(rawName).endsWith("." + domain) ? rawName : rawName + "." + domain);
+  const content = arvanRecValue(record.value) || arvanRecValue(record.values) || arvanRecValue(record.content) || arvanRecValue(record.data);
+  const type = String(record.type || "A").toUpperCase();
+  return {
+    id: record.id || record.uuid || record.record_id || "",
+    type,
+    name: fullName,
+    content,
+    proxied: !!record.cloud,
+    ttl: record.ttl || 120,
+    provider: "arvan",
+    domain,
+    raw: record,
+  };
+}
+
+async function arvanGetAllRecords(token, domain, kv, env) {
+  const out = [];
+  let page = 1;
+  while (true) {
+    const data = await arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records?per_page=100&page=${page}`, {}, 30000, kv, env);
+    let arr = null;
+    if (data.data && Array.isArray(data.data)) arr = data.data;
+    else if (data.result && Array.isArray(data.result)) arr = data.result;
+    else if (data.data && typeof data.data === "object") arr = data.data.records || data.data.dns_records || data.data.items || null;
+    if (!arr || !Array.isArray(arr) || arr.length === 0) break;
+    for (const r of arr) {
+      if (typeof r === "object" && r) {
+        const norm = normalizeArvanRecord(r, domain);
+        if (norm.id) out.push(norm);
+      }
+    }
+    if (arr.length < 100) break;
+    page++;
+    if (page > 20) break;
+  }
+  return out;
+}
+
+function arvanValuePayload(rtype, newContent, raw) {
+  const extra = {};
+  for (const k of Object.keys(raw || {})) {
+    if (!["id", "created_at", "updated_at", "status", "name", "type", "ttl", "cloud", "value", "values"].includes(k)) extra[k] = raw[k];
+  }
+  if (rtype === "A" || rtype === "AAAA") extra.ip = newContent;
+  else if (rtype === "CNAME" || rtype === "NS") extra.host = newContent;
+  else if (rtype === "TXT") extra.text = newContent;
+  else return [newContent];
+  return [extra];
+}
+
+async function arvanUpdateRecord(token, domain, record, newContent, kv, env, cloudOverride) {
+  const rid = record.id || record.raw?.id || record.raw?.uuid || "";
+  if (!rid) return { message: "Missing record id" };
+  const url = `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`;
+  const raw = record.raw || {};
+  const rtype = String(record.type || raw.type || "A").toUpperCase();
+  const ttl = raw.ttl != null ? raw.ttl : record.ttl;
+  const cloudVal = cloudOverride != null ? cloudOverride : (record.proxied != null ? record.proxied : !!raw.cloud);
+  const payload = {
+    type: rtype.toLowerCase(),
+    name: raw.name || record.name || "@",
+    value: arvanValuePayload(rtype, newContent, raw),
+    cloud: cloudVal,
+  };
+  if (ttl != null && ttl !== 0 && ttl !== "") payload.ttl = ttl;
+  if (rid) payload.id = rid;
+  let res = await arvanFetch(token, url, { method: "PUT", body: JSON.stringify(payload) }, 30000, kv, env);
+  if (res.message === "Unauthenticated." || res.success === false) {
+    const retry = await arvanFetch(token, url, { method: "PATCH", body: JSON.stringify(payload) }, 30000, kv, env);
+    if (arvanOk(retry)) return retry;
+    return res;
+  }
+  return res;
+}
+
+async function arvanCreateRecord(token, domain, rtype, name, content, proxied, kv, env) {
+  const shortName = name === domain ? "@" : (String(name).endsWith("." + domain) ? name.slice(0, -(domain.length + 1)) : name);
+  const rtypeU = String(rtype).toUpperCase();
+  const payload = {
+    type: rtypeU.toLowerCase(),
+    name: shortName,
+    value: arvanValuePayload(rtypeU, content, {}),
+    cloud: rtypeU === "A" || rtypeU === "AAAA" || rtypeU === "CNAME" ? !!proxied : false,
+  };
+  return arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records`, { method: "POST", body: JSON.stringify(payload) }, 30000, kv, env);
+}
+
+async function arvanDeleteRecord(token, domain, rid, kv, env) {
+  return arvanFetch(token, `/domains/${encodeURIComponent(domain)}/dns-records/${rid}`, { method: "DELETE" }, 30000, kv, env);
+}
+
+// ---------- سرور ابری (ECC 1.0) ----------
+function arvanEcc(token, region, path, opts = {}, kv, env) {
+  return arvanFetch(token, `/regions/${encodeURIComponent(region)}${path}`, opts, 45000, kv, env, ARVAN_ECC);
+}
+
+function arvanEccList(data) {
+  if (!data || typeof data !== "object") return null;
+  if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.result)) return data.result;
+  return null;
+}
+
+function normalizeEccServer(s) {
+  if (!s || typeof s !== "object") return null;
+  const flavor = s.flavor && typeof s.flavor === "object" ? s.flavor : {};
+  const image = s.image && typeof s.image === "object" ? s.image : {};
+  let pub = [];
+  let priv = [];
+  const addrs = s.addresses;
+  if (Array.isArray(addrs)) {
+    for (const a of addrs) {
+      const ip = a.addr || a.ip || a.address || "";
+      if (!ip) continue;
+      if (a.is_public === false || a.type === "private" || a.is_vpc) priv.push(ip);
+      else pub.push(ip);
+    }
+  } else if (addrs && typeof addrs === "object") {
+    for (const k of ["public", "private", "vpc"]) {
+      const arr = Array.isArray(addrs[k]) ? addrs[k] : [];
+      for (const a of arr) {
+        const ip = typeof a === "string" ? a : a.addr || a.ip || a.address || "";
+        if (ip) (k === "public" ? pub : priv).push(ip);
+      }
+    }
+  }
+  const nets = Array.isArray(s.networks) ? s.networks : [];
+  for (const n of nets) {
+    const ip = n.ip || n.addr || n.address || (n.ips && n.ips[0]) || "";
+    if (ip && !pub.includes(ip) && !priv.includes(ip)) (n.public === false ? priv : pub).push(ip);
+  }
+  return {
+    id: s.id || s.uuid || s.server_id || "",
+    name: s.name || s.hostname || s.label || s.id || "؟",
+    status: String(s.status || s.state || s.power_state || "؟"),
+    task: s.task_state || s.task || "",
+    flavor: flavor.name || flavor.id || s.flavor_name || s.size || "",
+    image: image.name || image.distribution || s.image_name || "",
+    cpu: flavor.vcpus || flavor.cpu || s.cpu || "",
+    ram: flavor.ram || flavor.memory || s.ram || "",
+    pub,
+    priv,
+    created: s.created || s.created_at || "",
+    region: s.region || "",
+    raw: s,
+  };
+}
+
+function arvanSessId() {
+  return "a" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// ---------- رابط کاربری DNS ----------
+async function arvanHome(ctx) {
+  const { edit, arvanAccounts } = ctx;
+  const kb = [
+    [{ text: "🌐 دامنه‌ها (DNS)", callback_data: "arvdoms" }],
+    [{ text: "🖥 سرورهای ابری", callback_data: "arvsrv" }],
+    [{ text: "👤 اکانت‌ها", callback_data: "arvanacc" }, { text: "🏠 منو", callback_data: "menu" }],
+  ];
+  await edit(
+    `🇮🇷 آروان کلاد\n\n` +
+      `اکانت‌ها: ${arvanAccounts.length ? arvanAccounts.map((a) => code(a.name)).join("، ") : "—"}\n\n` +
+      `کلید ماشین‌یوزر (npanel → Settings → IAM → Machine users) با دسترسی‌های CDN و Cloud Server لازم است.`,
+    kb
+  );
+}
+
+async function arvanAccountsView(ctx) {
+  const { edit, kv, arvanAccounts } = ctx;
+  const kb = [];
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    const a = arvanAccounts[i];
+    kb.push([
+      { text: `👤 ${a.name} (${maskArvanKey(a.token)})`, callback_data: "noop" },
+      { text: "🗑", callback_data: `arvanaccdel:${i}` },
+    ]);
+  }
+  kb.push([{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }]);
+  kb.push([{ text: "🔙 آروان", callback_data: "arvan" }, { text: "🏠 منو", callback_data: "menu" }]);
+  await edit("🇮🇷 آروان — اکانت‌ها\n\nبرای ساخت کلید: پنل آروان → Settings → Machine User → New User (نام لاتین کوچک). بعد دسترسی‌های CDN و Cloud Server را به آن بدهید.", kb);
+}
+
+async function arvanDomains(ctx, page = 0) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  if (!arvanAccounts.length) {
+    return edit("🇮🇷 آروان — دامنه‌ها\n\n📭 اکانتی ثبت نشده.", [
+      [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
+      [{ text: "🔙 آروان", callback_data: "arvan" }],
+    ]);
+  }
+  const items = [];
+  let err = "";
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    try {
+      const ds = await arvanGetAllDomains(arvanAccounts[i].token, kv, env);
+      for (const d of ds) items.push({ domain: d.domain, acc: i });
+    } catch (e) {
+      err = e && e.message ? e.message : String(e);
+    }
+  }
+  if (!items.length) {
+    return edit(
+      "🇮🇷 آروان — دامنه‌ها\n\n📭 دامنه‌ای پیدا نشد." + (err ? "\n⚠️ " + escHtml(err.slice(0, 200)) : "") + "\n\nℹ️ دامنه را اول از پنل آروان اضافه کنید، بعد اینجا «🔄 همگام‌سازی» بزنید.",
+      [
+        [{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }],
+        [{ text: "🔄 همگام‌سازی", callback_data: "arvsync" }],
+        [{ text: "🔙 آروان", callback_data: "arvan" }],
+      ]
+    );
+  }
+  const per = 8;
+  const pages = Math.max(1, Math.ceil(items.length / per));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const kb = [];
+  for (const it of items.slice(page * per, page * per + per)) {
+    kb.push([{ text: `🔍 ${it.domain}`, callback_data: `arvdom:${it.acc}:${it.domain}` }]);
+  }
+  if (pages > 1) {
+    kb.push([
+      page > 0 ? { text: "◀️", callback_data: `arvdoms:${page - 1}` } : EMPTY_BTN,
+      { text: `📄 ${page + 1}/${pages}`, callback_data: "noop" },
+      page < pages - 1 ? { text: "▶️", callback_data: `arvdoms:${page + 1}` } : EMPTY_BTN,
+    ]);
+  }
+  kb.push([{ text: "🔄 همگام‌سازی", callback_data: "arvsync" }]);
+  kb.push([{ text: "🔙 آروان", callback_data: "arvan" }]);
+  await edit(`🇮🇷 آروان — دامنه‌ها (${items.length})`, kb);
+}
+
+async function arvanRecords(ctx, acc, domain, page = 0) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 آروان", callback_data: "arvan" }]]);
+  let records = [];
+  try {
+    records = await arvanGetAllRecords(a.token, domain, kv, env);
+  } catch (e) {
+    return edit("❌ خطا در خواندن رکوردها:\n" + escHtml(String(e).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+  }
+  const t = arvanSessId();
+  await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain, acc }), { expirationTtl: 3600 });
+  if (!records.length) {
+    return edit(`📭 رکوردی برای ${code(domain)} یافت نشد.`, [
+      [{ text: "➕ افزودن رکورد", callback_data: `arvaadd:${t}` }],
+      [{ text: "🔙 بازگشت", callback_data: "arvdoms" }],
+    ]);
+  }
+  const per = 9;
+  const pages = Math.max(1, Math.ceil(records.length / per));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  const kb = [];
+  const slice = records.slice(page * per, page * per + per);
+  for (let i = 0; i < slice.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3 && j < slice.length; j++) {
+      const r = slice[j];
+      row.push({ text: `${r.type}-${r.name.length > 18 ? r.name.slice(0, 17) + "…" : r.name}`, callback_data: `arvrec:${t}:${r.id}` });
+    }
+    while (row.length < 3) row.push(EMPTY_BTN);
+    kb.push(row);
+  }
+  kb.push([{ text: "➕ افزودن رکورد", callback_data: `arvaadd:${t}` }]);
+  kb.push([
+    page > 0 ? { text: "◀️", callback_data: `arvdom:${acc}:${domain}:${page - 1}` } : EMPTY_BTN,
+    { text: "🔙 بازگشت", callback_data: "arvdoms" },
+    page < pages - 1 ? { text: "▶️", callback_data: `arvdom:${acc}:${domain}:${page + 1}` } : EMPTY_BTN,
+  ]);
+  await edit(`📋 ${code(domain)} — ${records.length} رکورد (صفحه ${page + 1} از ${pages})`, kb);
+}
+
+async function arvanFindRecord(ctx, t, rid) {
+  const { kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session || session.provider !== "arvan") return null;
+  const a = arvanAccounts[session.acc];
+  if (!a) return null;
+  const records = await arvanGetAllRecords(a.token, session.domain, kv, env);
+  const rec = records.find((r) => r.id === rid);
+  return rec ? { rec, session, token: a.token } : null;
+}
+
+async function arvanRecordDetail(ctx, t, rid) {
+  const { edit } = ctx;
+  const found = await arvanFindRecord(ctx, t, rid);
+  if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+  const { rec, session } = found;
+  const lines = [
+    `${rec.type}-${code(rec.name)}`,
+    ``,
+    `📄 مقدار: ${code(rec.content || "—")}`,
+    `☁️ ابری (CDN): ${rec.proxied ? "روشن" : "خاموش"}`,
+    `⏱ TTL: ${rec.ttl === 120 || rec.ttl === 1 ? "پیش‌فرض" : rec.ttl}`,
+  ];
+  await edit(lines.join("\n"), [
+    [{ text: "✏️ تغییر مقدار (تعویض IP)", callback_data: `arvev:${t}:${rid}` }],
+    [{ text: rec.proxied ? "☁️ خاموش‌کردن ابری" : "☁️ روشن‌کردن ابری", callback_data: `arvcloud:${t}:${rid}` }],
+    [{ text: "🗑 حذف رکورد", callback_data: `arvdel:${t}:${rid}` }],
+    [{ text: "🔙 رکوردها", callback_data: `arvdom:${session.acc}:${session.domain}` }],
+  ]);
+}
+
+// ---------- رابط سرورهای ابری آروان (ECC) ----------
+async function arvanRegions(ctx) {
+  const { edit, arvanAccounts } = ctx;
+  if (!arvanAccounts.length) {
+    return edit("🖥 سرورهای ابری آروان\n\n📭 اکانتی ثبت نشده.", [
+      [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
+      [{ text: "🔙 آروان", callback_data: "arvan" }],
+    ]);
+  }
+  const kb = [];
+  for (let i = 0; i < arvanAccounts.length; i++) {
+    for (const r of ARVAN_REGIONS) {
+      kb.push([{ text: `🖥 ${arvanAccounts[i].name} — ${r}`, callback_data: `arvreg:${i}:${r}` }]);
+    }
+  }
+  kb.push([{ text: "⌨️ ریجن دستی", callback_data: "arvregcustom" }]);
+  kb.push([{ text: "🔙 آروان", callback_data: "arvan" }]);
+  await edit("🖥 سرورهای ابری آروان\n\nیک اکانت و ریجن را انتخاب کنید:", kb);
+}
+
+async function arvanEccServers(ctx, acc, region) {
+  const { kv, env, arvanAccounts } = ctx;
+  const a = arvanAccounts[acc];
+  if (!a) return { error: "اکانت پیدا نشد." };
+  let data;
+  try {
+    data = await arvanEcc(a.token, region, "/servers", {}, kv, env);
+  } catch (e) {
+    return { error: String(e).slice(0, 200) };
+  }
+  if (data.message === "Unauthenticated.") return { error: "کلید نامعتبر است یا دسترسی ندارد." };
+  if (data.message && !arvanEccList(data)) return { error: String(data.message).slice(0, 200) };
+  const arr = arvanEccList(data) || [];
+  return { servers: arr.map(normalizeEccServer).filter(Boolean), token: a.token };
+}
+
+async function arvanServersView(ctx, acc, region) {
+  const { edit, kv } = ctx;
+  const r = await arvanEccServers(ctx, acc, region);
+  if (r.error) return edit("❌ " + escHtml(r.error), [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const t = arvanSessId();
+  await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-srv", acc, region, servers: r.servers }), { expirationTtl: 3600 });
+  const kb = [];
+  if (!r.servers.length) {
+    kb.push([{ text: "➕ ساخت سرور جدید", callback_data: `arvnew:${t}` }]);
+    kb.push([{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]);
+    return edit(`🖥 ${code(region)} — سروری نیست.`, kb);
+  }
+  for (let i = 0; i < r.servers.length; i++) {
+    const s = r.servers[i];
+    const dot = /on|active|running|on_/i.test(s.status) ? "🟢" : (/off|shut|stop|suspend/i.test(s.status) ? "🔴" : "⚪");
+    const ip = s.pub[0] || s.priv[0] || "—";
+    kb.push([{ text: `${dot} ${s.name} (${ip})`, callback_data: `arvs:${t}:${i}` }]);
+  }
+  kb.push([{ text: "➕ ساخت سرور جدید", callback_data: `arvnew:${t}` }]);
+  kb.push([{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]);
+  await edit(`🖥 سرورهای ${code(region)} (${r.servers.length})`, kb);
+}
+
+function arvanServerText(s, region) {
+  const lines = [
+    `🖥 ${code(s.name)}`,
+    ``,
+    `📊 وضعیت: ${code(s.status)}${s.task ? " (" + code(s.task) + ")" : ""}`,
+    `🌐 عمومی: ${s.pub.length ? s.pub.map(code).join("، ") : "—"}`,
+    `🔒 خصوصی: ${s.priv.length ? s.priv.map(code).join("، ") : "—"}`,
+    `📦 پلن: ${code(s.flavor || "—")} · 💿 ایمیج: ${code(s.image || "—")}`,
+    `🆔 ${code(String(s.id).slice(0, 18))} · 📍 ${code(region)}`,
+  ];
+  return lines.join("\n");
+}
+
+async function arvanServerDetail(ctx, t, idx) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session || session.provider !== "arvan-srv" || !session.servers[idx]) {
+    return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  }
+  const a = arvanAccounts[session.acc];
+  // جزئیات تازه برای وضعیت دقیق
+  let s = session.servers[idx];
+  try {
+    const d = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}`, {}, kv, env);
+    const one = (d.data && typeof d.data === "object" && !Array.isArray(d.data) ? d.data : d.result) || null;
+    if (one) {
+      s = normalizeEccServer(one) || s;
+      session.servers[idx] = s;
+      await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    }
+  } catch (e) {}
+  const isOn = /on|active|running/i.test(s.status) && !/off|shut|stop/i.test(s.status);
+  await edit(arvanServerText(s, session.region), [
+    isOn
+      ? [{ text: "🔌 خاموش", callback_data: `arvoff:${t}:${idx}` }, { text: "🔄 ریبوت", callback_data: `arvreboot:${t}:${idx}` }]
+      : [{ text: "⚡ روشن", callback_data: `arvon:${t}:${idx}` }],
+    [
+      { text: "📷 اسنپ‌شات", callback_data: `arvsnap:${t}:${idx}` },
+      { text: "✏️ تغییرنام", callback_data: `arvren:${t}:${idx}` },
+    ],
+    [
+      { text: "🔑 ریست رمز root", callback_data: `arvroot:${t}:${idx}` },
+      { text: "🗑 حذف سرور", callback_data: `arvterm:${t}:${idx}` },
+    ],
+    [{ text: "📷 اسنپ‌شات‌ها", callback_data: `arvsnapls:${t}:${idx}` }],
+    [{ text: "🔙 سرورها", callback_data: `arvregback:${t}` }],
+  ]);
+}
+
+async function arvanSrvAction(ctx, t, idx, action, extraBody) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session || session.provider !== "arvan-srv" || !session.servers[idx]) {
+    return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  }
+  const a = arvanAccounts[session.acc];
+  const s = session.servers[idx];
+  let data;
+  try {
+    data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/${action}`, { method: "POST", body: extraBody ? JSON.stringify(extraBody) : undefined }, kv, env);
+  } catch (e) {
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+  }
+  if (data.message === "Unauthenticated.") {
+    return edit("❌ کلید دسترسی این عمل را ندارد.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+  }
+  if (data.message && data.message !== "ok" && !data.data && !data.result) {
+    // بعضی اکشن‌ها ۲۰۲ با message برمی‌گردانند — همان را نشان بده
+    await edit("ℹ️ " + escHtml(String(data.message).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+    return;
+  }
+  return { session, server: s, data };
+}
+
+// ---------- توزیع‌کننده بخش آروان ----------
+async function handleArvanCallback(data, ctx) {
+  const { edit, kv, env, chatId, messageId, arvanAccounts } = ctx;
+  const kvPutPend = (obj) => kv.put(`pend:${chatId}`, JSON.stringify({ ...obj, msgId: messageId }), { expirationTtl: 600 });
+
+  if (data === "arvan") return arvanHome(ctx);
+  if (data === "arvanacc") return arvanAccountsView(ctx);
+  if (data === "arvanaccadd") {
+    await kvPutPend({ type: "arvan_acc_name" });
+    return edit("👤 نام اکانت را بفرستید (مثلاً main):", [[{ text: "⬅️ انصراف", callback_data: "arvanacc" }]]);
+  }
+  let m = data.match(/^arvanaccdel:(\d+)$/);
+  if (m) {
+    const i = Number(m[1]);
+    if (!arvanAccounts[i]) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvanacc" }]]);
+    return edit(`🗑 اکانت «${code(arvanAccounts[i].name)}» حذف شود؟`, [
+      [{ text: "✅ بله، حذف کن", callback_data: `arvanaccdelok:${i}` }, { text: "❌ انصراف", callback_data: "arvanacc" }],
+    ]);
+  }
+  m = data.match(/^arvanaccdelok:(\d+)$/);
+  if (m) {
+    const list = await getArvanAccounts(kv);
+    list.splice(Number(m[1]), 1);
+    await saveArvanAccounts(kv, list);
+    ctx.arvanAccounts = list;
+    return arvanAccountsView(ctx);
+  }
+  if (data === "arvdoms" || data === "arvsync") return arvanDomains(ctx, 0);
+  m = data.match(/^arvdoms:(\d+)$/);
+  if (m) return arvanDomains(ctx, Number(m[1]));
+  m = data.match(/^arvdom:(\d+):(.+?)(?::(\d+))?$/);
+  if (m) return arvanRecords(ctx, Number(m[1]), m[2], m[3] ? Number(m[3]) : 0);
+  m = data.match(/^arvrec:([^:]+):(.+)$/);
+  if (m) return arvanRecordDetail(ctx, m[1], m[2]);
+  m = data.match(/^arvev:([^:]+):(.+)$/);
+  if (m) {
+    const found = await arvanFindRecord(ctx, m[1], m[2]);
+    if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    await kvPutPend({ type: "arvan_rec_value", t: m[1], rid: m[2] });
+    return edit(`✏️ مقدار جدید برای ${code(found.rec.name)} را بفرستید:\n(فعلی: ${code(found.rec.content || "—")})`, [
+      [{ text: "⬅️ انصراف", callback_data: `arvrec:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvcloud:([^:]+):(.+)$/);
+  if (m) {
+    const found = await arvanFindRecord(ctx, m[1], m[2]);
+    if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    const res = await arvanUpdateRecord(found.token, found.session.domain, found.rec, found.rec.content, kv, env, !found.rec.proxied);
+    if (!arvanOk(res) || res.message === "Unauthenticated.") {
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${m[1]}:${m[2]}` }]]);
+    }
+    return arvanRecordDetail(ctx, m[1], m[2]);
+  }
+  m = data.match(/^arvdel:([^:]+):(.+)$/);
+  if (m) {
+    return edit("🗑 این رکورد حذف شود؟", [
+      [{ text: "✅ بله، حذف کن", callback_data: `arvdelok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvrec:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvdelok:([^:]+):(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const a = session && arvanAccounts[session.acc];
+    if (!a) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    const res = await arvanDeleteRecord(a.token, session.domain, m[2], kv, env);
+    if (!arvanOk(res)) return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${m[1]}:${m[2]}` }]]);
+    return arvanRecords(ctx, session.acc, session.domain, 0);
+  }
+  m = data.match(/^arvaadd:(.+)$/);
+  if (m) {
+    return edit("➕ نوع رکورد جدید:", [
+      [{ text: "A (آی‌پی)", callback_data: `arvantype:${m[1]}:A` }, { text: "AAAA", callback_data: `arvantype:${m[1]}:AAAA` }],
+      [{ text: "CNAME", callback_data: `arvantype:${m[1]}:CNAME` }, { text: "TXT", callback_data: `arvantype:${m[1]}:TXT` }],
+      [{ text: "⬅️ انصراف", callback_data: "arvdoms" }],
+    ]);
+  }
+  m = data.match(/^arvantype:(.+):(A|AAAA|CNAME|TXT)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_rec_name", t: m[1], rtype: m[2] });
+    return edit(`🔤 نام رکورد ${m[2]} را بفرستید (مثل sub یا @):`, [[{ text: "⬅️ انصراف", callback_data: "arvdoms" }]]);
+  }
+  // ---- سرورها در بخش بعد ----
+  return arvanServerCallback(data, ctx);
+}
+
+async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botToken, env) {
+  const type = pending.type;
+  const editId = (t, kb) => editMessage(botToken, chatId, pending.msgId, t, kb);
+  const arvanAccounts = await getArvanAccounts(kv);
+
+  if (type === "arvan_acc_name") {
+    if (!txt) return send("⚠️ نام معتبر نیست.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_acc_key", name: txt, msgId: pending.msgId }), { expirationTtl: 600 });
+    return editId(
+      `🔑 کلید ماشین‌یوزر اکانت «${code(txt)}» را بفرستید:\n\nساخت کلید: پنل آروان → Settings → Machine User → New User\nبعد دسترسی‌های CDN و Cloud Server را به آن بدهید.\n(کلید با همین پیام پاک می‌شود و جایی نمایش داده نمی‌شود)`,
+      [[{ text: "⬅️ انصراف", callback_data: "arvanacc" }]]
+    );
+  }
+  if (type === "arvan_acc_key") {
+    const key = arvanNormKey(txt);
+    if (!key) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ کلید خالی است.", [[{ text: "🔙 اکانت‌ها", callback_data: "arvanacc" }]]);
+    }
+    let ok = false;
+    let errT = "";
+    try {
+      const data = await arvanFetch(key, "/domains?per_page=1", {}, 30000, kv, env);
+      ok = Array.isArray(data.data) || Array.isArray(data.result);
+      if (!ok) errT = arvanErrText(data);
+    } catch (e) {
+      errT = String(e).slice(0, 200);
+    }
+    await kv.delete(`pend:${chatId}`);
+    if (!ok) {
+      return editId("❌ کلید قبول نشد:\n" + escHtml(errT) + "\n\nدسترسی‌های ماشین‌یوزر را در پنل آروان بررسی کنید.", [
+        [{ text: "🔙 اکانت‌ها", callback_data: "arvanacc" }],
+      ]);
+    }
+    const list = await getArvanAccounts(kv);
+    list.push({ name: pending.name || "main", token: key });
+    await saveArvanAccounts(kv, list);
+    return editId(`✅ اکانت «${code(pending.name || "main")}» اضافه شد.`, [
+      [{ text: "🌐 دامنه‌ها", callback_data: "arvdoms" }, { text: "👤 اکانت‌ها", callback_data: "arvanacc" }],
+    ]);
+  }
+  if (type === "arvan_rec_name") {
+    if (!txt) return;
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_rec_value_new", t: pending.t, rtype: pending.rtype, name: txt, msgId: pending.msgId }), { expirationTtl: 600 });
+    return editId(`🔤 مقدار رکورد ${pending.rtype} «${code(txt)}» را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "arvdoms" }]]);
+  }
+  if (type === "arvan_rec_value_new") {
+    const hint = valueIssueHint(txt, pending.rtype);
+    if (hint) {
+      return editId("❌ " + escHtml(hint), [[{ text: "⬅️ انصراف", callback_data: "arvdoms" }]]);
+    }
+    const session = await kv.get(`s:${pending.t}`, "json");
+    const a = session && arvanAccounts[session.acc];
+    if (!a) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    }
+    const res = await arvanCreateRecord(a.token, session.domain, pending.rtype, pending.name, txt, true, kv, env);
+    await kv.delete(`pend:${chatId}`);
+    if (!arvanOk(res)) {
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    }
+    await editId(`✅ رکورد ساخته شد:\n${pending.rtype}-${code(pending.name)} → ${code(txt)}`, []);
+    await sleep(1500);
+    const ctx2 = { edit: (t2, kb2) => editMessage(botToken, chatId, pending.msgId, t2, kb2), kv, env, arvanAccounts, chatId };
+    return arvanRecords(ctx2, session.acc, session.domain, 0);
+  }
+  if (type === "arvan_rec_value") {
+    const session = await kv.get(`s:${pending.t}`, "json");
+    const a = session && arvanAccounts[session.acc];
+    if (!a) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    }
+    const records = await arvanGetAllRecords(a.token, session.domain, kv, env);
+    const rec = records.find((r) => r.id === pending.rid);
+    if (!rec) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    }
+    const hint = valueIssueHint(txt, rec.type);
+    if (hint) {
+      return editId("❌ " + escHtml(hint) + "\n\nدوباره بفرستید؛ همین پیام ویرایش می‌شود.", [[{ text: "⬅️ انصراف", callback_data: `arvrec:${pending.t}:${pending.rid}` }]]);
+    }
+    const res = await arvanUpdateRecord(a.token, session.domain, rec, txt, kv, env);
+    await kv.delete(`pend:${chatId}`);
+    if (!arvanOk(res)) {
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${pending.t}:${pending.rid}` }]]);
+    }
+    await editId(`✅ تغییر یافت\n\n📛 ${code(rec.name)}\n\n🔴 قبلی: ${code(rec.content || "—")}\n🟢 فعلی: ${code(txt)}`, []);
+    await sleep(1500);
+    const ctx2 = { edit: (t2, kb2) => editMessage(botToken, chatId, pending.msgId, t2, kb2), kv, env, arvanAccounts, chatId };
+    return arvanRecords(ctx2, session.acc, session.domain, 0);
+  }
+  // ورودی‌های سرور در ادامه
+  return handleArvanServerPending(pending, txt, chatId, accounts, send, kv, botToken, env, arvanAccounts);
+}
+
+// ---------- کال‌بک‌های سرور ابری آروان ----------
+async function handleArvanServerPending(pending, txt, chatId, accounts, send, kv, botToken, env, arvanAccounts) {
+  const type = pending.type;
+  const editId = (t, kb) => editMessage(botToken, chatId, pending.msgId, t, kb);
+
+  if (type === "arvan_region") {
+    const region = txt.toLowerCase();
+    const a = arvanAccounts[pending.acc];
+    if (!a) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ اکانت پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    let data;
+    try {
+      data = await arvanEcc(a.token, region, "/servers", {}, kv, env);
+    } catch (e) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    if (data.message && !arvanEccList(data)) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ ریجن نامعتبر:\n" + escHtml(String(data.message).slice(0, 200)), [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    await kv.delete(`pend:${chatId}`);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanServersView(ctx2, pending.acc, region);
+  }
+
+  const needSrvSess = ["arvan_srv_snap", "arvan_srv_rename", "arvan_mk_name", "arvan_mk_image", "arvan_mk_ssh"];
+  if (needSrvSess.includes(type)) {
+    const session = await kv.get(`s:${pending.t}`, "json");
+    if (!session) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+  }
+
+  if (type === "arvan_srv_snap") {
+    if (!txt) return;
+    const session = await kv.get(`s:${pending.t}`, "json");
+    const a = arvanAccounts[session.acc];
+    const s = session.servers[pending.idx];
+    let data;
+    try {
+      data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/snapshot`, { method: "POST", body: JSON.stringify({ name: txt }) }, kv, env);
+    } catch (e) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+    }
+    await kv.delete(`pend:${chatId}`);
+    if (data.message === "Unauthenticated." || (data.message && !data.data && !data.result)) {
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+    }
+    await editId(`✅ اسنپ‌شات «${code(txt)}» ساخته شد (ممکن است چند دقیقه طول بکشد).`, []);
+    await sleep(1500);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanServerDetail(ctx2, pending.t, pending.idx);
+  }
+
+  if (type === "arvan_srv_rename") {
+    if (!txt) return;
+    const session = await kv.get(`s:${pending.t}`, "json");
+    const a = arvanAccounts[session.acc];
+    const s = session.servers[pending.idx];
+    let data;
+    try {
+      data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/rename`, { method: "POST", body: JSON.stringify({ name: txt }) }, kv, env);
+    } catch (e) {
+      await kv.delete(`pend:${chatId}`);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+    }
+    await kv.delete(`pend:${chatId}`);
+    if (data.message === "Unauthenticated." || (data.message && !data.data && !data.result)) {
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+    }
+    s.name = txt;
+    session.servers[pending.idx] = s;
+    await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    await editId(`✅ نام به «${code(txt)}» تغییر کرد.`, []);
+    await sleep(1200);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanServerDetail(ctx2, pending.t, pending.idx);
+  }
+
+  if (type === "arvan_mk_name") {
+    if (!txt || txt.length > 60) return;
+    const session = await kv.get(`s:${pending.t}`, "json");
+    session.name = txt;
+    await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    await kv.delete(`pend:${chatId}`);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanMkImages(ctx2, pending.t);
+  }
+  if (type === "arvan_mk_image") {
+    if (!txt) return;
+    const session = await kv.get(`s:${pending.t}`, "json");
+    session.imageId = txt;
+    session.imageName = txt.slice(0, 24);
+    await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    await kv.delete(`pend:${chatId}`);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanMkFlavors(ctx2, pending.t);
+  }
+  if (type === "arvan_mk_ssh") {
+    const session = await kv.get(`s:${pending.t}`, "json");
+    if (txt !== "-") {
+      session.sshKey = txt;
+      await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    }
+    await kv.delete(`pend:${chatId}`);
+    const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
+    return arvanMkConfirm(ctx2, pending.t);
+  }
+}
+
+async function arvanServerCallback(data, ctx) {
+  const { edit, kv, env, chatId, messageId, arvanAccounts } = ctx;
+  const kvPutPend = (obj) => kv.put(`pend:${chatId}`, JSON.stringify({ ...obj, msgId: messageId }), { expirationTtl: 900 });
+  let m;
+
+  if (data === "arvsrv") return arvanRegions(ctx);
+  if (data === "arvregcustom") {
+    if (arvanAccounts.length === 1) {
+      await kvPutPend({ type: "arvan_region", acc: 0 });
+      return edit("⌨️ کد ریجن را بفرستید (مثل ir-thr-c2):", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+    }
+    const kb = arvanAccounts.map((a, i) => [{ text: `👤 ${a.name}`, callback_data: `arvregcustom:${i}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }]);
+    return edit("کدام اکانت؟", kb);
+  }
+  m = data.match(/^arvregcustom:(\d+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_region", acc: Number(m[1]) });
+    return edit("⌨️ کد ریجن را بفرستید (مثل ir-thr-c2):", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  m = data.match(/^arvreg:(\d+):(.+)$/);
+  if (m) return arvanServersView(ctx, Number(m[1]), m[2]);
+  m = data.match(/^arvregback:(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    return arvanServersView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvs:([^:]+):(\d+)$/);
+  if (m) return arvanServerDetail(ctx, m[1], Number(m[2]));
+
+  // اکشن‌های پاور
+  m = data.match(/^arv(on|off|reboot):([^:]+):(\d+)$/);
+  if (m) {
+    const act = m[1] === "on" ? "power-on" : m[1] === "off" ? "power-off" : "reboot";
+    const r = await arvanSrvAction(ctx, m[2], Number(m[3]), act);
+    if (!r) return;
+    await edit(`✅ دستور ${act === "power-on" ? "روشن شدن" : act === "power-off" ? "خاموش شدن" : "ریبوت"} ارسال شد.\n(اعمال ممکن است کمی طول بکشد)`, []);
+    await sleep(2000);
+    return arvanServerDetail(ctx, m[2], Number(m[3]));
+  }
+  m = data.match(/^arvsnap:([^:]+):(\d+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_srv_snap", t: m[1], idx: Number(m[2]) });
+    return edit("📷 نام اسنپ‌شات را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+  }
+  m = data.match(/^arvren:([^:]+):(\d+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_srv_rename", t: m[1], idx: Number(m[2]) });
+    return edit("✏️ نام جدید سرور را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+  }
+  m = data.match(/^arvroot:([^:]+):(\d+)$/);
+  if (m) {
+    return edit("🔑 رمز root ریست شود؟ (رمز فعلی از کار می‌افتد)", [
+      [{ text: "✅ بله، ریست کن", callback_data: `arvyroot:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvyroot:([^:]+):(\d+)$/);
+  if (m) {
+    const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "reset-root-password", {});
+    if (!r) return;
+    const d = r.data || {};
+    const pwd = (d.data && d.data.password) || (d.result && d.result.password) || d.password || "";
+    await edit(`✅ رمز root ریست شد.${pwd ? "\n\n🔑 رمز جدید: " + code(String(pwd)) + "\n(یادداشت کن؛ دوباره نمایش داده نمی‌شود)" : ""}`, [
+      [{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }],
+    ]);
+    return;
+  }
+  m = data.match(/^arvterm:([^:]+):(\d+)$/);
+  if (m) {
+    return edit("🗑 سرور حذف شود؟ این عمل برگشت‌ناپذیر است!", [
+      [{ text: "✅ بله، حذف کن", callback_data: `arvyterm:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
+    ]);
+  }
+  m = data.match(/^arvyterm:([^:]+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    const s = session.servers[Number(m[2])];
+    let data2;
+    try {
+      data2 = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}`, { method: "DELETE" }, kv, env);
+    } catch (e) {
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    }
+    if (data2.message === "Unauthenticated." || (data2.message && !data2.data && !data2.result)) {
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(data2)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    }
+    await edit(`✅ سرور «${code(s.name)}» حذف شد.`, []);
+    await sleep(1500);
+    return arvanServersView(ctx, session.acc, session.region);
+  }
+  m = data.match(/^arvsnapls:([^:]+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    let data2;
+    try {
+      data2 = await arvanEcc(a.token, session.region, "/snapshots", {}, kv, env);
+    } catch (e) {
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    }
+    const arr = arvanEccList(data2) || [];
+    if (!arr.length) {
+      return edit("📭 اسنپ‌شاتی نیست.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
+    }
+    const kb = [];
+    for (const sn of arr.slice(0, 10)) {
+      const nm = sn.name || sn.id || "؟";
+      kb.push([
+        { text: `📷 ${String(nm).slice(0, 24)}`, callback_data: "noop" },
+        { text: "🗑", callback_data: `arvsnapdel:${session.region}:${session.acc}:${sn.id || ""}` },
+      ]);
+    }
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]);
+    return edit(`📷 اسنپ‌شات‌ها (${arr.length})`, kb);
+  }
+  m = data.match(/^arvsnapdel:([^:]+):(\d+):(.+)$/);
+  if (m) {
+    const a = arvanAccounts[Number(m[2])];
+    try {
+      await arvanEcc(a.token, m[1], `/snapshots/${encodeURIComponent(m[3])}`, { method: "DELETE" }, kv, env);
+    } catch (e) {}
+    return edit("✅ درخواست حذف اسنپ‌شات ارسال شد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  }
+  // ویزارد ساخت سرور در ادامه
+  return arvanMkCallback(data, ctx);
+}
+
+// ---------- ویزارد ساخت سرور آروان ----------
+// مراحل: نام → ایمیج → پلن → شبکه → کلید SSH (اختیاری) → تأیید (با قیمت) → ساخت
+async function arvanMkImages(ctx, t) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const a = arvanAccounts[session.acc];
+  const imgs = [];
+  try {
+    const d1 = await arvanEcc(a.token, session.region, "/images?per_page=100", {}, kv, env);
+    for (const im of arvanEccList(d1) || []) {
+      if (im && im.id) imgs.push({ id: im.id, name: im.name || im.distribution || im.id });
+    }
+  } catch (e) {}
+  try {
+    const d2 = await arvanEcc(a.token, session.region, "/images/marketplaces", {}, kv, env);
+    for (const g of arvanEccList(d2) || []) {
+      for (const im of (g && g.images) || []) {
+        if (im && im.id && imgs.length < 40) imgs.push({ id: im.id, name: `${g.name || ""} ${im.name || ""}`.trim() });
+      }
+    }
+  } catch (e) {}
+  session.images = imgs.slice(0, 40);
+  await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+  const kb = [];
+  for (let i = 0; i < Math.min(imgs.length, 10); i++) {
+    kb.push([{ text: `💿 ${imgs[i].name.slice(0, 30)}`, callback_data: `arvimg:${t}:${i}` }]);
+  }
+  kb.push([{ text: "⌨️ ورود دستی شناسه ایمیج", callback_data: `arvimgman:${t}` }]);
+  kb.push([{ text: "⬅️ انصراف", callback_data: "arvsrv" }]);
+  await edit(
+    `➕ ساخت سرور در ${code(session.region)}\nنام: ${code(session.name)}\n\nایمیج را انتخاب کنید:${imgs.length ? "" : "\n(لیستی برنگشت — دستی وارد کنید)"}`,
+    kb
+  );
+}
+
+async function arvanMkFlavors(ctx, t) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const a = arvanAccounts[session.acc];
+  let sizes = [];
+  try {
+    const d = await arvanEcc(a.token, session.region, "/sizes?per_page=100", {}, kv, env);
+    sizes = arvanEccList(d) || [];
+  } catch (e) {}
+  if (!sizes.length) {
+    return edit("❌ پلنی برنگشت. دوباره تلاش کنید.", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  session.flavors = sizes.slice(0, 30).map((s) => ({ id: s.id, name: s.name || s.id, cpu: s.cpu_count || "", ram: s.memory || "", disk: s.disk || "", price: s.price_per_month || s.price_per_hour || "" }));
+  await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+  const kb = [];
+  for (let i = 0; i < Math.min(session.flavors.length, 10); i++) {
+    const f = session.flavors[i];
+    const price = f.price ? ` ~ ${Number(f.price).toLocaleString("en-US")}/ماه` : "";
+    kb.push([{ text: `${f.name} (${f.cpu}CPU/${f.ram}G${price})`, callback_data: `arvflv:${t}:${i}` }]);
+  }
+  kb.push([{ text: "⬅️ انصراف", callback_data: "arvsrv" }]);
+  await edit(`➕ ${code(session.name)}\nایمیج: ${code(session.imageName)}\n\nپلن را انتخاب کنید:`, kb);
+}
+
+async function arvanMkNetworks(ctx, t) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const a = arvanAccounts[session.acc];
+  let nets = [];
+  try {
+    const d = await arvanEcc(a.token, session.region, "/networks", {}, kv, env);
+    nets = arvanEccList(d) || [];
+  } catch (e) {}
+  if (!nets.length) {
+    session.networkId = "";
+    session.networkName = "پیش‌فرض";
+    await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return arvanMkSsh(ctx, t);
+  }
+  session.networks = nets.slice(0, 12).map((n) => ({ id: n.id, name: n.name || n.id }));
+  await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+  const kb = session.networks.map((n, i) => [{ text: `🌐 ${n.name}`, callback_data: `arvnet:${t}:${i}` }]);
+  kb.push([{ text: "⬅️ انصراف", callback_data: "arvsrv" }]);
+  await edit(`➕ ${code(session.name)}\nپلن: ${code(session.flavorName)}\n\nشبکه را انتخاب کنید:`, kb);
+}
+
+async function arvanMkSsh(ctx, t) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const a = arvanAccounts[session.acc];
+  let keys = [];
+  try {
+    const d = await arvanEcc(a.token, session.region, "/ssh-keys", {}, kv, env);
+    keys = arvanEccList(d) || [];
+  } catch (e) {}
+  session.sshKeys = keys.slice(0, 10).map((k) => (typeof k === "string" ? k : k.name || k.id || "")).filter(Boolean);
+  await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
+  const kb = session.sshKeys.map((k) => [{ text: `🔑 ${k}`, callback_data: `arvsshk:${t}:${encodeURIComponent(k)}` }]);
+  kb.push([{ text: "⏭ رد شدن (بدون کلید)", callback_data: `arvsshskip:${t}` }]);
+  kb.push([{ text: "⌨️ ورود دستی نام کلید", callback_data: `arvsshman:${t}` }]);
+  await edit(`➕ ${code(session.name)}\nشبکه: ${code(session.networkName || "پیش‌فرض")}\n\nکلید SSH (اختیاری):`, kb);
+}
+
+async function arvanMkConfirm(ctx, t) {
+  const { edit, kv } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+  const price = session.flavorPrice ? `\n💰 حدود ${code(Number(session.flavorPrice).toLocaleString("en-US"))}/ماه` : "";
+  await edit(
+    `➕ تأیید ساخت سرور\n\n📍 ریجن: ${code(session.region)}\n📛 نام: ${code(session.name)}\n💿 ایمیج: ${code(session.imageName)}\n📦 پلن: ${code(session.flavorName)}${price}\n🌐 شبکه: ${code(session.networkName || "پیش‌فرض")}\n🔑 کلید: ${code(session.sshKey || "—")}\n\n⚠️ ساخت سرور هزینه دارد. مطمئنی؟`,
+    [
+      [{ text: "✅ بله، بساز", callback_data: `arvcreate:${t}` }, { text: "❌ انصراف", callback_data: "arvsrv" }],
+    ]
+  );
+}
+
+async function arvanMkCallback(data, ctx) {
+  const { edit, kv, env, chatId, messageId, arvanAccounts } = ctx;
+  const kvPutPend = (obj) => kv.put(`pend:${chatId}`, JSON.stringify({ ...obj, msgId: messageId }), { expirationTtl: 900 });
+  let m;
+
+  m = data.match(/^arvnew:(.+)$/);
+  if (m) {
+    const src = await kv.get(`s:${m[1]}`, "json");
+    if (!src) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const t = arvanSessId();
+    await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-mk", acc: src.acc, region: src.region }), { expirationTtl: 3600 });
+    await kvPutPend({ type: "arvan_mk_name", t });
+    return edit(`➕ ساخت سرور در ${code(src.region)}\n\nنام سرور را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  m = data.match(/^arvimg:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const im = session && session.images[Number(m[2])];
+    if (!im) return edit("❌ ایمیج پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    session.imageId = im.id;
+    session.imageName = im.name;
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return arvanMkFlavors(ctx, m[1]);
+  }
+  m = data.match(/^arvimgman:(.+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_mk_image", t: m[1] });
+    return edit("⌨️ شناسه ایمیج (UUID) را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
+  }
+  m = data.match(/^arvflv:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const f = session && session.flavors[Number(m[2])];
+    if (!f) return edit("❌ پلن پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    session.flavorId = f.id;
+    session.flavorName = f.name;
+    session.flavorPrice = f.price;
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return arvanMkNetworks(ctx, m[1]);
+  }
+  m = data.match(/^arvnet:(.+):(\d+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    const n = session && session.networks[Number(m[2])];
+    if (!n) return edit("❌ شبکه پیدا نشد.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    session.networkId = n.id;
+    session.networkName = n.name;
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return arvanMkSsh(ctx, m[1]);
+  }
+  m = data.match(/^arvsshk:(.+):(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    session.sshKey = decodeURIComponent(m[2]);
+    await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
+    return arvanMkConfirm(ctx, m[1]);
+  }
+  m = data.match(/^arvsshskip:(.+)$/);
+  if (m) return arvanMkConfirm(ctx, m[1]);
+  m = data.match(/^arvsshman:(.+)$/);
+  if (m) {
+    await kvPutPend({ type: "arvan_mk_ssh", t: m[1] });
+    return edit("⌨️ نام کلید SSH را بفرستید (یا - برای رد شدن):", [[{ text: "⏭ رد شدن", callback_data: `arvsshskip:${m[1]}` }]]);
+  }
+  m = data.match(/^arvcreate:(.+)$/);
+  if (m) {
+    const session = await kv.get(`s:${m[1]}`, "json");
+    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    const a = arvanAccounts[session.acc];
+    const body = { name: session.name, flavor_id: session.flavorId, image_id: session.imageId, enable_ipv4: true };
+    if (session.networkId) body.network_ids = [session.networkId];
+    if (session.sshKey) body.key_name = session.sshKey;
+    let res;
+    try {
+      res = await arvanEcc(a.token, session.region, "/servers", { method: "POST", body: JSON.stringify(body) }, kv, env);
+    } catch (e) {
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 ریجن‌ها", callback_data: "arvsrv" }]]);
+    }
+    const created = res.data && typeof res.data === "object" && !Array.isArray(res.data) ? res.data : res.result || {};
+    const pwd = created.password ? `\n🔑 رمز root: ${code(String(created.password))}\n(یادداشت کن؛ دوباره نمایش داده نمی‌شود)` : "";
+    await edit(`✅ درخواست ساخت ارسال شد.\n\n🖥 ${code(session.name)} — ${code(session.region)}${pwd}\n(آماده‌سازی چند دقیقه طول می‌کشد)`, [
+      [{ text: "🖥 سرورها", callback_data: `arvreg:${session.acc}:${session.region}` }],
+    ]);
+    return;
+  }
+  return edit("❓ دستور ناشناخته.", [[{ text: "🔙 آروان", callback_data: "arvan" }]]);
 }
 
 // ===================== Hetzner UI =====================
