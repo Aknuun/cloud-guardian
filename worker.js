@@ -6533,13 +6533,21 @@ async function renderEmailHome(edit, kv, accounts, token) {
   const tok = accounts[session.acc] && accounts[session.acc].token;
   if (!tok) return edit("❌ اکانت پیدا نشد.");
   let st = null;
+  let stErr = "";
   try {
     const s = await cfEmailGet(tok, `/zones/${session.zone_id}/email/routing`);
     if (s.success && s.result) st = s.result;
-  } catch (e) {}
+    else stErr = cfErrText(s);
+  } catch (e) {
+    stErr = String((e && e.message) || e).slice(0, 200);
+  }
   if (!st) {
+    const isPerm = /10000|authentic|permission|not authoriz/i.test(stErr);
     return edit(
-      `✉️ ایمیل ${session.zone_name}\n\n❌ دسترسی به Email Routing نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`,
+      `✉️ ایمیل ${session.zone_name}\n\n` +
+        (isPerm
+          ? `❌ دسترسی به Email Routing نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`
+          : `❌ خطا از کلادفلر:\n${stErr || "نامشخص"}`),
       [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]]
     );
   }
