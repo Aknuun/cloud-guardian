@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.14";
+const BOT_VERSION = "1.0.15";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.15": [
+    "🧭 منوی تعویض خودکار هاست خلوت شد: دو دکمهٔ «چک‌هاست / گلوبال‌پینگ» بالا — با زدن روی هر کدام همان سرویس فعال می‌شود؛ تنظیمات هر سرویس هم جداگانه است",
+  ],
   "1.0.14": [
     "🇮🇷 بازگشت بخش آروان با کلید ماشین‌یوزر جدید: مدیریت دامنه و رکوردهای DNS (تعویض IP، افزودن/حذف) + مدیریت کامل سرور ابری (لیست، روشن/خاموش، ریبوت، اسنپ‌شات، تغییرنام، ریست رمز، حذف و ویزارد ساخت سرور)",
   ],
@@ -9521,11 +9524,23 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
     } else if (data === "hfset") {
       await renderHostFilterSettings(edit, kv);
+    } else if (data === "hfsetch") {
+      await renderHostFilterSettingsCh(edit, kv);
+    } else if (data === "hfsetgp") {
+      await renderHostFilterSettingsGp(edit, kv);
+    } else if (data.startsWith("hfprov:")) {
+      const p = data.slice(7);
+      if (p === "checkhost" || p === "globalping") {
+        const cfg = await getHostFilterCfg(kv);
+        cfg.provider = p;
+        await saveHostFilterCfg(kv, cfg);
+      }
+      await renderHostFilterHome(edit, kv, env);
     } else if (data === "hfsetprov") {
       const cfg = await getHostFilterCfg(kv);
       cfg.provider = cfg.provider === "checkhost" ? "globalping" : "checkhost";
       await saveHostFilterCfg(kv, cfg);
-      await renderHostFilterSettings(edit, kv);
+      await renderHostFilterHome(edit, kv, env);
     } else if (data === "hfreal") {
       const cfg = await getHostFilterCfg(kv);
       cfg.realityRotate = !cfg.realityRotate;
@@ -9535,7 +9550,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_gptoken" }), { expirationTtl: 600 });
       await edit(
         "🔑 توکن Globalping را بفرستید (از dash.globalping.io).\nبرای حذف توکن، یک خط «-» بفرستید.",
-        [[{ text: "🔙 انصراف", callback_data: "hfset" }]]
+        [[{ text: "🔙 انصراف", callback_data: "hfsetgp" }]]
       );
     } else if (data === "hfcities") {
       await renderHostFilterCities(edit, kv);
@@ -14426,72 +14441,97 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("🔁 هاست‌های تعویض‌شده: " + count);
   lines.push("");
   lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. کانفیگ‌های REALITY/Fastly: " + (cfg.realityRotate ? "مثل بقیه تعویض می‌شوند." : "فقط هشدار می‌گیرند (پیش‌فرض)."));
+  const isCh = cfg.provider === "checkhost";
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
+  // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود
+  kb.push([
+    { text: (isCh ? "✅ " : "") + "🌐 چک‌هاست", callback_data: "hfprov:checkhost" },
+    { text: (!isCh ? "✅ " : "") + "📡 گلوبال‌پینگ", callback_data: "hfprov:globalping" },
+  ]);
   // hfcheck: اجرای فوری بررسی فیلترشدن | hfhist: تاریخچهٔ تعویض‌ها
   kb.push([{ text: "🔎 بررسی فوری", callback_data: "hfcheck" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
   // hflist: لیست هاست‌های پنل‌ها + استثنا و بررسی تک‌تک
   kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }]);
-  // hfsetprov: جابه‌جایی بین سرویس check-host و Globalping
-  kb.push([{ text: "🔌 سرویس: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping"), callback_data: "hfsetprov" }]);
-  // hfset: صفحهٔ تنظیمات آستانه‌ها | hfbk: مدیریت بکاپ هاست‌ها
-  kb.push([{ text: "⚙️ تنظیمات", callback_data: "hfset" }, { text: "💾 بکاپ", callback_data: "hfbk" }]);
+  // تنظیمات جداگانهٔ هر سرویس: hfsetch (چک‌هاست) | hfsetgp (گلوبال‌پینگ) — hfbk: مدیریت بکاپ
+  kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }, { text: "⚙️ تنظیمات گلوبال‌پینگ", callback_data: "hfsetgp" }]);
+  kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
   // mons: بازگشت به صفحهٔ مانیتورها
   kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
   await edit(lines.join("\n"), kb);
 }
 
 async function renderHostFilterSettings(edit, kv) {
+  // سازگاری: hfset قدیمی به تنظیمات همان سرویس فعال می‌رود
   const cfg = await getHostFilterCfg(kv);
-  const lines = ["⚙️ تنظیمات تعویض خودکار هاست", ""];
-  lines.push("⚠️ هرچه فاصلهٔ اجرا کوتاه‌تر یا تعداد پروب/هر اجرا بیشتر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود. اگر ممکن است زمان بزرگ‌تری انتخاب کن.");
+  if (cfg.provider === "checkhost") return renderHostFilterSettingsCh(edit, kv, cfg);
+  return renderHostFilterSettingsGp(edit, kv, cfg);
+}
+
+function hfCommonSettingsKb(cfg) {
+  // تنظیمات مشترک هر دو سرویس
+  return [
+    // batch: تعداد بررسی در هر اجرا | maxchanges: حداکثر تعداد تعویض در هر اجرا
+    [{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }],
+    // recheck: تعداد بررسی مجدد پس از تشخیص فیلتر | recheckmin: فاصلهٔ بررسی مجدد
+    [{ text: "♻️ تعداد بررسی مجدد", callback_data: "hfsetedit:recheck" }, { text: "⏱ فاصلهٔ بررسی مجدد", callback_data: "hfsetedit:recheckmin" }],
+    // hfreal: روشن/خاموش کردن تعویض کانفیگ‌های REALITY/Fastly (پیش‌فرض: فقط هشدار)
+    [{ text: cfg.realityRotate ? "🔒 فقط هشدار REALITY/Fastly" : "🔄 تعویض REALITY/Fastly", callback_data: "hfreal" }],
+    // hfforeign: بررسی دسترسی خارج از ایران برای همهٔ ساب‌ها
+    [{ text: "🌍 بررسی دسترسی خارج همهٔ ساب‌ها", callback_data: "hfforeign" }],
+    // backupkeep: تعداد بکاپ‌های نگه‌داشته‌شده
+    [{ text: "💾 تعداد بکاپ", callback_data: "hfsetedit:backupkeep" }],
+  ];
+}
+
+async function renderHostFilterSettingsCh(edit, kv, cfg0) {
+  const cfg = cfg0 || (await getHostFilterCfg(kv));
+  const lines = ["⚙️ تنظیمات چک‌هاست", ""];
+  lines.push("⚠️ هرچه فاصلهٔ اجرا کوتاه‌تر یا تعداد هر اجرا بیشتر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) شود.");
   lines.push("");
-  lines.push("مقادیر قابل تغییر (با زدن روی هر مورد، عدد/گزینهٔ تازه را بفرست):");
-  lines.push("• 🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host (نیاز به رله)" : "Globalping"));
   lines.push("• ⏱ فاصلهٔ اجرا: " + cfg.intervalMin + " دقیقه");
-  if (cfg.provider === "checkhost") {
-    lines.push("• 🌆 شهرهای بررسی‌شده: " + cfg.citiesSel.join("، "));
-    lines.push("• 🎯 حداقل شهرهای فیلتر: " + cfg.cities);
-  } else {
-    lines.push("• 📡 تعداد پروب ایرانی: " + cfg.probes);
-    lines.push("• 🎯 حداقل پروب فیلتر: " + cfg.minFail);
-  }
+  lines.push("• 🌆 شهرهای بررسی‌شده: " + cfg.citiesSel.join("، "));
+  lines.push("• 🎯 حداقل شهرهای فیلتر: " + cfg.cities);
   lines.push("• 📶 حداکثر پینگ موفق مجاز: " + cfg.maxOk + " از ۴");
-  lines.push("• 🔁 تعداد بررسی مجدد پس از تشخیص فیلتر: " + cfg.recheckCount + " (۰ = تعویض فوری)");
+  lines.push("• 🔁 تعداد بررسی مجدد: " + cfg.recheckCount + " (۰ = تعویض فوری)");
   lines.push("• ⏱ فاصلهٔ بررسی مجدد: هر " + cfg.recheckMin + " دقیقه");
-  lines.push("• 🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
-  lines.push("• 🔒 کانفیگ‌های REALITY/Fastly: " + (cfg.realityRotate ? "🔄 تعویض" : "فقط هشدار (پیش‌فرض)"));
   lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
   lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
   lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
-  if (cfg.provider !== "checkhost") lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده"));
   const kb = [];
-  // hfsetprov: تغییر سرویس بررسی (check-host/Globalping)
-  kb.push([{ text: "🔌 تغییر سرویس", callback_data: "hfsetprov" }]);
-  // hfsetedit:<field>: ویرایش عددی هر فیلد تنظیمات (interval = فاصلهٔ اجرای بررسی)
   kb.push([{ text: "⏱ فاصلهٔ اجرا", callback_data: "hfsetedit:interval" }]);
-  if (cfg.provider === "checkhost") {
-    // hfcities: انتخاب شهرهای ایرانی بررسی‌شده | cities: حداقل تعداد شهر فیلتر برای تعویض | maxok: حداکثر پینگ موفق مجاز
-    kb.push([{ text: "🌆 انتخاب شهرها", callback_data: "hfcities" }]);
-    kb.push([{ text: "🎯 حداقل شهر", callback_data: "hfsetedit:cities" }, { text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
-  } else {
-    // probes: تعداد پروب ایرانی | minfail: حداقل پروب فیلتر | maxok: حداکثر پینگ موفق
-    kb.push([{ text: "📡 تعداد پروب", callback_data: "hfsetedit:probes" }, { text: "🎯 حداقل پروب فیلتر", callback_data: "hfsetedit:minfail" }]);
-    kb.push([{ text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
-  }
-  // batch: تعداد بررسی در هر اجرا | maxchanges: حداکثر تعداد تعویض در هر اجرا
-  kb.push([{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }]);
-  // recheck: تعداد بررسی مجدد پس از تشخیص فیلتر | recheckmin: فاصلهٔ بررسی مجدد
-  kb.push([{ text: "♻️ تعداد بررسی مجدد", callback_data: "hfsetedit:recheck" }, { text: "⏱ فاصلهٔ بررسی مجدد", callback_data: "hfsetedit:recheckmin" }]);
-  // hfreal: روشن/خاموش کردن تعویض کانفیگ‌های REALITY/Fastly (پیش‌فرض: فقط هشدار)
-  kb.push([{ text: cfg.realityRotate ? "🔒 فقط هشدار REALITY/Fastly" : "🔄 تعویض REALITY/Fastly", callback_data: "hfreal" }]);
-  // hfforeign: بررسی دسترسی خارج از ایران برای همهٔ ساب‌ها
-  kb.push([{ text: "🌍 بررسی دسترسی خارج همهٔ ساب‌ها", callback_data: "hfforeign" }]);
-  // hfsettoken: ثبت/حذف توکن Globalping (فقط وقتی سرویس Globalping است)
-  if (cfg.provider !== "checkhost") kb.push([{ text: "🔑 توکن Globalping", callback_data: "hfsettoken" }]);
-  // backupkeep: تعداد بکاپ‌های نگه‌داشته‌شده
-  kb.push([{ text: "💾 تعداد بکاپ", callback_data: "hfsetedit:backupkeep" }]);
+  // hfcities: انتخاب شهرهای ایرانی بررسی‌شده | cities: حداقل تعداد شهر فیلتر برای تعویض | maxok: حداکثر پینگ موفق مجاز
+  kb.push([{ text: "🌆 انتخاب شهرها", callback_data: "hfcities" }]);
+  kb.push([{ text: "🎯 حداقل شهر", callback_data: "hfsetedit:cities" }, { text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
+  kb.push(...hfCommonSettingsKb(cfg));
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function renderHostFilterSettingsGp(edit, kv, cfg0) {
+  const cfg = cfg0 || (await getHostFilterCfg(kv));
+  const lines = ["⚙️ تنظیمات گلوبال‌پینگ", ""];
+  lines.push("⚠️ هرچه فاصلهٔ اجرا کوتاه‌تر یا تعداد پروب/هر اجرا بیشتر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) شود.");
+  lines.push("");
+  lines.push("• ⏱ فاصلهٔ اجرا: " + cfg.intervalMin + " دقیقه");
+  lines.push("• 📡 تعداد پروب ایرانی: " + cfg.probes);
+  lines.push("• 🎯 حداقل پروب فیلتر: " + cfg.minFail);
+  lines.push("• 📶 حداکثر پینگ موفق مجاز: " + cfg.maxOk + " از ۴");
+  lines.push("• 🔁 تعداد بررسی مجدد: " + cfg.recheckCount + " (۰ = تعویض فوری)");
+  lines.push("• ⏱ فاصلهٔ بررسی مجدد: هر " + cfg.recheckMin + " دقیقه");
+  lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
+  lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
+  lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
+  lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده"));
+  const kb = [];
+  kb.push([{ text: "⏱ فاصلهٔ اجرا", callback_data: "hfsetedit:interval" }]);
+  // probes: تعداد پروب ایرانی | minfail: حداقل پروب فیلتر | maxok: حداکثر پینگ موفق
+  kb.push([{ text: "📡 تعداد پروب", callback_data: "hfsetedit:probes" }, { text: "🎯 حداقل پروب فیلتر", callback_data: "hfsetedit:minfail" }]);
+  kb.push([{ text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
+  // hfsettoken: ثبت/حذف توکن Globalping
+  kb.push([{ text: "🔑 توکن Globalping", callback_data: "hfsettoken" }]);
+  kb.push(...hfCommonSettingsKb(cfg));
   kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
   await edit(lines.join("\n"), kb);
 }
@@ -14500,7 +14540,7 @@ async function renderHostFilterSettings(edit, kv) {
 async function renderHostFilterCities(edit, kv) {
   const cfg = await getHostFilterCfg(kv);
   const kb = IR_CITIES.map((c) => [{ text: (cfg.citiesSel.includes(c) ? "✅ " : "⬜ ") + c, callback_data: "hfcityt:" + c }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hfset" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hfsetch" }]);
   await edit("🌆 کدام شهرها بررسی شوند؟\n(حداقل یک شهر باید فعال بماند؛ حداقل شهرها خودکار اصلاح می‌شود)", kb);
 }
 
