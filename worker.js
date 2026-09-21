@@ -35,9 +35,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 // ============================================================
 const RELEASE_NOTES = {
   "1.4.0": [
-    "↪️ فوروارد ایمیل در «ایمیل سازمانی»: هر ایمیل با یک دکمه به هر چت/یوزر (شناسه عددی یا @یوزرنیم، چند مقصد) فوروارد می‌شود",
+    "📩 فورواردینگ ایمیل (روتیـنگ کلادفلر) در «ایمیل سازمانی»: موقع وصل دامنه، حالت «فوروارد به ایمیل مقصد» — ایمیل‌های آینده مستقیم به آدرس مقصد می‌روند (مثلاً جیمیل). مقصد باید اول با لینک داخل ایمیل تأیید شود.",
     "🔗 لینک‌های داخل ایمیل قابل کلیک شدند + نمایش امن متن ایمیل (بدون خطای HTML)",
-    "🐛 رفع خطای «actions: must have actions» موقع زدن دکمه قطع در «ایمیل سازمانی»",
+    "🐛 رفع خطای «actions: must have actions» موقع زدن دکمه قطع catch-all (هم ایمیل سازمانی و هم ایمیل دامنه)",
   ],
   "1.3.9": [
     "📊 تله‌متری ناشناس: شمارش نصب‌های فعال فقط در تنظیمات ربات اصلی (بدون هیچ دیتای شخصی)",
@@ -7223,7 +7223,8 @@ async function renderInboxOne(edit, kv, accounts, token, id) {
 // ===================== ایمیل‌های جهانی (داخل ✨ فیچرهای جدید) =====================
 // ساختار ساده بدون گیجی سمت دامنه: هر دامنه با یک دکمه وصل/قطع می‌شود،
 // چند دامنه همزمان، صندوق هر دامنه جدا، و بازگشت همیشه به همین صفحه.
-// پرچم فعال بودن هر دامنه در KV است: fmail_on:<domain> = {acc, zone_id, zone_name}
+// پرچم‌ها: fmail_on:<domain> = {acc, zone_id, zone_name} دریافت در ربات
+//            fmail_fwd:<domain> = {acc, zone_id, zone_name, dest} فورواردینگ (روتیـگ ورودی)
 async function fmailActive(kv) {
   const out = [];
   try {
@@ -7238,27 +7239,55 @@ async function fmailActive(kv) {
   out.sort((a, b) => String(a.zone_name || "").localeCompare(String(b.zone_name || "")));
   return out;
 }
+async function fmailFwdActive(kv) {
+  const out = [];
+  try {
+    const l = await kv.list({ prefix: "fmail_fwd:", limit: 100 });
+    for (const k of (l && l.keys) || []) {
+      try {
+        const v = await kv.get(k.name, "json");
+        if (v && v.zone_id) out.push(v);
+      } catch (e) {}
+    }
+  } catch (e) {}
+  out.sort((a, b) => String(a.zone_name || "").localeCompare(String(b.zone_name || "")));
+  return out;
+}
 async function renderFmailHome(edit, kv, accounts, env) {
   const act = await fmailActive(kv);
-  const lines = ["✉️ ایمیل سازمانی", "", "ایمیل‌های دامنه‌هایت را اینجا در تلگرام ببین. هر دامنه را با یک دکمه وصل کن؛ چند دامنه همزمان می‌شود."];
+  const fwd = await fmailFwdActive(kv);
+  const lines = ["✉️ ایمیل سازمانی", "", "ایمیل‌های دامنه‌هایت را در ربات ببین یا به هر آدرس فوروارد کن."];
   const kb = [];
-  if (!act.length) {
+  if (!act.length && !fwd.length) {
     lines.push("", "📭 هنوز دامنه‌ای وصل نیست.");
   } else {
-    lines.push("", `📬 ${act.length} دامنه وصل است:`);
-    for (const a of act.slice(0, 20)) {
-      const dom = String(a.zone_name || "").toLowerCase();
-      let n = 0;
-      try {
-        n = await inboxCount(kv, dom);
-      } catch (e) {}
-      lines.push(`• ${a.zone_name}${n ? ` (${n} ✉️)` : ""}`);
-      kb.push([
-        { text: `📥 ${String(a.zone_name).slice(0, 24)}${n ? ` (${n})` : ""}`, callback_data: `fmailbox:${a.acc}:${a.zone_id}` },
-        { text: "❌ قطع", callback_data: `fmailoff:${a.acc}:${a.zone_id}` },
-      ]);
+    if (act.length) {
+      lines.push("", `📥 دریافت در ربات (${act.length}):`);
+      for (const a of act.slice(0, 20)) {
+        const dom = String(a.zone_name || "").toLowerCase();
+        let n = 0;
+        try {
+          n = await inboxCount(kv, dom);
+        } catch (e) {}
+        lines.push(`• ${a.zone_name}${n ? ` (${n} ✉️)` : ""}`);
+        kb.push([
+          { text: `📥 ${String(a.zone_name).slice(0, 24)}${n ? ` (${n})` : ""}`, callback_data: `fmailbox:${a.acc}:${a.zone_id}` },
+          { text: "❌ قطع", callback_data: `fmailoff:${a.acc}:${a.zone_id}` },
+        ]);
+      }
+      if (act.length > 20) lines.push(`… و ${act.length - 20} دامنه دیگر`);
     }
-    if (act.length > 20) lines.push(`… و ${act.length - 20} دامنه دیگر`);
+    if (fwd.length) {
+      lines.push("", `📩 فوروارد به ایمیل (${fwd.length}):`);
+      for (const f of fwd.slice(0, 20)) {
+        lines.push(`• ${f.zone_name} ← ${f.dest}`);
+        kb.push([
+          { text: `📩 ${String(f.zone_name).slice(0, 16)} ← ${String(f.dest).slice(0, 16)}`, callback_data: `fmailoff:${f.acc}:${f.zone_id}` },
+          { text: "❌ قطع", callback_data: `fmailoff:${f.acc}:${f.zone_id}` },
+        ]);
+      }
+      if (fwd.length > 20) lines.push(`… و ${fwd.length - 20} دامنه دیگر`);
+    }
   }
   kb.push([{ text: "➕ افزودن ایمیل (وصل دامنه جدید)", callback_data: "fmailadd", style: "success" }]);
   kb.push([
@@ -7270,19 +7299,20 @@ async function renderFmailHome(edit, kv, accounts, env) {
 }
 async function renderFmailAdd(edit, kv, accounts) {
   const act = await fmailActive(kv);
-  const onSet = new Set(act.map((a) => String(a.zone_id)));
+  const fwd = await fmailFwdActive(kv);
+  const onSet = new Set([...act.map((a) => String(a.zone_id)), ...fwd.map((f) => String(f.zone_id))]);
   let zones = [];
   try {
     zones = await getAllZones(accounts, kv);
   } catch (e) {}
   const rest = zones.filter((z) => !onSet.has(String(z.id)));
-  const lines = ["➕ وصل دامنه جدید", "", "یک دامنه را بزن تا همه ایمیل‌هایش به صندوق ربات بیایند:"];
+  const lines = ["➕ وصل دامنه جدید", "", "دامنه را بزن و حالت دریافت را انتخاب کن (صندوق ربات یا فوروارد به آدرس):"];
   const kb = [];
   if (!rest.length) {
-    lines.push("", zones.length ? "همه دامنه‌ها وصل‌اند." : "📭 دامنه‌ای پیدا نشد.");
+    lines.push("", zones.length ? "همه دامنه‌ها تنظم شده‌اند." : "📭 دامنه‌ای پیدا نشد.");
   } else {
     for (const z of rest.slice(0, 20)) {
-      kb.push([{ text: `➕ ${z.name}`, callback_data: `fmailon:${z._acc}:${z.id}`, style: "success" }]);
+      kb.push([{ text: `➕ ${z.name}`, callback_data: `fmode:${z._acc}:${z.id}`, style: "success" }]);
     }
     if (rest.length > 20) lines.push("", `… و ${rest.length - 20} دامنه دیگر`);
   }
@@ -7330,10 +7360,7 @@ async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
     linkifyAndEscape(body.slice(0, 2600)),
   ];
   await edit(lines.join("\n").slice(0, 3900), [
-    [
-      { text: "↪️ فوروارد", callback_data: `fmailfwd:${acc}:${zoneId}:${id}`, style: "primary" },
-      { text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" },
-    ],
+    [{ text: "🗑 حذف", callback_data: `fmaildel:${acc}:${zoneId}:${id}`, style: "danger" }],
     [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
   ]);
 }
@@ -7830,59 +7857,41 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
-  // ↪️ فوروارد ایمیل از «ایمیل سازمانی» به چت/یوزر دیگر
-  if (type === "fmail_fwd") {
+  // 📧 ایمیل سازمانی: ثبت مقصد جدید فورواردینگ (اول باید verify شود)
+  if (type === "fmail_dest_new") {
     await kv.delete(`pend:${chatId}`);
     const fw = (pending && pending.fw) || {};
-    const targets = String(txt)
-      .split(/[\s,،;]+/)
-      .filter(Boolean)
-      .map((x) => x.trim());
-    const parsed = targets.filter((x) => /^@\w{3,}$/.test(x) || /^-?\d{5,}$/.test(x));
-    if (!parsed.length) {
-      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 900 });
-      await send(
-        "❌ مقصد معتبر نیست. دوباره بفرست: @یوزرنیم یا شناسه عددی (چند تا با فاصله).",
-        [[{ text: "⬅️ انصراف", callback_data: `fmailview:${fw.acc}:${fw.zone}:${fw.id}` }]]
-      );
+    const email = txt.trim().toLowerCase();
+    if (!isEmailLike(email)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ ایمیل معتبر نیست. دوباره بفرستید:");
       return;
     }
-    let m = null;
+    const aid = await getAccountId(accounts, fw.acc);
+    if (!aid) {
+      await send("❌ شناسه اکانت پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      return;
+    }
+    const tok = accounts[fw.acc] && accounts[fw.acc].token;
+    if (!tok) {
+      await send("❌ اکانت پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      return;
+    }
+    let created = null;
     try {
-      m = await kv.get(`inbox:${String(fw.dom || "").toLowerCase()}:${fw.id}`, "json");
-    } catch (e) {}
-    if (!m) {
-      await send("❌ ایمیل در صندوق نیست (حذف/منقضی شده).", [[{ text: "📥 صندوق", callback_data: `fmailbox:${fw.acc}:${fw.zone}` }]]);
+      const r = await cfEmailSend(tok, "POST", `/accounts/${aid}/email/routing/addresses`, { email });
+      if (r.success && r.result) created = r.result;
+      else {
+        await send("❌ خطا:\n" + cfErrText(r));
+        return;
+      }
+    } catch (e) {
+      await send("❌ خطا در ساخت مقصد.");
       return;
     }
-    const body = decodeStoredPreview(m.preview) || "—";
-    const text = [
-      "📨 فوروارد ایمیل",
-      "",
-      `✉️ از: ${code(decodeRfc2047(m.from) || "—")}`,
-      `📮 به: ${code(m.to || "—")}`,
-      `📌 موضوع: ${code((decodeRfc2047(m.subject) || "—").slice(0, 150))}`,
-      `🕒 ${m.date || "—"}`,
-      "",
-      linkifyAndEscape(body.slice(0, 2600)),
-    ]
-      .join("\n")
-      .slice(0, 4000);
-    let ok = 0;
-    for (const d of parsed.slice(0, 8)) {
-      try {
-        const chat = /^-?\d+$/.test(d) ? Number(d) : d;
-        if (await (await sendMessage(botToken, chat, text)).ok) ok++;
-      } catch (e) {}
-    }
-    const kb = [
-      [{ text: "📥 صندوق", callback_data: `fmailbox:${fw.acc}:${fw.zone}` }, { text: "🏠 خانه", callback_data: "menu" }],
-    ];
-    if (ok) {
-      await send(`📩 برای ${ok} مقصد فوروارد شد${ok < parsed.length ? `؛ ${parsed.length - ok} ناموفق بود.` : ""}.`, kb);
-    } else {
-      await send("⚠️ فوروارد ناموفق بود (مقصد را از اول بفرست یا از دکمه برگرد).", kb);
-    }
+    await send(`✅ مقصد اضافه شد: ${code(email)}\n\n${created.verified ? "✅ تأییدشده" : "⏳ در انتظار تأیید — لینک داخل ایمیل را بزن، بعد با «فوروارد به ایمیل مقصد» آن را انتخاب کن."}`, [
+      [{ text: "📩 انتخاب مقصد", callback_data: `fmailfwd:${fw.acc}:${fw.zone}` }, { text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
+    ]);
     return;
   }
 
@@ -10296,10 +10305,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!session) return edit("⏳ نشست منقضی شده.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       try {
-        const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, { enabled: false });
+        const wname = (env && env.WORKER_NAME) || "";
+        const actions = wname ? [{ type: "worker", value: [wname] }] : [{ type: "drop", value: [] }];
+        const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, { enabled: false, actions });
         if (r.success) {
           try {
             await kv.delete(`fmail_on:${String(session.zone_name).toLowerCase()}`);
+            await kv.delete(`fmail_fwd:${String(session.zone_name).toLowerCase()}`);
           } catch (e) {}
         }
         await edit(r.success ? "📩 catch-all غیرفعال شد." : "❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
@@ -11170,27 +11182,93 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       }
       try {
         await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
+        await kv.delete(`fmail_fwd:${String(zone.name).toLowerCase()}`);
       } catch (e) {}
-      await edit(`📩 دریافت ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      await edit(`📩 دریافت/فوروارد ${code(zone.name)} قطع شد.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
-    } else if (data.startsWith("fmailfwd:")) {
-      // ↪️ فوروارد ایمیل به چت/یوزر دیگر (شناسه عددی یا @یوزرنیم، چند مقصد)
+    } else if (data.startsWith("fmode:")) {
+      // انتخاب حالت دریافت برای دامنه: صندوق ربات یا فورواردینگ به آدرس
       const parts = data.split(":");
       const acc = Number(parts[1]);
       const zoneId = parts[2];
-      const id = parts[3];
       const zone = await getZoneById(zoneId, acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
-      await kv.put(
-        `pend:${chatId}`,
-        JSON.stringify({ type: "fmail_fwd", fw: { acc, zone: zoneId, id, dom: String(zone.name).toLowerCase() } }),
-        { expirationTtl: 900 }
-      );
-      await edit(
-        "↪️ فوروارد ایمیل\n\nشناسه مقصد را بفرست (چند تا با فاصله یا کاما):\n• برای گروه خصوصی: شناسه عددی (منفی)\n• برای یوزر/کانال: @یوزرنیم\n• برای چت خصوصی: شناسه عددی",
-        [[{ text: "⬅️ انصراف", callback_data: `fmailview:${acc}:${zoneId}:${id}` }]]
-      );
+      await edit(`🔀 ${zone.name} — ایمیل‌ها چطور دریافت شوند؟\n\n• 📥 دریافت در ربات: در صندوق تلگرام ذخیره و اعلان می‌شود\n• 📩 فوروارد به ایمیل: مستقیم به آدرس مقصد می‌رود (روتیـنگ کلادفلر)`, [
+        [{ text: "📥 دریافت در ربات", callback_data: `fmailon:${acc}:${zoneId}`, style: "success" }],
+        [{ text: "📩 فوروارد به ایمیل مقصد", callback_data: `fmailfwd:${acc}:${zoneId}` }],
+        [{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
+      ]);
+    } else if (data.startsWith("fmailfwd:")) {
+      // فورواردینگ: انتخاب مقصد تأییدشده برای catch-all همان دامنه
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      const dd = await cfMailDests(accounts, { acc });
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      const verified = dd.list.filter((x) => x.verified);
+      const pendingD = dd.list.filter((x) => !x.verified);
+      const lines = [`📩 فوروارد ${code(zone.name)} به کدام آدرس؟`, ""];
+      const kb = [];
+      verified.slice(0, 10).forEach((d, i) => kb.push([{ text: `✅ ${d.email}`, callback_data: `fmailfwdc:${acc}:${zoneId}:${i}` }]));
+      if (pendingD.length) {
+        lines.push(`⏳ در انتظار تأیید: ${pendingD.slice(0, 3).map((d) => d.email).join("، ")}`);
+        lines.push("لینک داخل ایمیل تأیید را بزن، بعد برگرد.");
+      }
+      if (!verified.length) lines.push("هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.");
+      kb.push([{ text: "➕ مقصد جدید", callback_data: `fmailfwdnew:${acc}:${zoneId}` }]);
+      kb.push([{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]);
+      await edit(lines.join("\n"), kb);
+    } else if (data.startsWith("fmailfwdnew:")) {
+      // مقصد جدید: آدرس ایمیل باید اول در اکانت ثبت و تأیید شود
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "fmail_dest_new", fw: { acc, zone: zoneId, zname: zone.name } }), { expirationTtl: 600 });
+      await edit("📧 ایمیل مقصد (مثلاً جیمیل خودت) را بفرست؛ لینک تأیید به همان ایمیل می‌رود:", [
+        [{ text: "⬅️ انصراف", callback_data: `fmailfwd:${acc}:${zoneId}` }],
+      ]);
+    } else if (data.startsWith("fmailfwdc:")) {
+      // اعمال فورواردینگ: catch-all → forward به مقصد انتخاب‌شده
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const di = Number(parts[3]);
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      const dd = await cfMailDests(accounts, { acc });
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      const dest = dd.list.filter((x) => x.verified)[di];
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      const tok = accounts[acc] && accounts[acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      let r = null;
+      try {
+        r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, {
+          enabled: true,
+          actions: [{ type: "forward", value: [dest.email] }],
+        });
+      } catch (e) {
+        return edit("❌ خطا.", [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      }
+      if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      try {
+        await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
+        await kv.put(
+          `fmail_fwd:${String(zone.name).toLowerCase()}`,
+          JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name, dest: dest.email }),
+          { expirationTtl: 90 * 86400 }
+        );
+      } catch (e) {}
+      await edit(`📩 ${code(zone.name)} به ${code(dest.email)} فوروارد می‌شود.\n\n⚠️ ایمیل‌های آینده مستقیم به مقصد می‌روند و وارد صندوق ربات نمی‌شوند.`, [
+        [{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }],
+      ]);
+      await sleep(800);
+      await renderFmailHome(edit, kv, accounts, env);
     } else if (data.startsWith("fmailbox:")) {
       const parts = data.split(":");
       await renderFmailBox(edit, kv, Number(parts[1]), parts[2], accounts);
@@ -11215,6 +11293,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         zones = await getAllZones(accounts, kv);
       } catch (e) {}
       let on = 0;
+      let fwd = 0;
       for (const z of zones) {
         const tok = accounts[z._acc] && accounts[z._acc].token;
         if (!tok) continue;
@@ -11222,19 +11301,35 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           const c = await cfEmailGet(tok, `/zones/${z.id}/email/routing/rules/catch_all`);
           const ca = c.success && c.result ? c.result : null;
           const act = ca && (ca.actions || [])[0];
-          if (ca && ca.enabled && act && act.type === "worker") {
-            on++;
-            try {
-              await kv.put(`fmail_on:${String(z.name).toLowerCase()}`, JSON.stringify({ acc: z._acc, zone_id: z.id, zone_name: z.name }), { expirationTtl: 90 * 86400 });
-            } catch (e) {}
+          const dom = String(z.name).toLowerCase();
+          if (ca && ca.enabled && act) {
+            if (act.type === "worker") {
+              on++;
+              try {
+                await kv.put(`fmail_on:${dom}`, JSON.stringify({ acc: z._acc, zone_id: z.id, zone_name: z.name }), { expirationTtl: 90 * 86400 });
+                await kv.delete(`fmail_fwd:${dom}`);
+              } catch (e) {}
+            } else if (act.type === "forward") {
+              fwd++;
+              try {
+                await kv.put(`fmail_fwd:${dom}`, JSON.stringify({ acc: z._acc, zone_id: z.id, zone_name: z.name, dest: String((act.value || [])[0] || "") }), { expirationTtl: 90 * 86400 });
+                await kv.delete(`fmail_on:${dom}`);
+              } catch (e) {}
+            } else {
+              try {
+                await kv.delete(`fmail_on:${dom}`);
+                await kv.delete(`fmail_fwd:${dom}`);
+              } catch (e) {}
+            }
           } else {
             try {
-              await kv.delete(`fmail_on:${String(z.name).toLowerCase()}`);
+              await kv.delete(`fmail_on:${dom}`);
+              await kv.delete(`fmail_fwd:${dom}`);
             } catch (e) {}
           }
         } catch (e) {}
       }
-      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه وصل است.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
+      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه صندوق ربات + ${fwd} دامنه فوروارد.`, [[{ text: "🔙 ایمیل سازمانی", callback_data: "fmail" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "quota") {
