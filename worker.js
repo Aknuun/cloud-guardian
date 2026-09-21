@@ -2256,6 +2256,20 @@ async function sendMessage(botToken, chatId, text, keyboard) {
   return tg(botToken, "sendMessage", body);
 }
 
+// ارسال فایل (مثل CSV خروجی Termius) به چت
+async function sendDocument(botToken, chatId, filename, content, caption) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("document", new Blob([content], { type: "text/csv;charset=utf-8" }), filename);
+  if (caption) form.append("caption", String(caption).slice(0, 1000));
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+    method: "POST",
+    body: form,
+    signal: withTimeout(60000),
+  });
+  return res.json();
+}
+
 async function editMessage(botToken, chatId, messageId, text, keyboard) {
   const t = text.substring(0, 4000);
   const body = {
@@ -4818,6 +4832,77 @@ function srvListBtn(list) {
   return list.map((s, i) => [{ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }]);
 }
 
+// جمع‌آوری سرورهای هر سه دیتاسنتر برای «وارد کردن به سرورها»
+async function collectProviderServers(kv, env, hzAccounts, lnAccounts, arvanAccounts) {
+  const items = [];
+  const counts = { hz: 0, ln: 0, arvan: 0 };
+  for (const acc of hzAccounts || []) {
+    try {
+      const arr = (await hzGetAll(acc.token, "/servers")) || [];
+      counts.hz += arr.length;
+      for (const s of arr) {
+        const ip = s && s.public_net && s.public_net.ipv4 ? s.public_net.ipv4.ip : "";
+        if (!ip) continue;
+        items.push({ src: "hetzner", srcFa: "🇩🇪 هتزنر", name: s.name || ip, host: ip, port: 22, user: "root" });
+      }
+    } catch (e) {}
+  }
+  for (const acc of lnAccounts || []) {
+    try {
+      const arr = (await lnGetAll(acc.token, "/linode/instances")) || [];
+      counts.ln += arr.length;
+      for (const s of arr) {
+        const ip = s && s.ipv4 && s.ipv4[0];
+        if (!ip) continue;
+        items.push({ src: "linode", srcFa: "🟢 لینود", name: s.label || ip, host: ip, port: 22, user: "root" });
+      }
+    } catch (e) {}
+  }
+  for (let ai = 0; ai < (arvanAccounts || []).length; ai++) {
+    try {
+      const regs = (await arvanGetRegions(arvanAccounts[ai].token, kv, env)) || [];
+      for (const rg of regs) {
+        try {
+          const r = await arvanEccServers({ kv, env, arvanAccounts }, ai, rg.code);
+          if (r.error || !r.servers) continue;
+          counts.arvan += r.servers.length;
+          for (const s of r.servers) {
+            const ip = (s.pub && s.pub[0]) || (s.priv && s.priv[0]);
+            if (!ip || ip === "—") continue;
+            items.push({ src: "arvan", srcFa: "🇮🇷 آروان", name: s.name || ip, host: ip, port: 22, user: "root" });
+          }
+        } catch (e2) {}
+      }
+    } catch (e) {}
+  }
+  return { items, counts };
+}
+
+function csvEsc(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// خروجی CSV با قالب ایمپورت Termius: Groups,Label,Tags,Hostname/IP,Protocol,Port,Username,Password,SSH_KEY
+function buildTermiusCsv(list) {
+  const rows = [["Groups", "Label", "Tags", "Hostname/IP", "Protocol", "Port", "Username", "Password", "SSH_KEY"]];
+  for (const s of list || []) {
+    rows.push([
+      "Cloud Guardian",
+      s.name || s.host,
+      s.srcFa || "",
+      s.host || "",
+      "SSH",
+      s.port || 22,
+      s.user || "root",
+      s.auth === "pass" ? s.password || "" : "",
+      s.auth === "key" ? s.key || "" : "",
+    ]);
+  }
+  // BOM برای بازشدن درست فارسی در اکسل
+  return "﻿" + rows.map((r) => r.map(csvEsc).join(",")).join("\r\n");
+}
+
 async function renderServersHome(edit, kv, env) {
   const list = await getServersList(kv);
   const lines = [
@@ -4834,11 +4919,13 @@ async function renderServersHome(edit, kv, env) {
     { text: "📥 افزودن گروهی", callback_data: "srvaddbulk" },
     { text: "➕ افزودن سرور", callback_data: "srvadd" },
   ]);
+  kb.push([{ text: "📥 وارد کردن از دیتاسنترها", callback_data: "srvimport" }]);
   if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
   kb.push([
     { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
     { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
   ]);
+  if (list.length) kb.push([{ text: "📤 خروجی Termius (CSV)", callback_data: "srvtermius" }]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
@@ -7011,6 +7098,46 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     if (r.addedHosts.length) lines.push("", "🖧 افزوده‌شده:", ...r.addedHosts.map((h) => "• " + code(h)));
     if (r.skipped.length) lines.push("", `ℹ️ ${r.skipped.length} مورد تکراری بود و رد شد.`);
     await send(lines.join("\n"), [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "srv_import_pw") {
+    // رمز پیش‌فرض برای سرورهای واردشده از دیتاسنترها («-» یعنی بدون رمز)
+    await kv.delete(`pend:${chatId}`);
+    const fresh = (await kv.get(`srvimp:${chatId}`, "json")) || [];
+    const list = await getServersList(kv);
+    const have = new Set(list.map((s) => String(s.host || "").toLowerCase()));
+    const pw = txt === "-" ? "" : txt;
+    let added = 0;
+    let skipped = 0;
+    for (const f of fresh) {
+      const h = String((f && f.host) || "").toLowerCase();
+      if (!h || have.has(h)) {
+        skipped++;
+        continue;
+      }
+      have.add(h);
+      list.push({
+        id: makeToken() + makeToken(),
+        name: String((f && f.name) || h).slice(0, 60),
+        host: f.host,
+        port: 22,
+        user: "root",
+        note: `واردشده از ${(f && f.srcFa) || "دیتاسنتر"}`,
+        auth: pw ? "pass" : "none",
+        password: pw || "",
+        src: (f && f.src) || "",
+        created: Date.now(),
+      });
+      added++;
+    }
+    await saveServersList(kv, list);
+    await kv.delete(`srvimp:${chatId}`);
+    await send(
+      `✅ ${added} سرور وارد شد.${skipped ? ` (${skipped} تکراری رد شد)` : ""}` +
+        (pw ? "" : "\n\n⚠️ چون رمز ندادی، برای هر سرور از «✏️ ویرایش» احراز هویت را تنظیم کن."),
+      [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
+    );
     return;
   }
 
@@ -9530,6 +9657,51 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const back = await getRelayBack(kv, chatId);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url", back }), { expirationTtl: 900 });
       await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
+    } else if (data === "srvimport") {
+      // وارد کردن سرورهای هتزنر/لینود/آروان به لیست سرورها
+      await edit("⏳ در حال خواندن سرورها از دیتاسنترها…");
+      const found = await collectProviderServers(kv, env, hzAccounts, lnAccounts, arvanAccounts);
+      const list = await getServersList(kv);
+      const have = new Set(list.map((s) => String(s.host || "").toLowerCase()));
+      const fresh = found.items.filter((s) => !have.has(String(s.host).toLowerCase()));
+      await kv.put(`srvimp:${chatId}`, JSON.stringify(fresh), { expirationTtl: 3600 });
+      const lines = [
+        "📥 وارد کردن از دیتاسنترها",
+        "",
+        `🇩🇪 هتزنر: ${found.counts.hz} سرور`,
+        `🟢 لینود: ${found.counts.ln} سرور`,
+        `🇮🇷 آروان: ${found.counts.arvan} سرور`,
+        "",
+        fresh.length ? `✅ ${fresh.length} سرور جدید پیدا شد (تکراری‌ها رد می‌شوند).` : "ℹ️ سرور جدیدی نیست؛ همه قبلاً اضافه شده‌اند.",
+      ];
+      const kb = [];
+      if (fresh.length) kb.push([{ text: `📥 وارد کردن ${fresh.length} سرور`, callback_data: "srvimportgo" }]);
+      kb.push([{ text: "⬅️ انصراف", callback_data: "srv" }]);
+      await edit(lines.join("\n"), kb);
+    } else if (data === "srvimportgo") {
+      const fresh = (await kv.get(`srvimp:${chatId}`, "json")) || [];
+      if (!fresh.length) return edit("ℹ️ چیزی برای وارد کردن نیست.", [[{ text: "🔙 سرورها", callback_data: "srv" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_import_pw" }), { expirationTtl: 900 });
+      await edit(
+        `🔐 رمز پیش‌فرض root برای ${fresh.length} سرور جدید را بفرستید (یکی برای همه؛ اگر رمزها فرق دارند «-» بفرستید تا بعداً از «✏️ ویرایش» هر سرور تنظیم کنید):`,
+        [[{ text: "⬅️ انصراف", callback_data: "srv" }]]
+      );
+    } else if (data === "srvtermius") {
+      // خروجی CSV سرورها با قالب ایمپورت Termius
+      const list = await getServersList(kv);
+      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      const csv = buildTermiusCsv(list);
+      let fileOk = false;
+      try {
+        const r = await sendDocument(botToken, chatId, "cloud-guardian-termius.csv", csv, "📤 خروجی Termius");
+        fileOk = !!(r && r.ok);
+      } catch (e) {}
+      await edit(
+        fileOk
+          ? `✅ فایل CSV ${list.length} سرور فرستاده شد.\n\nدر Termius: صفحهٔ Hosts ← منوی New Host ← گزینهٔ Import ← گزینهٔ CSV ← فایل را بدهید.`
+          : "❌ ارسال فایل ناموفق بود. دوباره تلاش کنید.",
+        [[{ text: "🔙 سرورها", callback_data: "srv" }]]
+      );
     } else if (data === "srvadd") {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_add", step: "host", d: {} }), { expirationTtl: 900 });
