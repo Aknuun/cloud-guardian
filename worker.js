@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.27";
+const BOT_VERSION = "1.0.28";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.28": [
+    "📞 دکمهٔ «ارتباط با سازنده» به «⚙️ تنظیمات و راهنما» اضافه شد؛ پیام مشتری همراه مشخصات ربات (نام، ورکر، اکانت، نسخه و فرستنده) به ربات سازنده می‌رسد",
+  ],
   "1.0.27": [
     "🗑 «حذف رله فعلی» حالا همیشه در دسترس است؛ با تأیید، رله حذف می‌شود و پیام «✅ رله حذف شد» با وضعیت جدید نمایش داده می‌شود",
   ],
@@ -452,6 +455,13 @@ const RELEASE_NOTES = {
 // ۴) استثنا: جفت تأییدی (بله/انصراف) دوتایی در یک ردیف می‌ماند.
 // هدف: چت تمیز و جلوگیری از انباشت پیام‌های بلند.
 // ============================================================
+// 📞 ارتباط با سازنده — پیام مشتری به ربات سازنده فرستاده می‌شود.
+// روی ورکر سازنده یک اندپوینت POST /contact هست که پیام را همراه مشخصات
+// مشتری (نام ربات، ورکر، اکانت، نسخه، فرستنده) به ادمین همان ورکر می‌فرستد.
+// توکن ربات سازنده هیچ‌جا داخل کد نیست؛ فقط این اندپوینت صدا زده می‌شود.
+const CREATOR_CONTACT_URL = "https://cloud-guardian.aknuun.workers.dev/contact";
+const CREATOR_CONTACT_KEY = "cg-creator-9f3a7c1b2e64d8a0";
+// ============================================================
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LINODE_API = "https://api.linode.com/v4";
 const HETZNER_API = "https://api.hetzner.cloud/v1";
@@ -633,6 +643,32 @@ export default {
         console.error("NDHOOK_PARSE", String(e));
       }
       ctx.waitUntil(handleNodeEvent(token, payload, env, botToken));
+      return ok();
+    }
+
+    // 📞 ارتباط با سازنده: پیام مشتری + مشخصات ربات را به ادمینِ همین ورکر (سازنده) می‌فرستد
+    if (request.method === "POST" && url.pathname === "/contact") {
+      let c = {};
+      try {
+        c = await request.json();
+      } catch (e) {}
+      if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      const lines = [
+        "📞 پیام جدید از مشتری نگهبان ابری",
+        "",
+        "🤖 ربات: " + (c.bot_username ? "@" + c.bot_username : "—"),
+        "🖥 ورکر: " + (c.worker || "—"),
+        "🏢 اکانت کلادفلر: " + (c.account || "—"),
+        "🧩 نسخه: v" + (c.version || "—"),
+        "👤 فرستنده: " + (c.name || "—") + (c.username ? " (@" + c.username + ")" : ""),
+        "🆔 چت: " + (c.chat_id || "—") + (c.admin_id ? " · ادمین: " + c.admin_id : ""),
+        "",
+        "✉️ متن پیام:",
+        String(c.message || "—").slice(0, 3000),
+      ];
+      try {
+        await sendMessage(botToken, adminId, lines.join("\n"));
+      } catch (e) {}
       return ok();
     }
 
@@ -1193,7 +1229,9 @@ function settingsHomeText() {
     "• 🌐 تنظیم رله — وضعیت و مدیریت رلهٔ SSH (شخصی / رایگان / خودکار)\n" +
     "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n\n" +
     "📖 راهنما\n" +
-    "• راهنمای بخش‌ها — توضیح کامل هر بخش ربات"
+    "• راهنمای بخش‌ها — توضیح کامل هر بخش ربات\n\n" +
+    "📞 ارتباط با سازنده\n" +
+    "• پیامت را بفرست؛ همراه با مشخصات ربات (نام، ورکر، اکانت، نسخه) برای سازنده ارسال می‌شود."
   );
 }
 function settingsHomeKb() {
@@ -1202,7 +1240,10 @@ function settingsHomeKb() {
       { text: "🌐 تنظیم رله", callback_data: "settingsrelay", style: "primary" },
       { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
-    [{ text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" }],
+    [
+      { text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" },
+      { text: "📞 ارتباط با سازنده", callback_data: "contactcreator" },
+    ],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -6490,6 +6531,45 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   const type = pending.type;
   const txt = value.trim();
 
+  // 📞 ارتباط با سازنده: پیام را با مشخصات ربات به اندپوینت سازنده می‌فرستد
+  if (type === "contact_creator") {
+    await kv.delete(`pend:${chatId}`);
+    let uname = "";
+    try {
+      const me = await (await fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: withTimeout() })).json();
+      uname = (me && me.result && me.result.username) || "";
+    } catch (e) {}
+    const payload = {
+      key: CREATOR_CONTACT_KEY,
+      message: txt,
+      bot_username: uname,
+      worker: (env && env.WORKER_NAME) || "",
+      account: (env && env.WORKER_ACCOUNT_ID) || "",
+      version: BOT_VERSION,
+      name: (pending.sender && pending.sender.name) || "",
+      username: (pending.sender && pending.sender.username) || "",
+      chat_id: chatId,
+      admin_id: (env && env.ADMIN_ID) || "",
+    };
+    let sent = false;
+    try {
+      const r = await fetch(CREATOR_CONTACT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: withTimeout(15000),
+      });
+      sent = r && (r.ok || r.status === 200);
+    } catch (e) {}
+    await send(
+      sent
+        ? "✅ پیامت برای سازنده ارسال شد. ممنون 🙏"
+        : "⚠️ ارسال پیام الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
+      [[{ text: "🏠 خانه", callback_data: "menu" }]]
+    );
+    return;
+  }
+
   // ورودی‌های بخش آروان (کلید اکانت، مقدار رکورد، ساخت رکورد/سرور و...)
   if (type.startsWith("arvan_")) {
     await handleArvanPending(pending, txt, chatId, accounts, send, kv, botToken, env);
@@ -8084,6 +8164,18 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // تنظیم رله از داخل «تنظیمات و راهنما» — بازگشت به همان صفحه
       await setRelayBack(kv, chatId, "settings");
       await renderRelayHome(edit, kv, env, "settings");
+    } else if (data === "contactcreator") {
+      // contactcreator: شروع ارسال پیام به سازنده
+      const nm = [cb.from && cb.from.first_name, cb.from && cb.from.last_name].filter(Boolean).join(" ");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "contact_creator", sender: { name: nm, username: (cb.from && cb.from.username) || "" } }),
+        { expirationTtl: 900 }
+      );
+      await edit(
+        "📞 ارتباط با سازنده\n\nپیامت را همین‌جا بنویس و بفرست؛ همراه با مشخصات ربات (نام ربات، ورکر، اکانت کلادفلر، نسخه) برای سازنده ارسال می‌شود.",
+        [[{ text: "⬅️ انصراف", callback_data: "settings" }]]
+      );
     } else if (data === "help") {
       // help: نمایش صفحهٔ راهنما
       await edit(helpText(), helpKeyboard());
