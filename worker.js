@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.3.3";
+const BOT_VERSION = "1.3.4";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.3.4": [
+    "📥 دریافت ایمیل در ربات: علاوه بر فوروارد، می‌توانی یک آدرس را به «دریافت در ربات» وصل کنی تا متن ایمیل‌های ورودی در صندوق ورودی ربات ذخیره و نمایش داده شود (با اعلان خودکار به ادمین)",
+  ],
   "1.3.3": [
     "🔄 تعمیر آپدیت خودکار با تگ: چک نسخه با ETag انجام می‌شود تا سهمیهٔ ساعتی گیت‌هاب تمام نشود و تگ جدید همیشه دیده شود (دیگر نیازی به ریلیز نیست)",
   ],
@@ -879,6 +882,54 @@ export default {
         })
       );
       ctx.waitUntil(runReminders(env).catch((e) => console.error("REMIND", String(e))));
+    }
+  },
+
+  // 📥 دریافت ایمیل در ربات (Email Workers): قوانینی که action=worker دارند اینجا می‌آیند.
+  // متن در KV ذخیره می‌شود (inbox:<domain>:<id>) و به ادمین اعلان می‌رود.
+  async email(message, env, ctx) {
+    try {
+      const kv = env.BOT_KV;
+      const from = String(message.from || "");
+      const to = String(message.to || "");
+      let subject = "";
+      try {
+        subject = String((message.headers && message.headers.get("subject")) || "");
+      } catch (e) {}
+      const dom = inboxDomainOf(to);
+      const rawText = await readEmailRawText(message, 100 * 1024);
+      const preview = parseEmailPreview(rawText);
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const rec = {
+        id,
+        from: from.slice(0, 200),
+        to: to.slice(0, 200),
+        subject: subject.slice(0, 300),
+        date: new Date().toISOString(),
+        preview: preview.slice(0, 3000),
+        size: message.rawSize || rawText.length,
+      };
+      if (kv && dom) {
+        ctx.waitUntil(inboxPut(kv, dom, rec));
+      }
+      const botToken = env.BOT_TOKEN || BOT_TOKEN;
+      const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+      if (botToken && adminId) {
+        const lines = [
+          `📥 ایمیل جدید در ${dom || to}`,
+          "",
+          `✉️ از: ${from.slice(0, 200) || "—"}`,
+          `📮 به: ${to.slice(0, 200) || "—"}`,
+          `📌 موضوع: ${(subject || "—").slice(0, 200)}`,
+          "",
+          (preview || "—").slice(0, 1500),
+          "",
+          "برای دیدن کامل: دامنه ← ✉️ ایمیل ← 📥 صندوق ورودی",
+        ];
+        ctx.waitUntil(sendMessage(botToken, adminId, lines.join("\n").slice(0, 3900)));
+      }
+    } catch (e) {
+      console.error("INBOX_EMAIL", String((e && e.stack) || e));
     }
   },
 };
@@ -6569,20 +6620,31 @@ async function renderEmailHome(edit, kv, accounts, token) {
       if (c.success && c.result) catchAll = c.result;
     } catch (e) {}
     const customs = rules.filter((r) => !(r.matchers || []).some((mm) => mm.type === "all"));
-    lines.push("", `📧 ${customs.length} آدرس شخصی (فوروارد؛ صندوق نیست):`);
+    const workerRules = customs.filter((r) => ((r.actions || [])[0] || {}).type === "worker");
+    const fwdRules = customs.filter((r) => ((r.actions || [])[0] || {}).type !== "worker");
+    lines.push("", `📧 ${fwdRules.length} فوروارد + 📥 ${workerRules.length} دریافت در ربات:`);
     for (const r of customs.slice(0, 12)) {
       const m = (r.matchers || []).find((mm) => mm.type === "literal");
       const a = (r.actions || [])[0] || {};
-      lines.push(`• ${(m && m.value) || r.name || "?"} → ${((a.value || []).join(",")) || a.type || "؟"}`);
+      const dest = a.type === "worker" ? "📥 دریافت در ربات" : ((a.value || []).join(",") || a.type || "؟");
+      lines.push(`• ${(m && m.value) || r.name || "?"} → ${dest}`);
       kb.push([{ text: `🗑 ${((m && m.value) || r.name || r.id || "").slice(0, 32)}`, callback_data: `zmaildel:${token}:${r.id}` }]);
     }
     if (customs.length > 12) lines.push(`… و ${customs.length - 12} مورد دیگر`);
     const ca = catchAll && (catchAll.actions || [])[0];
     lines.push("", `📥 catch-all: ${catchAll ? (catchAll.enabled ? "✅ " + (((ca || {}).value || []).join(",") || (ca || {}).type) : "⏸ غیرفعال") : "—"}`);
+    let inboxN = 0;
+    try {
+      inboxN = await inboxCount(kv, session.zone_name);
+    } catch (e) {}
     kb.push([{ text: "➕ آدرس جدید", callback_data: `zmailadd:${token}`, style: "success" }]);
     kb.push([
       { text: "📥 catch-all", callback_data: `zmailcatch:${token}` },
       { text: "📧 مقصدها", callback_data: `zmaildests:${token}` },
+    ]);
+    kb.push([
+      { text: `📥 صندوق ورودی${inboxN ? ` (${inboxN})` : ""}`, callback_data: `zmailinbox:${token}` },
+      { text: "📩 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" },
     ]);
   }
   kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]);
@@ -6616,6 +6678,166 @@ async function renderMailDestPicker(edit, kv, accounts, token, forCatch, chatId)
   kb.push([{ text: "➕ مقصد جدید", callback_data: forCatch ? `zmailcnew:${token}` : `zmaildestnew:${token}` }]);
   kb.push([{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]);
   await edit(lines.join("\n"), kb);
+}
+
+// ===================== صندوق ورودی ایمیل (دریافت در ربات via Email Worker) =====================
+// ایمیل‌های ورودی که قانون worker دارند، توسط هندلر email() همین ورکر گرفته و اینجا در KV ذخیره می‌شوند.
+// کلیدها: inbox:<domain>:<id> = JSON پیام، inbox_idx:<domain> = آرایه idها (جدیدترین اول، سقف ۵۰).
+const INBOX_MAX = 50;
+function inboxDomainOf(addr) {
+  const d = String(addr || "").split("@")[1] || "";
+  return d.trim().toLowerCase();
+}
+async function inboxPut(kv, domain, rec) {
+  const dom = String(domain || "").toLowerCase();
+  if (!kv || !dom || !rec || !rec.id) return;
+  try {
+    await kv.put(`inbox:${dom}:${rec.id}`, JSON.stringify(rec), { expirationTtl: 90 * 86400 });
+  } catch (e) {}
+  try {
+    let idx = [];
+    try {
+      idx = (await kv.get(`inbox_idx:${dom}`, "json")) || [];
+    } catch (e) {}
+    if (!Array.isArray(idx)) idx = [];
+    idx = [rec.id, ...idx.filter((x) => x !== rec.id)].slice(0, INBOX_MAX);
+    await kv.put(`inbox_idx:${dom}`, JSON.stringify(idx), { expirationTtl: 90 * 86400 });
+  } catch (e) {}
+}
+async function inboxList(kv, domain, limit) {
+  const dom = String(domain || "").toLowerCase();
+  if (!kv || !dom) return [];
+  let idx = [];
+  try {
+    idx = (await kv.get(`inbox_idx:${dom}`, "json")) || [];
+  } catch (e) {}
+  if (!Array.isArray(idx)) return [];
+  const out = [];
+  for (const id of idx.slice(0, limit || 10)) {
+    try {
+      const r = await kv.get(`inbox:${dom}:${id}`, "json");
+      if (r) out.push(r);
+    } catch (e) {}
+  }
+  return out;
+}
+async function inboxCount(kv, domain) {
+  const dom = String(domain || "").toLowerCase();
+  if (!kv || !dom) return 0;
+  try {
+    const idx = (await kv.get(`inbox_idx:${dom}`, "json")) || [];
+    return Array.isArray(idx) ? idx.length : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+async function inboxDel(kv, domain, id) {
+  const dom = String(domain || "").toLowerCase();
+  if (!kv || !dom || !id) return;
+  try {
+    await kv.delete(`inbox:${dom}:${id}`);
+  } catch (e) {}
+  try {
+    let idx = (await kv.get(`inbox_idx:${dom}`, "json")) || [];
+    if (!Array.isArray(idx)) idx = [];
+    idx = idx.filter((x) => x !== id);
+    await kv.put(`inbox_idx:${dom}`, JSON.stringify(idx), { expirationTtl: 90 * 86400 });
+  } catch (e) {}
+}
+// استخراج متن خوانا از raw ایمیل: سعی در text/plain، وگرنه snippet تمیز از raw.
+function parseEmailPreview(rawText) {
+  let t = String(rawText || "");
+  if (!t) return "";
+  // جدا کردن بدنه از هدرها
+  const sep = t.search(/\r?\n\r?\n/);
+  let body = sep >= 0 ? t.slice(sep).trim() : t;
+  // اگر multipart است، اولین بخش text/plain را پیدا کن
+  try {
+    const m = body.match(/Content-Type:\s*text\/plain[^\n]*\n(?:[^\n]*\n)*?\r?\n([\s\S]{0,8000}?)(?=\r?\n--|\r?\nContent-Type:|$)/i);
+    if (m && m[1] && m[1].trim().length > 10) body = m[1].trim();
+  } catch (e) {}
+  // حذف تگ‌های HTML اگر html افتاد دستمان
+  body = body.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ");
+  if (/<[a-z][^>]*>/i.test(body) && body.length > 50) body = body.replace(/<[^>]+>/g, " ");
+  // decode چند entity رایج
+  body = body.replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+  body = body.replace(/\s+/g, " ").trim();
+  return body.slice(0, 3000);
+}
+async function readEmailRawText(message, maxBytes) {
+  const lim = maxBytes || 100 * 1024;
+  try {
+    const reader = message.raw.getReader();
+    const chunks = [];
+    let total = 0;
+    const dec = new TextDecoder("utf-8", { fatal: false });
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.length;
+        chunks.push(value);
+        if (total >= lim) break;
+      }
+    }
+    try {
+      reader.releaseLock();
+    } catch (e) {}
+    const buf = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
+    let off = 0;
+    for (const c of chunks) {
+      buf.set(c, off);
+      off += c.length;
+    }
+    return dec.decode(buf.slice(0, lim));
+  } catch (e) {
+    return "";
+  }
+}
+async function renderInboxList(edit, kv, accounts, token) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const dom = String(session.zone_name || "").toLowerCase();
+  const items = await inboxList(kv, dom, 10);
+  const lines = [`📥 صندوق ورودی ${session.zone_name}`, ""];
+  const kb = [];
+  if (!items.length) {
+    lines.push("📭 هنوز ایمیلی در ربات دریافت نشده.", "", "برای دریافت: «📩 دریافت در ربات» را بزن و یک آدرس را به ورکر وصل کن.");
+  } else {
+    lines.push(`📬 ${items.length} ایمیل آخر:`);
+    for (const m of items) {
+      const subj = (m.subject || "—").slice(0, 40);
+      const from = String(m.from || "?").slice(0, 30);
+      lines.push(`• ${subj} — ${from}`);
+      kb.push([{ text: `📨 ${(m.subject || m.from || m.id).slice(0, 32)}`, callback_data: `zmailview:${token}:${m.id}` }]);
+    }
+  }
+  kb.push([{ text: "📩 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" }]);
+  kb.push([{ text: "🔙 ایمیل", callback_data: `zmail:${token}` }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function renderInboxOne(edit, kv, accounts, token, id) {
+  const session = await kv.get(`s:${token}`, "json");
+  if (!session) return edit("⏳ نشست منقضی شده.");
+  const dom = String(session.zone_name || "").toLowerCase();
+  let m = null;
+  try {
+    m = await kv.get(`inbox:${dom}:${id}`, "json");
+  } catch (e) {}
+  if (!m) return edit("❌ ایمیل پیدا نشد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${token}` }]]);
+  const lines = [
+    `📨 ${(m.subject || "—").slice(0, 200)}`,
+    "",
+    `✉️ از: ${m.from || "—"}`,
+    `📮 به: ${m.to || "—"}`,
+    `🕒 ${m.date || "—"}`,
+    "",
+    (m.preview || "—").slice(0, 3000),
+  ];
+  await edit(lines.join("\n").slice(0, 3900), [
+    [{ text: "🗑 حذف", callback_data: `zmailvdel:${token}:${id}`, style: "danger" }],
+    [{ text: "📥 صندوق", callback_data: `zmailinbox:${token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${token}` }],
+  ]);
 }
 
 // ===================== ترافیک ساب‌ها (DNS Analytics: کوئری هر ساب در ۷ روز) =====================
@@ -8645,6 +8867,52 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  if (type === "mail_worker_addr") {
+    await kv.delete(`pend:${chatId}`);
+    const session = await kv.get(`s:${pending.token}`, "json");
+    if (!session) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    let addr = txt.trim().toLowerCase();
+    if (!addr.includes("@")) addr = addr + "@" + session.zone_name;
+    if (!isEmailLike(addr)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ آدرس معتبر نیست. دوباره بفرستید (مثلاً info):");
+      return;
+    }
+    const wname = (env && (env.WORKER_NAME || "")) || "";
+    if (!wname) {
+      await send("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن تا بایندینگ‌ها کامل شوند.", [
+        [{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
+      ]);
+      return;
+    }
+    const tok = accounts[session.acc] && accounts[session.acc].token;
+    if (!tok) {
+      await send("❌ اکانت پیدا نشد.");
+      return;
+    }
+    try {
+      const r = await cfEmailSend(tok, "POST", `/zones/${session.zone_id}/email/routing/rules`, {
+        name: addr.split("@")[0].slice(0, 60),
+        enabled: true,
+        matchers: [{ type: "literal", field: "to", value: addr }],
+        actions: [{ type: "worker", value: [wname] }],
+      });
+      if (r.success) {
+        await send(`✅ دریافت در ربات فعال شد:\n${code(addr)} → 📥 صندوق ورودی\n\nیک ایمیل تست به این آدرس بفرست؛ متن آن اینجا در «📥 صندوق ورودی» می‌آید و به ادمین هم اعلان می‌رسد.`, [
+          [{ text: "📥 صندوق ورودی", callback_data: `zmailinbox:${pending.token}` }, { text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }],
+        ]);
+      } else {
+        await send("❌ خطا:\n" + cfErrText(r), [[{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }]]);
+      }
+    } catch (e) {
+      await send("❌ خطا در ساخت قانون worker.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${pending.token}` }]]);
+    }
+    return;
+  }
+
   if (type === "mail_dest_new" || type === "mail_dest_new2") {
     await kv.delete(`pend:${chatId}`);
     const email = txt.trim().toLowerCase();
@@ -9381,6 +9649,37 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await edit("📧 ایمیل مقصد را بفرست؛ لینک تأیید به همان ایمیل می‌رود:", [
         [{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }],
       ]);
+    } else if (data.startsWith("zmailinbox:")) {
+      await renderInboxList(edit, kv, accounts, data.slice(11));
+    } else if (data.startsWith("zmailview:")) {
+      const m = data.match(/^zmailview:([^:]+):(.+)$/);
+      if (!m) return edit("❌ درخواست نامعتبر است.");
+      await renderInboxOne(edit, kv, accounts, m[1], m[2]);
+    } else if (data.startsWith("zmailvdel:")) {
+      const m = data.match(/^zmailvdel:([^:]+):(.+)$/);
+      if (!m) return edit("❌ درخواست نامعتبر است.");
+      const session = await kv.get(`s:${m[1]}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await inboxDel(kv, session.zone_name, m[2]);
+      await edit("✅ ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${m[1]}` }]]);
+      await sleep(800);
+      await renderInboxList(edit, kv, accounts, m[1]);
+    } else if (data.startsWith("zmailwadd:")) {
+      const token = data.slice(10);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const wname = (env && (env.WORKER_NAME || env.WORKER_NAME)) || "";
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_worker_addr", token }), { expirationTtl: 600 });
+      await edit(
+        `📩 دریافت در ربات — ${session.zone_name}\n\nآدرس را بفرست (مثلاً info یا info@damane.com).\nایمیل‌های این آدرس در «📥 صندوق ورودی» ربات ذخیره می‌شوند و به ادمین اعلان می‌آید.${wname ? "" : "\n\n⚠️ نام ورکر (WORKER_NAME) در بایندینگ‌ها پیدا نشد؛ ممکن است ساخت قانون fail شود."}`,
+        [[{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }]]
+      );
+    } else if (data.startsWith("zmailwgo:")) {
+      // ساخت قانون worker (رزرو؛ جریان اصلی از pend می‌آید)
+      const token = data.slice(9);
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      await renderEmailHome(edit, kv, accounts, token);
     } else if (data.startsWith("zpause:")) {
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
