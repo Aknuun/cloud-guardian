@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.24";
+const BOT_VERSION = "1.0.25";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.25": [
+    "🧹 متن مربوط به «نصب با توکن ثابت» از راهنمای رله در ربات حذف شد؛ فقط دستور نصب معمولی رله نمایش داده می‌شود",
+  ],
   "1.0.24": [
     "⚙️ دکمه‌های «راهنما» و «مدیریت ادمین» در یک دکمهٔ «تنظیمات و راهنما» ادغام شدند؛ داخلش دسته‌بندی: 🌐 تنظیم رله · 👥 مدیریت ادمین‌ها · ℹ️ راهنمای بخش‌ها",
   ],
@@ -994,11 +997,6 @@ async function ensureBotCommands(env, botToken, kv) {
   } catch (e) {}
 }
 
-// دستور نصب رلهٔ شخصی با «توکن ثابت» (توکن پیش‌فرض رلهٔ رایگان ربات = guardian-public)
-// — با --fixed توکن با آپدیت‌های بعدی عوض نمی‌شود.
-const RELAY_FIXED_CMD =
-  'curl -fsSL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\' -o /tmp/srv-relay-install.sh && sudo bash /tmp/srv-relay-install.sh --fixed';
-
 function helpText() {
   return (
     "ℹ️ راهنما\n\n" +
@@ -1089,8 +1087,6 @@ const HELP_GUIDE = {
     "• 🗑 حذف رله فعلی: رلهٔ شخصی را پاک کن (برمی‌گردد به حالت خودکار).\n\n" +
     "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
     code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') + "\n\n" +
-    "🔒 نصب با «توکن ثابت» (تا توکن با آپدیت عوض نشود — توکن پیش‌فرض رلهٔ رایگان):\n" +
-    code(RELAY_FIXED_CMD) + "\n\n" +
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.\n" +
     "• رلهٔ پیش‌فرض با دامنه است؛ اگر سرورش جابه‌جا شود فقط DNS عوض می‌شود و تو قطع نمی‌شوی.",
   arvan:
@@ -4197,8 +4193,6 @@ const SRV_RELAY_HINT =
   "🌐 ساده‌ترین راه: دکمهٔ «رلهٔ رایگان پیش‌فرض» — بدون نصب، وصل می‌شوی (رلهٔ مالک ربات که با دامنه است و قطع نمی‌شود).\n\n" +
   "🛠 یا نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
   code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
-  "\n\n🔒 یا نصب با «توکن ثابت» (تا توکن با آپدیت عوض نشود):\n" +
-  code(RELAY_FIXED_CMD) +
   "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
 const SRV_DEFAULTS = { cpuPct: 85, memPct: 85, diskPct: 90, enabled: true, cooldownMin: 60 };
 const SRV_MON_MIN_MS = 30 * 60000;
@@ -4361,9 +4355,6 @@ async function renderRelayHome(render, kv, env, back) {
     "",
     "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):",
     code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"'),
-    "",
-    "🔒 نصب با «توکن ثابت» (تا توکن با آپدیت عوض نشود — توکن پیش‌فرض رلهٔ رایگان):",
-    code(RELAY_FIXED_CMD),
     "",
     "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
   ];
