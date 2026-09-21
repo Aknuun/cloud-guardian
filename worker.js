@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.0.30";
+const BOT_VERSION = "1.0.31";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.0.31": [
+    "📞 ارتباط با سازنده دوطرفه شد: روی پیام مشتری دکمهٔ «↩️ پاسخ» برای سازنده اضافه شد و پاسخ به مشتری می‌رسد؛ مشتری هم می‌تواند «↩️ پاسخ» بدهد یا «✅ تأیید و پایان» بزند و گفتگو بسته شود",
+  ],
   "1.0.30": [
     "📞 در پیام «ارتباط با سازنده»، دیگر «ورکر» و «اکانت کلادفلر» نمایش داده نمی‌شود؛ دکمهٔ ارتباط با سازنده هم بی‌رنگ شد",
   ],
@@ -467,6 +470,23 @@ const RELEASE_NOTES = {
 // توکن ربات سازنده هیچ‌جا داخل کد نیست؛ فقط این اندپوینت صدا زده می‌شود.
 const CREATOR_CONTACT_URL = "https://cloud-guardian.yaram169.workers.dev/contact";
 const CREATOR_CONTACT_KEY = "cg-creator-9f3a7c1b2e64d8a0";
+
+// فقط مقصدهای امن (http/https و میزبان عمومی، نه IP خصوصی) برای پاسخ سازنده پذیرفته می‌شود
+function safeReplyUrl(u) {
+  const s = String(u || "").trim();
+  if (!/^https?:\/\/[a-z0-9][a-z0-9.\-]*/i.test(s)) return "";
+  let host = "";
+  try {
+    host = new URL(s).hostname.toLowerCase();
+  } catch (e) {
+    return "";
+  }
+  if (!host) return "";
+  if (host === "localhost" || host.endsWith(".local")) return "";
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return "";
+  if (/^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return "";
+  return s.replace(/\/+$/, "");
+}
 // ============================================================
 const CF_API = "https://api.cloudflare.com/client/v4";
 const LINODE_API = "https://api.linode.com/v4";
@@ -652,13 +672,23 @@ export default {
       return ok();
     }
 
-    // 📞 ارتباط با سازنده: پیام مشتری + مشخصات ربات را به ادمینِ همین ورکر (سازنده) می‌فرستد
+    // 📞 ارتباط با سازنده: پیام مشتری را به ادمینِ همین ورکر (سازنده) می‌فرستد
     if (request.method === "POST" && url.pathname === "/contact") {
       let c = {};
       try {
         c = await request.json();
       } catch (e) {}
       if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      const tid = String(c.tid || "");
+      if (tid) {
+        try {
+          await kv.put(
+            `ct:${tid}`,
+            JSON.stringify({ reply_url: String(c.reply_url || ""), chat_id: c.chat_id || "", bot_username: c.bot_username || "", name: c.name || "" }),
+            { expirationTtl: 7 * 86400 }
+          );
+        } catch (e) {}
+      }
       const lines = [
         "📞 پیام جدید از مشتری نگهبان ابری",
         "",
@@ -670,9 +700,38 @@ export default {
         "✉️ متن پیام:",
         String(c.message || "—").slice(0, 3000),
       ];
+      const kb = tid
+        ? [[
+            { text: "↩️ پاسخ", callback_data: `creply:${tid}`, style: "primary" },
+            { text: "✅ بستن", callback_data: `cclose:${tid}` },
+          ]]
+        : [];
       try {
-        await sendMessage(botToken, adminId, lines.join("\n"));
+        await sendMessage(botToken, adminId, lines.join("\n"), kb);
       } catch (e) {}
+      return ok();
+    }
+
+    // 📩 پاسخ سازنده به مشتری (روی ورکر مشتری اجرا می‌شود)
+    if (request.method === "POST" && url.pathname === "/contact-reply") {
+      let c = {};
+      try {
+        c = await request.json();
+      } catch (e) {}
+      if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      const chat = Number(c.chat_id) || 0;
+      if (chat) {
+        const tid = String(c.tid || "");
+        const kb = tid
+          ? [[
+              { text: "↩️ پاسخ", callback_data: `ccontinue:${tid}`, style: "primary" },
+              { text: "✅ تأیید و پایان", callback_data: `cclosec:${tid}` },
+            ]]
+          : [];
+        try {
+          await sendMessage(botToken, chat, "📩 پاسخ سازنده:\n\n" + String(c.message || "").slice(0, 3500), kb);
+        } catch (e) {}
+      }
       return ok();
     }
 
@@ -6536,19 +6595,25 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   const txt = value.trim();
 
   // 📞 ارتباط با سازنده: پیام را با مشخصات ربات به اندپوینت سازنده می‌فرستد
-  if (type === "contact_creator") {
+  if (type === "contact_creator" || type === "contact_reply_to_maker") {
     await kv.delete(`pend:${chatId}`);
     let uname = "";
     try {
       const me = await (await fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: withTimeout() })).json();
       uname = (me && me.result && me.result.username) || "";
     } catch (e) {}
+    let tid = (pending && pending.tid) || "";
+    if (!tid) tid = makeToken();
+    const replyUrl = String((await kv.get("self_url")) || "").replace(/\/+$/, "");
+    try {
+      await kv.put(`ct:${tid}`, JSON.stringify({ chat_id: chatId, active: true }), { expirationTtl: 7 * 86400 });
+    } catch (e) {}
     const payload = {
       key: CREATOR_CONTACT_KEY,
       message: txt,
+      tid,
+      reply_url: replyUrl,
       bot_username: uname,
-      worker: (env && env.WORKER_NAME) || "",
-      account: (env && env.WORKER_ACCOUNT_ID) || "",
       version: BOT_VERSION,
       name: (pending.sender && pending.sender.name) || "",
       username: (pending.sender && pending.sender.username) || "",
@@ -6571,6 +6636,32 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         : "⚠️ ارسال پیام الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
       [[{ text: "🏠 خانه", callback_data: "menu" }]]
     );
+    return;
+  }
+
+  // ↩️ سازنده در حال پاسخ به مشتری است
+  if (type === "creator_reply") {
+    await kv.delete(`pend:${chatId}`);
+    const tid = (pending && pending.tid) || "";
+    const th = tid ? await kv.get(`ct:${tid}`, "json") : null;
+    const dest = th && safeReplyUrl(th.reply_url);
+    if (!dest) {
+      await send("❌ مقصد مشتری پیدا نشد (شاید لینک نامعتبر یا منقضی شده).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      return;
+    }
+    let sent = false;
+    try {
+      const r = await fetch(dest + "/contact-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: CREATOR_CONTACT_KEY, tid, chat_id: th.chat_id, message: txt }),
+        signal: withTimeout(15000),
+      });
+      sent = r && (r.ok || r.status === 200);
+    } catch (e) {}
+    await send(sent ? "✅ پاسخ برای مشتری ارسال شد." : "⚠️ ارسال پاسخ ناموفق بود (شاید ربات مشتری آپدیت نیست).", [
+      [{ text: "🏠 خانه", callback_data: "menu" }],
+    ]);
     return;
   }
 
@@ -8177,9 +8268,34 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         { expirationTtl: 900 }
       );
       await edit(
-        "📞 ارتباط با سازنده\n\nپیامت را همین‌جا بنویس و بفرست؛ همراه با مشخصات ربات (نام ربات، ورکر، اکانت کلادفلر، نسخه) برای سازنده ارسال می‌شود.",
+        "📞 ارتباط با سازنده\n\nپیامت را همین‌جا بنویس و بفرست؛ همراه با مشخصات ربات برای سازنده ارسال می‌شود.",
         [[{ text: "⬅️ انصراف", callback_data: "settings" }]]
       );
+    } else if (data.startsWith("creply:")) {
+      // سازنده: نوشتن پاسخ برای مشتری
+      const tid = data.slice(7);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "creator_reply", tid }), { expirationTtl: 900 });
+      await edit("↩️ پاسخ به مشتری را بنویس و بفرست:", [[{ text: "⬅️ انصراف", callback_data: "menu" }]]);
+    } else if (data.startsWith("cclose:")) {
+      // سازنده: بستن گفتگو
+      const tid = data.slice(7);
+      try { await kv.delete(`ct:${tid}`); } catch (e) {}
+      await edit("✅ گفتگو بسته شد.", []);
+    } else if (data.startsWith("ccontinue:")) {
+      // مشتری: پاسخ دوباره به سازنده
+      const tid = data.slice(10);
+      const nm2 = [cb.from && cb.from.first_name, cb.from && cb.from.last_name].filter(Boolean).join(" ");
+      await kv.put(
+        `pend:${chatId}`,
+        JSON.stringify({ type: "contact_reply_to_maker", tid, sender: { name: nm2, username: (cb.from && cb.from.username) || "" } }),
+        { expirationTtl: 900 }
+      );
+      await edit("↩️ پاسخت را بنویس و بفرست؛ برای سازنده ارسال می‌شود:", [[{ text: "⬅️ انصراف", callback_data: "menu" }]]);
+    } else if (data.startsWith("cclosec:")) {
+      // مشتری: تأیید و پایان گفتگو
+      const tid = data.slice(8);
+      try { await kv.delete(`ct:${tid}`); } catch (e) {}
+      await edit("✅ گفتگو بسته شد. خوش باشی 👋", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "help") {
       // help: نمایش صفحهٔ راهنما
       await edit(helpText(), helpKeyboard());
