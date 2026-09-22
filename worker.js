@@ -3724,33 +3724,57 @@ async function redrawLbSettingsNav(kv, accounts, botToken, chatId, messageId, en
 
 // ===================== مرکز لود بالانسر (منوی فیچرها) =====================
 // لود بالانسر به معنای چند رکورد A/AAAA/CNAME هم‌نام روی یک ساب‌دامین است
-// که ترافیک بین‌شان پخش می‌شود.
+// که ترافیک بین‌شان پخش می‌شود. همهٔ دامنه‌ها مستقیم نشان داده می‌شوند.
 
-async function renderLbRoot(edit, kv, accounts, env) {
-  const lines = ["⚖️ لود بالانسر", "", "ترافیک را بین چند آی‌پی/دامنه پخش کنید.", "", "👤 اکانت را انتخاب کنید:"];
+const LB_PAGE = 18;
+
+async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
+  const all = await getAllZones(accounts, kv);
+  if (!all.length) {
+    return edit("⚖️ لود بالانسر\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 فیچرهای جدید", callback_data: "mons" }]]);
+  }
+  const flt = filter === undefined ? "all" : String(filter);
+  const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
+  const pages = Math.max(1, Math.ceil(zones.length / LB_PAGE));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+
+  const slice = zones.slice(page * LB_PAGE, page * LB_PAGE + LB_PAGE);
   const kb = [];
-  for (let i = 0; i < accounts.length; i++) {
-    kb.push([{ text: `👤 ${accounts[i].name}`, callback_data: `lbacc:${i}` }]);
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2 && j < slice.length; j++) {
+      const z = slice[j];
+      row.push({ text: `⚖️ ${z.name}`, callback_data: `lbz:${z._acc}:${z.id}` });
+    }
+    if (row.length < 2) row.push(EMPTY_BTN);
+    kb.push(row);
   }
-  kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
-}
 
-async function renderLbZones(edit, kv, accounts, acc, env) {
-  const account = accounts[acc];
-  if (!account) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 لود بالانسر", callback_data: "lb" }]]);
-  let zones = [];
-  try {
-    zones = (await getAllZones(accounts, kv)).filter((z) => z._acc === acc);
-  } catch (e) {}
-  if (!zones.length) {
-    return edit(`👤 ${account.name}\n\n📭 دامنه‌ای پیدا نشد.`, [
-      [{ text: "🔙 لود بالانسر", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }],
-    ]);
+  kb.push([
+    { text: flt === "all" ? "📁 ✅ همه اکانت‌ها" : "📁 همه اکانت‌ها", callback_data: "lbzf:all:0" },
+  ]);
+  for (let i = 0; i < accounts.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3 && j < accounts.length; j++) {
+      row.push({ text: flt === String(j) ? `👤 ✅ ${accounts[j].name}` : `👤 ${accounts[j].name}`, callback_data: `lbzf:${j}:0` });
+    }
+    kb.push(row);
   }
-  const kb = zones.map((z) => [{ text: `⚖️ ${z.name}`, callback_data: `lbz:${acc}:${z.id}` }]);
-  kb.push([{ text: "🔙 لود بالانسر", callback_data: "lb" }]);
-  await edit(`👤 ${account.name} — ${zones.length} دامنه:\n\nدامنه را انتخاب کنید:`, kb);
+  if (pages > 1) {
+    const nav = [];
+    nav.push(page > 0 ? { text: "⬅️", callback_data: `lbzf:${flt}:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: "🏠 خانه", callback_data: "mons" });
+    nav.push(page < pages - 1 ? { text: "➡️", callback_data: `lbzf:${flt}:${page + 1}` } : EMPTY_BTN);
+    kb.push(nav);
+  } else {
+    kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }]);
+  }
+  const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
+  let title = `⚖️ لود بالانسر — ${label}`;
+  if (pages > 1) title += ` — صفحه ${page + 1} از ${pages}`;
+  title += "\n\nترافیک را بین چند آی‌پی پخش کنید — روی دامنه کلیک کنید.";
+  await edit(title, kb);
 }
 
 async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env) {
@@ -3784,7 +3808,7 @@ async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env) {
     lines.push("📭 هنوز لود بالانسری تعریف نشده.");
   }
   kb.push([{ text: "➕ ساخت لود بالانسر جدید", callback_data: `lbznew:${acc}:${zoneId}` }]);
-  kb.push([{ text: "🔙 اکانت", callback_data: `lbacc:${acc}` }]);
+  kb.push([{ text: "🔙 لود بالانسر", callback_data: "lb" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
@@ -7547,41 +7571,57 @@ async function renderTrafficHome(edit, kv, accounts, token) {
 }
 
 // ===================== مرکز ترافیک سایتها (منوی فیچرها) =====================
-// برخلاف صفحهٔ ترافیک داخل رکوردها، اینجا نه‌تنها ساب‌های پرترافیک بلکه همهٔ
-// ساب‌ها حتی آن‌هایی که ۷ روز صفر بوده‌اند هم دیده می‌شوند (دستیابی کامل بدون سانسور).
+// همهٔ دامنه‌ها مستقیم نشان داده می‌شوند (مثل بخش کلودفلر) با دکمه‌های فیلتر اکانت پایین.
 
-const TRAF_PAGE = 25;
+const TRAF_PAGE = 18;
 
-async function renderTrafficRoot(edit, kv, accounts, env) {
-  let zones = [];
-  try {
-    zones = await getAllZones(accounts, kv);
-  } catch (e) {}
-  const lines = ["📊 ترافیک سایتها", "", "ترافیک ۷ روزهٔ DNS هر دامنه را ببینید — همهٔ ساب‌ها حتی صفرها.", "", "👤 اکانت را انتخاب کنید:"];
+async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
+  const all = await getAllZones(accounts, kv);
+  if (!all.length) {
+    return edit("📊 ترافیک سایتها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 فیچرهای جدید", callback_data: "mons" }]]);
+  }
+  const flt = filter === undefined ? "all" : String(filter);
+  const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
+  const pages = Math.max(1, Math.ceil(zones.length / TRAF_PAGE));
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+
+  const slice = zones.slice(page * TRAF_PAGE, page * TRAF_PAGE + TRAF_PAGE);
   const kb = [];
-  for (let i = 0; i < accounts.length; i++) {
-    const n = zones.filter((z) => z._acc === i).length;
-    kb.push([{ text: `👤 ${accounts[i].name} (${n})`, callback_data: `trac:${i}` }]);
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2 && j < slice.length; j++) {
+      const z = slice[j];
+      row.push({ text: `📊 ${z.name}`, callback_data: `traz:${z._acc}:${z.id}:0` });
+    }
+    if (row.length < 2) row.push(EMPTY_BTN);
+    kb.push(row);
   }
-  kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
-}
 
-async function renderTrafficAccount(edit, kv, accounts, acc, env) {
-  const account = accounts[acc];
-  if (!account) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ترافیک", callback_data: "traf" }]]);
-  let zones = [];
-  try {
-    zones = (await getAllZones(accounts, kv)).filter((z) => z._acc === acc);
-  } catch (e) {}
-  if (!zones.length) {
-    return edit(`👤 ${account.name}\n\n📭 دامنه‌ای در این اکانت پیدا نشد.`, [
-      [{ text: "🔙 ترافیک", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }],
-    ]);
+  kb.push([
+    { text: flt === "all" ? "📁 ✅ همه اکانت‌ها" : "📁 همه اکانت‌ها", callback_data: "trazf:all:0" },
+  ]);
+  for (let i = 0; i < accounts.length; i += 3) {
+    const row = [];
+    for (let j = i; j < i + 3 && j < accounts.length; j++) {
+      row.push({ text: flt === String(j) ? `👤 ✅ ${accounts[j].name}` : `👤 ${accounts[j].name}`, callback_data: `trazf:${j}:0` });
+    }
+    kb.push(row);
   }
-  const kb = zones.map((z) => [{ text: `📊 ${z.name}`, callback_data: `traz:${acc}:${z.id}:0` }]);
-  kb.push([{ text: "🔙 ترافیک", callback_data: "traf" }]);
-  await edit(`👤 ${account.name} — ${zones.length} دامنه:\n\nروی دامنه کلیک کنید تا همهٔ ساب‌ها (حتی صفرها) دیده شود:`, kb);
+  if (pages > 1) {
+    const nav = [];
+    nav.push(page > 0 ? { text: "⬅️", callback_data: `trazf:${flt}:${page - 1}` } : EMPTY_BTN);
+    nav.push({ text: "🏠 خانه", callback_data: "mons" });
+    nav.push(page < pages - 1 ? { text: "➡️", callback_data: `trazf:${flt}:${page + 1}` } : EMPTY_BTN);
+    kb.push(nav);
+  } else {
+    kb.push([{ text: "🔙 فیچرهای جدید", callback_data: "mons" }]);
+  }
+  const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
+  let title = `📊 ترافیک سایتها — ${label}`;
+  if (pages > 1) title += ` — صفحه ${page + 1} از ${pages}`;
+  title += "\n\nترافیک ۷ روزهٔ DNS را ببینید — روی دامنه کلیک کنید.";
+  await edit(title, kb);
 }
 
 async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) {
@@ -7598,7 +7638,7 @@ async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) 
         ? `❌ دسترسی Analytics نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Analytics → Read")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`
         : `❌ خطا در آمار:\n${t.error}`,
     ];
-    return edit(lines.join("\n"), [[{ text: "🔙 اکانت", callback_data: `trac:${acc}` }]]);
+    return edit(lines.join("\n"), [[{ text: "🔙 ترافیک", callback_data: "traf" }]]);
   }
   const records = await getRecords(zone, accounts, kv);
   const rows = records
@@ -7625,7 +7665,7 @@ async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) 
   else if (pg > 0) kb.push([{ text: "⬅️ قبلی", callback_data: `traz:${acc}:${zoneId}:${pg - 1}` }]);
   else if (pg < pages - 1) kb.push([{ text: "➡️ بعدی", callback_data: `traz:${acc}:${zoneId}:${pg + 1}` }]);
   if (zeros > 0) kb.push([{ text: `🗑 حذف ${zeros} ساب صفر`, callback_data: `trazdel:${acc}:${zoneId}`, style: "danger" }]);
-  kb.push([{ text: "🔙 اکانت", callback_data: `trac:${acc}` }]);
+  kb.push([{ text: "🔙 ترافیک", callback_data: "traf" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
@@ -10694,10 +10734,12 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         [{ text: "📊 ترافیک", callback_data: `ztraf:${token}` }, { text: "🔙 رکوردها", callback_data: `p:${token}:0` }],
       ]);
     } else if (data === "traf") {
-      await renderTrafficRoot(edit, kv, accounts, env);
-    } else if (data.startsWith("trac:")) {
-      const acc = Number(data.slice(5));
-      await renderTrafficAccount(edit, kv, accounts, acc, env);
+      await renderTrafficZones(0, "all", edit, kv, accounts, env);
+    } else if (data.startsWith("trazf:")) {
+      const parts = data.split(":");
+      const flt = parts[1];
+      const pg = Number(parts[2]) || 0;
+      await renderTrafficZones(pg, flt, edit, kv, accounts, env);
     } else if (data.startsWith("traz:")) {
       const parts = data.split(":");
       const acc = Number(parts[1]);
@@ -10722,7 +10764,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const tok = accounts[acc] && accounts[acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 ترافیک", callback_data: "traf" }]]);
       const t = await fetchTrafficCounts(tok, zoneId);
-      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 ترافیک", callback_data: `trac:${acc}` }]]);
+      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 ترافیک", callback_data: "traf" }]]);
       const records = await getRecords(zone, accounts, kv);
       const zeros = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !(t.counts[String(r.name || "").toLowerCase()] || 0));
       let ok = 0;
@@ -10739,13 +10781,18 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       }
       await invalidateCache(kv, zoneId);
       await edit(`✅ ${ok} از ${zeros.length} رکورد بدون ترافیک حذف شد.`, [
-        [{ text: "📊 ترافیک", callback_data: `traz:${acc}:${zoneId}:0` }, { text: "🔙 اکانت", callback_data: `trac:${acc}` }],
+        [{ text: "📊 ترافیک", callback_data: "traf" }],
       ]);
     } else if (data === "lb") {
-      await renderLbRoot(edit, kv, accounts, env);
+      await renderLbZonesList(0, "all", edit, kv, accounts, env);
+    } else if (data.startsWith("lbzf:")) {
+      const parts = data.split(":");
+      const flt = parts[1];
+      const pg = Number(parts[2]) || 0;
+      await renderLbZonesList(pg, flt, edit, kv, accounts, env);
     } else if (data.startsWith("lbacc:")) {
       const acc = Number(data.slice(7));
-      await renderLbZones(edit, kv, accounts, acc, env);
+      await renderLbZonesList(0, String(acc), edit, kv, accounts, env);
     } else if (data.startsWith("lbz:")) {
       const parts = data.split(":");
       const acc = Number(parts[1]);
@@ -10782,11 +10829,9 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!g || !g.backCb) return edit("⏳ نشست منقضی شده.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const parts = g.backCb.split(":");
       if (parts[0] === "lbz") {
-        const acc = Number(parts[1]);
-        const zoneId = parts[2];
-        await renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env);
+        await renderLbZonesList(0, "all", edit, kv, accounts, env);
       } else {
-        await renderLbRoot(edit, kv, accounts, env);
+        await renderLbZonesList(0, "all", edit, kv, accounts, env);
       }
     } else if (data.startsWith("selmode:")) {
       const token = data.slice(8);
