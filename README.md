@@ -80,13 +80,15 @@
 | ۲ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۳ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
-**Cloudflare API Token (only 1 permission required):**
+**توکن کلادفلر — فقط ۱ مجوز:**
 
-![Cloudflare Token Setup](docs/Screenshot_20260922-211710-edit-20260922211749.jpg)
+![تنظیم توکن](docs/Screenshot_20260922-211710-edit-20260922211749.jpg)
 
-Enable: `Account - API Tokens - Edit`
+۱. برو: https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
+۲. فعال کن: `Account → API Tokens → Edit`
+۳. `Continue → Create Token` → توکن `cfut_...` رو به اسکریپت بده
 
-> The script will auto-create the full token. Create at: https://dash.cloudflare.com/profile/api-tokens
+> بقیه مجوزها خودکار ساخته میشه.
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
