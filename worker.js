@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.2";
+const BOT_VERSION = "1.5.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.3": [
+    "🐛 رفع هنگ صفحه‌های بعدی لود بالانسر (callback_data بلندتر از سقف تلگرام) + دکمه‌های ساب خاکستری در لود بالانسر و ترافیک سایتها",
+  ],
   "1.5.2": [
     "⚖️ صفحهٔ ساب‌دامین‌های لود بالانسر ۳ ستونه و صفحه‌بندی شد (۱۵ ساب در هر صفحه)",
   ],
@@ -3906,7 +3909,8 @@ async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, page, env) {
         const name = slice[j];
         const short = name === zone.name ? "@" : String(name).slice(0, -(String(zone.name).length + 1));
         const label = short.length > 16 ? short.slice(0, 15) + "…" : short;
-        row.push({ text: label, callback_data: `lbgopen:${acc}:${zoneId}:${name}` });
+        // ایندکس عددی به‌جای اسم کامل تا callback_data از ۶۴ بایت تلگرام رد نشود (علت هنگ صفحه‌های بعد)
+        row.push({ text: label, callback_data: `lbgopen:${acc}:${zoneId}:${pg * LB_GROUPS_PAGE + j}`, style: "plain" });
       }
       kb.push(row);
     }
@@ -7703,7 +7707,7 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
     const row = [];
     for (let j = i; j < i + 2 && j < slice.length; j++) {
       const z = slice[j];
-      row.push({ text: `📊 ${z.name}`, callback_data: `traz:${z._acc}:${z.id}:0` });
+      row.push({ text: `📊 ${z.name}`, callback_data: `traz:${z._acc}:${z.id}:0`, style: "plain" });
     }
     if (row.length < 2) row.push(EMPTY_BTN);
     kb.push(row);
@@ -10920,9 +10924,19 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const parts = data.split(":");
       const acc = Number(parts[1]);
       const zoneId = parts[2];
-      const name = parts.slice(3).join(":");
       const zone = await getZoneById(zoneId, acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 لود بالانسر", callback_data: "lb" }]]);
+      let name = "";
+      if (/^\d+$/.test(String(parts[3] || "")) && parts.length === 4) {
+        try {
+          const recs = await getRecords(zone, accounts, kv);
+          const nms = [...new Set(recs.filter((r) => LB_TYPES.includes(r.type)).map((r) => r.name))].sort();
+          name = nms[Number(parts[3])] || "";
+        } catch (e) {}
+      } else {
+        name = parts.slice(3).join(":");
+      }
+      if (!name) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 لود بالانسر", callback_data: "lb" }]]);
       const tok = accounts[acc] && accounts[acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 لود بالانسر", callback_data: "lb" }]]);
       const sessionToken = makeToken();
