@@ -9,12 +9,11 @@ https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 - [x] **Account** → `Workers KV Storage` → **Edit**
 - [x] **Zone** → `DNS` → **Edit**
 - [x] **Zone** → `Zone Settings` → **Edit**
-- [x] **Zone** → `Cache Purge` → **Purge**
-- [x] **Zone** → `Email Routing Rules` → **Edit**
-- [x] **Account** → `Email Routing Addresses` → **Read**
-- [x] **Account** → `Email Routing Addresses` → **Edit**
-- [x] **Zone** → `Analytics` → **Read**
-- [x] **Account** → `Account Analytics` → **Read**
+- [x] **Zone** → `Cache Purge` → **Purge** _(اختیاری)_
+- [x] **Zone** → `Email Routing Rules` → **Edit** _(اختیاری)_
+- [x] **Account** → `Email Routing Addresses` → **Edit** _(اختیاری)_
+- [x] **Zone** → `Analytics` → **Read** _(اختیاری)_
+- [x] **Account** → `Account Analytics` → **Read** _(اختیاری)_
 
 > Account Resources = **All accounts** · Zone Resources = **All zones**
 
