@@ -41,253 +41,132 @@ hr()   { printf "${DIM}───────────────────
 # ============================================================
 t() {
   case "${CG_L:-fa}:$1" in
-    fa:e_curl)                 printf '%s' "curl نصب نیست." ;;
     en:e_curl)                 printf '%s' "curl is not installed." ;;
-    fa:e_python)               printf '%s' "python3 نصب نیست." ;;
     en:e_python)               printf '%s' "python3 is not installed." ;;
-    fa:e_download)             printf '%s' "دانلود فایل ناموفق بود." ;;
     en:e_download)             printf '%s' "Download failed." ;;
-    fa:e_bad_token)            printf '%s' "توکن نامعتبر است یا دسترسی لازم را ندارد." ;;
     en:e_bad_token)            printf '%s' "Token is invalid or lacks the required permissions." ;;
-    fa:e_tries)                printf '%s' "تلاش‌های ناموفق تمام شد." ;;
     en:e_tries)                printf '%s' "Too many failed attempts." ;;
-    fa:e_worker_name)          printf '%s' "نام ورکر نامعتبر است (حروف/عدد/-/_ تا ۶۳ کاراکتر)." ;;
     en:e_worker_name)          printf '%s' "Invalid worker name (letters/digits/-/_, up to 63 chars)." ;;
-    fa:e_account)              printf '%s' "Account ID لازم است." ;;
     en:e_account)              printf '%s' "Account ID is required." ;;
-    fa:e_bot_token)            printf '%s' "فرمت توکن نامعتبر است (باید شبیه 123456:AA... باشد)." ;;
     en:e_bot_token)            printf '%s' "Invalid token format (should look like 123456:AA...)." ;;
-    fa:e_admin)                printf '%s' "شناسه باید فقط عدد باشد." ;;
     en:e_admin)                printf '%s' "The ID must be numeric only." ;;
-    fa:e_config_missing)       printf '%s' "config.json پیدا نشد؛ اول نصب کن." ;;
     en:e_config_missing)       printf '%s' "config.json not found; run install first." ;;
-    fa:e_token_missing)        printf '%s' "token در config نیست." ;;
     en:e_token_missing)        printf '%s' "token is missing from config." ;;
-    fa:e_nothing_remove)       printf '%s' "config.json پیدا نشد؛ چیزی برای حذف نیست." ;;
     en:e_nothing_remove)       printf '%s' "config.json not found; nothing to remove." ;;
-    fa:e_deploy)               printf '%s' "دیپلوی ناموفق بود." ;;
     en:e_deploy)               printf '%s' "Deploy failed." ;;
-    fa:e_update)               printf '%s' "آپدیت ناموفق بود." ;;
     en:e_update)               printf '%s' "Update failed." ;;
-    fa:e_unknown)              printf '%s' "دستور نامشخص:" ;;
     en:e_unknown)              printf '%s' "Unknown command:" ;;
-    fa:e_root)                 printf '%s' "برای نصب رله باید با root اجرا کنی:" ;;
     en:e_root)                 printf '%s' "Relay install needs root:" ;;
-    fa:e_systemd)              printf '%s' "systemd لازم است." ;;
     en:e_systemd)              printf '%s' "systemd is required." ;;
 
-    fa:w_empty)                printf '%s' "توکن خالی است." ;;
     en:w_empty)                printf '%s' "Token is empty." ;;
-    fa:w_webhook)              printf '%s' "ست‌کردن وبهوک ناموفق بود:" ;;
     en:w_webhook)              printf '%s' "Failed to set webhook:" ;;
-    fa:w_cron)                 printf '%s' "نصب کرون ناموفق بود (اختیاری)." ;;
     en:w_cron)                 printf '%s' "Failed to install the cron job (optional)." ;;
-    fa:w_account_auto)         printf '%s' "تشخیص خودکار نشد." ;;
     en:w_account_auto)         printf '%s' "Auto-detection failed." ;;
-    fa:w_kv_delete)            printf '%s' "حذف KV ناموفق:" ;;
     en:w_kv_delete)            printf '%s' "Failed to delete KV:" ;;
-    fa:w_partial)              printf '%s' "بعضی مراحل حذف با خطا مواجه شد." ;;
     en:w_partial)              printf '%s' "Some uninstall steps failed." ;;
-    fa:w_subdomain)            printf '%s' "زیردامنهٔ workers.dev پیدا نشد؛ وبهوک را دستی ست کن." ;;
     en:w_subdomain)            printf '%s' "workers.dev subdomain not found; set the webhook manually." ;;
-    fa:w_manual_relay)         printf '%s' "config.json نیست؛ رله را دستی از منوی ربات («🖥 سرورها ← 🔧 تنظیم رله») ثبت کن." ;;
     en:w_manual_relay)         printf '%s' "No config.json; register the relay manually from the bot («🖥 Servers ← 🔧 Set relay»)." ;;
-    fa:w_relay_reg)            printf '%s' "ثبت خودکار ناموفق؛ دستی از منوی «🖥 سرورها ← 🔧 تنظیم رله» انجام بده." ;;
     en:w_relay_reg)            printf '%s' "Auto-register failed; do it manually from «🖥 Servers ← 🔧 Set relay»." ;;
 
-    fa:ok_token)               printf '%s' "توکن معتبر است." ;;
     en:ok_token)               printf '%s' "Token is valid." ;;
-    fa:ok_using_token)         printf '%s' "از توکن ذخیره‌شده/محیطی استفاده می‌شود." ;;
     en:ok_using_token)         printf '%s' "Using the stored/environment token." ;;
-    fa:ok_account)             printf '%s' "پیدا شد:" ;;
     en:ok_account)             printf '%s' "Found:" ;;
-    fa:ok_config)              printf '%s' "تنظیمات ذخیره شد (دسترسی 600 — فقط خودت)" ;;
     en:ok_config)              printf '%s' "Configuration saved (mode 600 — private)" ;;
-    fa:ok_deploy)              printf '%s' "ورکر با موفقیت دیپلوی شد." ;;
     en:ok_deploy)              printf '%s' "Worker deployed successfully." ;;
-    fa:ok_webhook)             printf '%s' "وبهوک تلگرام ست شد:" ;;
     en:ok_webhook)             printf '%s' "Telegram webhook set:" ;;
-    fa:ok_cron)                printf '%s' "کرون پشتیبانِ آپدیت خودکار نصب شد (هر ۱۰ دقیقه — فقط با تگ/ریلیز جدید)." ;;
     en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 10 min — new tags/releases only)." ;;
-    fa:ok_updated)             printf '%s' "ورکر آپدیت شد به نسخهٔ" ;;
     en:ok_updated)             printf '%s' "Worker updated to version" ;;
-    fa:ok_uninstalled)         printf '%s' "حذف کامل شد." ;;
     en:ok_uninstalled)         printf '%s' "Uninstall complete." ;;
-    fa:ok_cron_removed)        printf '%s' "کرون آپدیت خودکار حذف شد." ;;
     en:ok_cron_removed)        printf '%s' "Auto-update cron removed." ;;
-    fa:ok_files_removed)       printf '%s' "فایل‌های محلی پاک شدند." ;;
     en:ok_files_removed)       printf '%s' "Local files removed." ;;
-    fa:ok_relay_installed)     printf '%s' "رله روی این سرور نصب/آپدیت شد." ;;
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
 
-    fa:install_title)          printf '%s' "نصب نگهبان ابری (Cloud Guardian)" ;;
     en:install_title)          printf '%s' "Installing Cloud Guardian" ;;
-    fa:using_local)            printf '%s' "استفاده از فایل‌های محلی:" ;;
     en:using_local)            printf '%s' "Using local files:" ;;
-    fa:downloading)            printf '%s' "دانلود worker.js و deploy-tool.py از گیت‌هاب…" ;;
     en:downloading)            printf '%s' "Downloading worker.js and deploy-tool.py from GitHub…" ;;
-    fa:step_token)             printf '%s' "مرحلهٔ ۱ از ۶ — توکن کلادفلر" ;;
     en:step_token)             printf '%s' "Step 1 of 6 — Cloudflare token" ;;
-    fa:step_account)           printf '%s' "مرحلهٔ ۲ از ۶ — Account ID" ;;
     en:step_account)           printf '%s' "Step 2 of 6 — Account ID" ;;
-    fa:step_worker)            printf '%s' "مرحلهٔ ۳ از ۶ — نام ورکر" ;;
     en:step_worker)            printf '%s' "Step 3 of 6 — Worker name" ;;
-    fa:step_bot)               printf '%s' "مرحلهٔ ۴ از ۶ — ربات تلگرام" ;;
     en:step_bot)               printf '%s' "Step 4 of 6 — Telegram bot" ;;
-    fa:step_admin)             printf '%s' "مرحلهٔ ۵ از ۶ — شناسهٔ مدیر" ;;
     en:step_admin)             printf '%s' "Step 5 of 6 — Admin ID" ;;
-    fa:step_save)              printf '%s' "مرحلهٔ ۶ از ۶ — ذخیرهٔ تنظیمات" ;;
     en:step_save)              printf '%s' "Step 6 of 6 — Save configuration" ;;
-    fa:deploy_step)            printf '%s' "دیپلوی روی کلادفلر (KV + bindings + worker + cron + workers.dev)" ;;
     en:deploy_step)            printf '%s' "Deploying to Cloudflare (KV + bindings + worker + cron + workers.dev)" ;;
-    fa:reuse_token)            printf '%s' "توکن ذخیره‌شدهٔ قبلی استفاده شود؟ [Y/n] " ;;
     en:reuse_token)            printf '%s' "Reuse the previously stored token? [Y/n] " ;;
-    fa:verify_token)           printf '%s' "بررسی توکن…" ;;
     en:verify_token)           printf '%s' "Verifying token…" ;;
-    fa:detect_account)         printf '%s' "تشخیص خودکار Account ID…" ;;
     en:detect_account)         printf '%s' "Auto-detecting Account ID…" ;;
-    fa:acc_hint)               printf '%s' "از داشبورد: سمت راست، باکس API ← Account ID:" ;;
     en:acc_hint)               printf '%s' "From the dashboard: right sidebar, API box → Account ID:" ;;
-    fa:worker_prompt)          printf '%s' "نام ورکر [cloud-guardian]: " ;;
     en:worker_prompt)          printf '%s' "Worker name [cloud-guardian]: " ;;
-    fa:bot_hint)               printf '%s' "توکن ربات را از @BotFather بگیر (دستور /newbot)." ;;
     en:bot_hint)               printf '%s' "Get the bot token from @BotFather (command /newbot)." ;;
-    fa:bot_prompt)             printf '%s' "توکن ربات: " ;;
     en:bot_prompt)             printf '%s' "Bot token: " ;;
-    fa:admin_hint)             printf '%s' "شناسهٔ عددی خودت را از @userinfobot بگیر." ;;
     en:admin_hint)             printf '%s' "Get your numeric ID from @userinfobot." ;;
-    fa:admin_prompt)           printf '%s' "شناسهٔ عددی مدیر: " ;;
     en:admin_prompt)           printf '%s' "Numeric admin ID: " ;;
-    fa:relay_ask)              printf '%s' "رلهٔ SSH را روی همین سرور نصب کنم؟ (برای پایش/اجرای سرورها) [y/N] " ;;
     en:relay_ask)              printf '%s' "Install the SSH relay on this server? (for server monitoring/SSH) [y/N] " ;;
-    fa:done_title)             printf '%s' "نصب کامل شد — نگهبان ابری فعال است" ;;
     en:done_title)             printf '%s' "Install complete — Cloud Guardian is live" ;;
-    fa:done_worker)            printf '%s' "ورکر:" ;;
     en:done_worker)            printf '%s' "Worker:" ;;
-    fa:done_bot)               printf '%s' "از تلگرام به این ربات پیام بده و /start بزن:" ;;
     en:done_bot)               printf '%s' "Open Telegram, message this bot and press /start:" ;;
-    fa:done_sending)           printf '%s' "ارسال /start به ربات مشتری…" ;;
     en:done_sending)           printf '%s' "Sending /start to the customer's bot…" ;;
-    fa:done_tg_msg)            printf '%s' "✅ نصب نگهبان ابری کامل شد. برای دیدن منو و دکمه‌ها /start بزن." ;;
     en:done_tg_msg)            printf '%s' "✅ Cloud Guardian installed. Press /start to see the menu and buttons." ;;
-    fa:done_cfg)               printf '%s' "تنظیمات (محرمانه):" ;;
     en:done_cfg)               printf '%s' "Config (secret):" ;;
-    fa:done_status)            printf '%s' "وضعیت:" ;;
     en:done_status)            printf '%s' "Status:" ;;
-    fa:done_remove)            printf '%s' "حذف:" ;;
     en:done_remove)            printf '%s' "Uninstall:" ;;
-    fa:done_update)            printf '%s' "آپدیت:" ;;
     en:done_update)            printf '%s' "Update:" ;;
 
-    fa:tk_box)                 printf '%s' "🔑 ساخت توکن API کلادفلر" ;;
     en:tk_box)                 printf '%s' "🔑 Create a Cloudflare API token" ;;
-    fa:tk_opens)               printf '%s' "این لینک را در مرورگر باز کن:" ;;
     en:tk_opens)               printf '%s' "Open this link in your browser:" ;;
-    fa:tk_create)              printf '%s' "دکمهٔ Create Token → Create Custom Token" ;;
     en:tk_create)              printf '%s' "Click Create Token → Create Custom Token" ;;
-    fa:tk_perms)               printf '%s' "این ۱ دسترسی را اضافه کن (بقیه خودکار ساخته میشود):" ;;
-    en:tk_perms)               printf '%s' "Add this 1 permission (the script will auto-create the rest):" ;;
-    fa:tk_res)                 printf '%s' "و در پایین: Account Resources = All accounts · Zone Resources = All zones" ;;
+    en:tk_perms)               printf '%s' "Add these 10 permissions:" ;;
     en:tk_res)                 printf '%s' "Then below: Account Resources = All accounts · Zone Resources = All zones" ;;
-    fa:tk_copy)                printf '%s' "Continue → Create Token، توکن را کپی کن و اینجا بچسبان." ;;
     en:tk_copy)                printf '%s' "Continue → Create Token, copy the token and paste it here." ;;
-    fa:tk_visual)              printf '%s' "راهنمای تصویری:" ;;
     en:tk_visual)              printf '%s' "Visual guide:" ;;
-    fa:tk_token_prompt)        printf '%s' "توکن API کلادفلر را اینجا بچسبان: " ;;
     en:tk_token_prompt)        printf '%s' "Paste the Cloudflare API token here: " ;;
 
-    fa:tk_auto)            printf '%s' "اسکریپت بقیه دسترسی‌ها را خودش می‌سازد و توکن اصلی را ذخیره می‌کند." ;;
-    en:tk_auto)            printf '%s' "The script will auto-create the full token and save it." ;;
-
-    fa:upd_title)              printf '%s' "آپدیت نگهبان ابری" ;;
     en:upd_title)              printf '%s' "Updating Cloud Guardian" ;;
-    fa:upd_download)           printf '%s' "دانلود آخرین worker.js از گیت‌هاب…" ;;
     en:upd_download)           printf '%s' "Downloading the latest worker.js from GitHub…" ;;
-    fa:upd_versions)           printf '%s' "نسخهٔ فعلی: %s  →  نسخهٔ جدید: %s" ;;
     en:upd_versions)           printf '%s' "Current: %s  →  New: %s" ;;
 
-    fa:un_title)               printf '%s' "حذف نگهبان ابری" ;;
     en:un_title)               printf '%s' "Uninstalling Cloud Guardian" ;;
-    fa:un_warn)                printf '%s' "ورکر «%s» از کلادفلر حذف می‌شود (توقف کامل ربات)." ;;
     en:un_warn)                printf '%s' "Worker «%s» will be deleted from Cloudflare (bot stops completely)." ;;
-    fa:un_confirm)             printf '%s' "مطمئنی؟ [y/N] " ;;
     en:un_confirm)             printf '%s' "Are you sure? [y/N] " ;;
-    fa:un_canceled)            printf '%s' "لغو شد." ;;
     en:un_canceled)            printf '%s' "Cancelled." ;;
-    fa:un_keep_kv)             printf '%s' "KV namespace هم حذف شود؟ [Y/n] " ;;
     en:un_keep_kv)             printf '%s' "Delete the KV namespace too? [Y/n] " ;;
-    fa:un_removing)            printf '%s' "حذف ورکر…" ;;
     en:un_removing)            printf '%s' "Deleting worker…" ;;
-    fa:un_files_q)             printf '%s' "فایل‌های محلی هم پاک شوند؟ [Y/n] " ;;
     en:un_files_q)             printf '%s' "Delete the local files too? [Y/n] " ;;
-    fa:un_files_kept)          printf '%s' "فایل‌ها نگه داشته شدند:" ;;
     en:un_files_kept)          printf '%s' "Files kept:" ;;
 
-    fa:rl_title)               printf '%s' "نصب رلهٔ SSH (srv-relay)" ;;
     en:rl_title)               printf '%s' "Installing SSH relay (srv-relay)" ;;
-    fa:rl_download)            printf '%s' "دانلود اسکریپت نصب رله از مخزن…" ;;
     en:rl_download)            printf '%s' "Downloading the relay installer from the repo…" ;;
-    fa:rl_download_fail)       printf '%s' "دانلود اسکریپت رله ناموفق بود." ;;
     en:rl_download_fail)       printf '%s' "Failed to download the relay installer." ;;
-    fa:rl_installing)          printf '%s' "اجرای نصب رله (پورت %s)…" ;;
     en:rl_installing)          printf '%s' "Running relay installer (port %s)…" ;;
-    fa:rl_addr)                printf '%s' "آدرس رله:" ;;
     en:rl_addr)                printf '%s' "Relay URL:" ;;
-    fa:rl_token)               printf '%s' "توکن رله:" ;;
     en:rl_token)               printf '%s' "Relay token:" ;;
-    fa:rl_fw)                  printf '%s' "پورت باید از بیرون باز باشد:" ;;
     en:rl_fw)                  printf '%s' "The port must be open externally:" ;;
-    fa:rl_register_q)          printf '%s' "رله خودکار در ربات ثبت شود؟ (یک رکورد A روی زون کلادفلر می‌سازد) [y/N] " ;;
     en:rl_register_q)          printf '%s' "Auto-register the relay in the bot? (creates an A record on your Cloudflare zone) [y/N] " ;;
 
-    fa:st_title)               printf '%s' "وضعیت نگهبان ابری" ;;
     en:st_title)               printf '%s' "Cloud Guardian status" ;;
-    fa:ck_title)               printf '%s' "بررسی دسترسی‌های توکن کلادفلر" ;;
     en:ck_title)               printf '%s' "Checking Cloudflare token permissions" ;;
 
-    fa:usage_title)            printf '%s' "نگهبان ابری — راهنما" ;;
     en:usage_title)            printf '%s' "Cloud Guardian — help" ;;
-    fa:cmd_install)            printf '%s' "نصب کامل" ;;
     en:cmd_install)            printf '%s' "Full install" ;;
-    fa:cmd_update)             printf '%s' "آپدیت" ;;
     en:cmd_update)             printf '%s' "Update" ;;
-    fa:cmd_uninstall)          printf '%s' "حذف" ;;
     en:cmd_uninstall)          printf '%s' "Uninstall" ;;
-    fa:cmd_relay)              printf '%s' "رلهٔ SSH" ;;
     en:cmd_relay)              printf '%s' "SSH relay" ;;
-    fa:cmd_status)             printf '%s' "وضعیت" ;;
     en:cmd_status)             printf '%s' "Status" ;;
-    fa:cmd_check)              printf '%s' "بررسی توکن" ;;
     en:cmd_check)              printf '%s' "Check token" ;;
-    fa:cmd_help)               printf '%s' "راهنما" ;;
     en:cmd_help)               printf '%s' "Help" ;;
-    fa:usage_cf)               printf '%s' "توکن کلادفلر:" ;;
     en:usage_cf)               printf '%s' "Cloudflare token:" ;;
-    fa:usage_oneline)          printf '%s' "نصب یک‌خطی:" ;;
     en:usage_oneline)          printf '%s' "One-line install:" ;;
-    fa:step_perms)             printf '%s' "بررسی دسترسی‌های توکن کلادفلر" ;;
     en:step_perms)             printf '%s' "Checking Cloudflare token permissions" ;;
-    fa:perm_box)               printf '%s' "توکن bootstrap ناقص است" ;;
-    en:perm_box)               printf '%s' "Bootstrap token missing API Tokens Edit" ;;
-    fa:perm_body)              printf '%s' "این ۱ دسترسی را روی توکن بده (Account Resources = All accounts):" ;;
-    en:perm_body)              printf '%s' "Grant this 1 permission (Account Resources = All accounts):" ;;
-    fa:perm_fix)               printf '%s' "توکن را از این لینک ویرایش/بساز:" ;;
+    en:perm_box)               printf '%s' "Cloudflare token permissions are missing or wrong" ;;
+    en:perm_body)              printf '%s' "Grant these 10 permissions on your token (Account Resources = All accounts · Zone Resources = All zones):" ;;
     en:perm_fix)               printf '%s' "Edit/create the token here:" ;;
-    fa:perm_continue)          printf '%s' "با این حال ادامه بدهم؟ [y/N] " ;;
     en:perm_continue)          printf '%s' "Continue anyway? [y/N] " ;;
-    fa:perm_abort)             printf '%s' "نصب متوقف شد. توکن را درست کن و دوباره اجرا کن." ;;
     en:perm_abort)             printf '%s' "Install aborted. Fix the token and run again." ;;
-    fa:menu_title)             printf '%s' "نگهبان ابری — منوی اصلی" ;;
     en:menu_title)             printf '%s' "Cloud Guardian — main menu" ;;
-    fa:menu_exit)              printf '%s' "خروج" ;;
     en:menu_exit)              printf '%s' "Exit" ;;
-    fa:menu_choose)            printf '%s' "یک گزینه انتخاب کن: " ;;
     en:menu_choose)            printf '%s' "Choose an option: " ;;
-    fa:menu_invalid)           printf '%s' "گزینهٔ نامعتبر." ;;
     en:menu_invalid)           printf '%s' "Invalid option." ;;
-    fa:menu_back)              printf '%s' "اینتر بزن تا به منو برگردی" ;;
     en:menu_back)              printf '%s' "Press Enter to return to the menu" ;;
-    fa:offer_install)          printf '%s' "می‌خواهی الان نصب کامل انجام شود؟ [y/N] " ;;
     en:offer_install)          printf '%s' "Start a full install now? [y/N] " ;;
     *)                         printf '%s' "$1" ;;
   esac
@@ -308,11 +187,7 @@ done
 if [ "${#POS[@]}" -gt 0 ]; then set -- "${POS[@]}"; else set --; fi
 
 set_language() {
-  case "${LANG_SEL:-}" in
-    en|EN|En|English|english)       CG_L=en ;;
-    fa|FA|fa_ir|Fa|Persian|persian) CG_L=fa ;;
-    *)                              CG_L=en ;;
-  esac
+  CG_L=en
 }
 LANG_SEL="${CG_LANG:-$LANG_ARG}"
 set_language
@@ -356,56 +231,6 @@ fetch_files() {
 verify_token() {
   curl -sS --max-time 30 -H "Authorization: Bearer $1" "$API/user/tokens/verify" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print('ok' if d.get('success') and (d.get('result') or {}).get('status')=='active' else 'bad')" 2>/dev/null || echo bad
-}
-
-create_deploy_token() {
-  local boot="$1"
-  local name="cloud-guardian-$(date +%s)"
-  local resp tmpjson
-  tmpjson=$(mktemp)
-  cat > "$tmpjson" <<EOF
-{
-  "name": "$name",
-  "policies": [
-    {"effect":"allow","resources":{"com.cloudflare.api.account.zone.*":"*"},"permissionGroups":[
-      {"id":"4755a26eedb94da69e1066d98aa820be"},
-      {"id":"3030687196b94b638145a3953da2b699"},
-      {"id":"e17beae8b8cb423a99b1730f21238bed"},
-      {"id":"79b3ec0d10ce4148a8f8bdc0cc5f97f2"}
-    ]},
-    {"effect":"allow","resources":{"com.cloudflare.api.account.*":"*"},"permissionGroups":[
-      {"id":"e086da7e2179491d91ee5f35b3ca210a"},
-      {"id":"f7f0eda5697f475c90846e879bab8666"},
-      {"id":"e4589eb09e63436686cd64252a3aebeb"},
-      {"id":"b89a480218d04ceb98b4fe57ca29dc1f"}
-    ]}
-  ]
-}
-EOF
-  resp=$(curl -sS --max-time 30 -X POST -H "Authorization: Bearer $boot" -H "Content-Type: application/json" "$API/user/tokens" --data-binary @"$tmpjson" 2>/dev/null)
-  rm -f "$tmpjson"
-  echo "$resp" > "$DIR/.last_token_create.json" 2>/dev/null || true
-  python3 -c "import sys,json;d=json.load(sys.stdin); print(d.get('result',{}).get('value','') if d.get('success') else '')" <<<"$resp" 2>/dev/null
-}
-maybe_auto_create_token() {
-  local boot="$1"
-  if ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box >/dev/null 2>&1 ); then
-    return 0
-  fi
-  b "توکن Bootstrap تشخیص داده شد — در حال ساخت توکن اصلی با 10 دسترسی..."
-  b "Bootstrap detected — creating full deploy token..."
-  local newtok
-  newtok=$(create_deploy_token "$boot")
-  if [ -n "$newtok" ] && [ "${#newtok}" -gt 20 ]; then
-    ok "توکن اصلی ساخته شد (auto-created)"
-    TOKEN="$newtok"
-    if [ "$(verify_token "$TOKEN")" = "ok" ]; then
-      ok "$(t ok_token) (deploy token)"
-      return 0
-    fi
-  fi
-  warn "ساخت خودکار ناموفق — با همان توکن bootstrap ادامه میدهم (ممکن است deploy خطا دهد)"
-  return 1
 }
 detect_account() {
   curl -sS --max-time 30 -H "Authorization: Bearer $1" "$API/accounts?per_page=50" \
@@ -523,7 +348,16 @@ _tk_guide_block() {
   printf "        %s\n" "$(link "$CF_TOKENS_URL")"
   printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
   printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
-  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}     · ${GREEN}Edit${RST} ${DIM}(فقط همین یکی)${RST}\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n"
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
 }
 cf_token_guide() {
@@ -538,7 +372,16 @@ cf_perm_error() {
   printf "${RED}${BOLD}  │${RST}  ⛔ ${BOLD}%s${RST}\n" "$(t perm_box)"
   printf "${RED}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  %s\n\n" "$(t perm_body)"
-  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}          · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n\n"
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
@@ -573,8 +416,6 @@ do_install() {
   else
     ok "$(t ok_using_token)"
   fi
-
-  maybe_auto_create_token "$TOKEN" || true
 
   step "$(t step_account)"
   local ACC="${ACCOUNT_ID:-}"
