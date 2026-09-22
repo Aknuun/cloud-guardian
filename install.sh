@@ -172,6 +172,8 @@ t() {
     en:existing_found)         printf '%s' "Existing install found" ;;
     en:update_instead)         printf '%s' "Update instead of full install? [Y/n] " ;;
     en:auto_update)            printf '%s' "Config exists - running update instead of full install." ;;
+    en:boot_title)             printf '%s' "Setting up Cloudflare credentials" ;;
+    en:boot_saved)             printf '%s' "Credentials saved (mode 600 - private)" ;;
     *)                         printf '%s' "$1" ;;
   esac
 }
@@ -578,8 +580,7 @@ do_install() {
 do_update() {
   printf "\n${MAG}${BOLD}🔄 %s${RST}\n" "$(t upd_title)"; hr
   need_tools
-  load_cfg
-  need_config_or_install || return 0
+  ensure_ctx full || return 0
   [ -n "$CFG_TOKEN" ] || { err "$(t e_token_missing)"; exit 1; }
   mkdir -p "$DIR"; chmod 700 "$DIR" 2>/dev/null || true
   b "$(t upd_download)"
@@ -615,8 +616,7 @@ do_update() {
 do_uninstall() {
   printf "\n${MAG}${BOLD}🗑️  %s${RST}\n" "$(t un_title)"; hr
   need_tools
-  load_cfg
-  [ -f "$CFG" ] || { err "$(t e_nothing_remove)"; exit 1; }
+  ensure_ctx full || return 0
   warn "$(printf "$(t un_warn)" "$CFG_WORKER")"
   local a; read -rp "  $(t un_confirm)" a
   [[ "${a,,}" == "y" ]] || { echo "$(t un_canceled)"; exit 0; }
@@ -687,19 +687,107 @@ ensure_tool_only() {
   fi
   return 0
 }
-# اگر config نیست، به‌جای خطا، نصب کامل را پیشنهاد بده
-need_config_or_install() {
-  if [ -f "$CFG" ]; then return 0; fi
-  warn "$(t e_config_missing)"
-  if [ -t 0 ]; then
-    local a; read -rp "  $(t offer_install)" a
-    if [[ "${a,,}" == "y" ]]; then do_install; else return 1; fi
+# Standard credential bootstrap: when no usable local config exists, ask for the
+# Cloudflare token up front (like full install does), auto-detect the account,
+# ask the worker name (+ bot/admin for deploy commands) and save config.json —
+# so update/uninstall/status/check work without a prior install.
+# Mode "basic" stops after the worker name (enough for status/check).
+bootstrap_creds() {
+  local mode="${1:-full}" tries=0
+  printf "\n${MAG}${BOLD}🔑 %s${RST}\n" "$(t boot_title)"; hr
+  mkdir -p "$DIR"; chmod 700 "$DIR" 2>/dev/null || true
+  load_cfg
+  TOKEN="${CF_TOKEN:-$CFG_TOKEN}"
+  if [ -z "$TOKEN" ]; then
+    cf_token_guide
+    while :; do
+      read -rp "  🔑 $(t tk_token_prompt)" TOKEN || TOKEN=""
+      [ -n "$TOKEN" ] || { warn "$(t w_empty)"; continue; }
+      b "$(t verify_token)"
+      if [ "$(verify_token "$TOKEN")" = "ok" ]; then ok "$(t ok_token)"; break; fi
+      err "$(t e_bad_token)"
+      tries=$((tries+1)); [ "$tries" -ge 3 ] && { err "$(t e_tries)"; return 1; }
+    done
   else
-    return 1
+    ok "$(t ok_using_token)"
   fi
+  ACC="${ACCOUNT_ID:-$CFG_ACCOUNT}"
+  if [ -z "$ACC" ]; then
+    b "$(t detect_account)"
+    ACC="$(detect_account "$TOKEN")"
+    if [ -n "$ACC" ]; then
+      ok "$(t ok_account) $ACC (${CF_DASH_URL}/${ACC})"
+    else
+      warn "$(t w_account_auto)"
+      printf "     %s %s\n" "$(t acc_hint)" "$(link "$CF_DASH_URL")"
+      read -rp "  Account ID: " ACC || ACC=""
+    fi
+  fi
+  [ -n "$ACC" ] || { err "$(t e_account)"; return 1; }
+  WORKER="${WORKER_NAME:-${CFG_WORKER:-}}"
+  if [ -z "$WORKER" ]; then
+    read -rp "  $(t worker_prompt)" WORKER || WORKER=""
+    WORKER="${WORKER:-cloud-guardian}"
+  fi
+  [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ ]] || { err "$(t e_worker_name)"; return 1; }
+  BOT="${BOT_TOKEN:-$CFG_BOT}"
+  ADMIN="${ADMIN_ID:-$CFG_ADMIN}"
+  if [ "$mode" = "full" ]; then
+    if [ -z "$BOT" ]; then
+      printf "  %s\n" "$(t bot_hint)"
+      while :; do
+        read -rp "  🤖 $(t bot_prompt)" BOT || BOT=""
+        [[ "$BOT" =~ ^[0-9]{5,}:[A-Za-z0-9_-]{25,}$ ]] && break
+        err "$(t e_bot_token)"; BOT=""
+      done
+    fi
+    if [[ ! "${ADMIN:-}" =~ ^[0-9]+$ ]] || [ "${ADMIN:-0}" = "0" ]; then
+      ADMIN=""
+      printf "  %s\n" "$(t admin_hint)"
+      while :; do
+        read -rp "  🆔 $(t admin_prompt)" ADMIN || ADMIN=""
+        [[ "$ADMIN" =~ ^[0-9]+$ ]] && break
+        err "$(t e_admin)"; ADMIN=""
+      done
+    fi
+  fi
+  write_cfg
+  chmod 700 "$DIR" 2>/dev/null || true
+  ok "$(t boot_saved): $CFG"
 }
-do_status() { printf "\n${MAG}${BOLD}📊 %s${RST}\n" "$(t st_title)"; hr; ensure_tool_only; need_config_or_install || return 0; ( cd "$DIR" && python3 deploy-tool.py status ); printf '\n'; }
-do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; need_config_or_install || return 0; ( cd "$DIR" && python3 deploy-tool.py check ); printf '\n'; }
+ctx_complete() {
+  [ -n "$CFG_TOKEN" ] && [ -n "$CFG_ACCOUNT" ] && [ -n "$CFG_WORKER" ] || return 1
+  [ "$1" = "basic" ] && return 0
+  [ -n "$CFG_BOT" ] || return 1
+  [[ "$CFG_ADMIN" =~ ^[0-9]+$ ]] && [ "$CFG_ADMIN" != "0" ] || return 1
+  return 0
+}
+# Ensure a usable config for management commands: stored config first, then a
+# silent fill from env (automation friendly), then interactive bootstrap.
+ensure_ctx() {
+  local mode="${1:-full}"
+  load_cfg
+  if ctx_complete "$mode"; then return 0; fi
+  if [ -n "${CF_TOKEN:-}" ] && [ -n "${ACCOUNT_ID:-}" ] && [ -n "${WORKER_NAME:-}" ]; then
+    if [ "$mode" = "basic" ] || { [ -n "${BOT_TOKEN:-}" ] && [ -n "${ADMIN_ID:-}" ]; }; then
+      TOKEN="$CF_TOKEN" ACC="$ACCOUNT_ID" WORKER="$WORKER_NAME"
+      BOT="${BOT_TOKEN:-}" ADMIN="${ADMIN_ID:-0}"
+      mkdir -p "$DIR"; chmod 700 "$DIR" 2>/dev/null || true
+      write_cfg
+      load_cfg
+      if ctx_complete "$mode"; then return 0; fi
+    fi
+  fi
+  if [ -t 0 ]; then
+    bootstrap_creds "$mode" || return 1
+    load_cfg
+    return 0
+  fi
+  warn "$(t e_config_missing)"
+  return 1
+}
+do_status() { printf "\n${MAG}${BOLD}📊 %s${RST}\n" "$(t st_title)"; hr; ensure_tool_only; ensure_ctx basic || return 0; ( cd "$DIR" && python3 deploy-tool.py status ); printf '\n'; }
+do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; ensure_ctx basic || return 0; ( cd "$DIR" && python3 deploy-tool.py check ); printf '\n'; }
 
 usage() {
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t usage_title)"; hr
@@ -760,12 +848,8 @@ main_menu() {
 cmd=""
 if [ "$#" -gt 0 ]; then cmd="$1"; shift; fi
 ensure_deps
-# Bare run (no command): a locally-saved script on a terminal shows the menu,
-# but a remote one-liner (bash -c "$(curl...)") goes straight to update/install
-# with no menu and no questions when possible.
 if [ -z "$cmd" ]; then
-  case "${BASH_SOURCE[0]:-}" in ""|/dev/fd/*) REMOTE_RUN=1 ;; *) REMOTE_RUN="" ;; esac
-  if [ -z "$REMOTE_RUN" ] && [ -t 0 ] && [ -t 1 ]; then
+  if [ -t 0 ] && [ -t 1 ]; then
     main_menu
     exit 0
   fi
