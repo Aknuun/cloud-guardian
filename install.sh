@@ -760,8 +760,12 @@ main_menu() {
 cmd=""
 if [ "$#" -gt 0 ]; then cmd="$1"; shift; fi
 ensure_deps
+# Bare run (no command): a locally-saved script on a terminal shows the menu,
+# but a remote one-liner (bash -c "$(curl...)") goes straight to update/install
+# with no menu and no questions when possible.
 if [ -z "$cmd" ]; then
-  if [ -t 0 ] && [ -t 1 ]; then
+  case "${BASH_SOURCE[0]:-}" in ""|/dev/fd/*) REMOTE_RUN=1 ;; *) REMOTE_RUN="" ;; esac
+  if [ -z "$REMOTE_RUN" ] && [ -t 0 ] && [ -t 1 ]; then
     main_menu
     exit 0
   fi
@@ -775,5 +779,6 @@ case "$cmd" in
   status|s)            do_status ;;
   check|c)             do_check ;;
   help|-h|--help)      usage ;;
+  menu|m)                main_menu ;;
   *) err "$(t e_unknown) $cmd"; usage; exit 1 ;;
 esac
