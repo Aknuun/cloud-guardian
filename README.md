@@ -15,10 +15,17 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian
 
 > همین دستور بدون هیچ متغیر اضافی با مقادیر پیش‌فرض نصب میکنه — همون چیزی که میخواستید.
 
-## نصب با توکن ثابت (هیچوقت عوض نمیشه)
+## نصب با توکن/پورت دلخواه
 
 ```bash
-sudo SRV_RELAY_TOKEN=AknuunFixedToken2024 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
+# توکن دلخواه
+sudo SRV_RELAY_TOKEN=mySecret123 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
+
+# پورت دلخواه
+sudo SRV_RELAY_PORT=9090 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
+
+# هر دو
+sudo SRV_RELAY_TOKEN=mySecret123 SRV_RELAY_PORT=9090 bash srv-relay-install.sh
 ```
 
 ## بررسی وضعیت
