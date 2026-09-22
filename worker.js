@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.6";
+const BOT_VERSION = "1.5.7";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.7": [
+    "🖥 صفحه آمار سرور دکمه‌ای شد: ۴ ستونه خاکستری (آی‌پی / CPU / RAM / دیسک) به‌جای متن طولانی",
+  ],
   "1.5.6": [
     "🆕 گزارش لحظه‌ای نصب جدید برای سازنده (ربات، ورکر، ورژن، ادمین) + فهرست اعضا ۳۰تایی با دکمهٔ هر کاربر",
     "👤 صفحهٔ مشخصات هر عضو: ورژن/آپدیت، وضعیت سهمیهٔ ورکر + دکمهٔ ارسال پیام به کاربر + کرون ساعتی بررسی سهمیه",
@@ -12590,11 +12593,37 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال جمع‌آوری آمار…");
       const st = await srvRelayStats(kv, env, s);
-      const txt = srvStatsText(s, st);
-      await edit(txt, [
-        [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
-        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
-      ]);
+      if (!st || st.error) {
+        const txt = srvStatsText(s, st);
+        await edit(txt, [
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+        ]);
+      } else {
+        const upD = Math.floor((st.uptimeS || 0) / 86400);
+        const upH = Math.floor(((st.uptimeS || 0) % 86400) / 3600);
+        const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
+        const fmtGb = (mb) => (mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB");
+        const shortIp = String(s.host || "").slice(0, 15);
+        const txt = `📊 ${s.name}
+⏱ ${upD} روز و ${upH} ساعت`;
+        await edit(txt, [
+          [
+            { text: `🌐 ${shortIp}`, callback_data: "noop", style: "plain" },
+            { text: `⚙️ ${st.cpu.pct}%`, callback_data: "noop", style: "plain" },
+            { text: `🧠 ${memPct}%`, callback_data: "noop", style: "plain" },
+            { text: `🗄 ${st.disk.pct}`, callback_data: "noop", style: "plain" },
+          ],
+          [
+            { text: `⚙️ ${st.cpu.cores} هسته`, callback_data: "noop", style: "plain" },
+            { text: `🧠 ${fmtGb(st.mem.usedMb)}/${fmtGb(st.mem.totalMb)}`, callback_data: "noop", style: "plain" },
+            { text: `🗄 ${st.disk.used}/${st.disk.total}`, callback_data: "noop", style: "plain" },
+            { text: `⏱ ${upD}r ${upH}h`, callback_data: "noop", style: "plain" },
+          ],
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+        ]);
+      }
     } else if (data.startsWith("srvreboot:")) {
       const i = Number(data.slice(10));
       const list = await getServersList(kv);
