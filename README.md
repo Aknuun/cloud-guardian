@@ -28,7 +28,7 @@
 │   ├── 🖥 مانیتور سرورها · 🔥 گزارش بدمصرف
 │   ├── 🔐 مانیتور SSL · ☁️ سهمیه کلادفلر
 │   ├── ⏰ یادآورها · 🗓 انقضای دامنه
-│   ├── 📊 ترافیک سایتها · ⚖️ لود بالانسر
+│   ├── 📊 ترافیک ساب‌ها · ⚖️ لود بالانسر IP
 │   └── ✉️ ایمیل سازمانی + 📩 فوروارد
 └── ⚙️ تنظیمات و راهنما ── 👥 ادمین‌ها · 📊 آمار نصب‌ها · 📢 پیام همگانی
 ```
@@ -93,8 +93,8 @@
 6. Zone · Email Routing Rules · Edit — برای ایمیل سازمانی و فوروارد
 7. Account · Email Routing Addresses · Read — برای انتخاب مقصد فوروارد
 8. Account · Email Routing Addresses · Edit — برای افزودن مقصد جدید
-9. Zone · Analytics · Read — برای ترافیک سایتها
-10. Account · Account Analytics · Read — برای ترافیک سایتها
+9. Zone · Analytics · Read — برای ترافیک ساب‌ها
+10. Account · Account Analytics · Read — برای ترافیک ساب‌ها
 
 🔗 **ساخت توکن کلادفلر:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` (Account Resources = All accounts، Zone Resources = All zones).
 
