@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.7";
+const BOT_VERSION = "1.5.8";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.8": [
+    "🛡 آپدیت خودکار مطمئن به آخرین نسخه: اگر تگ وسط راه جابه‌جا شود کش بررسی تازه‌سازی می‌شود تا ربات روی نسخهٔ میانی گیر نکند + پیام آپدیت تغییرات همهٔ نسخه‌های جامانده را نشان می‌دهد",
+  ],
   "1.5.7": [
     "🖥 صفحه آمار سرور دکمه‌ای شد: ۴ ستونه خاکستری (آی‌پی / CPU / RAM / دیسک) به‌جای متن طولانی",
   ],
@@ -2192,7 +2195,16 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     if (!res.ok) return;
     const code = await res.text();
     const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
-    if (!m || !selfVerGreater(m[1], BOT_VERSION) || !code.includes("export default {")) return;
+    if (!m || !code.includes("export default {")) return;
+    if (!selfVerGreater(m[1], BOT_VERSION)) {
+      // تگ جدید است ولی کد سرو شده قدیمی است (مثلاً تگ وسط راه جابه‌جا شده):
+      // کش ETag را پاک کن تا چرخهٔ بعد کامل و تازه چک شود و ربات روی نسخهٔ میانی گیر نکند
+      if (tag && selfVerGreater(tag, BOT_VERSION)) {
+        try { await kv.delete("selfup_etag_tags"); } catch (e) {}
+        try { await kv.delete("selfup_etag_rels"); } catch (e) {}
+      }
+      return;
+    }
     // ⚠️ بایندینگ‌ها را از env بازسازی کن و با API نصب (PUT) دیپلوی کن.
     // API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
     // بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
@@ -2281,13 +2293,27 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       await kv.put("release_seen", m[1]);
     } catch (e) {}
     if (botToken && adminId) {
-      const notes = RELEASE_NOTES[m[1]] || [];
+      // یادداشت همهٔ نسخه‌های جامانده (نه فقط نسخهٔ آخر) تا پرش چندنسخه‌ای چیزی را قایم نکند
+      let notes = [];
+      try {
+        const vers = Object.keys(RELEASE_NOTES || {}).filter(
+          (k) => selfVerParts(k) && selfVerGreater(k, BOT_VERSION) && !selfVerGreater(k, m[1])
+        );
+        vers.sort((a, b) => (selfVerGreater(a, b) ? 1 : selfVerGreater(b, a) ? -1 : 0));
+        for (const v of vers) {
+          const arr = RELEASE_NOTES[v] || [];
+          if (vers.length > 1 && arr.length) notes.push(`— v${v}:`);
+          for (const n of arr) notes.push("• " + n);
+        }
+      } catch (e) {
+        notes = RELEASE_NOTES[m[1]] || [];
+      }
       const lines = [
         `🔄 آپدیت خودکار از مخزن انجام شد: v${BOT_VERSION} ← v${m[1]}`,
-        ...(notes.length ? ["", "✨ این نسخه:", ...notes.map((n) => "• " + n)] : []),
+        ...(notes.length ? ["", "✨ تغییرات جدید:", ...notes] : []),
       ];
       try {
-        await sendMessage(botToken, adminId, lines.join("\n"), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+        await sendMessage(botToken, adminId, lines.join("\n").slice(0, 3800), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
       } catch (e) {}
     }
   } catch (e) {
