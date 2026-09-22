@@ -3,7 +3,7 @@
 ### ۱. برو به:
 https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 
-### ۲. این ۹ تا رو تیک بزن:
+### ۲. این ۸ تا رو تیک بزن (۴ اجباری + ۴ اختیاری):
 
 **اجباری (۴ تا):**
 - [x] **Account** → `Workers Scripts` → **Edit**
@@ -12,7 +12,6 @@ https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 - [x] **Zone** → `Zone Settings` → **Edit**
 
 **اختیاری (۵ تا):**
-- [x] **Zone** → `Cache Purge` → **Purge**
 - [x] **Zone** → `Email Routing Rules` → **Edit**
 - [x] **Account** → `Email Routing Addresses` → **Edit**
 - [x] **Zone** → `Analytics` → **Read**
