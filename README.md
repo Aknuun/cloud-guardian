@@ -86,16 +86,16 @@
 
 **دسترسیهای موردنیاز توکن کلادفلر (۱۰ مورد):**
 
-1. Account · Workers Scripts · Edit
-2. Account · Workers KV Storage · Edit
-3. Zone · DNS · Edit
-4. Zone · Zone Settings · Edit
-5. Zone · Cache Purge · Purge
-6. Zone · Email Routing Rules · Edit (ایمیل‌ها و صندوق ورودی)
-7. Account · Email Routing Addresses · Read (مقصدهای ایمیل)
-8. Account · Email Routing Addresses · Edit (مقصدهای ایمیل)
-9. Zone · Analytics · Read (ترافیک ساب‌ها)
-10. Account · Account Analytics · Read (ترافیک ساب‌ها)
+1. Account · Workers Scripts · Edit — اجرای ربات روی ورکر
+2. Account · Workers KV Storage · Edit — ذخیرهٔ تنظیمات، نشست‌ها و ایمیل‌ها
+3. Zone · DNS · Edit — مدیریت رکوردها (افزودن/ویرایش/حذف)
+4. Zone · Zone Settings · Edit — تغییر تنظیمات دامنه (SSL/TLS و...)
+5. Zone · Cache Purge · Purge — پاک‌سازی کش بعد از تغییر DNS
+6. Zone · Email Routing Rules · Edit — ساخت/ویرایش قوانین فوروارد و catch-all
+7. Account · Email Routing Addresses · Read — خواندن مقصدهای ایمیل تأییدشده
+8. Account · Email Routing Addresses · Edit — افزودن مقصد ایمیل جدید
+9. Zone · Analytics · Read — ترافیک ۷ روزهٔ ساب‌ها (DNS queries)
+10. Account · Account Analytics · Read — ترافیک کلی اکانت
 
 🔗 **ساخت توکن کلادفلر:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` (Account Resources = All accounts، Zone Resources = All zones).
 
