@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.5";
+const BOT_VERSION = "1.5.6";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.6": [
+    "🆕 گزارش لحظه‌ای نصب جدید برای سازنده (ربات، ورکر، ورژن، ادمین) + فهرست اعضا ۳۰تایی با دکمهٔ هر کاربر",
+    "👤 صفحهٔ مشخصات هر عضو: ورژن/آپدیت، وضعیت سهمیهٔ ورکر + دکمهٔ ارسال پیام به کاربر + کرون ساعتی بررسی سهمیه",
+  ],
   "1.5.5": [
     "✏️ راهنمای دکمه‌های «بالانسر» (وزن) و «🛟 زاپاس» در صفحه لود بالانسر IP + دکمه‌های ورودی «بالانسر۱/۲/...»",
   ],
@@ -550,7 +554,7 @@ const HUB_BASE = "https://cloud-guardian.yaram169.workers.dev";
 const HUB_TELEMETRY_URL = HUB_BASE + "/telemetry";
 const HUB_ANNOUNCE_URL = HUB_BASE + "/announcements";
 const MAKER_BOT_USERNAME = "CloudGardianBot";
-const TM_MIN_MS = 24 * 3600000;
+const TM_MIN_MS = 60 * 60000;
 async function isHubWorker(env, botToken, kv) {
   try {
     const c = kv ? await kv.get("hub_self", "json") : null;
@@ -851,7 +855,8 @@ export default {
       return ok();
     }
 
-    // 📊 تله‌متری: پینگ روزانهٔ نصب‌ها (آیدی تصادفی + نسخه + یوزرنیم/آیدی ادمین اصلی)
+    // 📊 تله‌متری: پینگ ساعتی نصب‌ها (مشخصات نصب + وضعیت سهمیه).
+    // اولین پینگ هر نصب (event=install یا آیدی جدید) بلافاصله به سازنده خبر داده می‌شود.
     if (request.method === "POST" && url.pathname === "/telemetry") {
       let b = {};
       try {
@@ -860,13 +865,84 @@ export default {
       const iid = String((b && b.install_id) || "").slice(0, 64);
       if (/^[A-Za-z0-9_-]{8,64}$/.test(iid)) {
         try {
-          await kv.put(
-            `tm:${iid}`,
-            JSON.stringify({ v: String(b.version || "").slice(0, 20), ts: Date.now(), ev: String(b.event || "").slice(0, 20), admin: String(b.admin || "").replace(/[^@A-Za-z0-9_.]/g, "").slice(0, 64) }),
-            { expirationTtl: 45 * 86400 }
-          );
+          const clean = (s, re, n) => String(s || "").replace(re, "").slice(0, n);
+          let replyUrl = String((b && b.reply_url) || "").trim().slice(0, 200);
+          if (replyUrl && !safeReplyUrl(replyUrl)) replyUrl = "";
+          let q = null;
+          try {
+            const qb = b && b.quota;
+            if (qb && Number.isFinite(Number(qb.req)) && Number.isFinite(Number(qb.lim)) && Number(qb.lim) > 0) {
+              q = { req: Math.max(0, Math.floor(Number(qb.req))), lim: Math.floor(Number(qb.lim)), over: !!qb.over };
+            }
+          } catch (e) {}
+          const prev = await kv.get(`tm:${iid}`, "json").catch(() => null);
+          const rec = {
+            v: clean(b.version, /[^A-Za-z0-9_.-]/g, 20),
+            ts: Date.now(),
+            first: (prev && Number(prev.first)) || Date.now(),
+            ev: clean(b.event, /[^a-z]/g, 12) || "heartbeat",
+            admin: clean(b.admin, /[^@A-Za-z0-9_.]/g, 64),
+            admin_id: clean(b.admin_id, /[^0-9]/g, 20),
+            bot: clean(b.bot, /[^A-Za-z0-9_]/g, 64),
+            worker: clean(b.worker, /[^A-Za-z0-9_.-]/g, 64),
+            account_id: clean(b.account_id, /[^A-Za-z0-9]/g, 40),
+            reply: replyUrl,
+            q,
+          };
+          await kv.put(`tm:${iid}`, JSON.stringify(rec), { expirationTtl: 45 * 86400 });
+          // نصب تازه → پیام فوری به سازنده با مشخصات کامل.
+          if (!prev) {
+            try {
+              const hubAdmin = Number(env.ADMIN_ID || ADMIN_ID);
+              if (hubAdmin) {
+                const bl = [
+                  "🆕 نصب جدید نگهبان ابری",
+                  "",
+                  "🤖 ربات: " + (rec.bot ? "@" + rec.bot : "—"),
+                  "🧩 ورژن: " + (rec.v ? "v" + rec.v : "—"),
+                  "👤 ادمین: " + (rec.admin || "—") + (rec.admin_id ? ` (${rec.admin_id})` : ""),
+                  "🖥 ورکر: " + (rec.worker || "—"),
+                  "🏢 اکانت: " + (rec.account_id || "—"),
+                  "🔗 آدرس: " + (rec.reply || "—"),
+                ];
+                await sendMessage(botToken, hubAdmin, bl.join("\n").slice(0, 3500), [
+                  [{ text: "👤 مشاهدهٔ کاربر", callback_data: `hubuser:${iid}` }],
+                  [{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }],
+                ]);
+              }
+            } catch (e) {}
+          }
         } catch (e) {}
       }
+      return ok();
+    }
+
+    // 📩 پیام مستقیم سازنده به یک نصب (روی ورکر مشتری اجرا می‌شود؛ فرستنده = هاب).
+    if (request.method === "POST" && url.pathname === "/maker-dm") {
+      let c = {};
+      try {
+        c = await request.json();
+      } catch (e) {}
+      if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      // ریت‌لیمیت سبک ضد اسپم (۵ پیام در ساعت برای هر IP)
+      try {
+        const ip = request.headers.get("CF-Connecting-IP") || "x";
+        const rk = `makerdm_rl:${ip}`;
+        const n = Number((await kv.get(rk, "text")) || 0);
+        if (n >= 5) return ok();
+        await kv.put(rk, String(n + 1), { expirationTtl: 3600 });
+      } catch (e) {}
+      const msg = String((c && c.message) || "").slice(0, 3500);
+      if (!msg) return ok();
+      try {
+        const admins = (await getAdmins(kv, env)) || [];
+        for (const a of admins) {
+          try {
+            await sendMessage(botToken, a, "📩 پیام سازنده:\n\n" + msg);
+          } catch (e) {}
+          await sleep(400);
+        }
+      } catch (e) {}
       return ok();
     }
 
@@ -973,6 +1049,10 @@ export default {
           if (!cs.tm || now - cs.tm >= TM_MIN_MS) {
             patch.tm = now;
             jobs.push(runTelemetryPing(env).catch((e) => console.error("TM", String(e))));
+          }
+          if (!cs.hubwatch || now - cs.hubwatch >= 60 * 60000) {
+            patch.hubwatch = now;
+            jobs.push(runHubWatch(env).catch((e) => console.error("HUBWATCH", String(e))));
           }
           jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
           jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
@@ -1562,7 +1642,14 @@ function faAgo(ts) {
   return `${Math.floor(h / 24)} روز پیش`;
 }
 
-const HUBSTATS_PAGE = 10;
+const HUBSTATS_PAGE = 30;
+
+function hubMemberLabel(v) {
+  const who = String((v && v.admin) || "").slice(0, 30) || "؟";
+  const ver = String((v && v.v) || "؟").slice(0, 12);
+  const over = v && v.q && v.q.over;
+  return `👤 ${who} · v${ver}${over ? " · ⚠️سهمیه" : ""}`;
+}
 
 async function renderHubStats(edit, kv, page) {
   let keys = [];
@@ -1574,7 +1661,7 @@ async function renderHubStats(edit, kv, page) {
   for (const k of keys) {
     try {
       const v = await kv.get(k.name, "json");
-      if (v) items.push({ v });
+      if (v) items.push({ iid: String(k.name).slice(3, 67), v });
     } catch (e) {}
   }
   items.sort((a, b) => Number((b.v && b.v.ts) || 0) - Number((a.v && a.v.ts) || 0));
@@ -1588,9 +1675,9 @@ async function renderHubStats(edit, kv, page) {
   const lines = ["📊 آمار نصب‌ها", "", `🟢 نصب فعال (۴۵ روز اخیر): ${items.length}`, ""];
   const vers = Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10);
   for (const [v, n] of vers) lines.push(`• v${v}: ${n}`);
-  lines.push("", "👤 نصاب‌ها:");
+  lines.push("", "👤 اعضا (برای جزئیات روی هر کدام بزن):");
   const slice = items.slice(pg * HUBSTATS_PAGE, pg * HUBSTATS_PAGE + HUBSTATS_PAGE);
-  if (!slice.length) lines.push("📭 هنوز پینگی ثبت نشده (نصب‌ها روزی یک‌بار خبر می‌دهند).");
+  if (!slice.length) lines.push("📭 هنوز پینگی ثبت نشده (نصب‌ها هر ساعت خبر می‌دهند).");
   for (const it of slice) {
     const who = String((it.v && it.v.admin) || "").slice(0, 40) || "؟";
     const ver = String((it.v && it.v.v) || "؟").slice(0, 12);
@@ -1598,6 +1685,12 @@ async function renderHubStats(edit, kv, page) {
   }
   if (pages > 1) lines.push("", `صفحه ${pg + 1} از ${pages}`);
   const kb = [];
+  // دکمهٔ هر کاربر: بدون رنگ (plain)، هر کدام یک ردیف.
+  for (const it of slice) {
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(it.iid || "")) {
+      kb.push([{ text: hubMemberLabel(it.v).slice(0, 60), callback_data: `hubuser:${it.iid}` }]);
+    }
+  }
   if (pages > 1) {
     const nav = [];
     nav.push(pg > 0 ? { text: "⬅️", callback_data: `hubstatsp:${pg - 1}` } : EMPTY_BTN);
@@ -1608,6 +1701,96 @@ async function renderHubStats(edit, kv, page) {
     kb.push([{ text: "🔙 تنظیمات", callback_data: "settings" }]);
   }
   await edit(lines.join("\n").slice(0, 3500), kb);
+}
+
+// صفحهٔ مشخصات کامل یک عضو (فقط ربات اصلی).
+async function renderHubUser(edit, kv, iid) {
+  let v = null;
+  try {
+    v = await kv.get(`tm:${iid}`, "json");
+  } catch (e) {}
+  if (!v) {
+    await edit("❌ این کاربر پیدا نشد (شاید حذف شده).", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+    return;
+  }
+  const ver = String(v.v || "؟");
+  let updLine = "🟢 به‌روز است";
+  try {
+    if (selfVerGreater(BOT_VERSION, ver)) updLine = `🟡 آپدیت دارد (آخرین: v${BOT_VERSION})`;
+  } catch (e) {}
+  let quotaLine = "☁️ سهمیه: —";
+  try {
+    if (v.q && Number.isFinite(Number(v.q.req)) && Number(v.q.lim) > 0) {
+      const pct = Math.round((Number(v.q.req) / Number(v.q.lim)) * 100);
+      quotaLine = `☁️ سهمیه: ${Number(v.q.req).toLocaleString("en-US")} / ${Number(v.q.lim).toLocaleString("en-US")} (${pct}٪)${v.q.over ? " ⚠️ رد کرده" : ""}`;
+    }
+  } catch (e) {}
+  const firstSeen = v.first ? new Date(Number(v.first)).toISOString().slice(0, 10) : "—";
+  const lines = [
+    "👤 مشخصات کاربر",
+    "",
+    "🤖 ربات: " + (v.bot ? "@" + String(v.bot).slice(0, 64) : "—"),
+    "🧩 ورژن نصب: " + (ver !== "؟" ? "v" + ver.slice(0, 20) : "—") + " — " + updLine,
+    "👤 ادمین: " + (String(v.admin || "—").slice(0, 64)) + (v.admin_id ? ` (${String(v.admin_id).slice(0, 20)})` : ""),
+    "🖥 ورکر: " + (String(v.worker || "—").slice(0, 64)),
+    "🏢 اکانت: " + (String(v.account_id || "—").slice(0, 40)),
+    "🔗 آدرس: " + (String(v.reply || "—").slice(0, 200)),
+    quotaLine,
+    `🕓 آخرین پینگ: ${faAgo(v.ts)} · اولین نصب: ${firstSeen}`,
+  ];
+  const kb = [
+    [{ text: "✉️ ارسال پیام به کاربر", callback_data: `hubmsgsend:${iid}` }],
+    [{ text: "🗑 حذف از فهرست", callback_data: `hubuserdel:${iid}` }],
+    [{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }, { text: "🏠 خانه", callback_data: "menu" }],
+  ];
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+
+// کرون ساعتی هاب: اعضای تازه و اعضای دارای هشدار سهمیه را یکجا خبر می‌دهد (ضداسپم روزانه).
+async function runHubWatch(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+  if (!botToken || !adminId) return;
+  let isHub = false;
+  try {
+    isHub = await isHubWorker(env, botToken, kv);
+  } catch (e) {}
+  if (!isHub) return;
+  let keys = [];
+  try {
+    const l = await kv.list({ prefix: "tm:", limit: 1000 });
+    keys = (l && l.keys) || [];
+  } catch (e) {}
+  const overLines = [];
+  for (const k of keys) {
+    let v = null;
+    try {
+      v = await kv.get(k.name, "json");
+    } catch (e) {}
+    if (!v || !(v.q && v.q.over)) continue;
+    const iid = String(k.name).slice(3, 67);
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) continue;
+    let flagged = "";
+    try {
+      flagged = String((await kv.get(`hubq:${iid}`, "text")) || "");
+    } catch (e) {}
+    if (flagged) continue;
+    const who = String(v.admin || "؟").slice(0, 40);
+    const ver = String(v.v || "؟").slice(0, 12);
+    overLines.push(`• ${who} — v${ver} — ${Number(v.q.req).toLocaleString("en-US")}/${Number(v.q.lim).toLocaleString("en-US")}`);
+    try {
+      await kv.put(`hubq:${iid}`, "1", { expirationTtl: 24 * 3600 });
+    } catch (e) {}
+    if (overLines.length >= 20) break;
+  }
+  if (!overLines.length) return;
+  try {
+    await sendMessage(botToken, adminId, ("⚠️ سهمیهٔ ورکر این اعضا رد شده:\n\n" + overLines.join("\n")).slice(0, 3500), [
+      [{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }],
+    ]);
+  } catch (e) {}
 }
 
 function parseAccounts(env) {
@@ -1688,7 +1871,8 @@ async function getPromo(kv, env) {
 // قالب announcements.json: [{"id":"msg-01","text":"...","until":"2026-12-01","reply":true}]
 const ANNOUNCE_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/announcements.json";
 const ANN_MIN_MS = 60 * 60000;
-// 📊 پینگ روزانه به هاب (آیدی تصادفی نصب + نسخه + یوزرنیم/آیدی ادمین اصلی).
+// 📊 پینگ ساعتی به هاب (آیدی تصادفی نصب + نسخه + مشخصات نصب برای سازنده).
+// اولین پینگِ هر نصب با event=install می‌آید و هاب بلافاصله به سازنده خبر می‌دهد.
 // خاموش‌کردن برای مشتری: set-kv کلید telemetry_off به 1 (راهنما در README).
 async function runTelemetryPing(env) {
   const kv = env.BOT_KV;
@@ -1696,15 +1880,22 @@ async function runTelemetryPing(env) {
   try {
     if (String((await kv.get("telemetry_off", "text")) || "") === "1") return;
   } catch (e) {}
+  // ربات اصلی به خودش پینگ نمی‌فرستد (خودش هاب است).
+  try {
+    const bt0 = env.BOT_TOKEN || BOT_TOKEN;
+    if (bt0 && (await isHubWorker(env, bt0, kv))) return;
+  } catch (e) {}
   let iid = "";
   try {
     iid = String((await kv.get("install_id", "text")) || "");
   } catch (e) {}
+  let event = "heartbeat";
   if (!iid) {
     iid = (makeToken() || "i") + Date.now().toString(36);
     try {
       await kv.put("install_id", iid.slice(0, 64));
     } catch (e) {}
+    event = "install";
   }
   let adminTag = "";
   try {
@@ -1716,11 +1907,59 @@ async function runTelemetryPing(env) {
     } catch (e) {}
   }
   adminTag = adminTag.replace(/[^@A-Za-z0-9_.]/g, "").slice(0, 64);
+  // یوزرنیم ربات (کش ۷ روزه تا هر ساعت به تلگرام نزند).
+  let botUname = "";
+  try {
+    botUname = String((await kv.get("tm_botname", "text")) || "");
+    if (!botUname) {
+      const bt = env.BOT_TOKEN || BOT_TOKEN;
+      if (bt) {
+        const me = await (await fetch(`https://api.telegram.org/bot${bt}/getMe`, { signal: withTimeout(15000) })).json();
+        botUname = String((me && me.result && me.result.username) || "").slice(0, 64);
+        if (botUname) await kv.put("tm_botname", botUname, { expirationTtl: 7 * 86400 });
+      }
+    }
+  } catch (e) {}
+  botUname = botUname.replace(/[^A-Za-z0-9_]/g, "").slice(0, 64);
+  // آدرس همین ورکر تا سازنده بتواند مستقیم پیام بفرستد (فقط دامنه، بدون توکن).
+  let replyUrl = "";
+  try {
+    replyUrl = String((await kv.get("self_url", "text")) || env.WORKER_URL || "").replace(/\/+$/, "").slice(0, 200);
+    if (replyUrl && !safeReplyUrl(replyUrl)) replyUrl = "";
+  } catch (e) {}
+  // وضعیت سهمیهٔ همین ورکر (سبک: فقط تعداد درخواست‌های امروز).
+  let quota = null;
+  try {
+    const acc = await getQuotaAcct(kv, env);
+    if (acc && acc.tok && acc.aid) {
+      const req = await fetchRequestsToday(acc.tok, acc.aid);
+      if (req !== null && req !== undefined) {
+        let lim = REQUEST_LIMIT_DAILY;
+        try {
+          const cfg = await getQuotaCfg(kv, env);
+          if (cfg && Number(cfg.limit) > 0) lim = Number(cfg.limit);
+        } catch (e) {}
+        quota = { req: Number(req) || 0, lim, over: Number(req) >= Number(lim) };
+      }
+    }
+  } catch (e) {}
+  const body = {
+    install_id: iid.slice(0, 64),
+    version: BOT_VERSION,
+    event,
+    admin: adminTag,
+    admin_id: String(Number(env.ADMIN_ID || ADMIN_ID) || "").slice(0, 20),
+    bot: botUname,
+    worker: String(env.WORKER_NAME || "").slice(0, 64),
+    account_id: String(env.WORKER_ACCOUNT_ID || "").slice(0, 40),
+    reply_url: replyUrl,
+    quota,
+  };
   try {
     await fetch(HUB_TELEMETRY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ install_id: iid.slice(0, 64), version: BOT_VERSION, event: "heartbeat", admin: adminTag }),
+      body: JSON.stringify(body),
       signal: withTimeout(15000),
     });
   } catch (e) {}
@@ -8252,6 +8491,50 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  // ✉️ هاب: ارسال پیام مستقیم سازنده به یک نصب (فقط ربات اصلی)
+  if (type === "hub_msg_send") {
+    await kv.delete(`pend:${chatId}`);
+    const iid = String((pending && pending.iid) || "");
+    if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) {
+      await send("❌ شناسه کاربر نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+      return;
+    }
+    if (!(await isHubWorker(env, botToken, kv))) {
+      await send("❌ فقط در ربات اصلی.", mainMenuKeyboard());
+      return;
+    }
+    if (!txt || txt.length < 1) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ متن خالی است. دوباره بفرست:");
+      return;
+    }
+    let v = null;
+    try {
+      v = await kv.get(`tm:${iid}`, "json");
+    } catch (e) {}
+    const dest = v && v.reply && safeReplyUrl(v.reply);
+    if (!dest) {
+      await send("⚠️ آدرس ورکر این کاربر ثبت نشده؛ پیام ارسال نشد (بعد از پینگ بعدی دوباره تلاش کن).", [
+        [{ text: "👤 بازگشت", callback_data: `hubuser:${iid}` }],
+      ]);
+      return;
+    }
+    let sent = false;
+    try {
+      const r = await fetch(dest + "/maker-dm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: CREATOR_CONTACT_KEY, message: txt.slice(0, 3500) }),
+        signal: withTimeout(15000),
+      });
+      sent = !!(r && (r.ok || r.status === 200));
+    } catch (e) {}
+    await send(sent ? "✅ پیام برای کاربر ارسال شد." : "⚠️ ارسال ناموفق بود (شاید ربات کاربر آپدیت نیست).", [
+      [{ text: "👤 بازگشت", callback_data: `hubuser:${iid}` }],
+    ]);
+    return;
+  }
+
   // 📧 ایمیل سازمانی: ثبت مقصد جدید فورواردینگ (اول باید verify شود)
   if (type === "fmail_dest_new") {
     await kv.delete(`pend:${chatId}`);
@@ -10126,6 +10409,35 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data.startsWith("hubstatsp:")) {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await renderHubStats(edit, kv, Number(data.split(":")[1]) || 0);
+    } else if (data.startsWith("hubuser:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      const iid = data.slice(8, 72);
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+      await renderHubUser(edit, kv, iid);
+    } else if (data.startsWith("hubmsgsend:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      const iid = data.slice(11, 75);
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+      let v = null;
+      try {
+        v = await kv.get(`tm:${iid}`, "json");
+      } catch (e) {}
+      if (!v) return edit("❌ این کاربر پیدا نشد.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hub_msg_send", iid }), { expirationTtl: 600 });
+      await edit(`✉️ متن پیام به ${String(v.admin || "کاربر").slice(0, 40)} را بفرست (زیر ۳۵۰۰ کاراکتر):`, [
+        [{ text: "⬅️ انصراف", callback_data: `hubuser:${iid}` }],
+      ]);
+    } else if (data.startsWith("hubuserdel:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      const iid = data.slice(11, 75);
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
+      try {
+        await kv.delete(`tm:${iid}`);
+      } catch (e) {}
+      try {
+        await kv.delete(`hubq:${iid}`);
+      } catch (e) {}
+      await edit("🗑 کاربر از فهرست حذف شد.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
     } else if (data === "hubann") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       let arr = [];
