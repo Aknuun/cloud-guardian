@@ -147,7 +147,7 @@ t() {
     en:ck_title)               printf '%s' "Checking Cloudflare token permissions" ;;
 
     en:usage_title)            printf '%s' "Cloud Guardian — help" ;;
-    en:cmd_install)            printf '%s' "Full install" ;;
+    en:cmd_install)            printf '%s' "Full install (updates if already installed)" ;;
     en:cmd_update)             printf '%s' "Update" ;;
     en:cmd_uninstall)          printf '%s' "Uninstall" ;;
     en:cmd_relay)              printf '%s' "SSH relay" ;;
@@ -168,6 +168,10 @@ t() {
     en:menu_invalid)           printf '%s' "Invalid option." ;;
     en:menu_back)              printf '%s' "Press Enter to return to the menu" ;;
     en:offer_install)          printf '%s' "Start a full install now? [y/N] " ;;
+    en:auto_deps)              printf '%s' "Installing missing dependencies automatically:" ;;
+    en:existing_found)         printf '%s' "Existing install found" ;;
+    en:update_instead)         printf '%s' "Update instead of full install? [Y/n] " ;;
+    en:auto_update)            printf '%s' "Config exists - running update instead of full install." ;;
     *)                         printf '%s' "$1" ;;
   esac
 }
@@ -205,6 +209,29 @@ fi
 need_tools() {
   command -v curl >/dev/null 2>&1 || { err "$(t e_curl)"; exit 1; }
   command -v python3 >/dev/null 2>&1 || { err "$(t e_python)"; exit 1; }
+}
+
+# Install missing dependencies automatically at start, without asking.
+# Falls back to need_tools error if installation is impossible (no root/package manager).
+ensure_deps() {
+  local missing=()
+  command -v curl >/dev/null 2>&1 || missing+=("curl")
+  command -v python3 >/dev/null 2>&1 || missing+=("python3")
+  [ "${#missing[@]}" -eq 0 ] && return 0
+  b "$(t auto_deps) ${missing[*]}"
+  local SUDO=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then SUDO="sudo"; fi
+  if command -v apt-get >/dev/null 2>&1; then
+    $SUDO apt-get update -qq 2>/dev/null || true
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}" >/dev/null 2>&1 || true
+  elif command -v dnf >/dev/null 2>&1; then
+    $SUDO dnf install -y -q "${missing[@]}" >/dev/null 2>&1 || true
+  elif command -v yum >/dev/null 2>&1; then
+    $SUDO yum install -y -q "${missing[@]}" >/dev/null 2>&1 || true
+  elif command -v apk >/dev/null 2>&1; then
+    $SUDO apk add --no-cache "${missing[@]}" >/dev/null 2>&1 || true
+  fi
+  need_tools
 }
 
 gh_raw() {
@@ -411,6 +438,17 @@ cf_perm_error() {
 do_install() {
   local arg
   for arg in "$@"; do case "$arg" in --no-relay) NO_RELAY=1 ;; --force|-y) FORCE=1 ;; esac; done
+
+  if [ -f "$CFG" ] && [ -z "${FORCE:-}" ]; then
+    if [ -t 0 ]; then
+      warn "$(t existing_found): $CFG"
+      local a=""; read -rp "  $(t update_instead)" a || a=""
+      if [[ "${a,,}" != "n" ]]; then do_update; return 0; fi
+    else
+      b "$(t auto_update)"
+      do_update; return 0
+    fi
+  fi
 
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t install_title)"
   hr
@@ -721,12 +759,13 @@ main_menu() {
 # ============================================================
 cmd=""
 if [ "$#" -gt 0 ]; then cmd="$1"; shift; fi
+ensure_deps
 if [ -z "$cmd" ]; then
   if [ -t 0 ] && [ -t 1 ]; then
     main_menu
     exit 0
   fi
-  cmd="install"
+  if [ -f "$CFG" ]; then cmd="update"; else cmd="install"; fi
 fi
 case "$cmd" in
   install|i)           do_install "$@" ;;
