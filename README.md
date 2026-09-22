@@ -80,23 +80,18 @@
 | ۲ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۳ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
-**دسترسیهای توکن کلادفلر (۴ اجباری + ۶ اختیاری):**
+**دسترسی توکن کلادفلر (فقط ۱ مجوز — بقیه خودکار):**
 
-1. **Account · Workers Scripts · Edit**
-2. **Account · Workers KV Storage · Edit**
-3. **Zone · DNS · Edit**
-4. **Zone · Zone Settings · Edit**
+> **کافیست فقط یک مجوز بدهید، اسکریپت بقیه 10 مجوز را خودش می‌سازد.**
 
-۶ تای بعدی اختیاری‌اند؛ اگر بعداً خواستی اضافه کن:
+1. **Account · API Tokens · Edit** — فقط همین یکی (Account Resources = All accounts)
 
-5. Zone · Cache Purge · Purge
-6. Zone · Email Routing Rules · Edit — برای ایمیل سازمانی و فوروارد
-7. Account · Email Routing Addresses · Read — برای انتخاب مقصد فوروارد
-8. Account · Email Routing Addresses · Edit — برای افزودن مقصد جدید
-9. Zone · Analytics · Read — برای ترافیک ساب‌ها
-10. Account · Account Analytics · Read — برای ترافیک ساب‌ها
+اسکریپت نصب با این توکنِ Bootstrap به صورت خودکار یک توکن اصلی با تمام دسترسی‌ها می‌سازد:
+`Workers Scripts / Workers KV Storage / DNS / Zone Settings / Cache Purge / Email Routing Rules & Addresses / Analytics`
 
-🔗 **ساخت توکن کلادفلر:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` (Account Resources = All accounts، Zone Resources = All zones).
+🔗 **ساخت توکن Bootstrap:** https://dash.cloudflare.com/profile/api-tokens — دکمهٔ `Create Token` → `Create Custom Token` → `Account Resources = All accounts` → فقط `API Tokens - Edit` را اضافه کن → `Continue → Create Token` و توکن `cfut_...` را کپی کن و به اسکریپت بده.
+
+> توکن Bootstrap فقط برای ساخت توکن اصلی است و بعد از نصب می‌توانی آن را پاک کنی (TTL پیشنهادی 10 دقیقه).
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
