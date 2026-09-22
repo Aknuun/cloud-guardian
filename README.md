@@ -85,10 +85,8 @@
 > برای ساخت توکن به [راهنمای بدون عکس](docs/TOKEN_GUIDE.md) مراجعه کن — فقط همین ۸ تا رو تیک بزن و `cfut_...` رو کپی کن.
 
 ۱. برو: https://dash.cloudflare.com/profile/api-tokens → Create Custom Token
-۲. [۱۰ مجوز](docs/TOKEN_GUIDE.md) رو تیک بزن
+۲. [۸ مجوز](docs/TOKEN_GUIDE.md) رو تیک بزن
 ۳. Continue → Create Token → توکن رو به اسکریپت بده
-
-> بقیه مجوزها خودکار ساخته میشه.
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
