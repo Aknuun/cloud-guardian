@@ -80,12 +80,15 @@
 | ۲ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۳ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
-**دسترسیهای موردنیاز توکن کلادفلر (۱۰ مورد):**
+**دسترسیهای توکن کلادفلر (۴ اجباری + ۶ اختیاری):**
 
-1. Account · Workers Scripts · Edit
-2. Account · Workers KV Storage · Edit
-3. Zone · DNS · Edit
-4. Zone · Zone Settings · Edit
+1. **Account · Workers Scripts · Edit**
+2. **Account · Workers KV Storage · Edit**
+3. **Zone · DNS · Edit**
+4. **Zone · Zone Settings · Edit**
+
+۶ تای بعدی اختیاری‌اند؛ اگر بعداً خواستی اضافه کن:
+
 5. Zone · Cache Purge · Purge
 6. Zone · Email Routing Rules · Edit — برای ایمیل سازمانی و فوروارد
 7. Account · Email Routing Addresses · Read — برای انتخاب مقصد فوروارد
