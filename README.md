@@ -97,8 +97,6 @@
 - [x] **Zone** → `Analytics` → **Read**
 - [x] **Account** → `Account Analytics` → **Read**
 
-<p align="center"><img src="docs/Screenshot_20260922-211710-edit-20260922211749.jpg" width="50%" alt="تنظیم توکن"></p>
-
 > Account Resources = **All accounts** · Zone Resources = **All zones**
 
 ۳. `Continue → Create Token` → توکن `cfut_...` رو کپی کن و به اسکریپت بده
