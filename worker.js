@@ -3804,7 +3804,7 @@ async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
   }
   const kb = entries.map((e, i) => {
     const row = [
-      { text: `⚖️ وزن ${i + 1}`, callback_data: `lbw:${gid}:${i}` },
+      { text: `بالانسر${String(i + 1).replace(/\d/g, (d) => FA_DIGITS[d])}`, callback_data: `lbw:${gid}:${i}` },
       { text: e.on ? "⏸ غیرفعال" : "▶️ فعال", callback_data: `lbt:${gid}:${i}` },
     ];
     if (e.on) row.push({ text: `🛟 زاپاس ${i + 1}`, callback_data: `lbsm:${gid}:${i}` });
