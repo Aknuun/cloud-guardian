@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.1";
+const BOT_VERSION = "1.5.2";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.2": [
+    "⚖️ صفحهٔ ساب‌دامین‌های لود بالانسر ۳ ستونه و صفحه‌بندی شد (۱۵ ساب در هر صفحه)",
+  ],
   "1.5.1": [
     "📊 آمار نصب‌ها فقط در ربات اصلی و فقط برای سازنده (برگشت محدودیت هاب)",
     "👤 ثبت یوزرنیم نصاب در آمار نصب‌ها (اگر یوزرنیم نداشت، آیدی عددی) + صفحه‌بندی فهرست نصب‌ها",
@@ -3863,7 +3866,9 @@ async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   await edit(title, kb);
 }
 
-async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env) {
+const LB_GROUPS_PAGE = 15; // ۵ ردیف ۳ ستونه
+
+async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, page, env) {
   const zone = await getZoneById(zoneId, acc, accounts);
   if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 لود بالانسر", callback_data: "lb" }]]);
   const records = await getRecords(zone, accounts, kv);
@@ -3875,23 +3880,43 @@ async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env) {
     groups[r.name].push(r);
   }
   const names = Object.keys(groups).sort();
-  const lines = [`⚖️ لود بالانسر — ${zone.name}`, ""];
-  const kb = [];
   let totalEntries = 0;
-  if (names.length) {
-    for (const name of names) {
-      const g = groups[name];
-      const short = name === zone.name ? "@" : name.slice(0, -(String(zone.name).length + 1));
-      totalEntries += g.length;
-      const key = `lb:cf:${zoneId}:${name}`;
-      const cfg = await getLbCfg(kv, key);
-      const disabled = cfg.disabled ? cfg.disabled.length : 0;
-      lines.push(`${short} — ${g.length} رکورد${disabled ? ` (+${disabled} غیرفعال)` : ""}`);
-      kb.push([{ text: `⚖️ ${short}`, callback_data: `lbgopen:${acc}:${zoneId}:${name}` }]);
-    }
-    lines.push("", `总计 ${names.length} ساب‌دامین، ${totalEntries} رکورد فعال.`);
-  } else {
+  for (const n of names) totalEntries += groups[n].length;
+  const pages = Math.max(1, Math.ceil(names.length / LB_GROUPS_PAGE));
+  const pg = Math.min(Math.max(page || 0, 0), pages - 1);
+  const slice = names.slice(pg * LB_GROUPS_PAGE, pg * LB_GROUPS_PAGE + LB_GROUPS_PAGE);
+  const lines = [`⚖️ لود بالانسر — ${zone.name}`, `📦 ${names.length} ساب‌دامین، ${totalEntries} رکورد فعال`, ""];
+  const kb = [];
+  if (!names.length) {
     lines.push("📭 هنوز لود بالانسری تعریف نشده.");
+  } else {
+    for (const name of slice) {
+      const g = groups[name];
+      const short = name === zone.name ? "@" : String(name).slice(0, -(String(zone.name).length + 1));
+      let disabled = 0;
+      try {
+        const cfg = await getLbCfg(kv, `lb:cf:${zoneId}:${name}`);
+        disabled = (cfg.disabled || []).length;
+      } catch (e) {}
+      lines.push(`${short} — ${g.length} رکورد${disabled ? ` (+${disabled} غیرفعال)` : ""}`);
+    }
+    for (let i = 0; i < slice.length; i += 3) {
+      const row = [];
+      for (let j = i; j < i + 3 && j < slice.length; j++) {
+        const name = slice[j];
+        const short = name === zone.name ? "@" : String(name).slice(0, -(String(zone.name).length + 1));
+        const label = short.length > 16 ? short.slice(0, 15) + "…" : short;
+        row.push({ text: label, callback_data: `lbgopen:${acc}:${zoneId}:${name}` });
+      }
+      kb.push(row);
+    }
+    if (pages > 1) lines.push("", `صفحه ${pg + 1} از ${pages}`);
+  }
+  if (pages > 1) {
+    const nav = [];
+    nav.push(pg > 0 ? { text: "⬅️", callback_data: `lbzp:${acc}:${zoneId}:${pg - 1}` } : EMPTY_BTN);
+    nav.push(pg < pages - 1 ? { text: "➡️", callback_data: `lbzp:${acc}:${zoneId}:${pg + 1}` } : EMPTY_BTN);
+    kb.push(nav);
   }
   kb.push([{ text: "➕ ساخت لود بالانسر جدید", callback_data: `lbznew:${acc}:${zoneId}` }]);
   kb.push([{ text: "🔙 لود بالانسر", callback_data: "lb" }]);
@@ -10873,7 +10898,14 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const parts = data.split(":");
       const acc = Number(parts[1]);
       const zoneId = parts[2];
-      await renderLbZoneGroups(edit, kv, accounts, acc, zoneId, env);
+      const pg = Number(parts[3]) || 0;
+      await renderLbZoneGroups(edit, kv, accounts, acc, zoneId, pg, env);
+    } else if (data.startsWith("lbzp:")) {
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const pg = Number(parts[3]) || 0;
+      await renderLbZoneGroups(edit, kv, accounts, acc, zoneId, pg, env);
     } else if (data.startsWith("lbznew:")) {
       const parts = data.split(":");
       const acc = Number(parts[1]);
