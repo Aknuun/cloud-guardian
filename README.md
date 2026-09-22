@@ -82,11 +82,26 @@
 
 **توکن کلادفلر — فقط ۱ بار تیک بزن:**
 
-> برای ساخت توکن به [راهنمای بدون عکس](docs/TOKEN_GUIDE.md) مراجعه کن — فقط همین ۱۰ تا رو تیک بزن و `cfut_...` رو کپی کن.
+۱. برو: https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
+۲. این ۸ تا رو تیک بزن:
 
-۱. برو: https://dash.cloudflare.com/profile/api-tokens → Create Custom Token
-۲. [۱۰ مجوز](docs/TOKEN_GUIDE.md) رو تیک بزن
-۳. Continue → Create Token → توکن رو به اسکریپت بده
+**اجباری (۴ تا):**
+- [x] **Account** → `Workers Scripts` → **Edit**
+- [x] **Account** → `Workers KV Storage` → **Edit**
+- [x] **Zone** → `DNS` → **Edit**
+- [x] **Zone** → `Zone Settings` → **Edit**
+
+**اختیاری (۴ تا):**
+- [x] **Zone** → `Email Routing Rules` → **Edit**
+- [x] **Account** → `Email Routing Addresses` → **Edit**
+- [x] **Zone** → `Analytics` → **Read**
+- [x] **Account** → `Account Analytics` → **Read**
+
+<p align="center"><img src="docs/Screenshot_20260922-211710-edit-20260922211749.jpg" width="50%" alt="تنظیم توکن"></p>
+
+> Account Resources = **All accounts** · Zone Resources = **All zones**
+
+۳. `Continue → Create Token` → توکن `cfut_...` رو کپی کن و به اسکریپت بده
 
 ---
 ## نصب (از طریق سرور روی کلادفلر)
