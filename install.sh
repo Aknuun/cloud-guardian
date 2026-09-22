@@ -358,13 +358,14 @@ verify_token() {
     | python3 -c "import sys,json;d=json.load(sys.stdin);print('ok' if d.get('success') and (d.get('result') or {}).get('status')=='active' else 'bad')" 2>/dev/null || echo bad
 }
 
-# --- bootstrap -> auto-create full deploy token (10 perms) ---
 create_deploy_token() {
   local boot="$1"
   local name="cloud-guardian-$(date +%s)"
-  local resp
-  resp=$(curl -sS --max-time 30 -X POST -H "Authorization: Bearer $boot" -H "Content-Type: application/json" "$API/user/tokens" -d '{
-  "name": "'"$name"'",
+  local resp tmpjson
+  tmpjson=$(mktemp)
+  cat > "$tmpjson" <<EOF
+{
+  "name": "$name",
   "policies": [
     {"effect":"allow","resources":{"com.cloudflare.api.account.zone.*":"*"},"permissionGroups":[
       {"id":"4755a26eedb94da69e1066d98aa820be"},
@@ -379,15 +380,15 @@ create_deploy_token() {
       {"id":"b89a480218d04ceb98b4fe57ca29dc1f"}
     ]}
   ]
-}' 2>/dev/null)
-  # return token value on success, empty on fail
-  python3 -c "import sys,json;d=json.load(sys.stdin); print(d.get('result',{}).get('value','') if d.get('success') else '')" <<<"$resp" 2>/dev/null
-  # also save full resp for debug if needed
+}
+EOF
+  resp=$(curl -sS --max-time 30 -X POST -H "Authorization: Bearer $boot" -H "Content-Type: application/json" "$API/user/tokens" --data-binary @"$tmpjson" 2>/dev/null)
+  rm -f "$tmpjson"
   echo "$resp" > "$DIR/.last_token_create.json" 2>/dev/null || true
+  python3 -c "import sys,json;d=json.load(sys.stdin); print(d.get('result',{}).get('value','') if d.get('success') else '')" <<<"$resp" 2>/dev/null
 }
 maybe_auto_create_token() {
   local boot="$1"
-  # try to check if boot already has full perms - if deploy-tool check passes, keep it
   if ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box >/dev/null 2>&1 ); then
     return 0
   fi
@@ -398,7 +399,6 @@ maybe_auto_create_token() {
   if [ -n "$newtok" ] && [ "${#newtok}" -gt 20 ]; then
     ok "توکن اصلی ساخته شد (auto-created)"
     TOKEN="$newtok"
-    # verify new token
     if [ "$(verify_token "$TOKEN")" = "ok" ]; then
       ok "$(t ok_token) (deploy token)"
       return 0
@@ -407,7 +407,6 @@ maybe_auto_create_token() {
   warn "ساخت خودکار ناموفق — با همان توکن bootstrap ادامه میدهم (ممکن است deploy خطا دهد)"
   return 1
 }
-
 detect_account() {
   curl -sS --max-time 30 -H "Authorization: Bearer $1" "$API/accounts?per_page=50" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);r=d.get('result') or [];print(r[0]['id'] if d.get('success') and r else '')" 2>/dev/null || true
@@ -517,30 +516,17 @@ install_cron_backup() {
 }
 
 _tk_guide_block() {
-  printf "${CYAN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}
-"
-  printf "${CYAN}${BOLD}  │${RST}  %s
-" "$(t tk_box)"
-  printf "${CYAN}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}
-"
-  printf "  ${BOLD}1)${RST} %s
-" "$(t tk_opens)"
-  printf "        %s
-" "$(link "$CF_TOKENS_URL")"
-  printf "  ${BOLD}2)${RST} %s
-" "$(t tk_create)"
-  printf "  ${BOLD}3)${RST} %s
-" "$(t tk_perms)"
-  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}     · ${GREEN}Edit${RST} ${DIM}(فقط همین یکی)${RST}
-"
-  printf "     %s
-" "$(t tk_res)"
-  printf "  ${BOLD}4)${RST} %s
-" "$(t tk_copy)"
-  printf "     ${DIM}%s %s${RST}
-" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
-  printf "  ${DIM}→ %s${RST}
-" "$(t tk_auto)"
+  printf "${CYAN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
+  printf "${CYAN}${BOLD}  │${RST}  %s\n" "$(t tk_box)"
+  printf "${CYAN}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n"
+  printf "  ${BOLD}1)${RST} %s\n" "$(t tk_opens)"
+  printf "        %s\n" "$(link "$CF_TOKENS_URL")"
+  printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
+  printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}     · ${GREEN}Edit${RST} ${DIM}(فقط همین یکی)${RST}\n"
+  printf "     %s\n" "$(t tk_res)"
+  printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
+  printf "     ${DIM}%s %s${RST}\n" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
 }
 cf_token_guide() {
   local save="$CG_L"
@@ -559,7 +545,16 @@ cf_perm_error() {
   printf "${RED}${BOLD}  │${RST}  ⛔ ${BOLD}%s${RST}\n" "$(t perm_box)"
   printf "${RED}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  %s\n\n" "$(t perm_body)"
-  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}          · ${GREEN}Edit${RST}\n"\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n\n"
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
@@ -595,7 +590,6 @@ do_install() {
     ok "$(t ok_using_token)"
   fi
 
-  # --- auto-create full token from bootstrap if needed ---
   maybe_auto_create_token "$TOKEN" || true
 
   step "$(t step_account)"
