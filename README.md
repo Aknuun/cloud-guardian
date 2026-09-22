@@ -82,7 +82,7 @@
 
 **توکن کلادفلر — فقط ۱ مجوز:**
 
-![تنظیم توکن](docs/Screenshot_20260922-211710-edit-20260922211749.jpg)
+<p align="center"><img src="docs/Screenshot_20260922-211710-edit-20260922211749.jpg" width="50%" alt="تنظیم توکن"></p>
 
 ۱. برو: https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 ۲. فعال کن: `Account → API Tokens → Edit`
