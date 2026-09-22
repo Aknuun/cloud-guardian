@@ -18,31 +18,15 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian
 ## نصب با توکن/پورت دلخواه
 
 ```bash
-# توکن دلخواه
-sudo SRV_RELAY_TOKEN=mySecret123 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
-
-# پورت دلخواه
-sudo SRV_RELAY_PORT=9090 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
-
-# هر دو
-sudo SRV_RELAY_TOKEN=mySecret123 SRV_RELAY_PORT=9090 bash srv-relay-install.sh
+sudo SRV_RELAY_TOKEN=AknuunFixedToken2024 bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian-relay/main/srv-relay-install.sh)"
 ```
 
 ## بررسی وضعیت
 
 ```bash
 systemctl status srv-relay --no-pager
-```
-
-```bash
 curl http://127.0.0.1:8788/ping
-```
-
-```bash
 cat /opt/srv-relay/config.json | grep token
-```
-
-```bash
 sudo ufw allow 8788/tcp  # اگر فایروال داری
 ```
 
@@ -62,13 +46,7 @@ sudo bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian
 
 ```bash
 sudo systemctl disable --now srv-relay
-```
-
-```bash
 sudo rm -rf /opt/srv-relay /etc/systemd/system/srv-relay.service
-```
-
-```bash
 sudo systemctl daemon-reload
 ```
 
