@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.0";
+const BOT_VERSION = "1.5.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.1": [
+    "📊 آمار نصب‌ها فقط در ربات اصلی و فقط برای سازنده (برگشت محدودیت هاب)",
+    "👤 ثبت یوزرنیم نصاب در آمار نصب‌ها (اگر یوزرنیم نداشت، آیدی عددی) + صفحه‌بندی فهرست نصب‌ها",
+  ],
   "1.5.0": [
     "📊 ترافیک سایتها: مرکز ترافیک DNS همهٔ دامنه‌ها — همهٔ ساب‌ها حتی صفرها دیده می‌شوند، با صفحه‌بندی و حذف ساب‌های بدون ترافیک",
     "⚖️ لود بالانسر: مرکز مدیریت لود بالانسر — انتخاب دامنه، دیدن همهٔ ساب‌ها، ساخت جدید، تنظیم وزن/فعال/غیرفعال",
@@ -834,7 +838,7 @@ export default {
       return ok();
     }
 
-    // 📊 تله‌متری ناشناس: پینگ روزانهٔ نصب‌ها (آیدی تصادفی + نسخه؛ بدون دیتای شخصی)
+    // 📊 تله‌متری: پینگ روزانهٔ نصب‌ها (آیدی تصادفی + نسخه + یوزرنیم/آیدی ادمین اصلی)
     if (request.method === "POST" && url.pathname === "/telemetry") {
       let b = {};
       try {
@@ -845,7 +849,7 @@ export default {
         try {
           await kv.put(
             `tm:${iid}`,
-            JSON.stringify({ v: String(b.version || "").slice(0, 20), ts: Date.now(), ev: String(b.event || "").slice(0, 20) }),
+            JSON.stringify({ v: String(b.version || "").slice(0, 20), ts: Date.now(), ev: String(b.event || "").slice(0, 20), admin: String(b.admin || "").replace(/[^@A-Za-z0-9_.]/g, "").slice(0, 64) }),
             { expirationTtl: 45 * 86400 }
           );
         } catch (e) {}
@@ -1053,6 +1057,7 @@ async function processUpdate(payload, env, botToken, adminId) {
     textChatId = chatId;
     const admins = await getAdmins(kv, env);
     if (!admins.includes(chatId)) return;
+    if (chatId === adminId) await cacheAdminUname(kv, adminId, payload.message.from);
 
     const send = async (msg, kb) => {
       const isPerm = msg && msg.indexOf(PERM_MARK) !== -1;
@@ -1509,9 +1514,7 @@ function settingsHomeKb() {
 async function settingsHomeKbFor(env, botToken, kv) {
   const kb = settingsHomeKb();
   try {
-    const admins = await getAdmins(kv, env);
-    const mainAdmin = Number(env.ADMIN_ID || ADMIN_ID);
-    if (admins.includes(mainAdmin)) {
+    if (await isHubWorker(env, botToken, kv)) {
       kb.splice(kb.length - 1, 0, [
         { text: "📊 آمار نصب‌ها", callback_data: "hubstats" },
         { text: "📢 پیام همگانی", callback_data: "hubann", style: "success" },
@@ -1519,6 +1522,79 @@ async function settingsHomeKbFor(env, botToken, kv) {
     }
   } catch (e) {}
   return kb;
+}
+
+// یوزرنیم ادمین اصلی را کش می‌کند تا در پینگ تله‌متری برای هاب فرستاده شود؛
+// اگر یوزرنیم نداشت، آیدی عددی ذخیره می‌شود. فقط وقتی تغییر کرده می‌نویسد.
+async function cacheAdminUname(kv, adminId, from) {
+  if (!kv || !from) return;
+  try {
+    const id = Number(from.id);
+    if (!id || id !== Number(adminId)) return;
+    const un = String(from.username || "").trim().replace(/^@+/, "");
+    const val = un ? "@" + un.slice(0, 60) : String(id);
+    const cur = await kv.get("admin_uname", "text");
+    if (cur !== val) await kv.put("admin_uname", val, { expirationTtl: 90 * 86400 });
+  } catch (e) {}
+}
+
+function faAgo(ts) {
+  const d = Date.now() - Number(ts || 0);
+  if (!(d >= 0)) return "—";
+  const m = Math.floor(d / 60000);
+  if (m < 1) return "لحظاتی پیش";
+  if (m < 60) return `${m} دقیقه پیش`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} ساعت پیش`;
+  return `${Math.floor(h / 24)} روز پیش`;
+}
+
+const HUBSTATS_PAGE = 10;
+
+async function renderHubStats(edit, kv, page) {
+  let keys = [];
+  try {
+    const l = await kv.list({ prefix: "tm:", limit: 1000 });
+    keys = (l && l.keys) || [];
+  } catch (e) {}
+  const items = [];
+  for (const k of keys) {
+    try {
+      const v = await kv.get(k.name, "json");
+      if (v) items.push({ v });
+    } catch (e) {}
+  }
+  items.sort((a, b) => Number((b.v && b.v.ts) || 0) - Number((a.v && a.v.ts) || 0));
+  const byVer = {};
+  for (const it of items) {
+    const ver = (it.v && it.v.v) || "؟";
+    byVer[ver] = (byVer[ver] || 0) + 1;
+  }
+  const pages = Math.max(1, Math.ceil(items.length / HUBSTATS_PAGE));
+  const pg = Math.min(Math.max(page || 0, 0), pages - 1);
+  const lines = ["📊 آمار نصب‌ها", "", `🟢 نصب فعال (۴۵ روز اخیر): ${items.length}`, ""];
+  const vers = Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  for (const [v, n] of vers) lines.push(`• v${v}: ${n}`);
+  lines.push("", "👤 نصاب‌ها:");
+  const slice = items.slice(pg * HUBSTATS_PAGE, pg * HUBSTATS_PAGE + HUBSTATS_PAGE);
+  if (!slice.length) lines.push("📭 هنوز پینگی ثبت نشده (نصب‌ها روزی یک‌بار خبر می‌دهند).");
+  for (const it of slice) {
+    const who = String((it.v && it.v.admin) || "").slice(0, 40) || "؟";
+    const ver = String((it.v && it.v.v) || "؟").slice(0, 12);
+    lines.push(`• ${who} — v${ver} — ${faAgo(it.v && it.v.ts)}`);
+  }
+  if (pages > 1) lines.push("", `صفحه ${pg + 1} از ${pages}`);
+  const kb = [];
+  if (pages > 1) {
+    const nav = [];
+    nav.push(pg > 0 ? { text: "⬅️", callback_data: `hubstatsp:${pg - 1}` } : EMPTY_BTN);
+    nav.push({ text: "🔙 تنظیمات", callback_data: "settings" });
+    nav.push(pg < pages - 1 ? { text: "➡️", callback_data: `hubstatsp:${pg + 1}` } : EMPTY_BTN);
+    kb.push(nav);
+  } else {
+    kb.push([{ text: "🔙 تنظیمات", callback_data: "settings" }]);
+  }
+  await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
 function parseAccounts(env) {
@@ -1599,7 +1675,7 @@ async function getPromo(kv, env) {
 // قالب announcements.json: [{"id":"msg-01","text":"...","until":"2026-12-01","reply":true}]
 const ANNOUNCE_URL_DEFAULT = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/announcements.json";
 const ANN_MIN_MS = 60 * 60000;
-// 📊 پینگ ناشناس روزانه به هاب (آیدی تصادفی نصب + نسخه؛ بدون هیچ دیتای شخصی).
+// 📊 پینگ روزانه به هاب (آیدی تصادفی نصب + نسخه + یوزرنیم/آیدی ادمین اصلی).
 // خاموش‌کردن برای مشتری: set-kv کلید telemetry_off به 1 (راهنما در README).
 async function runTelemetryPing(env) {
   const kv = env.BOT_KV;
@@ -1617,11 +1693,21 @@ async function runTelemetryPing(env) {
       await kv.put("install_id", iid.slice(0, 64));
     } catch (e) {}
   }
+  let adminTag = "";
+  try {
+    adminTag = String((await kv.get("admin_uname", "text")) || "");
+  } catch (e) {}
+  if (!adminTag) {
+    try {
+      adminTag = String(Number(env.ADMIN_ID || ADMIN_ID) || "");
+    } catch (e) {}
+  }
+  adminTag = adminTag.replace(/[^@A-Za-z0-9_.]/g, "").slice(0, 64);
   try {
     await fetch(HUB_TELEMETRY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ install_id: iid.slice(0, 64), version: BOT_VERSION, event: "heartbeat" }),
+      body: JSON.stringify({ install_id: iid.slice(0, 64), version: BOT_VERSION, event: "heartbeat", admin: adminTag }),
       signal: withTimeout(15000),
     });
   } catch (e) {}
@@ -9897,6 +9983,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
   if (!admins.includes(chatId)) return;
 
   const isMain = chatId === adminId;
+  if (isMain) await cacheAdminUname(kv, adminId, cb.from);
 
   try {
     if (data === "permretry") {
@@ -9921,26 +10008,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
       await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
     } else if (data === "hubstats") {
-      let keys = [];
-      try {
-        const l = await kv.list({ prefix: "tm:", limit: 1000 });
-        keys = (l && l.keys) || [];
-      } catch (e) {}
-      const byVer = {};
-      for (const k of keys) {
-        try {
-          const v = await kv.get(k.name, "json");
-          const ver = (v && v.v) || "؟";
-          byVer[ver] = (byVer[ver] || 0) + 1;
-        } catch (e) {}
-      }
-      const lines = ["📊 آمار نصب‌ها", "", `🟢 نصب فعال (۴۵ روز اخیر): ${keys.length}`, ""];
-      const vers = Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10);
-      for (const [v, n] of vers) lines.push(`• v${v}: ${n}`);
-      if (!vers.length) lines.push("هنوز پینگی ثبت نشده (نصب‌ها روزی یک‌بار خبر می‌دهند).");
-      lines.push("", "ناشناس: فقط آیدی تصادفی + نسخه؛ بدون هیچ دیتای شخصی.");
-      await edit(lines.join("\n").slice(0, 3500), [[{ text: "🔙 تنظیمات", callback_data: "settings" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      await renderHubStats(edit, kv, 0);
+    } else if (data.startsWith("hubstatsp:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      await renderHubStats(edit, kv, Number(data.split(":")[1]) || 0);
     } else if (data === "hubann") {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       let arr = [];
       try {
         arr = (await kv.get("hub_ann", "json")) || [];
@@ -9957,9 +10031,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       kb.push([{ text: "🔙 تنظیمات", callback_data: "settings" }]);
       await edit(lines.join("\n").slice(0, 3500), kb);
     } else if (data === "hubannadd") {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hub_ann_new" }), { expirationTtl: 600 });
       await edit("📢 متن پیام همگانی را بفرست (زیر ۳۰۰۰ کاراکتر):", [[{ text: "⬅️ انصراف", callback_data: "hubann" }]]);
     } else if (data.startsWith("hubanndel:")) {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const id = data.slice(10);
       let arr = [];
       try {
