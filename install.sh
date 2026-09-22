@@ -348,14 +348,26 @@ _tk_guide_block() {
   printf "        %s\n" "$(link "$CF_TOKENS_URL")"
   printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
   printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
-printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}6)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}7)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
-  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}
+"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}
+"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
+"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
+"
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
 }
 cf_token_guide() {
@@ -370,14 +382,26 @@ cf_perm_error() {
   printf "${RED}${BOLD}  │${RST}  ⛔ ${BOLD}%s${RST}\n" "$(t perm_box)"
   printf "${RED}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  %s\n\n" "$(t perm_body)"
-printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}6)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}7)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
-  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}
+"
+  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}
+"
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
+"
+  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
+"
+  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
+"
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
