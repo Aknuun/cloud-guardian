@@ -76,7 +76,7 @@
 
 | # | پیشنیاز | راهنما |
 |---|---|---|
-| ۱ | توکن API کلادفلر | [ساخت توکن](https://dash.cloudflare.com/profile/api-tokens) · [آموزش متنی](docs/cloudflare-api-token.md) |
+| ۱ | توکن API کلادفلر | در پایین توضیح داده شده |
 | ۲ | توکن ربات تلگرام | از [@BotFather](https://t.me/BotFather) با دستور `/newbot` |
 | ۳ | شناسهٔ عددی تلگرام خودتان (برای مدیر) | از [@userinfobot](https://t.me/userinfobot) |
 
