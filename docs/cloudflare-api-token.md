@@ -1,6 +1,8 @@
 # آموزش متنی: ساخت توکن API کلادفلر
 
-این آموزش، گامبهگام ساخت توکنی است که رباتِ «نگهبان ابری» برای مدیریت DNS و دیپلوی روی ورکر به آن نیاز دارد.
+> 🆕 **آپدیت شهریور 1404 — فقط ۱ مجوز کافیست!** اسکریپت نصب با یک توکن Bootstrap (`Account → API Tokens → Edit`) بقیه 10 مجوز را خودش می‌سازد. دیگر لازم نیست یکی یکی فعال کنید.
+
+این آموزش، گامبهگام ساخت توکن Bootstrap است که رباتِ «نگهبان ابری» برای ساخت خودکار توکن اصلی استفاده می‌کند.
 
 > 🔗 **لینک مستقیم ساخت توکن:** https://dash.cloudflare.com/profile/api-tokens
 
@@ -21,29 +23,21 @@
 
 ---
 
-## مرحلهٔ ۳ — تنظیم دسترسیها (مهمترین قسمت)
+## مرحلهٔ ۳ — تنظیم دسترسی Bootstrap (فقط ۱ مجوز)
 
-1. یک نام بگذارید، مثلاً `cloud-guardian`.
-2. این ده دسترسی را اضافه کنید (روی **Add more** بعد از هر کدام):
-
-| بخش | اسم | سطح | برای چه کاری در ربات |
+1. یک نام بگذارید، مثلاً `cloud-guardian-bootstrap`.
+2. **فقط این یک دسترسی را اضافه کنید:**
+| بخش | اسم | سطح | توضیح |
 |---|---|---|---|
-| Account | Workers Scripts | Edit | دیپلوی، آپدیت خودکار ورکر و سابدامنهٔ `workers.dev` |
-| Account | Workers KV Storage | Edit | ساخت KV ربات |
-| Zone | DNS | Edit | مدیریت رکوردها و ساخت سابدامنهٔ رله |
-| Zone | Zone Settings | Edit | مشاهده/تغییر تنظیمات هر زون (TLS/کش/…) |
-| Zone | Cache Purge | Purge | دکمهٔ «پاککردن کش» زون |
-| Zone | Email Routing Rules | Edit | فعال‌سازی ایمیل، قوانین فوروارد و دریافت در ربات (صندوق ورودی) |
-| Account | Email Routing Addresses | Read | دیدن مقصدهای ایمیل (جیمیل‌های تأییدشده) |
-| Account | Email Routing Addresses | Edit | افزودن مقصد ایمیل جدید |
-| Zone | Analytics | Read | «📊 ترافیک ساب‌ها» (آمار ۷ روزهٔ هر ساب) |
-| Account | Account Analytics | Read | «📊 ترافیک ساب‌ها» (پیش‌نیاز کوئری آنالیتیکس) |
-
-> ⚠️ کار با سابدامنهٔ `workers.dev` جداگانه نیست؛ زیرمجموعهٔ دسترسی **Account → Workers Scripts → Edit** است و در فهرست پنل ابری به این اسم دیده نمیشود.
-> ⚠️ این ده دسترسی، **دقیقاً** همانهایی هستند که ربات استفاده میکند. توکن قبلی‌تان فقط پنج‌تای اول را داشت؟ چون توکن قابل ویرایش نیست، یک توکن جدید با هر ده دسترسی بسازید و در ربات جایگزین کنید: کلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید.
+| Account | API Tokens | Edit | اجازه ساخت توکن اصلی با 10 مجوز به اسکریپت |
 
 3. بخش **Account Resources** را روی **Include → All accounts** بگذارید.
-4. بخش **Zone Resources** را روی **Include → All zones** بگذارید.
+4. **Zone Resources را لازم نیست پر کنید** (خالی بماند).
+5. `Continue → Create Token` و توکن `cfut_...` را کپی کنید و به اسکریپت نصب بدهید.
+
+> ✅ اسکریپت با این توکن Bootstrap به صورت خودکار یک توکن اصلی می‌سازد که شامل این 10 مجوز است و آن را ذخیره می‌کند:
+> `Workers Scripts/Edit`, `Workers KV/Edit`, `DNS/Edit`, `Zone Settings/Edit`, `Cache Purge/Purge`, `Email Routing Rules/Edit`, `Email Routing Addresses/Read`, `Email Routing Addresses/Edit`, `Analytics/Read`, `Account Analytics/Read`
+> توکن Bootstrap بعد از نصب قابل حذف است (TTL پیشنهادی 10 دقیقه).
 
 ---
 
