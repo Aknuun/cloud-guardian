@@ -3,7 +3,7 @@
 ### ۱. برو به:
 https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 
-### ۲. این ۱۰ تا رو تیک بزن:
+### ۲. این ۹ تا رو تیک بزن (۴ اجباری + ۵ اختیاری):
 
 - [x] **Account** → `Workers Scripts` → **Edit**
 - [x] **Account** → `Workers KV Storage` → **Edit**
