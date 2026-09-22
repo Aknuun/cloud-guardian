@@ -11,7 +11,7 @@ https://dash.cloudflare.com/profile/api-tokens → `Create Custom Token`
 - [x] **Zone** → `DNS` → **Edit**
 - [x] **Zone** → `Zone Settings` → **Edit**
 
-**اختیاری (۵ تا):**
+**اختیاری (۴ تا):**
 - [x] **Zone** → `Email Routing Rules` → **Edit**
 - [x] **Account** → `Email Routing Addresses` → **Edit**
 - [x] **Zone** → `Analytics` → **Read**
