@@ -524,18 +524,11 @@ _tk_guide_block() {
   printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
   printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
   printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}     · ${GREEN}Edit${RST} ${DIM}(فقط همین یکی)${RST}\n"
-  printf "     %s\n" "$(t tk_res)"
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
-  printf "     ${DIM}%s %s${RST}\n" "$(t tk_visual)" "$(link "$DOC_TOKEN_URL")"
 }
 cf_token_guide() {
-  local save="$CG_L"
-  printf '\n'
-  CG_L=fa; _tk_guide_block
-  hr
   CG_L=en; _tk_guide_block
   hr
-  CG_L="$save"
 }
 
 # ─────────────── خطای رنگيِ دسترسی توکن کلادفلر ───────────────
@@ -545,16 +538,7 @@ cf_perm_error() {
   printf "${RED}${BOLD}  │${RST}  ⛔ ${BOLD}%s${RST}\n" "$(t perm_box)"
   printf "${RED}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  %s\n\n" "$(t perm_body)"
-  printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}3)${RST} Zone    · ${YELLOW}DNS${RST}                 · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}\n"
-  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}\n"
-  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}\n"
-  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}\n"
-  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}\n\n"
+  printf "       ${GREEN}1)${RST} Account · ${YELLOW}API Tokens${RST}          · ${GREEN}Edit${RST}\n"
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
