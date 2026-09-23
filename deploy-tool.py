@@ -73,20 +73,25 @@ _S = {
     "rec_update_fail": ("❌ به‌روزرسانی رکورد: %s", "❌ Failed to update record: %s"),
     "rec_create_fail": ("❌ ساخت رکورد: %s", "❌ Failed to create record: %s"),
     "ck_token_inactive": ("توکن غیرفعال/نامعتبر است", "Token is inactive/invalid"),
+    "ck_acct_analytics": ("Account · Account Analytics · Read", "Account · Account Analytics · Read"),
+    "ck_opt_title": ("دسترسی‌های اختیاری ناقص است", "Optional permissions are incomplete"),
+    "ck_opt_body": ("این‌ها برای نصب لازم نیستند ولی قابلیت‌هایشان کار نمی‌کند:", "These are not needed for install, but their features will not work:"),
+    "ck_analytics_note": ("Zone Analytics بدون کوئری واقعی قابل تست نیست؛ اگر صفحه «ترافیک ساب‌ها» را می‌خواهی دسترسی Zone · Analytics · Read را هم بده.",
+                        "Zone Analytics cannot be tested without a real query; grant Zone · Analytics · Read if you use the traffic page."),
     "ck_workers":      ("Account · Workers Scripts · Edit", "Account · Workers Scripts · Edit"),
     "ck_kv":           ("Account · Workers KV Storage · Edit", "Account · Workers KV Storage · Edit"),
     "ck_zones_perm":   ("Zone · DNS · Edit (دسترسی به زون‌ها)", "Zone · DNS · Edit (zone access)"),
     "ck_dns":          ("Zone · DNS · Edit (خواندن رکوردها)", "Zone · DNS · Edit (record read)"),
     "ck_settings":     ("Zone · Zone Settings · Edit", "Zone · Zone Settings · Edit"),
     "ck_mail":         ("Zone · Email Routing Rules · Edit (ایمیل‌ها و صندوق ورودی)", "Zone · Email Routing Rules · Edit (emails and inbox)"),
-    "ck_mailaddr":     ("Account · Email Routing Addresses · Read/Edit (مقصدهای ایمیل)", "Account · Email Routing Addresses · Read/Edit (email destinations)"),
+    "ck_mailaddr":     ("Account · Email Routing Addresses · Edit (مقصدهای ایمیل)", "Account · Email Routing Addresses · Edit (email destinations)"),
     "ck_cache_note":   ("Cache Purge بدون اجرای واقعی قابل تست نیست؛ مطمئن شو دسترسی Purge را هم داده‌ای.",
                         "Cache Purge cannot be tested without a real purge; make sure the Purge permission is granted."),
-    "ck_analytics_note": ("Analytics بدون کوئری واقعی قابل تست نیست؛ این دو دسترسی را هم بده: Zone · Analytics · Read و Account · Account Analytics · Read.",
-                        "Analytics cannot be tested without a real query; also grant these two: Zone · Analytics · Read and Account · Account Analytics · Read."),
+    "ck_analytics_note": ("Zone Analytics بدون کوئری واقعی قابل تست نیست؛ اگر صفحه «ترافیک ساب‌ها» را می‌خواهی دسترسی Zone · Analytics · Read را هم بده.",
+                        "Zone Analytics cannot be tested without a real query; grant Zone · Analytics · Read if you use the traffic page."),
     "ck_fail_title":   ("دسترسی‌های توکن کلادفلر ناقص است", "Cloudflare token permissions are incomplete"),
     "ck_fail_body":    ("این دسترسی‌ها درست نیستند یا کم هستند:", "These permissions are missing or wrong:"),
-    "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۱۰ دسترسی لازم را بده:", "Edit/create the token here and grant the 10 required permissions:"),
+    "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۸ دسترسی لازم را بده:", "Edit/create the token here and grant the 8 required permissions:"),
 }
 
 
@@ -415,17 +420,44 @@ def _perm_summary(failures):
     print()
 
 
+def check_acct_analytics(tok, acc):
+    if not acc:
+        return None, "no account"
+    import datetime
+    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    q = {"query": "{viewer{accounts(filter:{accountTag:\"%s\"}){workersInvocationsAdaptive(limit:1,filter:{datetime_geq:\"%sT00:00:30Z\"}){sum{requests}}}}}" % (acc, day)}
+    try:
+        st, out = req(tok, "POST", "https://api.cloudflare.com/client/v4/graphql", json.dumps(q).encode("utf-8"), "application/json")
+        d = json.loads(out)
+    except Exception as ex:
+        return None, str(ex)[:120]
+    if isinstance(d, dict) and d.get("data") and not d.get("errors"):
+        return True, None
+    err = ""
+    try:
+        errs = (d.get("errors") if isinstance(d, dict) else None) or []
+        err = "; ".join([str(e.get("message", "")) for e in errs if isinstance(e, dict)][:2])
+    except Exception:
+        pass
+    return None, (err or ("HTTP %s" % st))[:160]
+
+
 def cmd_check(cfg, tok, show_box=True):
     failures = []
+    opt_failures = []
 
-    def line(good, critical, label, detail="", note=""):
+    # exit codes: 0 = همه اوکی، ۲ = فقط اختیاری‌ها ناقص‌اند، ۱ = اجباری‌ها ناقص‌اند
+    def line(good, critical, label, detail="", note="", optional=False):
         mark = (GREEN + "✅" + RST) if good else (RED + "❌" + RST)
         extra = (" — " + detail) if detail else ""
         if note:
             extra += " " + YELLOW + note + RST
         print(mark + " " + label + extra)
-        if not good and critical:
-            failures.append(label)
+        if not good:
+            if optional:
+                opt_failures.append(label)
+            elif critical:
+                failures.append(label)
 
     st, out = req(tok, "GET", f"{API}/user/tokens/verify")
     res, err = json_ok(st, out)
@@ -452,7 +484,9 @@ def cmd_check(cfg, tok, show_box=True):
         line(not err, True, T("ck_kv"), "" if not err else str(err)[:160])
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/email/routing/addresses?per_page=1")
         _, err = json_ok(st, out)
-        line(not err, True, T("ck_mailaddr"), "" if not err else str(err)[:160])
+        line(not err, True, T("ck_mailaddr"), "" if not err else str(err)[:160], optional=True)
+        ok7, err7 = check_acct_analytics(tok, acc)
+        line(bool(ok7), True, T("ck_acct_analytics"), "" if ok7 else str(err7 or "")[:160], optional=True)
 
     st, out = req(tok, "GET", f"{API}/zones?per_page=50")
     res, err = json_ok(st, out)
@@ -473,13 +507,19 @@ def cmd_check(cfg, tok, show_box=True):
             line(not err, True, T("ck_settings"), "" if not err else str(err)[:160])
             st, out = req(tok, "GET", f"{API}/zones/{z['id']}/email/routing")
             _, err = json_ok(st, out)
-            line(not err, True, T("ck_mail"), "" if not err else str(err)[:160])
+            line(not err, True, T("ck_mail"), "" if not err else str(err)[:160], optional=True)
 
-    print(YELLOW + "ℹ️ " + RST + T("ck_cache_note"))
     print(YELLOW + "ℹ️ " + RST + T("ck_analytics_note"))
     if show_box:
         _perm_summary(failures)
-    return 1 if failures else 0
+        if opt_failures:
+            print()
+            print(YELLOW + BOLD + "  ── " + T("ck_opt_title") + RST)
+            print("  " + T("ck_opt_body"))
+            for f in opt_failures:
+                print("    " + YELLOW + "•" + RST + " " + f)
+            print()
+    return 1 if failures else (2 if opt_failures else 0)
 
 
 def cmd_uninstall(cfg, tok, keep_kv=False, keep_webhook=False):
