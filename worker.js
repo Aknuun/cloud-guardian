@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.11";
+const BOT_VERSION = "1.5.12";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.12": [
+    "🖥 گزارش مانیتور سرورها دکمه‌ای شد: هر سرور یک دکمه ۳ ستونه (CPU/RAM، بدون دیسک) با باز شدن جزئیات",
+    "🛡 خطای relay 403: خودکار رله پیش‌فرض فعال و یک‌بار تلاش مجدد می‌شود + دکمه «🔧 تنظیم رله» همیشه زیر خطاها و گزارش مانیتور هست",
+    "🗂 سرچ آیپی: دکمه «✅ انتخاب همه» کنار عملیات گروهی (همه نتایج یک‌جا تیک می‌خورند)",
+  ],
   "1.5.11": [
     "🛠 نصب‌گر استاندارد شد: اول پیش‌نیازها خودکار، بعد توکن و مشخصات مثل نصب کامل گرفته و ذخیره می‌شود؛ آپدیت و حذف بدون config قبلی هم کار می‌کنند و مستقیم آخرین نسخه روی ورکر دیپلوی می‌شود",
   ],
@@ -5283,6 +5288,18 @@ async function setRelayMode(kv, mode) {
     await kv.put(RELAY_MODE_KEY, mode);
   } catch (e) {}
 }
+// Auto-switch to the default relay on 403 (custom relay rejected) — caller retries once.
+async function srvAutoDefaultRelay(kv, env, err) {
+  try {
+    if (!err || !/403/.test(String(err))) return false;
+    const mode = await getRelayMode(kv);
+    if (mode === "default") return false;
+    const def = getDefaultRelayCfg(env);
+    if (!def.url) return false;
+    await setRelayMode(kv, "default");
+    return true;
+  } catch (e) { return false; }
+}
 
 // ليست کاندیداها برای fallback: [فعال، پیش‌فرض] — در حالت custom فقط فعال
 async function relayCandidates(kv, env) {
@@ -5899,11 +5916,19 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   }
   const admins = await getAdmins(kv, env);
   const alerts = [];
-  const okSummaries = [];
-  for (const s of list) {
-    const st = await srvRelayStats(kv, env, s);
+  const srvBtns = [];
+  let relayFixed = false;
+  for (let si = 0; si < list.length; si++) {
+    const s = list[si];
+    let st = await srvRelayStats(kv, env, s);
+    if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) {
+      relayFixed = true;
+      st = await srvRelayStats(kv, env, s);
+    }
+    const shortName = String(s.name || s.host || "").slice(0, 18);
     if (st.error) {
       alerts.push(`🔴 ${escHtml(s.name)} — خطای اتصال SSH (${st.error})`);
+      srvBtns.push({ text: `🔴 ${shortName}`, callback_data: `srvopen:${si}` });
       continue;
     }
     const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
@@ -5914,6 +5939,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
     if (memPct >= cfg.memPct) issues.push(`RAM ${memPct}%`);
     if (diskPct >= cfg.diskPct) issues.push(`دیسک ${diskPct}%`);
     if (issues.length) {
+      srvBtns.push({ text: `🟡 ${shortName} · ${cpuPct}% · ${memPct}%`, callback_data: `srvopen:${si}` });
       // گارد cooldown: برای هر سرور فقط یک هشدار در بازهٔ تعیین‌شده
       const coolKey = `srv_cool:${s.id || s.host}`;
       const lastAlert = Number((await kv.get(coolKey)) || 0);
@@ -5922,15 +5948,23 @@ async function runSrvMonitor(env, botToken, manual, opts) {
         alerts.push(`⚠️ ${escHtml(s.name)} — ${issues.join(" · ")}`);
       }
     } else {
-      okSummaries.push(`🟢 ${escHtml(s.name)} — CPU ${cpuPct}% · RAM ${memPct}% · دیسک ${diskPct}%`);
+      srvBtns.push({ text: `🟢 ${shortName} · ${cpuPct}% · ${memPct}%`, callback_data: `srvopen:${si}` });
     }
   }
   if (!alerts.length && !manual) return;
   let msg = "📊 گزارش مانیتور سرورها\n\n";
   if (alerts.length) msg += alerts.join("\n") + "\n";
-  if (manual && okSummaries.length) msg += (alerts.length ? "\n" : "") + okSummaries.join("\n");
   if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
-  const kb = [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }], [{ text: "🏠 خانه", callback_data: "menu" }]];
+  if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
+  const kb = [];
+  for (let r = 0; r < srvBtns.length; r += 3) {
+    const row = srvBtns.slice(r, r + 3);
+    while (row.length < 3) row.push(EMPTY_BTN);
+    kb.push(row);
+  }
+  kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
+  kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]];
   for (const a of admins) {
     try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
   }
@@ -12627,11 +12661,13 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال جمع‌آوری آمار…");
-      const st = await srvRelayStats(kv, env, s);
+      let st = await srvRelayStats(kv, env, s);
+      if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) st = await srvRelayStats(kv, env, s);
       if (!st || st.error) {
         const txt = srvStatsText(s, st);
         await edit(txt, [
           [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+          [{ text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault" }, { text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
         ]);
       } else {
@@ -16904,6 +16940,7 @@ async function renderIpSearchMenu(io, token, page, note) {
     kb.push(nav);
   }
   if (selMode) {
+    kb.push([{ text: "✅ انتخاب همه", callback_data: `ipselall:${token}` }]);
     if (selSet.size > 0) {
       // ipbulkdel: حذف گروهی | ipbulkedit: تغییر مقدار گروهی | ipbulkfav: افزودن به منتخب‌ها
       kb.push([
@@ -17487,6 +17524,19 @@ async function dispatchFavQa(data, io) {
     const token = data.slice(10);
     const st = await kv.get(`ipsel:${chatId}`, "json");
     if (!st || st.token !== token) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    await renderIpSearchMenu(io, token, st.page || 0);
+    return true;
+  }
+  if (data.startsWith("ipselall:")) {
+    const token = data.slice(9);
+    const stored = await kv.get(`ips:${token}`, "json");
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    if (!stored || !st || st.token !== token) return edit("⏳ نشست منقضی شد.", mainMenuKeyboard());
+    const n = (stored.results || []).length;
+    const idxs = [];
+    for (let k = 0; k < n; k++) idxs.push(k);
+    st.idxs = idxs;
+    await kv.put(`ipsel:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
     await renderIpSearchMenu(io, token, st.page || 0);
     return true;
   }
