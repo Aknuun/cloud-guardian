@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.13";
+const BOT_VERSION = "1.5.14";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.14": [
+    "✉️ فیکس ارسال پیام به کاربر: آدرس ورکر با هر تغییر (تغییرنام/جابه‌جایی) خودکار تازه می‌شود + پیام خطا حالا آدرس ثبت‌شده و سن آخرین پینگ را نشان می‌دهد",
+  ],
   "1.5.13": [
     "🔙 استانداردسازی دکمه بازگشت: همه دکمه‌های برگشت (با هر اسم صفحه قبلی) شدند «🔙 بازگشت»؛ فقط عملکردشان فرق دارد",
     "✉️ اسم دکمه «ایمیل سازمانی» شد «ساخت ایمیل دامنه»",
@@ -6678,7 +6681,7 @@ async function cacheSelfUrl(kv, origin) {
   _lastSelfOrigin = origin;
   try {
     const cur = await kvGetCached(kv, "self_url", undefined, 3600000);
-    if (!cur) await kvPutCached(kv, "self_url", origin, undefined, 3600000);
+    if (!cur || cur !== origin) await kvPutCached(kv, "self_url", origin, undefined, 3600000);
   } catch (e) {
     console.error("SELF_URL", String(e));
   }
@@ -8605,7 +8608,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       });
       sent = !!(r && (r.ok || r.status === 200));
     } catch (e) {}
-    await send(sent ? "✅ پیام برای کاربر ارسال شد." : "⚠️ ارسال ناموفق بود (شاید ربات کاربر آپدیت نیست).", [
+    await send(sent ? "✅ پیام برای کاربر ارسال شد." : `⚠️ ارسال ناموفق بود.\n🔗 آدرس ثبت‌شده: ${dest}\n🕓 آخرین پینگ: ${faAgo(v.ts)} · ورژن: ${v.v ? "v" + String(v.v).slice(0, 20) : "—"}\nاگر آدرس قدیمی است، کاربر دوباره نصب کرده؛ رکورد جدیدش را از «📊 آمار نصب‌ها» پیدا کن.`, [
       [{ text: "👤 بازگشت", callback_data: `hubuser:${iid}` }],
     ]);
     return;
