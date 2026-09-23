@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.17";
+const BOT_VERSION = "1.5.18";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.18": [
+    "🖥 گزارش مانیتور جدول شد: هر سرور یک ردیف سه‌ستونه (IP | CPU | RAM) با ردیف عنوان خاکستری؛ تپ روی IP جزئیات را باز می‌کند",
+  ],
   "1.5.17": [
     "🐛 فیکس باگ حیاتی دیپلوی (براکت اضافه در گزارش مانیتور که باعث رد شدن نسخه‌های 1.5.12 تا 1.5.16 می‌شد)",
   ],
@@ -5977,7 +5980,12 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   }
   const admins = await getAdmins(kv, env);
   const alerts = [];
-  const srvBtns = [];
+  const srvRows = [];
+  srvRows.push([
+    { text: "\u{1F310} IP", callback_data: "noop", style: "plain" },
+    { text: "\u2699\uFE0F CPU", callback_data: "noop", style: "plain" },
+    { text: "\u{1F9E0} RAM", callback_data: "noop", style: "plain" },
+  ]);
   let relayFixed = false;
   for (let si = 0; si < list.length; si++) {
     const s = list[si];
@@ -5986,10 +5994,14 @@ async function runSrvMonitor(env, botToken, manual, opts) {
       relayFixed = true;
       st = await srvRelayStats(kv, env, s);
     }
-    const shortName = String(s.name || s.host || "").slice(0, 18);
+    const shortIp = String(s.host || s.name || "").slice(0, 16);
     if (st.error) {
       alerts.push(`🔴 ${escHtml(s.name)} — خطای اتصال SSH (${st.error})`);
-      srvBtns.push({ text: `🔴 ${shortName}`, callback_data: `srvopen:${si}` });
+      srvRows.push([
+        { text: `\u{1F534} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: "\u2014", callback_data: "noop", style: "plain" },
+        { text: "\u2014", callback_data: "noop", style: "plain" },
+      ]);
       continue;
     }
     const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
@@ -6000,7 +6012,11 @@ async function runSrvMonitor(env, botToken, manual, opts) {
     if (memPct >= cfg.memPct) issues.push(`RAM ${memPct}%`);
     if (diskPct >= cfg.diskPct) issues.push(`دیسک ${diskPct}%`);
     if (issues.length) {
-      srvBtns.push({ text: `🟡 ${shortName} · ${cpuPct}% · ${memPct}%`, callback_data: `srvopen:${si}` });
+      srvRows.push([
+        { text: `\u{1F7E1} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
+        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
+      ]);
       // گارد cooldown: برای هر سرور فقط یک هشدار در بازهٔ تعیین‌شده
       const coolKey = `srv_cool:${s.id || s.host}`;
       const lastAlert = Number((await kv.get(coolKey)) || 0);
@@ -6009,7 +6025,11 @@ async function runSrvMonitor(env, botToken, manual, opts) {
         alerts.push(`⚠️ ${escHtml(s.name)} — ${issues.join(" · ")}`);
       }
     } else {
-      srvBtns.push({ text: `🟢 ${shortName} · ${cpuPct}% · ${memPct}%`, callback_data: `srvopen:${si}` });
+      srvRows.push([
+        { text: `\u{1F7E2} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
+        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
+      ]);
     }
   }
   if (!alerts.length && !manual) return;
@@ -6017,12 +6037,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   if (alerts.length) msg += alerts.join("\n") + "\n";
   if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
   if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
-  const kb = [];
-  for (let r = 0; r < srvBtns.length; r += 3) {
-    const row = srvBtns.slice(r, r + 3);
-    while (row.length < 3) row.push(EMPTY_BTN);
-    kb.push(row);
-  }
+  const kb = srvRows;
   kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
   kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
   kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
