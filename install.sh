@@ -115,7 +115,9 @@ t() {
     en:tk_box)                 printf '%s' "🔑 Create a Cloudflare API token" ;;
     en:tk_opens)               printf '%s' "Open this link in your browser:" ;;
     en:tk_create)              printf '%s' "Click Create Token → Create Custom Token" ;;
-    en:tk_perms)               printf '%s' "Add these 10 permissions:" ;;
+    en:tk_perms)               printf '%s' "Add these 8 permissions (4 required + 4 optional):" ;;
+    en:tk_req)                 printf '%s' "REQUIRED (install stops without these):" ;;
+    en:tk_opt)                 printf '%s' "OPTIONAL (install succeeds without these):" ;;
     en:tk_res)                 printf '%s' "Then below: Account Resources = All accounts · Zone Resources = All zones" ;;
     en:tk_copy)                printf '%s' "Continue → Create Token, copy the token and paste it here." ;;
     en:tk_visual)              printf '%s' "Visual guide:" ;;
@@ -158,7 +160,9 @@ t() {
     en:usage_oneline)          printf '%s' "One-line install:" ;;
     en:step_perms)             printf '%s' "Checking Cloudflare token permissions" ;;
     en:perm_box)               printf '%s' "Cloudflare token permissions are missing or wrong" ;;
-    en:perm_body)              printf '%s' "Grant these 10 permissions on your token (Account Resources = All accounts · Zone Resources = All zones):" ;;
+    en:perm_body)              printf '%s' "Grant these 8 permissions on your token, 4 required + 4 optional (Account Resources = All accounts · Zone Resources = All zones):" ;;
+    en:ok_perms)               printf '%s' "All required permissions are granted." ;;
+    en:perm_opt_warn)          printf '%s' "Optional permissions are missing - install continues; those features will need them later." ;;
     en:perm_fix)               printf '%s' "Edit/create the token here:" ;;
     en:perm_continue)          printf '%s' "Continue anyway? [y/N] " ;;
     en:perm_abort)             printf '%s' "Install aborted. Fix the token and run again." ;;
@@ -377,6 +381,7 @@ _tk_guide_block() {
   printf "        %s\n" "$(link "$CF_TOKENS_URL")"
   printf "  ${BOLD}2)${RST} %s\n" "$(t tk_create)"
   printf "  ${BOLD}3)${RST} %s\n" "$(t tk_perms)"
+  printf "       ${BOLD}%s${RST}\n" "$(t tk_req)"
   printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}
 "
   printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}
@@ -385,17 +390,14 @@ _tk_guide_block() {
 "
   printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}
+  printf "       ${BOLD}%s${RST}\n" "$(t tk_opt)"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
+  printf "       ${GREEN}6)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}
+  printf "       ${GREEN}7)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
 "
-  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
-"
-  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
-"
-  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
 "
   printf "  ${BOLD}4)${RST} %s\n" "$(t tk_copy)"
 }
@@ -411,6 +413,7 @@ cf_perm_error() {
   printf "${RED}${BOLD}  │${RST}  ⛔ ${BOLD}%s${RST}\n" "$(t perm_box)"
   printf "${RED}${BOLD}  ╰──────────────────────────────────────────────────────────────╯${RST}\n\n"
   printf "  %s\n\n" "$(t perm_body)"
+  printf "       ${BOLD}%s${RST}\n" "$(t tk_req)"
   printf "       ${GREEN}1)${RST} Account · ${YELLOW}Workers Scripts${RST}     · ${GREEN}Edit${RST}
 "
   printf "       ${GREEN}2)${RST} Account · ${YELLOW}Workers KV Storage${RST}  · ${GREEN}Edit${RST}
@@ -419,17 +422,14 @@ cf_perm_error() {
 "
   printf "       ${GREEN}4)${RST} Zone    · ${YELLOW}Zone Settings${RST}       · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Cache Purge${RST}         · ${GREEN}Purge${RST}
+  printf "       ${BOLD}%s${RST}\n" "$(t tk_opt)"
+  printf "       ${GREEN}5)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}6)${RST} Zone    · ${YELLOW}Email Routing Rules${RST} · ${GREEN}Edit${RST}
+  printf "       ${GREEN}6)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
 "
-  printf "       ${GREEN}7)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Read${RST}
+  printf "       ${GREEN}7)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
 "
-  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Email Routing Addresses${RST} · ${GREEN}Edit${RST}
-"
-  printf "       ${GREEN}9)${RST} Zone    · ${YELLOW}Analytics${RST}           · ${GREEN}Read${RST}
-"
-  printf "       ${GREEN}10)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
+  printf "       ${GREEN}8)${RST} Account · ${YELLOW}Account Analytics${RST}   · ${GREEN}Read${RST}
 "
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
@@ -524,13 +524,18 @@ do_install() {
   ok "$(t ok_config): $CFG"
 
   step "$(t step_perms)"
-  if ! ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box ); then
+  set +e
+  ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box )
+  rc=$?
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    ok "$(t ok_perms)"
+  elif [ "$rc" -eq 2 ]; then
+    warn "$(t perm_opt_warn)"
+  else
     cf_perm_error
     if [ -n "${FORCE:-}" ]; then
       warn "$(t perm_abort)"
-    elif [ -t 0 ]; then
-      read -rp "  $(t perm_continue)" a
-      [[ "${a,,}" == "y" ]] || { err "$(t perm_abort)"; exit 1; }
     else
       err "$(t perm_abort)"; exit 1
     fi
@@ -787,7 +792,7 @@ ensure_ctx() {
   return 1
 }
 do_status() { printf "\n${MAG}${BOLD}📊 %s${RST}\n" "$(t st_title)"; hr; ensure_tool_only; ensure_ctx basic || return 0; ( cd "$DIR" && python3 deploy-tool.py status ); printf '\n'; }
-do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; ensure_ctx basic || return 0; ( cd "$DIR" && python3 deploy-tool.py check ); printf '\n'; }
+do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensure_tool_only; ensure_ctx basic || return 0; ( cd "$DIR" && python3 deploy-tool.py check ) || true; printf '\n'; }
 
 usage() {
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t usage_title)"; hr
