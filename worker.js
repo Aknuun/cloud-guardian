@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.14";
+const BOT_VERSION = "1.5.15";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.15": [
+    "🛡 آپدیت خودکار تضمینی بعد از هر ریلیز: جابه‌جایی تگ هم لو می‌رود و بازنشر می‌شود + ضدازدحام سهمیه گیت‌هاب (بک‌آف تصادفی و پخش زمان چک ربات‌ها)",
+  ],
   "1.5.14": [
     "✉️ فیکس ارسال پیام به کاربر: آدرس ورکر با هر تغییر (تغییرنام/جابه‌جایی) خودکار تازه می‌شود + پیام خطا حالا آدرس ثبت‌شده و سن آخرین پینگ را نشان می‌دهد",
   ],
@@ -1065,7 +1068,7 @@ export default {
             // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
             jobs.push(runNodeAddPending(env, { skipGuard: true }).catch((e) => console.error("NODEADD", String(e))));
           }
-          if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS) {
+          if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS + selfupJitter(env)) {
             patch.selfup = now;
             jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
           }
@@ -2139,6 +2142,10 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
   if (!kv || !aid || !wname) return;
   const skipGuard = !!(opts && opts.skipGuard);
   try {
+    const until = Number((await kv.get("selfup_backoff_until")) || 0);
+    if (until && Date.now() < until) return;
+  } catch (e) {}
+  try {
     if (!skipGuard) {
       const last = Number((await kv.get("selfup_last")) || 0);
       if (Date.now() - last < SELFUP_MIN_MS) return;
@@ -2165,7 +2172,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       } catch (e) {}
       return;
     }
-    if (!tRes.ok) return;
+    if (!tRes.ok) { await selfupBackoff(kv, 20, 60); return; }
     try {
       const newEtag = tRes.headers.get("etag");
       if (newEtag) await kv.put("selfup_etag_tags", newEtag);
@@ -2176,7 +2183,12 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     } catch (e) {
       return;
     }
-    const tagFromTags = selfLatestTag(Array.isArray(tags) ? tags.map((t) => t && t.name) : []);
+    const tagList = Array.isArray(tags) ? tags : [];
+    const tagSha = {};
+    for (const t of tagList) {
+      try { if (t && t.name && t.commit && t.commit.sha) tagSha[t.name] = t.commit.sha; } catch (e) {}
+    }
+    const tagFromTags = selfLatestTag(tagList.map((t) => t && t.name));
     // ریلیزها: درفت‌ها نادیده گرفته می‌شوند؛ پری‌ریلیزها هم نادیده (فقط ریلیز پایدار)
     let tagFromRelease = null;
     try {
@@ -2204,7 +2216,21 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     } catch (e) {}
     let tag = tagFromTags;
     if (tagFromRelease && (!tag || selfVerGreater(tagFromRelease, tag))) tag = tagFromRelease;
-    if (!tag || !selfVerGreater(tag, BOT_VERSION)) return;
+    if (!tag) return;
+    const latestSha = (tag && tagSha[tag]) || null;
+    let seen = null;
+    try { seen = await kv.get("selfup_seen", "json"); } catch (e) {}
+    const newer = selfVerGreater(tag, BOT_VERSION);
+    const sameVer = !newer && !selfVerGreater(BOT_VERSION, tag);
+    // تگ جابه‌جا شده؟ (همان ورژن ولی کامیت جدید) → بازنشر و redeploy تا کد کهنه گیر نکند
+    const moved = !!(sameVer && latestSha && seen && seen.tag === tag && seen.sha && seen.sha !== latestSha);
+    if (!newer && !moved) {
+      // خط مبنا ثبت شود تا جابه‌جایی بعدی تگ لو برود
+      if (sameVer && latestSha && (!seen || seen.tag !== tag || seen.sha !== latestSha)) {
+        try { await kv.put("selfup_seen", JSON.stringify({ tag, sha: latestSha })); } catch (e) {}
+      }
+      return;
+    }
 
     const res = await fetch(
       `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
@@ -2213,11 +2239,11 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
         signal: AbortSignal.timeout(30000),
       }
     );
-    if (!res.ok) return;
+    if (!res.ok) { await selfupBackoff(kv, 30, 90); return; }
     const code = await res.text();
     const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
     if (!m || !code.includes("export default {")) return;
-    if (!selfVerGreater(m[1], BOT_VERSION)) {
+    if (!selfVerGreater(m[1], BOT_VERSION) && !moved) {
       // تگ جدید است ولی کد سرو شده قدیمی است (مثلاً تگ وسط راه جابه‌جا شده):
       // کش ETag را پاک کن تا چرخهٔ بعد کامل و تازه چک شود و ربات روی نسخهٔ میانی گیر نکند
       if (tag && selfVerGreater(tag, BOT_VERSION)) {
@@ -2226,6 +2252,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       }
       return;
     }
+    if (moved && selfVerGreater(BOT_VERSION, m[1])) return; // هرگز دانگرید نکن
     // ⚠️ بایندینگ‌ها را از env بازسازی کن و با API نصب (PUT) دیپلوی کن.
     // API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
     // بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
@@ -2290,7 +2317,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       signal: withTimeout(90000),
     });
     const upData = await upRes.json();
-    if (!upData.success) return;
+    if (!upData.success) { await selfupBackoff(kv, 30, 90); return; }
     try {
       await fetch(base + "/subdomain", {
         method: "POST",
@@ -2309,6 +2336,10 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
         });
       } catch (e) {}
     }
+    try {
+      await kv.put("selfup_seen", JSON.stringify({ tag, sha: latestSha || (seen && seen.sha) || "" }));
+    } catch (e) {}
+    try { await kv.delete("selfup_backoff_until"); } catch (e) {}
     if (!skipGuard) await kv.put("selfup_last", String(Date.now()));
     try {
       await kv.put("release_seen", m[1]);
@@ -2329,8 +2360,9 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       } catch (e) {
         notes = RELEASE_NOTES[m[1]] || [];
       }
+      if (moved && !notes.length) notes = RELEASE_NOTES[m[1]] || [];
       const lines = [
-        `🔄 آپدیت خودکار از مخزن انجام شد: v${BOT_VERSION} ← v${m[1]}`,
+        `🔄 آپدیت خودکار از مخزن انجام شد: v${BOT_VERSION} ← v${m[1]}${moved ? " (بازنشر تگ)" : ""}`,
         ...(notes.length ? ["", "✨ تغییرات جدید:", ...notes] : []),
       ];
       try {
@@ -5233,6 +5265,22 @@ const UM_REPORT_TOP = 10;
 const UM_MIN_INTERVAL_MS = 30 * 60000;
 const NODEADD_MIN_MS = 30 * 60000;
 const SELFUP_MIN_MS = 10 * 60000;
+// jitter قطعی هر ورکر (۰ تا ۵ دقیقه از هش اسم ورکر): چک‌های همه ربات‌ها روی هم نمی‌افتد
+function selfupJitter(env) {
+  try {
+    const s = String((env && env.WORKER_NAME) || "");
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return (h % 6) * 60000;
+  } catch (e) { return 0; }
+}
+// بک‌آف تصادفی بعد از خطا (مخصوصاً 403 سهمیه مشترک گیت‌هاب)
+async function selfupBackoff(kv, minMin, maxMin) {
+  try {
+    const ms = (minMin + Math.random() * (maxMin - minMin)) * 60000;
+    await kv.put("selfup_backoff_until", String(Date.now() + Math.floor(ms)));
+  } catch (e) {}
+}
 
 // ===================== سرورها (SSH از طریق رلهٔ واحد) =====================
 // همهٔ اتصال‌های SSH از طریق رلهٔ واحد srv-relay (روی VPS کاربر) انجام می‌شود؛
