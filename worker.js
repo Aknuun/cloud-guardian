@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.18";
+const BOT_VERSION = "1.5.19";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.19": [
+    "🔒 رفتار REALITY عوض شد: آدرس مثل هاست عادی خودکار تعویض می‌شود ولی SNI هرگز دست نمی‌خورد (REALITY به SNI حساس است) + هشدار دامنه‌های محافظت‌شده ضداسپم شد (هر دامنه فقط یک‌بار در ۲۴ ساعت)",
+  ],
   "1.5.18": [
     "🖥 گزارش مانیتور جدول شد: هر سرور یک ردیف سه‌ستونه (IP | CPU | RAM) با ردیف عنوان خاکستری؛ تپ روی IP جزئیات را باز می‌کند",
   ],
@@ -18763,17 +18766,48 @@ async function runHostFilter(env, opts = {}) {
         const dv = String(v).toLowerCase();
         if (!filtered[dv] || repl[dv]) continue;
 
-        // REALITY / Fastly configs: by default alert only, never change.
-        // If cfg.realityRotate is true, they rotate like normal hosts.
-        if (!cfg.realityRotate && (hfIsReality(item.host) || hfIsFastly(item.host, dv))) {
-          const why = hfIsReality(item.host) ? "REALITY" : "Fastly";
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: why });
-          await hfNotify(
-            botToken,
-            admins,
-            "🔒 دامنه فیلتر شد ولی کانفیگ " + why + " است؛ فقط هشدار (بدون تغییر):\n" +
-              "🖥 پنل: " + escHtml(item.panel.name) + "\n📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n🔗 " + code(dv)
-          );
+        // REALITY: آدرس مثل هاست عادی تعویض می‌شود، ولی SNI/host هرگز دست نمی‌خورد (REALITY به SNI حساس است).
+        // ضداسپم: هشدار هر دامنه فقط یک‌بار در ۲۴ ساعت می‌آید (بررسی دستی همیشه پیام می‌دهد).
+        const hfIsReal = hfIsReality(item.host);
+        if (hfIsReal && field !== "address") {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv, field, reason: "REALITY" });
+          const prevP = ipNotices[dv];
+          const freshP =
+            prevP &&
+            prevP.kind === "protected_sni" &&
+            Number(prevP.ts || 0) > 0 &&
+            Date.now() - Number(prevP.ts) < HOSTFILTER_IP_NOTICE_TTL_MS;
+          if (manual || opts.force || !freshP) {
+            await hfNotify(
+              botToken,
+              admins,
+              "🔒 دامنه فیلتر شد ولی SNI کانفیگ REALITY است؛ تغییر نکرد (REALITY به SNI حساس است):\n" +
+                "🖥 پنل: " + escHtml(item.panel.name) + "\n📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n🔗 " + code(dv) + "\n📝 آدرس خودکار تعویض می‌شود؛ SNI دست نمی‌خورد."
+            );
+            ipNotices[dv] = { kind: "protected_sni", ip: "", ts: Date.now() };
+            ipNoticesDirty = true;
+          }
+          continue;
+        }
+        // Fastly: مثل قبل فقط هشدار (با همان ضداسپم یک‌بار در ۲۴ ساعت)، مگر تعویض Fastly روشن باشد.
+        if (!cfg.realityRotate && !hfIsReal && hfIsFastly(item.host, dv)) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: "Fastly" });
+          const prevP = ipNotices[dv];
+          const freshP =
+            prevP &&
+            prevP.kind === "protected" &&
+            Number(prevP.ts || 0) > 0 &&
+            Date.now() - Number(prevP.ts) < HOSTFILTER_IP_NOTICE_TTL_MS;
+          if (manual || opts.force || !freshP) {
+            await hfNotify(
+              botToken,
+              admins,
+              "🔒 دامنه فیلتر شد ولی کانفیگ Fastly است؛ فقط هشدار (بدون تغییر):\n" +
+                "🖥 پنل: " + escHtml(item.panel.name) + "\n📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n🔗 " + code(dv)
+            );
+            ipNotices[dv] = { kind: "protected", ip: "", ts: Date.now() };
+            ipNoticesDirty = true;
+          }
           continue;
         }
 
@@ -18963,14 +18997,14 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("📦 تعداد هر اجرا: " + cfg.batch + " · 🔁 حداکثر تعویض: " + cfg.maxChanges);
   lines.push("🔁 بررسی مجدد: " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار، هر " + cfg.recheckMin + " دقیقه" : "غیرفعال (تعویض فوری)"));
   lines.push("🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
-  lines.push("🔒 REALITY/Fastly: " + (cfg.realityRotate ? "🔄 تعویض فعال" : "فقط هشدار (پیش‌فرض)"));
+  lines.push("🔒 REALITY: آدرس تعویض می‌شود، SNI هرگز (فقط یک هشدار)؛ Fastly: " + (cfg.realityRotate ? "🔄 تعویض فعال" : "فقط هشدار"));
   lines.push("💾 بکاپ‌های نگه‌داشته: " + backups.length + " (حداکثر " + cfg.backupKeep + ")");
   if (cfg.last_run) lines.push("🕐 آخرین اجرا: " + ndFmtTs(cfg.last_run) + " به وقت ایران");
   if (cfg.last_summary) lines.push("📝 " + escHtml(cfg.last_summary));
   if (cfg.checkhost_down) lines.push("⚠️ سرویس بررسی در دسترس نیست (از " + ndFmtTs(cfg.checkhost_down.ts) + ")");
   lines.push("🔁 هاست‌های تعویض‌شده: " + count);
   lines.push("");
-  lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. کانفیگ‌های REALITY/Fastly: " + (cfg.realityRotate ? "مثل بقیه تعویض می‌شوند." : "فقط هشدار می‌گیرند (پیش‌فرض)."));
+  lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. در کانفیگ‌های REALITY فقط آدرس تعویض می‌شود و SNI هرگز دست نمی‌خورد (یک هشدار). Fastly: " + (cfg.realityRotate ? "مثل بقیه تعویض می‌شود." : "فقط هشدار می‌گیرد."));
   const isCh = cfg.provider === "checkhost";
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
@@ -19007,8 +19041,8 @@ function hfCommonSettingsKb(cfg) {
     [{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }],
     // recheck: تعداد بررسی مجدد پس از تشخیص فیلتر | recheckmin: فاصلهٔ بررسی مجدد
     [{ text: "♻️ تعداد بررسی مجدد", callback_data: "hfsetedit:recheck" }, { text: "⏱ فاصلهٔ بررسی مجدد", callback_data: "hfsetedit:recheckmin" }],
-    // hfreal: روشن/خاموش کردن تعویض کانفیگ‌های REALITY/Fastly (پیش‌فرض: فقط هشدار)
-    [{ text: cfg.realityRotate ? "🔒 فقط هشدار REALITY/Fastly" : "🔄 تعویض REALITY/Fastly", callback_data: "hfreal" }],
+    // hfreal: روشن/خاموش کردن تعویض Fastly (پیش‌فرض: فقط هشدار)؛ آدرس REALITY همیشه تعویض می‌شود و SNI آن هرگز
+    [{ text: cfg.realityRotate ? "🔒 فقط هشدار Fastly" : "🔄 تعویض Fastly", callback_data: "hfreal" }],
     // hfforeign: بررسی دسترسی خارج از ایران برای همهٔ ساب‌ها
     [{ text: "🌍 بررسی دسترسی خارج همهٔ ساب‌ها", callback_data: "hfforeign" }],
     // backupkeep: تعداد بکاپ‌های نگه‌داشته‌شده
