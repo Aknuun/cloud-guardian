@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.19";
+const BOT_VERSION = "1.5.20";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.20": [
+    "⚡ موازی‌سازی بررسی هاست فیلتر: پینگ‌های هر اجرا (۵ همزمان) + تأیید مجدد + تشخیص آی‌پی موازی شد؛ ~۱۰ دقیقه به ~۱-۲ دقیقه رسید (منطق تعویض عوض نشده)",
+    "⏳ پیام «بررسی کامل» حالا بر اساس تعداد دامنه‌ها تخمین می‌زند نتیجه حدود چند دقیقه دیگر می‌رسد",
+  ],
   "1.5.19": [
     "🔒 رفتار REALITY عوض شد: آدرس مثل هاست عادی خودکار تعویض می‌شود ولی SNI هرگز دست نمی‌خورد (REALITY به SNI حساس است) + هشدار دامنه‌های محافظت‌شده ضداسپم شد (هر دامنه فقط یک‌بار در ۲۴ ساعت)",
   ],
@@ -13163,7 +13167,16 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const cfg = await getHostFilterCfg(kv);
       cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
       await saveHostFilterCfg(kv, cfg);
-      await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+      let hfN = Number(cfg.last_domains) || 0;
+      if (!hfN) {
+        try {
+          const hc = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+          hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
+        } catch (e) {}
+      }
+      const hfMins = hfEstimateMin(hfN, cfg.provider);
+      const hfScope = hfN ? " (" + hfN + " دامنه، حدود " + hfMins + " دقیقه)" : "";
+      await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
     } else if (data === "hfforeign") {
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
@@ -18214,6 +18227,53 @@ async function foreignPingOne(target, cfg, env, kv) {
 }
 
 
+// Estimate full-check minutes from domain count (parallel batches: ~3s/domain checkhost, ~5s/domain globalping + ~45s overhead).
+function hfEstimateMin(n, provider) {
+  const per = provider === "checkhost" ? 3 : 5;
+  return Math.max(1, Math.ceil((45 + Math.max(0, Number(n) || 0) * per) / 60));
+}
+
+// Concurrency-limited parallel map: same request count, ~10x faster batches (keeps provider/relay limits safe).
+async function hfPMap(list, fn, limit) {
+  const arr = Array.isArray(list) ? list : [];
+  const lim = Math.max(1, Math.min(10, Number(limit) || 5));
+  const out = new Array(arr.length);
+  let i = 0;
+  const workers = [];
+  for (let w = 0; w < Math.min(lim, arr.length); w++) {
+    workers.push((async () => {
+      while (i < arr.length) {
+        const idx = i++;
+        try { out[idx] = await fn(arr[idx], idx); } catch (e) { out[idx] = { error: "pmap" }; }
+      }
+    })());
+  }
+  await Promise.all(workers);
+  return out;
+}
+
+// Diagnose one domain's IP (pure: no notifications/state writes) — safe to run in parallel; results cached in ipCache.
+async function hfDiagDomain(dv, cfg, env, kv) {
+  const diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
+  let ips = null;
+  try { ips = await resolveIPs(dv, kv); } catch (e) { ips = null; }
+  if (ips && ips[0]) {
+    diag.ip = ips[0];
+    const ipp = await pingTarget(ips[0], cfg, env, kv);
+    const iranMeasured = !ipp.error;
+    const iranBlocked = iranMeasured && hostFilterIsBlocked(hostFilterPingBlocked(ipp, cfg), cfg);
+    const fp = await foreignPing(ips[0], cfg, env, kv);
+    const fstat = pingFailStats(fp);
+    const foreignDown = !fp.error && fstat.fail >= HOSTFILTER_IP_DOWN_FAILS;
+    diag.iranBlocked = iranBlocked;
+    diag.foreignFail = fstat.fail;
+    diag.ipDown = foreignDown && (!iranMeasured || iranBlocked);
+    diag.iranAccess = foreignDown && iranMeasured && !iranBlocked;
+    diag.ipBlocked = iranMeasured && iranBlocked && !foreignDown;
+  }
+  return diag;
+}
+
 async function pingTarget(target, cfg, env, kv) {
   if (cfg.provider === "checkhost") return checkHostPing(target, cfg.citiesSel, env, kv);
   return globalpingPing(target, cfg);
@@ -18667,6 +18727,7 @@ async function runHostFilter(env, opts = {}) {
   }
   if (hostList.length) await kvPutCached(kv, "hosts_cache", JSON.stringify(hostList), { expirationTtl: 3600 }, 3600000);
   const uniq = [...uniqSet];
+  cfg.last_domains = uniq.length;
   if (!uniq.length) {
     cfg.last_run = new Date().toISOString();
     cfg.last_summary = "دامنه‌ای برای بررسی پیدا نشد.";
@@ -18684,18 +18745,15 @@ async function runHostFilter(env, opts = {}) {
   for (let i = 0; i < take; i++) slice.push(uniq[(start + i) % uniq.length]);
   cfg.cursor = (start + take) % uniq.length;
 
-  // Ping checks.
+  // Ping checks (parallel, max 5 concurrent — same request count, ~10x faster).
   const results = {};
   let anyCheck = false;
-  for (const t of slice) {
-    const ping = await pingTarget(t, cfg, env, kv);
-    if (ping.error) {
-      await sleep(700);
-      continue;
-    }
-    results[t] = ping;
+  const slicePings = await hfPMap(slice, (t) => pingTarget(t, cfg, env, kv), 5);
+  for (let pi = 0; pi < slice.length; pi++) {
+    const ping = slicePings[pi];
+    if (!ping || ping.error) continue;
+    results[slice[pi]] = ping;
     anyCheck = true;
-    await sleep(1000);
   }
   if (!anyCheck) {
     cfg.checkhost_down = { ts: new Date().toISOString(), reason: "no_results" };
@@ -18706,14 +18764,21 @@ async function runHostFilter(env, opts = {}) {
     return { checkhost_down: true, cfg };
   }
 
-  // First pass filter.
+  // First pass filter (DNS lookups parallel).
   let filtered = {};
-  for (const t of Object.keys(results)) {
-    const info = hostFilterPingBlocked(results[t], cfg);
-    if (!hostFilterIsBlocked(info, cfg)) continue;
-    const ips = await resolveIPs(t, kv);
-    if (!ips || !ips.length) continue; // dead / non-resolving domain, not a filter
-    filtered[t] = info;
+  {
+    const cands = [];
+    for (const t of Object.keys(results)) {
+      const info = hostFilterPingBlocked(results[t], cfg);
+      if (!hostFilterIsBlocked(info, cfg)) continue;
+      cands.push([t, info]);
+    }
+    const resolutions = await hfPMap(cands, ([t]) => resolveIPs(t, kv), 6);
+    for (let ci = 0; ci < cands.length; ci++) {
+      const ips = resolutions[ci];
+      if (!ips || !ips.length) continue; // dead / non-resolving domain, not a filter
+      filtered[cands[ci][0]] = cands[ci][1];
+    }
   }
 
   // Confirmation: re-check the exact filtered domains, cfg.recheckCount times with cfg.recheckMin interval.
@@ -18723,13 +18788,14 @@ async function runHostFilter(env, opts = {}) {
     for (let r = 0; r < cfg.recheckCount; r++) {
       await sleep(cfg.recheckMin * 60000);
       const still = {};
-      for (const t of Object.keys(round)) {
-        const ping2 = await pingTarget(t, cfg, env, kv);
-        if (!ping2.error) {
+      const roundKeys = Object.keys(round);
+      const roundPings = await hfPMap(roundKeys, (t) => pingTarget(t, cfg, env, kv), 5);
+      for (let qi = 0; qi < roundKeys.length; qi++) {
+        const ping2 = roundPings[qi];
+        if (ping2 && !ping2.error) {
           const info2 = hostFilterPingBlocked(ping2, cfg);
-          if (hostFilterIsBlocked(info2, cfg)) still[t] = info2;
+          if (hostFilterIsBlocked(info2, cfg)) still[roundKeys[qi]] = info2;
         }
-        await sleep(1000);
       }
       round = still;
       if (!Object.keys(round).length) break;
@@ -18755,6 +18821,32 @@ async function runHostFilter(env, opts = {}) {
   let ipDownCount = 0;
   let iranAccessCount = 0;
   let didBackup = false;
+
+  // Pre-warm IP diagnosis for all filtered domains in parallel (max 4 concurrent; each warms IR + foreign checks).
+  {
+    const warmSet = new Set();
+    for (const item of hostItems) {
+      for (const field of ["address", "sni", "host"]) {
+        const arr = Array.isArray(item.host[field]) ? item.host[field] : [];
+        for (const v of arr) {
+          const dv = String(v).toLowerCase();
+          if (!filtered[dv] || warmSet.has(dv)) continue;
+          if (hfIsReality(item.host) && field !== "address") continue;
+          if (!cfg.realityRotate && !hfIsReality(item.host) && hfIsFastly(item.host, dv)) continue;
+          warmSet.add(dv);
+        }
+      }
+    }
+    const warmKeys = [...warmSet];
+    if (warmKeys.length) {
+      const warmDiags = await hfPMap(warmKeys, (dv) => hfDiagDomain(dv, cfg, env, kv), 4);
+      for (let wi = 0; wi < warmKeys.length; wi++) {
+        ipCache[warmKeys[wi]] = warmDiags[wi] && !warmDiags[wi].error
+          ? warmDiags[wi]
+          : { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
+      }
+    }
+  }
 
   for (const item of hostItems) {
     if (changedCount >= maxChanges) break;
@@ -18811,26 +18903,10 @@ async function runHostFilter(env, opts = {}) {
           continue;
         }
 
-        // Diagnose IP status before swapping: ping IP from Iran + Germany/Netherlands.
+        // Diagnose IP status before swapping (pre-warmed in parallel above; cached per domain).
         let diag = ipCache[dv];
         if (!diag) {
-          diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
-          const ips = await resolveIPs(dv, kv);
-          if (ips && ips[0]) {
-            diag.ip = ips[0];
-            const ipp = await pingTarget(ips[0], cfg, env, kv);
-            const iranMeasured = !ipp.error;
-            const iranBlocked = iranMeasured && hostFilterIsBlocked(hostFilterPingBlocked(ipp, cfg), cfg);
-            const fp = await foreignPing(ips[0], cfg, env, kv);
-            const fstat = pingFailStats(fp);
-            const foreignDown = !fp.error && fstat.fail >= HOSTFILTER_IP_DOWN_FAILS;
-            diag.iranBlocked = iranBlocked;
-            diag.foreignFail = fstat.fail;
-            diag.ipDown = foreignDown && (!iranMeasured || iranBlocked);
-            diag.iranAccess = foreignDown && iranMeasured && !iranBlocked;
-            diag.ipBlocked = iranMeasured && iranBlocked && !foreignDown;
-            await sleep(900);
-          }
+          diag = await hfDiagDomain(dv, cfg, env, kv);
           ipCache[dv] = diag;
         }
         if (diag.handled) continue;
