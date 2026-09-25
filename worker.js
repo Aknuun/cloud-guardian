@@ -17087,10 +17087,28 @@ async function renderIpSearchMenu(io, token, page, note) {
   const selState = chatId ? await kv.get(`ipsel:${chatId}`, "json") : null;
   const selMode = !!(selState && selState.token === token);
   const selSet = new Set((selMode && selState.idxs) || []);
-  const lines = [`🌐 آیپی: ${code(ip)}`, ""];
+  // مثل جست‌وجوی داخل چت: لیست شماره‌دار «نام کامل → مقدار → دامنه»
+  const fqdnOf = (res) => {
+    const fullName = String((res.record && res.record.name) || "");
+    const zn = res.zone_name || "";
+    return zn && !fullName.endsWith("." + zn) ? fullName + "." + zn : fullName;
+  };
+  const lines = [`🔍 نتایج جستجوی «${code(ip)}» (${results.length} مورد):`, ""];
   if (!results.length) lines.push("📭 هیچ سابی با این آیپی پیدا نشد.");
-  else if (selMode) lines.push(`🗂 ${selSet.size} انتخاب شده:`);
-  else lines.push(`✅ ${results.length} ساب با این آیپی پیدا شد:`);
+  else {
+    for (let j = 0; j < slice.length; j++) {
+      const res = slice[j];
+      if (!res) continue;
+      const gidx = page * CZ_PAGE_SIZE + j;
+      const flag = res.provider === "arvan" ? "🇮🇷" : "☁️";
+      lines.push(
+        `${gidx + 1}) ${flag} ${res.record.type}-${code(fqdnOf(res))}\n` +
+          `   → ${code(res.record.content)}\n` +
+          `   دامنه: ${code(res.zone_name || "")}\n`
+      );
+    }
+    if (selMode) lines.push(`🗂 ${selSet.size} انتخاب شده:`);
+  }
   const kb = [];
   for (let i = 0; i < slice.length; i += 2) {
     const row = [];
@@ -17099,21 +17117,21 @@ async function renderIpSearchMenu(io, token, page, note) {
       if (res) {
         const gidx = page * CZ_PAGE_SIZE + j;
         const flag = res.provider === "arvan" ? "🇮🇷 " : "";
-        const fullName = String(res.record.name || "");
-        const fqdn = res.zone_name && !fullName.endsWith("." + res.zone_name) ? fullName + "." + res.zone_name : fullName;
+        const fqdn = fqdnOf(res);
         const label = `${flag}${res.record.type} ${fqdn.length > 40 ? fqdn.slice(0, 39) + "…" : fqdn}`;
         if (selMode) {
           // ipsel:<token>:<index>: تیک/برداشتن تیک در حالت گروهی
-          row.push({ text: `${selSet.has(gidx) ? "✅ " : "⬜ "}${label}`, callback_data: `ipsel:${token}:${gidx}` });
+          row.push({ text: `${selSet.has(gidx) ? "✅ " : "⬜ "}${gidx + 1}) ${label}`, callback_data: `ipsel:${token}:${gidx}` });
         } else {
-          // ipd:<token>:<index>: باز کردن جزئیات سابی که با این آی‌پی پیدا شده
-          row.push({ text: label, callback_data: `ipd:${token}:${gidx}` });
+          // ipd:<token>:<index>: باز کردن جزئیات کامل ساب (همان صفحهٔ رکورد با همهٔ دکمه‌ها)
+          kb.push([{ text: `✏️ ${gidx + 1}) ${label}`, callback_data: `ipd:${token}:${gidx}` }]);
+          continue;
         }
       } else {
         row.push(EMPTY_BTN);
       }
     }
-    kb.push(row);
+    if (row.length) kb.push(row);
   }
   if (pages > 1) {
     const nav = [];
