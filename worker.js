@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.22";
+const BOT_VERSION = "1.6.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,13 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.6.0": [
+    "🚨 هشدار قطع نود با آیپی و علت قابل کپی (mono) + آیپی‌ها و اسم‌ها در گزارش‌ها کپی‌پذیر شدند",
+    "📊 گزارش مانیتور سرور: آیپی کپی‌پذیر + دکمه تنظیم رله فقط هنگام خطای رله",
+    "🔎 جست‌وجوی آیپی: ساب کامل با دامنه در نتایج",
+    "🇩🇪 صفحه هتزنر: سرورهای اکانت + آیپی اصلی/اسنپ‌شات/تنظیمات/ساخت سرور همه در یک صفحه",
+    "🛟 زاپاس صاحب صفحه جدا شد: دکمه «آیپی زاپاس» کنار تنظیمات لود بالانسر (حذف افزودن آیپی از آنجا)",
+  ],
   "1.5.22": [
     "🔀 فیل‌اور ساکت: با خوابیدن چک‌هاست/گلوبال‌پینگ، بررسی خودکار با سرویس دیگر ادامه می‌یابد (بدون پیام قطع/وصل) + ⏳ نگهبان بررسی فوری: اگر تا موعد تمام نشود، مرحله و دلیلش پیامک می‌شود",
   ],
@@ -3906,7 +3913,7 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   if (lbIsLbRecord(r)) {
     // lba: افزودن آی‌پی جدید به گروه لود بالانسر | lbs: تنظیمات وزن/وضعیت آی‌پی‌های گروه
     detailKb.push([
-      { text: "➕ افزودن آی‌پی لود بالانسر", callback_data: `lba:${token}:${recordId}`, style: "success" },
+      { text: "🛟 آیپی زاپاس", callback_data: `lbss:${token}:${recordId}`, style: "success" },
       { text: "⚙️ تنظیمات لود بالانسر", callback_data: `lbs:${token}:${recordId}`, style: "success" },
     ]);
   }
@@ -4143,17 +4150,15 @@ async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
     lines.push("📭 هنوز آی‌پی‌ای اضافه نشده. با دکمهٔ «➕ افزودن آی‌پی» اضافه کن.");
   } else {
     entries.forEach((e, i) => {
-      const sp = e.on ? lbSpareOf(ctx.cfg, e.content) : null;
-      lines.push(`${i + 1}) ${e.on ? "🟢" : "🔴"} ${code(e.content)} — وزن ${e.weight}${e.on ? "" : " (غیرفعال)"}${sp ? `\n   🛟 زاپاس: ${code(sp.content)} (${sp.type})` : ""}`);
+      lines.push(`${i + 1}) ${e.on ? "🟢" : "🔴"} ${code(e.content)} — وزن ${e.weight}${e.on ? "" : " (غیرفعال)"}`);
     });
-    lines.push("", "وزن، فعال/غیرفعال و زاپاس هر آی‌پی را از دکمه‌های زیر تغییر بده.");
+    lines.push("", "وزن و فعال/غیرفعال هر آی‌پی را از دکمه‌های زیر تغییر بده. (زاپاس دکمهٔ جدا دارد.)");
   }
   const kb = entries.map((e, i) => {
     const row = [
       { text: `بالانسر${String(i + 1).replace(/\d/g, (d) => FA_DIGITS[d])}`, callback_data: `lbw:${gid}:${i}` },
       { text: e.on ? "⏸ غیرفعال" : "▶️ فعال", callback_data: `lbt:${gid}:${i}` },
     ];
-    if (e.on) row.push({ text: `🛟 زاپاس ${i + 1}`, callback_data: `lbsm:${gid}:${i}` });
     return row;
   });
   kb.push([{ text: "➕ افزودن آی‌پی", callback_data: `lbadd:${gid}` }]);
@@ -4174,8 +4179,8 @@ async function renderLbSpareMenu(kv, accounts, edit, gid, idx, env) {
   const ctx = await lbLoadByGid(kv, accounts, gid, env);
   if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
   const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-  if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
-  if (!e.on) return edit("ℹ️ زاپاس فقط برای ورودی فعال است.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+  if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+  if (!e.on) return edit("ℹ️ زاپاس فقط برای ورودی فعال است.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
   const sp = lbSpareOf(ctx.cfg, e.content);
   const lines = [
     `🛟 زاپاس — ${code(e.content)} (${e.type})`,
@@ -4191,7 +4196,7 @@ async function renderLbSpareMenu(kv, accounts, edit, gid, idx, env) {
     kb.push([{ text: `🔄 جایگزینی با ${sp.content.slice(0, 24)}`, callback_data: `lbsgo:${gid}:${idx}` }]);
     kb.push([{ text: "❌ حذف زاپاس", callback_data: `lbsdel:${gid}:${idx}` }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -4202,6 +4207,45 @@ async function lbOpenSettings(kv, accounts, edit, chatId, messageId, token, reco
   await kv.put(`lbg:${gid}`, JSON.stringify({ token, name: ctx.name }), { expirationTtl: 86400 });
   await kv.put(`lbn:${chatId}:${messageId}`, JSON.stringify({ gid }), { expirationTtl: 86400 });
   await renderLbSettings(kv, accounts, edit, chatId, gid, env);
+}
+
+// صفحهٔ اختصاصی زاپاس یک گروه لود بالانسر: دیدن زاپاس هر ورودی + ورود به منوی زاپاس همان ورودی
+async function renderLbSpareHome(kv, accounts, edit, gid, env) {
+  const ctx = await lbLoadByGid(kv, accounts, gid, env);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  const entries = lbEntriesOf(ctx.group, ctx.cfg);
+  const actives = entries.map((e, i) => ({ e, i })).filter(({ e }) => e.on);
+  const lines = [
+    "🛟 آیپی زاپاس",
+    "",
+    `📛 ساب‌دامین: ${code(ctx.name)}`,
+    `🌍 آی‌پی‌ها: ${actives.length} فعال از ${entries.length}`,
+    "",
+  ];
+  if (!actives.length) lines.push("📭 ورودی فعالی نیست.");
+  else {
+    for (const { e, i } of actives) {
+      const sp = lbSpareOf(ctx.cfg, e.content);
+      lines.push(`${i + 1}) ${code(e.content)} — ${sp ? `🛟 ${code(sp.content)} (${sp.type})` : "بدون زاپاس"}`);
+    }
+    lines.push("", "برای تعیین/تغییر/جایگزینی/حذف زاپاس هر آی‌پی، دکمه‌اش را بزن.");
+  }
+  const kb = grid2(actives.map(({ e, i }) => ({ text: `🛟 ${String(e.content).slice(0, 18)}`, callback_data: `lbsm:${gid}:${i}` })));
+  let back = `lbsr:${gid}`;
+  try {
+    const sess = await kv.get(`lbg:${gid}`, "json");
+    if (sess && sess.recordId) back = `e:${sess.token}:${sess.recordId}`;
+  } catch (err) {}
+  kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+  await edit(lines.join("\n"), kb);
+}
+
+async function lbOpenSpare(kv, accounts, edit, token, recordId, env) {
+  const ctx = await lbLoadById(kv, accounts, token, recordId, env);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  const gid = makeToken();
+  await kv.put(`lbg:${gid}`, JSON.stringify({ token, name: ctx.name, recordId }), { expirationTtl: 86400 });
+  await renderLbSpareHome(kv, accounts, edit, gid, env);
 }
 
 async function redrawLbSettingsNav(kv, accounts, botToken, chatId, messageId, env) {
@@ -6000,6 +6044,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
     { text: "\u{1F9E0} RAM", callback_data: "noop", style: "plain" },
   ]);
   let relayFixed = false;
+  let relayErr = false;
   for (let si = 0; si < list.length; si++) {
     const s = list[si];
     let st = await srvRelayStats(kv, env, s);
@@ -6007,9 +6052,10 @@ async function runSrvMonitor(env, botToken, manual, opts) {
       relayFixed = true;
       st = await srvRelayStats(kv, env, s);
     }
+    if (/^(no_relay|relay_)/.test(String((st && st.error) || ""))) relayErr = true;
     const shortIp = String(s.host || s.name || "").slice(0, 16);
     if (st.error) {
-      alerts.push(`🔴 ${escHtml(s.name)} — خطای اتصال SSH (${st.error})`);
+      alerts.push(`🔴 ${code(s.name)} — خطای اتصال SSH (${code(String(st.error))})`);
       srvRows.push([
         { text: `\u{1F534} ${shortIp}`, callback_data: `srvopen:${si}` },
         { text: "\u2014", callback_data: "noop", style: "plain" },
@@ -6035,7 +6081,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
       const lastAlert = Number((await kv.get(coolKey)) || 0);
       if (manual || !lastAlert || Date.now() - lastAlert > cfg.cooldownMin * 60000) {
         await kv.put(coolKey, String(Date.now()), { expirationTtl: Math.max(3600, cfg.cooldownMin * 120) });
-        alerts.push(`⚠️ ${escHtml(s.name)} — ${issues.join(" · ")}`);
+        alerts.push(`⚠️ ${code(s.name)} — ${issues.join(" · ")}`);
       }
     } else {
       srvRows.push([
@@ -6052,7 +6098,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
   const kb = srvRows;
   kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
-  kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
+  if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
   kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
   for (const a of admins) {
     try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
@@ -6918,7 +6964,7 @@ async function runNodePoll(env) {
             const ts = ndFmtTs(now);
             const msg =
               dir === "down"
-                ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? escHtml(String(n.reason)) : "—"}`
+                ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(name)}${n.address ? `\n🌐 آیپی: ${code(String(n.address))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? code(String(n.reason)) : "—"}`
                 : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
             for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
           }
@@ -7212,9 +7258,11 @@ async function handleNodeEvent(token, payload, env, botToken) {
     const st = await getNodeState(kv, m.id);
     const cur = st.nodes[nodeName];
     if (cur && cur.status === dir) return;
+    const hookIp = payload.ip || payload.address || (cur && cur.address) || null;
     st.nodes[nodeName] = {
       name: nodeName,
       status: dir,
+      address: hookIp,
       reason: reason ? String(reason) : null,
       ts: new Date().toISOString(),
       first_seen: (cur && cur.first_seen) || new Date().toISOString(),
@@ -7228,7 +7276,7 @@ async function handleNodeEvent(token, payload, env, botToken) {
     const ts = ndFmtTs(st.nodes[nodeName].ts);
     const msg =
       (dir === "down"
-        ? `🚨 نود قطع شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${reason ? escHtml(String(reason)) : "—"}`
+        ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(nodeName)}${hookIp ? `\n🌐 آیپی: ${code(String(hookIp))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${reason ? code(String(reason)) : "—"}`
         : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(nodeName)}\n⏱ زمان: ${ts} به وقت ایران${reason ? `\nℹ️ ${escHtml(String(reason))}` : ""}`);
     for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
   } catch (e) {
@@ -11954,6 +12002,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await lbOpenSettings(kv, accounts, edit, chatId, messageId, parts[1], parts[2], env);
     } else if (data.startsWith("lbsr:")) {
       await renderLbSettings(kv, accounts, edit, chatId, data.slice(5), env);
+    } else if (data.startsWith("lbss:")) {
+      const parts = data.split(":");
+      await lbOpenSpare(kv, accounts, edit, parts[1], parts[2], env);
+    } else if (data.startsWith("lbsh:")) {
+      await renderLbSpareHome(kv, accounts, edit, data.slice(5), env);
     } else if (data.startsWith("lba:")) {
       const parts = data.split(":");
       const ctx = await lbLoadById(kv, accounts, parts[1], parts[2], env);
@@ -12043,7 +12096,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
       if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e || !e.on) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e || !e.on) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_spare", gid, idx, msgId: messageId }), { expirationTtl: 600 });
       await edit(`🛟 زاپاس ${code(e.content)} را بفرستید:\n\nآی‌پی IPv4/IPv6 یا دامنه (CNAME رزرو). اگر فیلتر شد، با یک دکمه جایگزین می‌شود:`, [
         [{ text: "⬅️ انصراف", callback_data: `lbsm:${gid}:${idx}` }],
@@ -12055,7 +12108,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
       if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
       if (ctx.cfg.spares) delete ctx.cfg.spares[e.content];
       await saveLbCfg(kv, ctx.key, ctx.cfg);
       await renderLbSpareMenu(kv, accounts, edit, gid, idx, env);
@@ -12067,8 +12120,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
       const sp = e && e.on ? lbSpareOf(ctx.cfg, e.content) : null;
-      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
-      if (!e.id) return edit("❌ رکورد فعال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+      if (!e.id) return edit("❌ رکورد فعال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
       if (ctx.group.some((r) => String(r.content) === sp.content) || (ctx.cfg.disabled || []).some((d) => String(d.content) === sp.content)) {
         return edit(`ℹ️ ${code(sp.content)} از قبل در لود بالانسر هست؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: `lbsm:${gid}:${idx}` }]]);
       }
@@ -12102,7 +12155,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       ctx.cfg.spares[sp.content] = { type: e.type, content: e.content };
       await saveLbCfg(kv, ctx.key, ctx.cfg);
       await edit(`✅ جایگزین شد:\n${code(e.content)} → ${code(sp.content)}\n\nبرای برگشت، از منوی زاپاس همان ورودی اقدام کن.`, [
-        [{ text: "⚖️ تنظیمات", callback_data: `lbsr:${gid}` }],
+        [{ text: "🛟 زاپاس", callback_data: `lbsh:${gid}` }],
       ]);
     } else if (data.startsWith("lbsgo:")) {
       const parts = data.split(":");
@@ -12112,7 +12165,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
       const sp = e && e.on ? lbSpareOf(ctx.cfg, e.content) : null;
-      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
       await edit(`🔄 رکورد DNS با زاپاس جایگزین شود؟\n\n${code(e.content)} (${e.type}) → ${code(sp.content)} (${sp.type})`, [
         [{ text: "✅ بله، جایگزین کن", callback_data: `lbsgoc:${gid}:${idx}` }, { text: "❌ انصراف", callback_data: `lbsm:${gid}:${idx}` }],
       ]);
@@ -13076,10 +13129,15 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await send(
         "🧪 این فقط یک پیام آزمایشی است تا قالب هشدار قطع شدن را ببینید:\n\n" +
           "🚨 نود قطع شد!\n🖥 پنل: " +
-          m.name +
-          "\n🖧 نود: node-test\n⏱ زمان: " +
+          code(m.name) +
+          "\n🖧 نود: " +
+          code("node-test") +
+          "\n🌐 آیپی: " +
+          code("1.2.3.4") +
+          "\n⏱ زمان: " +
           ndFmtTs(new Date().toISOString()) +
-          " به وقت ایران\n🔎 علت: اتصال به پنل از دست رفت (تست)"
+          " به وقت ایران\n🔎 علت: " +
+          code("اتصال به پنل از دست رفت (تست)")
       );
       await renderNodeHome(edit, kv);
     } else if (data.startsWith("ndi:") || data.startsWith("ndip:") || data.startsWith("ndx:")) {
@@ -15966,15 +16024,40 @@ async function showHzClientSettings(hzAccounts, i, edit) {
 
 // منوی داخلی اکانت هتزنر:
 // hzs: سرورها | hzn: اسنپ‌شات‌ها | hzp: آی‌پی‌های اصلی | hzacc: تنظیمات کلاینت
+// منوی اکانت هتزنر: سرورهای همین اکانت + آی‌پی‌های اصلی/اسنپ‌شات/تنظیمات کلاینت/ساخت سرور، همه در همین صفحه
 async function showHzAccountMenu(hzAccounts, i, edit) {
   const acc = hzAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
-  await edit(`👤 ${acc.name}\n\nانتخاب کنید:`, [
-    [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
-    [{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }],
-    [{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }],
-    [{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }],
-  ]);
+  let servers = null;
+  let ipN = null;
+  let snapN = null;
+  try { servers = await hzGetAll(acc.token, "/servers"); } catch (e) {}
+  try { const ips = await hzGetAll(acc.token, "/primary_ips"); ipN = ips.length; } catch (e) {}
+  try {
+    const imgs = await hzGetAll(acc.token, "/images");
+    snapN = imgs.filter((x) => x && x.type === "snapshot").length;
+  } catch (e) {}
+  // اگر API خطا داد، همان منوی قبلی (بدون لیست)
+  if (!servers || ipN === null || snapN === null) {
+    return edit(`👤 ${code(acc.name)}\n\nانتخاب کنید:`, [
+      [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
+      [{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }],
+      [{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }],
+    ]);
+  }
+  const lines = [`👤 ${code(acc.name)}`, "", `🖥 سرورها (${servers.length}) · 🌐 آی‌پی اصلی: ${ipN} · 📸 اسنپ‌شات: ${snapN}`, ""];
+  const kb = [];
+  if (!servers.length) lines.push("📭 سروری نیست؛ با دکمهٔ زیر بساز.");
+  for (const s of servers.slice(0, 8)) {
+    kb.push([{ text: `${hzStatusEmoji(s.status)} ${String(s.name || s.id).slice(0, 30)}`, callback_data: `hzsi:${i}:${s.id}` }]);
+  }
+  if (servers.length > 8) kb.push([{ text: `🖥 همه سرورها (${servers.length})`, callback_data: `hzs:${i}:0` }]);
+  kb.push([{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }]);
+  kb.push([{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }]);
+  kb.push([{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
 }
 
 async function showHzServers(hzAccounts, i, page, edit) {
@@ -17016,7 +17099,9 @@ async function renderIpSearchMenu(io, token, page, note) {
       if (res) {
         const gidx = page * CZ_PAGE_SIZE + j;
         const flag = res.provider === "arvan" ? "🇮🇷 " : "";
-        const label = `${flag}${res.record.type} ${nameShortStr(res.record.name, res.zone_name)}`;
+        const fullName = String(res.record.name || "");
+        const fqdn = res.zone_name && !fullName.endsWith("." + res.zone_name) ? fullName + "." + res.zone_name : fullName;
+        const label = `${flag}${res.record.type} ${fqdn.length > 40 ? fqdn.slice(0, 39) + "…" : fqdn}`;
         if (selMode) {
           // ipsel:<token>:<index>: تیک/برداشتن تیک در حالت گروهی
           row.push({ text: `${selSet.has(gidx) ? "✅ " : "⬜ "}${label}`, callback_data: `ipsel:${token}:${gidx}` });
