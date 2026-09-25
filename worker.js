@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.7.0";
+const BOT_VERSION = "1.7.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.7.1": [
+    "📊 صفحه سهمیه فقط نوشتن روزانه (۱۰۰۰) را نشان می‌دهد",
+    "📩 پیام وصل دامنه ایمیل حالا آدرس تست کامل (test@دامنه) با قابلیت کپی نشان می‌دهد",
+  ],
   "1.7.0": [
     "🔍 نتیجه جست‌وجوی آیپی مثل داخل چت شد (لیست شماره‌دار با اسم کامل)؛ تپ = صفحه کامل رکورد",
     "🇩🇪 هتزنر مدل انتخاب: گرید متحرک اکانت‌ها + سرورهای inline خاکستری ۲ ستونه + ساخت/آیپی/تنظیمات روی منتخب + اسنپ‌شات داخل تنظیمات + قانون تک‌اکانت",
@@ -2873,7 +2877,8 @@ async function renderQuotaMenu(edit, kv, env) {
 
   lines.push("", "🗄 Workers KV (روزانه):");
   if (kvOps) {
-    for (const k of ["read", "write", "delete", "list"]) {
+    // فقط سهمیهٔ نوشتن (۱۰۰۰ روزانه) که زود پر می‌شود
+    for (const k of ["write"]) {
       const lim = KV_LIMITS_DAILY[k];
       const p = quotaPct(kvOps[k], lim);
       lines.push(
@@ -12343,7 +12348,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         try {
           await kv.put(`fmail_on:${String(zone.name).toLowerCase()}`, JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name }), { expirationTtl: 90 * 86400 });
         } catch (e) {}
-        await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند. یک ایمیل تست بفرست و در صندوق ببین.`, [
+        await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند.\n\n📧 یک ایمیل تست به این آدرس بفرست و در صندوق ببین:\n${code("test@" + zone.name)}`, [
           [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 بازگشت", callback_data: "fmail" }],
         ]);
       } catch (e) {
