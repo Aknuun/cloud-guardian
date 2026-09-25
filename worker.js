@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.21";
+const BOT_VERSION = "1.5.22";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.22": [
+    "🔀 فیل‌اور ساکت: با خوابیدن چک‌هاست/گلوبال‌پینگ، بررسی خودکار با سرویس دیگر ادامه می‌یابد (بدون پیام قطع/وصل) + ⏳ نگهبان بررسی فوری: اگر تا موعد تمام نشود، مرحله و دلیلش پیامک می‌شود",
+  ],
   "1.5.21": [
     "🔋 کاهش مصرف KV: کش هاست و state فقط در صورت تغییر ذخیره می‌شوند + مانیتور مصرف و سرور هر ۶۰ دقیقه شدند (پیش‌فرض)؛ نوشتن روزانه از ~۵۹۰ به ~۳۵۰ می‌رسد",
   ],
@@ -13169,7 +13172,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "hfcheck") {
       const cfg = await getHostFilterCfg(kv);
       cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
-      await saveHostFilterCfg(kv, cfg);
       let hfN = Number(cfg.last_domains) || 0;
       if (!hfN) {
         try {
@@ -13178,6 +13180,8 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         } catch (e) {}
       }
       const hfMins = hfEstimateMin(hfN, cfg.provider);
+      cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
+      await saveHostFilterCfg(kv, cfg);
       const hfScope = hfN ? " (" + hfN + " دامنه، حدود " + hfMins + " دقیقه)" : "";
       await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
     } else if (data === "hfforeign") {
@@ -17931,6 +17935,8 @@ async function getHostFilterCfg(kv) {
     last_summary: cfg.last_summary || null,
     checkhost_down: cfg.checkhost_down || null,
     manual_request: cfg.manual_request || null,
+    failover: cfg.failover || null,
+    manual_watch: cfg.manual_watch || null,
   };
 }
 
@@ -18211,7 +18217,7 @@ function pingHasResponse(ping) {
 // اول از رلهٔ check-host (سریع‌تر و پایدارتر)، در صورت خطا از Globalping.
 async function foreignPing(target, cfg, env, kv) {
   const relay = env && env.HF_RELAY_URL;
-  if (relay && cfg && cfg.provider === "checkhost") {
+  if (relay && cfg && hfEff(cfg) === "checkhost") {
     const r = await checkHostPing(target, HOSTFILTER_FOREIGN_CITIES, env, kv);
     if (!r.error) return r;
   }
@@ -18222,13 +18228,24 @@ async function foreignPing(target, cfg, env, kv) {
 // بررسی یک لوکیشن خارجی برای اسکن همهٔ ساب‌ها (ایران‌اکسس)
 async function foreignPingOne(target, cfg, env, kv) {
   const relay = env && env.HF_RELAY_URL;
-  if (relay && cfg && cfg.provider === "checkhost") {
+  if (relay && cfg && hfEff(cfg) === "checkhost") {
     const r = await checkHostPing(target, [HOSTFILTER_FOREIGN_CITIES[0]], env, kv);
     if (!r.error) return r;
   }
   return globalpingPingLoc(target, [{ country: "DE" }], cfg, 1);
 }
 
+
+// Effective provider for this run (silent failover target; cfg.provider stays the user's setting).
+function hfEff(cfg) {
+  return (cfg && cfg.effProvider) || (cfg && cfg.provider);
+}
+
+// Manual-run progress marker (manual runs only — zero quota impact on scheduled runs).
+async function hfProg(kv, manual, stage, detail) {
+  if (!manual) return;
+  try { await kv.put("hf_progress", JSON.stringify({ stage, detail: String(detail || "").slice(0, 120), ts: Date.now() })); } catch (e) {}
+}
 
 // Estimate full-check minutes from domain count (parallel batches: ~3s/domain checkhost, ~5s/domain globalping + ~45s overhead).
 function hfEstimateMin(n, provider) {
@@ -18278,13 +18295,13 @@ async function hfDiagDomain(dv, cfg, env, kv) {
 }
 
 async function pingTarget(target, cfg, env, kv) {
-  if (cfg.provider === "checkhost") return checkHostPing(target, cfg.citiesSel, env, kv);
+  if (hfEff(cfg) === "checkhost") return checkHostPing(target, cfg.citiesSel, env, kv);
   return globalpingPing(target, cfg);
 }
 
 function hostFilterPingBlocked(ping, cfg) {
   if (!ping || ping.error || !ping.nodes) return null;
-  const isCheckHost = cfg && cfg.provider === "checkhost";
+  const isCheckHost = hfEff(cfg) === "checkhost";
   const sel = cfg && Array.isArray(cfg.citiesSel) && cfg.citiesSel.length ? cfg.citiesSel : IR_CITIES;
   const maxOk = cfg && Number.isInteger(cfg.maxOk) ? cfg.maxOk : 0;
   const byCity = {};
@@ -18309,7 +18326,7 @@ function hostFilterPingBlocked(ping, cfg) {
 
 function hostFilterIsBlocked(info, cfg) {
   if (!info) return false;
-  if (cfg.provider === "checkhost") return info.blockedCities >= cfg.cities;
+  if (hfEff(cfg) === "checkhost") return info.blockedCities >= cfg.cities;
   return info.blockedProbes >= cfg.minFail;
 }
 
@@ -18624,6 +18641,39 @@ async function runHostFilter(env, opts = {}) {
     cfg.last_attempt = new Date().toISOString();
     await saveHostFilterCfg(kv, cfg);
   }
+  // Watchdog for manual full-checks: if the promised time passed with no result, explain why + which stage.
+  {
+    const mw = cfg.manual_watch;
+    if (mw && mw.by && Number(mw.deadline)) {
+      const doneByRun = cfg.last_run && Number(mw.since || 0) && Date.parse(cfg.last_run) > Number(mw.since);
+      if (doneByRun) {
+        if (cfg.manual_watch) { cfg.manual_watch = null; await saveHostFilterCfg(kv, cfg); }
+      } else if (Date.now() > Number(mw.deadline) && !mw.reported && !manual) {
+        let prog = null;
+        try { prog = await kv.get("hf_progress", "json"); } catch (e) {}
+        const progFresh = prog && Number(prog.ts) && Date.now() - Number(prog.ts) < 3 * 60000 && prog.stage !== "done";
+        if (!progFresh) {
+          const stageFa = !prog
+            ? (cfg.last_attempt && Number(mw.since || 0) && Date.parse(cfg.last_attempt) >= Number(mw.since)
+              ? "شروع شده ولی پیشرفتی ثبت نشده (احتمالاً همان اول متوقف شده)"
+              : "هنوز شروع نشده (در صف کرون)")
+            : prog.stage === "gather" ? "جمع‌آوری هاست‌ها از پنل‌ها (لاگین/خواندن پنل کند است یا قطع شده)"
+            : prog.stage === "ping" ? "پینگ دامنه‌ها از ایران (" + String(prog.detail || "سرویس بررسی کند است یا جواب نمی‌دهد") + ")"
+            : prog.stage === "recheck" ? "تأیید مجدد دامنه‌های فیلترشده"
+            : prog.stage === "swap" ? "تعویض دامنه‌ها در پنل‌ها (" + String(prog.detail || "") + ")"
+            : "نامشخص";
+          let why = "";
+          if (cfg.failover) why = "سرویس اصلی (" + (cfg.failover.from === "checkhost" ? "چک‌هاست" : "گلوبال‌پینگ") + ") خوابیده و بررسی با سرویس جایگزین ادامه دارد.";
+          else if (cfg.checkhost_down) why = "سرویس بررسی (چک‌هاست) در دسترس نیست.";
+          const txt = "⏳ بررسی کامل هنوز تمام نشده.\n📍 مرحله: " + stageFa + (why ? "\n📝 " + why : "") + "\n\nخودکار ادامه می‌دهد؛ همین که تمام شود نتیجه می‌آید.";
+          try { await sendMessage(botToken, mw.by, txt); } catch (e) {}
+          mw.reported = true;
+          cfg.manual_watch = mw;
+          await saveHostFilterCfg(kv, cfg);
+        }
+      }
+    }
+  }
   const report = async (msg) => {
     if (manualBy) {
       try {
@@ -18653,24 +18703,25 @@ async function runHostFilter(env, opts = {}) {
   }
   const zones = await getAllZones(accounts, kv);
 
-  // Control probe: if the checker itself is down, do nothing.
+  // Control probe: if the primary checker is down, silently fail over to the other service for this run.
+  // No outage/recovery messages — runs just continue on the fallback until the primary is back.
+  cfg.effProvider = cfg.provider;
   if (cfg.provider === "checkhost") {
-    const control = await checkHostPing("www.google.com", IR_CITIES, env, kv);
+    let control = null;
+    try {
+      control = await checkHostPing("www.google.com", IR_CITIES, env, kv);
+    } catch (e) {
+      control = { error: "control_throw" };
+    }
     if (control.error) {
-      const wasDown = !!cfg.checkhost_down;
+      cfg.effProvider = "globalping";
+      cfg.failover = { from: "checkhost", ts: new Date().toISOString(), reason: String(control.error).slice(0, 120) };
       cfg.checkhost_down = { ts: new Date().toISOString(), reason: control.error };
-      cfg.last_run = new Date().toISOString();
-      cfg.last_summary = "check-host در دسترس نبود؛ هیچ تغییری انجام نشد.";
-      await saveHostFilterCfg(kv, cfg);
-      if (!wasDown && !opts.manual) {
-        const admins = await getAdmins(kv, env);
-        await hfNotify(botToken, admins, "⚠️ تعویض خودکار هاست: سایت check-host فعلاً در دسترس نیست. تا برگشتن آن هیچ دامنه‌ای تعویض نمی‌شود.");
-      }
-      await report("⚠️ بررسی انجام نشد: سرویس check-host در دسترس نیست.");
-      return { checkhost_down: true, cfg };
+    } else {
+      cfg.checkhost_down = null;
+      if (cfg.failover) cfg.failover = null;
     }
   }
-  cfg.checkhost_down = null;
 
   // Gather enabled hosts and their domain values.
   const hostItems = [];
@@ -18739,6 +18790,7 @@ async function runHostFilter(env, opts = {}) {
   }
   const uniq = [...uniqSet];
   cfg.last_domains = uniq.length;
+  await hfProg(kv, manual, "gather", uniq.length + " دامنه");
   if (!uniq.length) {
     cfg.last_run = new Date().toISOString();
     cfg.last_summary = "دامنه‌ای برای بررسی پیدا نشد.";
@@ -18759,13 +18811,37 @@ async function runHostFilter(env, opts = {}) {
   // Ping checks (parallel, max 5 concurrent — same request count, ~10x faster).
   const results = {};
   let anyCheck = false;
-  const slicePings = await hfPMap(slice, (t) => pingTarget(t, cfg, env, kv), 5);
-  for (let pi = 0; pi < slice.length; pi++) {
-    const ping = slicePings[pi];
-    if (!ping || ping.error) continue;
-    results[slice[pi]] = ping;
-    anyCheck = true;
+  const runBatch = async () => {
+    const out = {};
+    let any = false;
+    const slicePings = await hfPMap(slice, (t) => pingTarget(t, cfg, env, kv), 5);
+    for (let pi = 0; pi < slice.length; pi++) {
+      const ping = slicePings[pi];
+      if (!ping || ping.error) continue;
+      out[slice[pi]] = ping;
+      any = true;
+    }
+    return { out, any };
+  };
+  let br = await runBatch();
+  Object.assign(results, br.out);
+  anyCheck = br.any;
+  // Silent failover: if the primary yielded nothing, retry the whole batch once on the other service.
+  if (!anyCheck && cfg.effProvider === cfg.provider) {
+    const other = cfg.provider === "checkhost" ? "globalping" : "checkhost";
+    let relayOk = true;
+    if (other === "checkhost") {
+      try { relayOk = !!(await getRelayBase(kv, env)) || !!(env && env.HF_RELAY_URL); } catch (e) { relayOk = false; }
+    }
+    if (relayOk) {
+      cfg.effProvider = other;
+      cfg.failover = { from: cfg.provider, ts: new Date().toISOString(), reason: "batch_no_results" };
+      br = await runBatch();
+      Object.assign(results, br.out);
+      anyCheck = br.any;
+    }
   }
+  if (anyCheck && cfg.effProvider === cfg.provider && cfg.failover) cfg.failover = null;
   if (!anyCheck) {
     cfg.checkhost_down = { ts: new Date().toISOString(), reason: "no_results" };
     cfg.last_run = new Date().toISOString();
@@ -18775,6 +18851,7 @@ async function runHostFilter(env, opts = {}) {
     return { checkhost_down: true, cfg };
   }
 
+  await hfProg(kv, manual, "ping", Object.keys(results).length + "/" + slice.length);
   // First pass filter (DNS lookups parallel).
   let filtered = {};
   {
@@ -18794,6 +18871,7 @@ async function runHostFilter(env, opts = {}) {
 
   // Confirmation: re-check the exact filtered domains, cfg.recheckCount times with cfg.recheckMin interval.
   // 0 re-checks = swap immediately on first detection.
+  await hfProg(kv, manual, "recheck", Object.keys(filtered).length + " فیلتر");
   if (filtered && Object.keys(filtered).length && !opts.skipRecheck && cfg.recheckCount > 0) {
     let round = filtered;
     for (let r = 0; r < cfg.recheckCount; r++) {
@@ -18860,6 +18938,7 @@ async function runHostFilter(env, opts = {}) {
     }
   }
 
+  await hfProg(kv, manual, "swap", Object.keys(filtered).length + " فیلتر");
   for (const item of hostItems) {
     if (changedCount >= maxChanges) break;
     const repl = {};
@@ -19056,6 +19135,7 @@ async function runHostFilter(env, opts = {}) {
   cfg.last_run = new Date().toISOString();
   cfg.last_summary = `بررسی ${slice.length} دامنه — ${changedCount} تعویض، ${ipBlockedCount} آی‌پی فیلتر، ${ipDownCount} آی‌پی خاموش، ${iranAccessCount} ایران‌اکسس.`;
   await saveHostFilterCfg(kv, cfg);
+  await hfProg(kv, manual, "done", changedCount + " تعویض");
   await report(
     "✅ بررسی کامل انجام شد.\n" +
       `🔎 بررسی‌شده: ${slice.length}\n` +
@@ -19075,7 +19155,7 @@ async function renderHostFilterHome(edit, kv, env) {
   const count = Object.keys(states).length;
   const lines = ["🧭 تعویض خودکار هاست فیلتر", ""];
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
-  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping (پیش‌فرض)"));
+  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping (پیش‌فرض)") + (cfg.failover ? " (⏳ موقتاً با " + (cfg.provider === "checkhost" ? "گلوبال‌پینگ" : "چک‌هاست") + ")" : ""));
   lines.push("⏱ فاصلهٔ اجرا: هر " + cfg.intervalMin + " دقیقه");
   if (cfg.provider === "checkhost") {
     lines.push("🌆 شهرها: " + cfg.citiesSel.join("، "));
