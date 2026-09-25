@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.5.20";
+const BOT_VERSION = "1.5.21";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.5.21": [
+    "🔋 کاهش مصرف KV: کش هاست و state فقط در صورت تغییر ذخیره می‌شوند + مانیتور مصرف و سرور هر ۶۰ دقیقه شدند (پیش‌فرض)؛ نوشتن روزانه از ~۵۹۰ به ~۳۵۰ می‌رسد",
+  ],
   "1.5.20": [
     "⚡ موازی‌سازی بررسی هاست فیلتر: پینگ‌های هر اجرا (۵ همزمان) + تأیید مجدد + تشخیص آی‌پی موازی شد؛ ~۱۰ دقیقه به ~۱-۲ دقیقه رسید (منطق تعویض عوض نشده)",
     "⏳ پیام «بررسی کامل» حالا بر اساس تعداد دامنه‌ها تخمین می‌زند نتیجه حدود چند دقیقه دیگر می‌رسد",
@@ -5277,8 +5280,8 @@ const UM_DAY_MIN_MS = 23 * 3600000;
 const UM_DAY_MAX_MS = 48 * 3600000;
 const UM_REPORT_MS = 24 * 3600000;
 const UM_REPORT_TOP = 10;
-// حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۳۰ دقیقه اجرا می‌شود)
-const UM_MIN_INTERVAL_MS = 30 * 60000;
+// حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۶۰ دقیقه اجرا می‌شود — کاهش مصرف KV)
+const UM_MIN_INTERVAL_MS = 60 * 60000;
 const NODEADD_MIN_MS = 30 * 60000;
 const SELFUP_MIN_MS = 10 * 60000;
 // jitter قطعی هر ورکر (۰ تا ۵ دقیقه از هش اسم ورکر): چک‌های همه ربات‌ها روی هم نمی‌افتد
@@ -5309,7 +5312,7 @@ const SRV_RELAY_HINT =
   code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
   "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
 const SRV_DEFAULTS = { cpuPct: 85, memPct: 85, diskPct: 90, enabled: true, cooldownMin: 60 };
-const SRV_MON_MIN_MS = 30 * 60000;
+const SRV_MON_MIN_MS = 60 * 60000; // پیش‌فرض ۶۰ دقیقه — کاهش مصرف KV
 const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
 
 // کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
@@ -6675,7 +6678,7 @@ function umCfgText(cfg) {
     "🔥 گزارش بد مصرف پاسارگارد",
     "",
     "کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند را پیدا می‌کند.",
-    "هر ۳۰ دقیقه از API پنل خوانده و با مصرف ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌شود.",
+    "هر ۶۰ دقیقه از API پنل خوانده و با مصرف ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌شود.",
     "الگوی مصرف هر هشدار (پیوسته/جهشی) هم مشخص می‌شود.",
     "",
     `وضعیت: ${cfg.enabled ? "روشن ✅" : "خاموش ❌"}`,
@@ -18725,7 +18728,15 @@ async function runHostFilter(env, opts = {}) {
       });
     }
   }
-  if (hostList.length) await kvPutCached(kv, "hosts_cache", JSON.stringify(hostList), { expirationTtl: 3600 }, 3600000);
+  // کش هاست فقط وقتی واقعاً تغییری کرده ذخیره می‌شود (کاهش write روزانه؛ خواندن اضافه سقف بالایی دارد)
+  if (hostList.length) {
+    const hostsJson = JSON.stringify(hostList);
+    let prevHosts = null;
+    try { prevHosts = await kvGetCached(kv, "hosts_cache", "json", 3600000); } catch (e) {}
+    if (!prevHosts || JSON.stringify(prevHosts) !== hostsJson) {
+      await kvPutCached(kv, "hosts_cache", hostsJson, { expirationTtl: 3600 }, 3600000);
+    }
+  }
   const uniq = [...uniqSet];
   cfg.last_domains = uniq.length;
   if (!uniq.length) {
@@ -18811,6 +18822,7 @@ async function runHostFilter(env, opts = {}) {
   }
 
   const states = await getHostStateAll(kv);
+  const statesJson0 = JSON.stringify(states);
   const admins = await getAdmins(kv, env);
   const ipCache = {};
   const ipNotices = await getHostIpNoticeAll(kv);
@@ -19039,7 +19051,8 @@ async function runHostFilter(env, opts = {}) {
     }
     if (ipNoticesDirty || pruned) await saveHostIpNoticeAll(kv, ipNotices);
   }
-  await saveHostStateAll(kv, states);
+  // ران‌های بدون تعویض چیزی برای ذخیره ندارند (کاهش write روزانه)
+  if (JSON.stringify(states) !== statesJson0) await saveHostStateAll(kv, states);
   cfg.last_run = new Date().toISOString();
   cfg.last_summary = `بررسی ${slice.length} دامنه — ${changedCount} تعویض، ${ipBlockedCount} آی‌پی فیلتر، ${ipDownCount} آی‌پی خاموش، ${iranAccessCount} ایران‌اکسس.`;
   await saveHostFilterCfg(kv, cfg);
