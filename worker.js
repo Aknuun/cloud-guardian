@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.6.0";
+const BOT_VERSION = "1.7.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.7.0": [
+    "🔍 نتیجه جست‌وجوی آیپی مثل داخل چت شد (لیست شماره‌دار با اسم کامل)؛ تپ = صفحه کامل رکورد",
+    "🇩🇪 هتزنر مدل انتخاب: گرید متحرک اکانت‌ها + سرورهای inline خاکستری ۲ ستونه + ساخت/آیپی/تنظیمات روی منتخب + اسنپ‌شات داخل تنظیمات + قانون تک‌اکانت",
+    "🟢 لینود هم دقیقاً همین مدل شد (انتخاب، inline، خاکستری، تک‌اکانت، برگشت‌ها)",
+    "🇮🇷 آروان و ☁️ کلادفلر: گرید اکانت + تپ برای فیلتر + قانون تک‌اکانت + دکمه خانه",
+  ],
   "1.6.0": [
     "🚨 هشدار قطع نود با آیپی و علت قابل کپی (mono) + آیپی‌ها و اسم‌ها در گزارش‌ها کپی‌پذیر شدند",
     "📊 گزارش مانیتور سرور: آیپی کپی‌پذیر + دکمه تنظیم رله فقط هنگام خطای رله",
@@ -7359,7 +7365,8 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
     { text: flt === "all" ? "📁 ✅ همه اکانت‌ها" : "📁 همه اکانت‌ها", callback_data: `zf:all:0` },
   ]);
 
-  for (let i = 0; i < accounts.length; i += 3) {
+  // تک‌اکانت: ردیف‌های فیلتر اکانت لازم نیست (دکمه «همه» سر جایش می‌ماند)
+  for (let i = 0; i < (accounts.length > 1 ? accounts.length : 0); i += 3) {
     const row = [];
     for (let j = i; j < i + 3; j++) {
       if (j < accounts.length) {
@@ -8319,14 +8326,21 @@ async function renderAdmins(admins, mainAdmin, send) {
   await send(text, keyboard);
 }
 
+// اکانت‌های کلادفلر (منطق یکدست با هتزنر): گرید انتخاب (تپ = دامنه‌های همان اکانت) + تک‌اکانت بدون انتخاب
 async function showAccounts(accounts, send) {
   let text = "";
   const keyboard = [];
   if (accounts.length > 0) {
     text += "👤 اکانت‌های کلودفلر:\n\n";
-    accounts.forEach((a, i) => {
-      text += `${i + 1}) ${a.name}\n   توکن: ${maskToken(a.token)}\n\n`;
-    });
+    if (accounts.length === 1) {
+      text += `«${accounts[0].name}»\n   توکن: ${maskToken(accounts[0].token)}\n\n`;
+    } else {
+      const accBtns = accounts.map((a, i) => ({ text: `☁️ ${a.name}`, callback_data: `zf:${i}:0` }));
+      keyboard.push(...(accounts.length === 2 ? grid2(accBtns) : accounts.length === 3 ? grid3(accBtns) : grid4(accBtns)));
+      accounts.forEach((a, i) => {
+        text += `${i + 1}) ${a.name}\n   توکن: ${maskToken(a.token)}\n\n`;
+      });
+    }
   } else {
     text += "👤 کلودفلر: هیچ اکانتی ثبت نشده\n\n";
   }
@@ -10059,7 +10073,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   if (type === "hz_add_name") {
     if (!txt) return send("⚠️ نام معتبری وارد کنید.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_add_token", name: txt }), { expirationTtl: 600 });
-    await send(`🔑 حالا API Token هتزنر اکانت «${txt}» را بفرستید:`);
+    await send(`🔑 توکن اکانت «${txt}» را بفرستید:`);
     return;
   }
 
@@ -13540,10 +13554,10 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         [{ text: "🔙 بازگشت", callback_data: "menu" }],
       ]);
     } else if (data === "hz") {
-      await showHzHome(hzAccounts, edit);
+      await showHzHome(hzAccounts, edit, kv);
     } else if (data === "hza") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_add_name" }), { expirationTtl: 600 });
-      await edit("👤 نام دلخواه اکانت هتزنر را بفرستید (مثلاً: اصلی):", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await edit("👤 چه اسمی برای این اکانت بزارم؟", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
     } else if (data === "hzdel") {
       if (hzAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
       const kb = hzAccounts.map((a, idx) => [{ text: `🗑 ${a.name}`, callback_data: `hzd:${idx}` }]);
@@ -13554,7 +13568,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = hzAccounts[idx];
       if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
       await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
-        [{ text: "✅ بله، حذف کن", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hz" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hzdel" }],
       ]);
     } else if (data.startsWith("hzdy:")) {
       const idx = Number(data.slice(5));
@@ -13562,7 +13576,15 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await saveHzAccounts(kv, hzAccounts);
       await edit("✅ اکانت حذف شد.", [[{ text: "🇩🇪 هتزنر", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
     } else if (data.startsWith("hzm:")) {
-      await showHzAccountMenu(hzAccounts, Number(data.slice(4)), edit);
+      const hzmIdx = Number(data.slice(4));
+      if (hzAccounts[hzmIdx]) { try { await kv.put("hz_sel", String(hzmIdx)); } catch (e) {} }
+      await showHzHome(hzAccounts, edit, kv);
+    } else if (data === "hzaccs") {
+      await edit("👤 اکانت‌های هتزنر\n\nافزودن یا حذف:", [
+        [{ text: "➕ افزودن اکانت هتزنر", callback_data: "hza" }],
+        ...(hzAccounts.length ? [[{ text: "🗑 حذف اکانت", callback_data: "hzdel" }]] : []),
+        [{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }],
+      ]);
     } else if (data.startsWith("hzacc:")) {
       await showHzClientSettings(hzAccounts, Number(data.slice(6)), edit);
     } else if (data.startsWith("hzaccrn:")) {
@@ -13582,7 +13604,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data.startsWith("hzsc:")) {
       const i = Number(data.slice(5));
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_srv_remark", acc: i }), { expirationTtl: 600 });
-      await edit("➕ ساخت سرور هتزنر\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: `hzs:${i}:0` }]]);
+      await edit("➕ ساخت سرور هتزنر\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: "hz" }]]);
     } else if (data.startsWith("hzsl:")) {
       const parts = data.split(":");
       const i = Number(parts[1]);
@@ -13637,7 +13659,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         kb.push([{ text: "🚫 ناموجود در این لوکیشن", callback_data: "noop", style: "plain" }]);
         kb.push(...grid2(unavailTypes.slice(0, 18).map((t) => ({ text: `🚫 ${t.name}`, callback_data: "noop", style: "plain" }))));
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
       const title = availTypes.length
         ? `💰 پلن سرور را انتخاب کن (لوکیشن: ${location}):`
         : `⚠️ هیچ پلنی در لوکیشن ${location} موجود نیست؛ پلن‌های ناموجود پایین نشان داده شده‌اند.`;
@@ -13653,11 +13675,11 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const type = (await hzFetch(acc.token, `/server_types/${planId}`)).server_type;
       const imgs = await hzGetAll(acc.token, "/images");
       const avail = imgs.filter((im) => (im.type === "system" || im.type === "snapshot") && (!type || !type.architecture || im.architecture === type.architecture));
-      if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]]);
+      if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
       avail.sort((a, b) => (b.type === "system" ? 1 : 0) - (a.type === "system" ? 1 : 0));
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, planId }), { expirationTtl: 600 });
       const kb = grid2(avail.slice(0, 50).map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsci:${i}:${im.id}` })));
-      kb.push([{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
       await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
     } else if (data.startsWith("hzsci:")) {
       const parts = data.split(":");
@@ -13934,7 +13956,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data === "arvan" || data.startsWith("arv")) {
       await handleArvanCallback(data, { botToken, adminId, kv, env, chatId, messageId, edit, send, accounts, arvanAccounts });
     } else if (data === "ln") {
-      await showLnHome(lnAccounts, edit);
+      await showLnHome(lnAccounts, edit, kv);
     } else if (data === "lna") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_add_name" }), { expirationTtl: 600 });
       await edit("👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
@@ -13956,14 +13978,28 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await saveLnAccounts(kv, lnAccounts);
       await edit("✅ اکانت حذف شد.", [[{ text: "🟢 لینود", callback_data: "ln" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
     } else if (data.startsWith("lnm:")) {
-      await showLnAccountMenu(lnAccounts, Number(data.slice(4)), edit);
+      const lnmIdx = Number(data.slice(4));
+      if (lnAccounts[lnmIdx]) { try { await kv.put("ln_sel", String(lnmIdx)); } catch (e) {} }
+      await showLnHome(lnAccounts, edit, kv);
+    } else if (data === "lnaccs") {
+      await edit("👤 اکانت‌های لینود\n\nافزودن یا حذف:", [
+        [{ text: "➕ افزودن اکانت لینود", callback_data: "lna" }],
+        ...(lnAccounts.length ? [[{ text: "🗑 حذف اکانت", callback_data: "lndel" }]] : []),
+        [{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }],
+      ]);
     } else if (data.startsWith("lnacc:")) {
       const i = Number(data.slice(6));
       const acc = lnAccounts[i];
       if (!acc) return edit("❌ اکانت پیدا نشد.");
-      await edit(`⚙️ اکانت «${acc.name}»\n\nتوکن: ${code(maskLnToken(acc.token))}`, [
+      let lnSnapN = null;
+      try {
+        const limgs = await lnGetAll(acc.token, "/images?is_public=false");
+        lnSnapN = limgs.filter((x) => x && x.status === "available").length;
+      } catch (e) {}
+      await edit(`⚙️ اکانت «${acc.name}»\n\nتوکن: ${code(maskLnToken(acc.token))}${lnSnapN === null ? "" : `\n📸 اسنپ‌شات: ${lnSnapN}`}`, [
+        [{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${i}:0` }],
         [{ text: "🗑 حذف اکانت", callback_data: `lnd:${i}` }],
-        [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("lns:")) {
       const parts = data.split(":");
@@ -13974,7 +14010,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
     } else if (data.startsWith("lnsc:")) {
       const i = Number(data.slice(5));
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_srv_remark", acc: i }), { expirationTtl: 600 });
-      await edit("➕ ساخت سرور لینود\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: `lns:${i}:0` }]]);
+      await edit("➕ ساخت سرور لینود\n\nنام سرور را بفرستید (بدون فاصله، مثلاً web1):", [[{ text: "🔙 انصراف", callback_data: "ln" }]]);
     } else if (data.startsWith("lnscd:")) {
       const parts = data.split(":");
       const i = Number(parts[1]);
@@ -13991,7 +14027,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
           return { text: `${t.label} ($${pr.monthly || "?"}/m)`, callback_data: `lnscp:${i}:${region}:${t.id}` };
         })
       );
-      kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
       await edit("💰 پلن سرور را انتخاب کنید:", kb);
     } else if (data.startsWith("lnscp:")) {
       const parts = data.split(":");
@@ -14003,10 +14039,10 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const acc = lnAccounts[i];
       const imgs = (await lnGetAll(acc.token, "/images")).filter((im) => im.is_public && im.status === "available");
       imgs.sort((a, b) => String(a.label).localeCompare(String(b.label)));
-      if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]]);
+      if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, region, planId }), { expirationTtl: 600 });
       const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsci:${i}:${im.id}` })));
-      kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
       await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
     } else if (data.startsWith("lnsci:")) {
       const parts = data.split(":");
@@ -14496,7 +14532,7 @@ async function arvanAccountsView(ctx) {
     ]);
   }
   kb.push([{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit("🇮🇷 آروان — اکانت‌ها\n\nبرای ساخت کلید: پنل آروان → Settings → Machine User → New User (نام لاتین کوچک). بعد دسترسی‌های CDN و Cloud Server را به آن بدهید.", kb);
 }
 
@@ -15998,67 +16034,59 @@ async function arvanVolView(ctx, acc, region) {
 
 // ===================== Hetzner UI =====================
 // hzm:<index>: ورود به منوی همان اکانت | hza: افزودن اکانت | hzdel: حذف اکانت | providers/menu: بازگشت
-async function showHzHome(hzAccounts, edit) {
+// خانهٔ هتزنر (مدل انتخاب): تپ روی اکانت = انتخاب؛ سرورها/آیپی‌ها/تنظیمات دکمه‌ها روی اکانت منتخب عمل می‌کنند
+async function showHzHome(hzAccounts, edit, kv) {
+  let sel = 0;
+  try {
+    const s = kv ? Number(await kv.get("hz_sel", "text")) : NaN;
+    if (Number.isInteger(s) && s >= 0 && s < hzAccounts.length) sel = s;
+  } catch (e) {}
   const kb = [];
-  for (let i = 0; i < hzAccounts.length; i += 2) {
-    const row = [{ text: `👤 ${hzAccounts[i].name}`, callback_data: `hzm:${i}` }];
-    row.push(i + 1 < hzAccounts.length ? { text: `👤 ${hzAccounts[i + 1].name}`, callback_data: `hzm:${i + 1}` } : EMPTY_BTN);
-    kb.push(row);
+  const lines = ["🇩🇪 هتزنر", ""];
+  if (!hzAccounts.length) {
+    kb.push([{ text: "➕ افزودن اکانت هتزنر", callback_data: "hza" }]);
+    lines.push("اکانتی نیست؛ اضافه کن:");
+  } else {
+    const nm = hzAccounts[sel].name;
+    // تک‌اکانت: ردیف انتخاب لازم نیست، مستقیم محتوای همان اکانت
+    if (hzAccounts.length > 1) {
+      // ستون متحرک: ۲ اکانت = ۲ ستون، ۳ اکانت = ۳ ستون، بیشتر = ۴ ستون
+      const accBtns = hzAccounts.map((a, idx) => ({ text: `${idx === sel ? "✅ " : "👤 "}${a.name}`, callback_data: `hzm:${idx}` }));
+      kb.push(...(hzAccounts.length === 2 ? grid2(accBtns) : hzAccounts.length === 3 ? grid3(accBtns) : grid4(accBtns)));
+    }
+    lines.push(`«${nm}» انتخاب شده:`, "");
+    let servers = null;
+    try { servers = await hzGetAll(hzAccounts[sel].token, "/servers"); } catch (e) {}
+    if (!servers) lines.push("⚠️ لیست سرورها خوانده نشد.");
+    else if (!servers.length) lines.push("📭 سروری نیست؛ با دکمهٔ زیر بساز.");
+    else for (const s of servers) kb.push({ text: `${hzStatusEmoji(s.status)} ${String(s.name || s.id).slice(0, 30)}`, callback_data: `hzsi:${sel}:${s.id}`, style: "plain" });
+    if (servers && servers.length) kb.push(...grid2(kb.splice(kb.length - servers.length)));
+    // تک‌اکانت: اسم در پرانتز نمی‌آید (با چند اکانت برای تشخیص می‌آید)
+    const multi = hzAccounts.length > 1;
+    kb.push([{ text: multi ? `➕ ساخت سرور در ${nm}` : "➕ ساخت سرور", callback_data: `hzsc:${sel}` }]);
+    kb.push([{ text: multi ? `🌐 آیپی‌ها (${nm})` : "🌐 آیپی‌ها", callback_data: `hzp:${sel}:0` }, { text: multi ? `⚙️ تنظیمات (${nm})` : "⚙️ تنظیمات", callback_data: `hzacc:${sel}` }]);
   }
-  kb.push([{ text: "➕ افزودن اکانت هتزنر", callback_data: "hza" }]);
-  if (hzAccounts.length) kb.push([{ text: "🗑 حذف اکانت", callback_data: "hzdel" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
-  await edit("🇩🇪 اکانت‌های هتزنر\n\nیک اکانت را انتخاب کنید:", kb);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "hzaccs" }]);
+  await edit(lines.join("\n"), kb);
 }
 
 // تنظیمات کلاینت (اکانت) — تغییر نام/توکن/حذف
 async function showHzClientSettings(hzAccounts, i, edit) {
   const acc = hzAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
-  await edit(`⚙️ تنظیمات کلاینت\n\n👤 نام: ${code(acc.name)}\n🔑 توکن: ${code(maskHzToken(acc.token))}`, [
-    [{ text: "✏️ تغییر نام", callback_data: `hzaccrn:${i}` }, { text: "🔑 تغییر توکن", callback_data: `hzacctk:${i}` }],
-    [{ text: "🗑 حذف اکانت", callback_data: `hzd:${i}` }],
-    [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
-  ]);
-}
-
-// منوی داخلی اکانت هتزنر:
-// hzs: سرورها | hzn: اسنپ‌شات‌ها | hzp: آی‌پی‌های اصلی | hzacc: تنظیمات کلاینت
-// منوی اکانت هتزنر: سرورهای همین اکانت + آی‌پی‌های اصلی/اسنپ‌شات/تنظیمات کلاینت/ساخت سرور، همه در همین صفحه
-async function showHzAccountMenu(hzAccounts, i, edit) {
-  const acc = hzAccounts[i];
-  if (!acc) return edit("❌ اکانت پیدا نشد.");
-  let servers = null;
-  let ipN = null;
   let snapN = null;
-  try { servers = await hzGetAll(acc.token, "/servers"); } catch (e) {}
-  try { const ips = await hzGetAll(acc.token, "/primary_ips"); ipN = ips.length; } catch (e) {}
   try {
     const imgs = await hzGetAll(acc.token, "/images");
     snapN = imgs.filter((x) => x && x.type === "snapshot").length;
   } catch (e) {}
-  // اگر API خطا داد، همان منوی قبلی (بدون لیست)
-  if (!servers || ipN === null || snapN === null) {
-    return edit(`👤 ${code(acc.name)}\n\nانتخاب کنید:`, [
-      [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
-      [{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }],
-      [{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }],
-      [{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }],
-    ]);
-  }
-  const lines = [`👤 ${code(acc.name)}`, "", `🖥 سرورها (${servers.length}) · 🌐 آی‌پی اصلی: ${ipN} · 📸 اسنپ‌شات: ${snapN}`, ""];
-  const kb = [];
-  if (!servers.length) lines.push("📭 سروری نیست؛ با دکمهٔ زیر بساز.");
-  for (const s of servers.slice(0, 8)) {
-    kb.push([{ text: `${hzStatusEmoji(s.status)} ${String(s.name || s.id).slice(0, 30)}`, callback_data: `hzsi:${i}:${s.id}` }]);
-  }
-  if (servers.length > 8) kb.push([{ text: `🖥 همه سرورها (${servers.length})`, callback_data: `hzs:${i}:0` }]);
-  kb.push([{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }]);
-  kb.push([{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }, { text: "🌐 آی‌پی‌های اصلی", callback_data: `hzp:${i}:0` }]);
-  kb.push([{ text: "⚙️ تنظیمات کلاینت", callback_data: `hzacc:${i}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
+  await edit(`⚙️ تنظیمات کلاینت\n\n👤 نام: ${code(acc.name)}\n🔑 توکن: ${code(maskHzToken(acc.token))}${snapN === null ? "" : `\n📸 اسنپ‌شات: ${snapN}`}`, [
+    [{ text: "✏️ تغییر نام", callback_data: `hzaccrn:${i}` }, { text: "🔑 تغییر توکن", callback_data: `hzacctk:${i}` }],
+    [{ text: "📸 اسنپ‌شات‌ها", callback_data: `hzn:${i}:0` }],
+    [{ text: "🗑 حذف اکانت", callback_data: `hzd:${i}` }],
+    [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
+  ]);
 }
+
 
 async function showHzServers(hzAccounts, i, page, edit) {
   const acc = hzAccounts[i];
@@ -16067,7 +16095,7 @@ async function showHzServers(hzAccounts, i, page, edit) {
   if (servers.length === 0) {
     return edit("📭 سروری یافت نشد.", [
       [{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }],
-      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const pages = Math.ceil(servers.length / HZ_PAGE_SIZE);
@@ -16075,14 +16103,14 @@ async function showHzServers(hzAccounts, i, page, edit) {
   if (page >= pages) page = pages - 1;
   const slice = servers.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
   // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور
-  const kb = grid2(slice.map((s) => ({ text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}` })));
+  const kb = grid2(slice.map((s) => ({ text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" })));
   const nav = [];
   nav.push(page > 0 ? { text: "◀️", callback_data: `hzs:${i}:${page - 1}` } : EMPTY_BTN);
   nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzs:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "➕ ساخت سرور", callback_data: `hzsc:${i}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🖥️ سرورهای «${acc.name}» (${servers.length}):`, kb);
 }
 
@@ -16327,7 +16355,7 @@ async function showHzPrimaryIps(hzAccounts, i, page, edit) {
   if (ips.length === 0) {
     return edit("📭 آی‌پی اصلی‌ای یافت نشد.", [
       [{ text: "➕ ساخت IPv4", callback_data: `hzpc:${i}:ipv4` }, { text: "➕ ساخت IPv6", callback_data: `hzpc:${i}:ipv6` }],
-      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const pages = Math.ceil(ips.length / HZ_PAGE_SIZE);
@@ -16341,7 +16369,7 @@ async function showHzPrimaryIps(hzAccounts, i, page, edit) {
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzp:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "➕ ساخت IPv4", callback_data: `hzpc:${i}:ipv4` }, { text: "➕ ساخت IPv6", callback_data: `hzpc:${i}:ipv6` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🌐 آی‌پی‌های اصلی «${acc.name}» (${ips.length}):`, kb);
 }
 
@@ -16437,7 +16465,7 @@ async function showHzSnapshots(hzAccounts, i, page, edit) {
   if (snaps.length === 0) {
     return edit("📭 اسنپ‌شاتی یافت نشد.", [
       [{ text: "➕ ساخت اسنپ‌شات", callback_data: `hznc:${i}` }],
-      [{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `hzacc:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const pages = Math.ceil(snaps.length / HZ_PAGE_SIZE);
@@ -16451,7 +16479,7 @@ async function showHzSnapshots(hzAccounts, i, page, edit) {
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `hzn:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "➕ ساخت اسنپ‌شات", callback_data: `hznc:${i}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `hzm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzacc:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`📸 اسنپ‌شات‌های «${acc.name}» (${snaps.length}):`, kb);
 }
 
@@ -16497,31 +16525,40 @@ async function hzSnapshotDo(hzAccounts, i, imageId, step, edit) {
 
 // ===================== Linode UI =====================
 // lnm:<index>: ورود به منوی اکانت | lna: افزودن اکانت | lndel: حذف اکانت | providers/menu: بازگشت
-async function showLnHome(lnAccounts, edit) {
+// خانهٔ لینود (مدل انتخاب مثل هتزنر): تپ = انتخاب؛ دکمه‌ها روی اکانت منتخب عمل می‌کنند
+async function showLnHome(lnAccounts, edit, kv) {
+  let sel = 0;
+  try {
+    const s = kv ? Number(await kv.get("ln_sel", "text")) : NaN;
+    if (Number.isInteger(s) && s >= 0 && s < lnAccounts.length) sel = s;
+  } catch (e) {}
   const kb = [];
-  for (let i = 0; i < lnAccounts.length; i += 2) {
-    const row = [{ text: `👤 ${lnAccounts[i].name}`, callback_data: `lnm:${i}` }];
-    row.push(i + 1 < lnAccounts.length ? { text: `👤 ${lnAccounts[i + 1].name}`, callback_data: `lnm:${i + 1}` } : EMPTY_BTN);
-    kb.push(row);
+  const lines = ["🟢 لینود", ""];
+  if (!lnAccounts.length) {
+    kb.push([{ text: "➕ افزودن اکانت لینود", callback_data: "lna" }]);
+    lines.push("اکانتی نیست؛ اضافه کن:");
+  } else {
+    const nm = lnAccounts[sel].name;
+    // تک‌اکانت: ردیف انتخاب لازم نیست
+    if (lnAccounts.length > 1) {
+      const accBtns = lnAccounts.map((a, idx) => ({ text: `${idx === sel ? "✅ " : "👤 "}${a.name}`, callback_data: `lnm:${idx}` }));
+      kb.push(...(lnAccounts.length === 2 ? grid2(accBtns) : lnAccounts.length === 3 ? grid3(accBtns) : grid4(accBtns)));
+    }
+    lines.push(`«${nm}» انتخاب شده:`, "");
+    let servers = null;
+    try { servers = await lnGetAll(lnAccounts[sel].token, "/linode/instances"); } catch (e) {}
+    if (!servers) lines.push("⚠️ لیست سرورها خوانده نشد.");
+    else if (!servers.length) lines.push("📭 سروری نیست؛ با دکمهٔ زیر بساز.");
+    else for (const s of servers) kb.push({ text: lnServerListText(s).slice(0, 30), callback_data: `lnsi:${sel}:${s.id}`, style: "plain" });
+    if (servers && servers.length) kb.push(...grid2(kb.splice(kb.length - servers.length)));
+    const multi = lnAccounts.length > 1;
+    kb.push([{ text: multi ? `➕ ساخت سرور در ${nm}` : "➕ ساخت سرور", callback_data: `lnsc:${sel}` }]);
+    kb.push([{ text: multi ? `🌐 آیپی‌ها (${nm})` : "🌐 آیپی‌ها", callback_data: `lnp:${sel}:0` }, { text: multi ? `⚙️ تنظیمات (${nm})` : "⚙️ تنظیمات", callback_data: `lnacc:${sel}` }]);
   }
-  kb.push([{ text: "➕ افزودن اکانت لینود", callback_data: "lna" }]);
-  if (lnAccounts.length) kb.push([{ text: "🗑 حذف اکانت", callback_data: "lndel" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
-  await edit("🟢 اکانت‌های لینود\n\nیک اکانت را انتخاب کنید:", kb);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "lnaccs" }]);
+  await edit(lines.join("\n"), kb);
 }
 
-// منوی داخلی اکانت لینود:
-// lns: لیست سرورها | lnn: اسنپ‌شات‌ها | lnp: آی‌پی‌ها | lnacc: تنظیمات اکانت
-async function showLnAccountMenu(lnAccounts, i, edit) {
-  const acc = lnAccounts[i];
-  if (!acc) return edit("❌ اکانت پیدا نشد.");
-  await edit(`👤 ${acc.name}\n\nانتخاب کنید:`, [
-    [{ text: "🖥️ سرورها", callback_data: `lns:${i}:0` }],
-    [{ text: "📸 اسنپ‌شات‌ها", callback_data: `lnn:${i}:0` }, { text: "🌐 آی‌پی‌ها", callback_data: `lnp:${i}:0` }],
-    [{ text: "⚙️ تنظیمات اکانت", callback_data: `lnacc:${i}` }],
-    [{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🔙 بازگشت", callback_data: "menu" }],
-  ]);
-}
 
 async function showLnServers(lnAccounts, i, page, edit) {
   const acc = lnAccounts[i];
@@ -16530,7 +16567,7 @@ async function showLnServers(lnAccounts, i, page, edit) {
   if (servers.length === 0) {
     return edit("📭 سروری یافت نشد.", [
       [{ text: "➕ ساخت سرور", callback_data: `lnsc:${i}` }],
-      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const pages = Math.ceil(servers.length / LN_PAGE_SIZE);
@@ -16538,14 +16575,14 @@ async function showLnServers(lnAccounts, i, page, edit) {
   if (page >= pages) page = pages - 1;
   const slice = servers.slice(page * LN_PAGE_SIZE, page * LN_PAGE_SIZE + LN_PAGE_SIZE);
   // lnsi:<acc>:<serverId>: جزئیات و عملیات سرور | lns:<acc>:<page>: صفحه‌بندی | lnsc: ساخت سرور | lnm: بازگشت
-  const kb = grid2(slice.map((s) => ({ text: lnServerListText(s), callback_data: `lnsi:${i}:${s.id}` })));
+  const kb = grid2(slice.map((s) => ({ text: lnServerListText(s), callback_data: `lnsi:${i}:${s.id}`, style: "plain" })));
   const nav = [];
   nav.push(page > 0 ? { text: "◀️", callback_data: `lns:${i}:${page - 1}` } : EMPTY_BTN);
   nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lns:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "➕ ساخت سرور", callback_data: `lnsc:${i}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🖥️ سرورهای «${acc.name}»:`, kb);
 }
 
@@ -16748,7 +16785,7 @@ async function showLnIps(lnAccounts, i, page, edit, kv) {
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   const ips = await lnGetAll(acc.token, "/networking/ips");
   if (ips.length === 0) {
-    return edit("📭 آی‌پی‌ای یافت نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]]);
+    return edit("📭 آی‌پی‌ای یافت نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const pages = Math.ceil(ips.length / LN_PAGE_SIZE);
   if (page < 0) page = 0;
@@ -16767,7 +16804,7 @@ async function showLnIps(lnAccounts, i, page, edit, kv) {
   nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lnp:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🌐 آی‌پی‌های «${acc.name}»:`, kb);
 }
 
@@ -16859,7 +16896,7 @@ async function showLnSnapshots(lnAccounts, i, page, edit) {
   if (snaps.length === 0) {
     return edit("📭 اسنپ‌شاتی یافت نشد.", [
       [{ text: "➕ ساخت اسنپ‌شات", callback_data: `lnnc:${i}` }],
-      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }],
+      [{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const pages = Math.ceil(snaps.length / LN_PAGE_SIZE);
@@ -16874,7 +16911,7 @@ async function showLnSnapshots(lnAccounts, i, page, edit) {
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `lnn:${i}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "➕ ساخت اسنپ‌شات", callback_data: `lnnc:${i}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnm:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`📸 اسنپ‌شات‌های «${acc.name}»:`, kb);
 }
 
