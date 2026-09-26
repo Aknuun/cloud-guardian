@@ -11630,7 +11630,23 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      await edit(`🗑 رکوردهای بدون ترافیک ${trafRangeLabel(days)} حذف شوند؟\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟`, [
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.");
+      const zone = await getZoneById(session.zone_id, session.acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.");
+      const t = await fetchTrafficCounts(tok, session.zone_id, days);
+      if (t.needPerm || t.error)
+        return edit("❌ " + (t.needPerm ? "دسترسی Analytics نیست." : "خطا در آمار:\n" + t.error), [
+          [{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }],
+        ]);
+      const records = await getRecords(zone, accounts, kv);
+      const zeros = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !(t.counts[String(r.name || "").toLowerCase()] || 0));
+      if (!zeros.length)
+        return edit("✅ چیزی برای حذف نیست؛ همه ساب‌ها ترافیک دارند.", [[{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }]]);
+      const names = zeros.map((r) => (r.name === zone.name ? "@" : String(r.name).slice(0, -(zone.name.length + 1))) + ` (${r.type})`);
+      const shown = names.slice(0, 30);
+      await edit(
+        `🗑 ${zeros.length} رکورد بدون ترافیک ${trafRangeLabel(days)} حذف شوند؟\n\n${shown.map((x, i) => `${i + 1}) ${x}`).join("\n")}${names.length > 30 ? `\n… و ${names.length - 30} مورد دیگر` : ""}\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟`.slice(0, 3500), [
         [{ text: "✅ بله، حذف کن", callback_data: `ztrafdely:${token}:${days}` }, { text: "❌ انصراف", callback_data: `ztraf:${token}:${days}` }],
       ]);
     } else if (data.startsWith("ztrafdely:")) {
