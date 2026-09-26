@@ -944,6 +944,10 @@ export default {
               q = { req: Math.max(0, Math.floor(Number(qb.req))), lim: Math.floor(Number(qb.lim)), over: !!qb.over };
             }
           } catch (e) {}
+          let qw = null;
+          try {
+            if (Number.isFinite(Number(b && b.kvwrite)) && Number(b.kvwrite) >= 0) qw = Math.floor(Number(b.kvwrite));
+          } catch (e) {}
           const prev = await kv.get(`tm:${iid}`, "json").catch(() => null);
           const rec = {
             v: clean(b.version, /[^A-Za-z0-9_.-]/g, 20),
@@ -957,6 +961,7 @@ export default {
             account_id: clean(b.account_id, /[^A-Za-z0-9]/g, 40),
             reply: replyUrl,
             q,
+            qw,
           };
           await kv.put(`tm:${iid}`, JSON.stringify(rec), { expirationTtl: 45 * 86400 });
           // نصب تازه → پیام فوری به سازنده با مشخصات کامل.
@@ -1787,11 +1792,11 @@ async function renderHubUser(edit, kv, iid) {
   try {
     if (selfVerGreater(BOT_VERSION, ver)) updLine = `🟡 آپدیت دارد (آخرین: v${BOT_VERSION})`;
   } catch (e) {}
-  let quotaLine = "☁️ سهمیه: —";
+  let quotaLine = "✍️ نوشتن: —";
   try {
-    if (v.q && Number.isFinite(Number(v.q.req)) && Number(v.q.lim) > 0) {
-      const pct = Math.round((Number(v.q.req) / Number(v.q.lim)) * 100);
-      quotaLine = `☁️ سهمیه: ${Number(v.q.req).toLocaleString("en-US")} / ${Number(v.q.lim).toLocaleString("en-US")} (${pct}٪)${v.q.over ? " ⚠️ رد کرده" : ""}`;
+    if (Number.isFinite(Number(v.qw)) && Number(v.qw) >= 0) {
+      const w = Math.floor(Number(v.qw));
+      quotaLine = `✍️ نوشتن: ${w.toLocaleString("en-US")} / 1,000${w >= 1000 ? " ⚠️ پر شده" : ""}`;
     }
   } catch (e) {}
   const firstSeen = v.first ? new Date(Number(v.first)).toISOString().slice(0, 10) : "—";
@@ -2009,6 +2014,10 @@ async function runTelemetryPing(env) {
           if (cfg && Number(cfg.limit) > 0) lim = Number(cfg.limit);
         } catch (e) {}
         quota = { req: Number(req) || 0, lim, over: Number(req) >= Number(lim) };
+        try {
+          const kvu = await fetchKvUsageToday(acc.tok, acc.aid);
+          if (kvu && Number.isFinite(Number(kvu.write))) quota.kvw = Math.max(0, Math.floor(Number(kvu.write)));
+        } catch (e) {}
       }
     }
   } catch (e) {}
@@ -2023,6 +2032,7 @@ async function runTelemetryPing(env) {
     account_id: String(env.WORKER_ACCOUNT_ID || "").slice(0, 40),
     reply_url: replyUrl,
     quota,
+    kvwrite: quota && Number.isFinite(Number(quota.kvw)) ? Math.max(0, Math.floor(Number(quota.kvw))) : null,
   };
   try {
     await fetch(HUB_TELEMETRY_URL, {
@@ -2877,8 +2887,7 @@ async function renderQuotaMenu(edit, kv, env) {
 
   lines.push("", "🗄 Workers KV (روزانه):");
   if (kvOps) {
-    // فقط سهمیهٔ نوشتن (۱۰۰۰ روزانه) که زود پر می‌شود
-    for (const k of ["write"]) {
+    for (const k of ["read", "write", "delete", "list"]) {
       const lim = KV_LIMITS_DAILY[k];
       const p = quotaPct(kvOps[k], lim);
       lines.push(
@@ -2916,7 +2925,7 @@ async function renderQuotaMenu(edit, kv, env) {
     { text: "🔓 روشن‌کردن ربات", callback_data: "qresume" },
     { text: "🔄 بررسی مجدد", callback_data: "quota" },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -5145,7 +5154,7 @@ async function renderDomExpiryHome(kv, edit, page) {
   // domexp: استعلام دوبارهٔ همهٔ دامنه‌ها | domexpkey: تنظیمات کلید API انقضا
   kb.push([{ text: "🔄 استعلام دوبارهٔ همه", callback_data: "domexp" }]);
   kb.push([{ text: cfg.key ? "🔑 کلید API (ثبت‌شده ✅)" : "🔑 ثبت کلید API", callback_data: "domexpkey" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -6027,7 +6036,7 @@ async function renderSrvMonCfg(edit, kv) {
     [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
     [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
     [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
-    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "srv" }],
+    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(lines.join("\n"), kb);
 }
@@ -6773,7 +6782,7 @@ function umCfgKeyboard(cfg) {
       { text: cfg.report ? "📊 گزارش: روشن" : "📊 گزارش: خاموش", callback_data: "um:report" },
     ],
     // mons: بازگشت به منوی فیچرهای جدید | menu: بازگشت به منوی اصلی
-    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "menu" }],
+    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 
@@ -7116,7 +7125,7 @@ async function renderNodeHome(edit, kv) {
     outKb.push([{ text: "➕ ساخت مانیتور نود", callback_data: "nda" }]);
   }
   // mons: بازگشت به صفحهٔ فیچرهای جدید | menu: منوی اصلی | ndhelp: راهنما
-  outKb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  outKb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   outKb.push([{ text: "ℹ️ راهنما", callback_data: "ndhelp" }]);
   await edit(lines.join("\n"), outKb);
 }
@@ -8386,7 +8395,7 @@ async function handleAdd(args, accounts, send, kv) {
     await invalidateCache(kv, zone.id);
     await send(
       `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار | Proxy: ${data.result.proxied ? "روشن" : "خاموش"}`,
-      [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]]
+      [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]
     );
   } else {
     await send("❌ خطا از کلودفلر:\n" + cfErrText(data));
@@ -8565,7 +8574,7 @@ async function addRecordFromPending(pending, content, accounts, kv, chatId, send
       });
       kb.push([{ text: "🛰 روشن‌کردن Proxy", callback_data: `ep:${token}:${data.result.id}` }]);
     }
-    kb.push([{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]);
     await send(
       `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار`,
       kb
@@ -9457,7 +9466,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
               if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
               else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
             } else {
-              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
+              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]);
             }
             return;
           } else {
@@ -9490,7 +9499,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
               if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
               else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
             } else {
-              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
+              await send(`🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]);
             }
             return;
           } else {
@@ -9537,7 +9546,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
         else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
       } else {
-        await send(summary, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
+        await send(summary, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
     } else {
       await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(data));
@@ -9586,7 +9595,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
         else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
       } else {
-        await send(summary, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }]]);
+        await send(summary, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
     } else {
       await valueErrorReply(pending, chatId, botToken, "خطا:\n\n" + cfErrText(data));
@@ -14179,7 +14188,7 @@ async function renderRemindersHome(kv, edit) {
   kb.push([{ text: "➕ یادآور جدید", callback_data: "remnew" }]);
   if (list.length) kb.push([{ text: "🗑 حذف یادآور", callback_data: "remdel" }]);
   kb.push([{ text: `⚙️ تنظیمات یادآور (${cfg.leadHours} ساعت قبل)`, callback_data: "remset" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -17268,7 +17277,7 @@ async function createQaSub(pending, io) {
 async function renderQuickResults(token, results, query, qa, send) {
   if (!results.length) {
     const kb = qa && qa.ip
-      ? [[{ text: "🔙 بازگشت", callback_data: "qamenu" }], [{ text: "🔙 بازگشت", callback_data: "menu" }]]
+      ? [[{ text: "🔙 بازگشت", callback_data: "qamenu" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
       : [[{ text: "🔙 بازگشت", callback_data: "menu" }]];
     return send(`🔍 نتیجه‌ای برای «${escHtml(query)}» پیدا نشد.`, kb);
   }
