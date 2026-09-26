@@ -26,6 +26,7 @@ if LANG not in ("fa", "en"):
 _S = {
     "kv_routing":      ("KV namespaces API روی این اکانت routable نیست: %s…", "KV namespaces API is not routable on this account: %s…"),
     "kv_reuse":        ("استفادهٔ مجدد از KV namespace موجود: %s", "Reusing an existing KV namespace: %s"),
+    "kv_stale":        ("KV id ذخیره‌شده در این اکانت نیست (%s) — یکی تازه می‌سازم.", "Stored KV id not found in this account (%s) — creating a fresh one."),
     "kv_create_fail":  (
         'ساخت KV از API ممکن نشد و namespace آماده‌ای هم روی اکانت پیدا نشد.\n'
         'در داشبورد کلادفلر (Workers & Pages → KV → Create a namespace) یکی بساز و id آن را '
@@ -176,9 +177,22 @@ def find_existing_kv_id(tok, acc):
     return None
 
 
+def _kv_exists(tok, acc, kv_id):
+    try:
+        st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces/{kv_id}")
+        res, err = json_ok(st, out)
+        return not err
+    except Exception:
+        return False
+
+
 def ensure_kv(cfg, tok):
     if cfg.get("kv_namespace_id"):
-        return cfg["kv_namespace_id"], None
+        # ممکن است id از اکانت دیگری مانده باشد (config قدیمی) — بررسی کن، وگرنه تازه بساز
+        if _kv_exists(tok, cfg.get("account_id"), cfg["kv_namespace_id"]):
+            return cfg["kv_namespace_id"], None
+        print("[*] " + T("kv_stale", cfg["kv_namespace_id"]))
+        cfg.pop("kv_namespace_id", None)
     body = json.dumps({"title": f"{cfg['worker']}-kv"}).encode("utf-8")
     st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces", body, "application/json")
     res, err = json_ok(st, out)
