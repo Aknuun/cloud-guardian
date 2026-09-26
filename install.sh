@@ -54,6 +54,7 @@ t() {
     en:e_token_missing)        printf '%s' "token is missing from config." ;;
     en:e_nothing_remove)       printf '%s' "config.json not found; nothing to remove." ;;
     en:e_deploy)               printf '%s' "Deploy failed." ;;
+    en:e_kv_stale)             printf '%s' "The saved KV namespace id is not in this account (stale config). Delete ~/.cloud-guardian/config.json and run install again." ;;
     en:e_update)               printf '%s' "Update failed." ;;
     en:e_unknown)              printf '%s' "Unknown command:" ;;
     en:e_root)                 printf '%s' "Relay install needs root:" ;;
@@ -542,8 +543,14 @@ do_install() {
   fi
 
   step "$(t deploy_step)"
-  if ! ( cd "$DIR" && python3 deploy-tool.py install ); then
-    cf_perm_error
+  dout=""
+  if ! dout=$(cd "$DIR" && python3 deploy-tool.py install 2>&1); then
+    printf "%s\n" "$dout"
+    if printf "%s" "$dout" | grep -q "10041"; then
+      err "$(t e_kv_stale)"
+    else
+      cf_perm_error
+    fi
     err "$(t e_deploy)"
     exit 1
   fi
