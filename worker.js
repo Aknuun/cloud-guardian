@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.7.1";
+const BOT_VERSION = "1.8.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.0": [
+    "🛡 ارتقای امنیتی: secret وب‌هوک تلگرام (ضد جعل آپدیت) + هشدار توکن پیش‌فرض رله + حذف خودکار پیام‌های رمز",
+    "📧 ایمیل سازمانی: ساخت چند ایمیل با پیشوند دلخواه برای هر دامنه + نمایش آدرس کامل با @",
+    "📝 صفحه رکورد کلادفلر: نوع/TTL/Proxy دکمه‌ای (A↔CNAME هوشمند، چرخه TTL، پروکسی درجا) + دکمه ترافیک امروز + بازه ۱/۷/۳۰ روزه",
+    "⬅️ انصراف همه‌جا فقط یک صفحه عقب + 🏠 تبلیغ در صفحه خانه + 🔍 جابه‌جایی و رنگ دکمه‌های جست‌وجو/فیچرها",
+  ],
   "1.7.1": [
     "📊 صفحه سهمیه فقط نوشتن روزانه (۱۰۰۰) را نشان می‌دهد",
     "📩 پیام وصل دامنه ایمیل حالا آدرس تست کامل (test@دامنه) با قابلیت کپی نشان می‌دهد",
@@ -1066,6 +1072,24 @@ export default {
     // self_url را قبل از پردازش آپدیت کش کن تا پیام اول هم reply_url معتبر داشته باشد
     if (kv) await cacheSelfUrl(kv, url.origin);
 
+    // 🔐 آپدیت واقعی تلگرام update_id دارد؛ هدر secret را چک کن (ضد جعل)
+    if (payload && typeof payload === "object" && "update_id" in payload) {
+      let secret = "";
+      try {
+        secret = kv ? (await kv.get("tg_secret", "text")) || "" : "";
+      } catch (e) {}
+      if (!secret) {
+        if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+      } else {
+        const got = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
+        if (got !== secret) {
+          if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+          return ok();
+        }
+      }
+    }
+    if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+
     ctx.waitUntil(processUpdate(payload, env, botToken, adminId));
     return ok();
   },
@@ -1128,6 +1152,8 @@ export default {
             patch.hubwatch = now;
             jobs.push(runHubWatch(env).catch((e) => console.error("HUBWATCH", String(e))));
           }
+          jobs.push(ensureTgWebhook(botToken, ckv, env).catch((e) => console.error("TGSEC", String(e))));
+          jobs.push(runSecretSweep(botToken, ckv).catch((e) => console.error("SECDEL", String(e))));
           jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
           jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
           jobs.push(ensureBotCommands(env, botToken, ckv).catch(() => {}));
@@ -1287,8 +1313,7 @@ async function processUpdate(payload, env, botToken, adminId) {
 
     if (cmd === "/start" || cmd === "/menu") {
       await ensureBotCommands(env, botToken, kv);
-      const promo = await getPromo(kv, env);
-      await send(mainMenuText() + (promo ? "\n\n" + promo : ""), mainMenuKeyboard());
+      await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/myid") {
       await send(`🆔 شناسه تلگرام شما: ${chatId}`);
     } else if (cmd === "/promoset" || cmd === "/promoreset") {
@@ -1405,6 +1430,15 @@ function ok() {
 function mainMenuText() {
   return `به ربات نگهبان ابری خوش اومدی ⚙️ نسخه v${BOT_VERSION}`;
 }
+// متن خانه همراه تبلیغ (برای /start و دکمه 🏠 خانه — یکدست)
+async function mainMenuTextFull(kv, env) {
+  try {
+    const promo = await getPromo(kv, env);
+    return mainMenuText() + (promo ? "\n\n" + promo : "");
+  } catch (e) {
+    return mainMenuText();
+  }
+}
 
 const SEARCH_PROMPT_TEXT =
   "🔍 جست‌وجو\n\n" +
@@ -1417,16 +1451,16 @@ function mainMenuKeyboard() {
   return [
     // addrec: شروع ویزارد افزودن رکورد | zones: لیست دامنه‌های کلودفلر (به‌تفکیک اکانت)
     [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
-    // search: جست‌وجوی سراسری رکورد در همهٔ اکانت‌ها (قرمز = تک‌ستونه)
-    [{ text: "🔍 جست و جو در همه", callback_data: "search", style: "danger" }],
+    // mons: منوی فیچرهای جدید (تک‌ستونه)
+    [{ text: "✨ فیچرهای جدید", callback_data: "mons", style: "danger" }],
     // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) کنار هم در یک ردیف — سبز
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
       { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
-    // srv: بخش سرورها (SSH/نود/مانیتور) | mons: منوی فیچرهای جدید — در یک ردیف
-    [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "✨ فیچرهای جدید", callback_data: "mons" }],
+    // srv: بخش سرورها (SSH/نود/مانیتور) | search: جست‌وجوی سراسری (قرمز) — در یک ردیف
+    [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🔍 جست و جو", callback_data: "search", style: "primary" }],
     // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
     [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
   ];
@@ -1462,7 +1496,7 @@ const BOT_COMMANDS = [
   { command: "zones", description: "☁️ کلودفلر — دامنه‌ها" },
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
-  { command: "search", description: "🔍 جست‌وجو در همه" },
+  { command: "search", description: "🔍 جست‌وجو" },
   { command: "mons", description: "✨ فیچرهای جدید" },
   { command: "providers", description: "🏢 دیتاسنترها" },
   { command: "srv", description: "🖥 سرورها" },
@@ -1623,7 +1657,7 @@ function helpKeyboard() {
       { text: "➕ افزودن رکورد", callback_data: "hg:rec" },
     ],
     [
-      { text: "🔍 جست و جو در همه", callback_data: "hg:search" },
+      { text: "🔍 جست و جو", callback_data: "hg:search" },
       { text: "⭐ ساب‌های منتخب", callback_data: "hg:fav" },
     ],
     [{ text: "🗂 عملیات گروهی", callback_data: "hg:bulk" }],
@@ -2640,6 +2674,38 @@ async function getSelfWebhook(env, tok) {
   return null;
 }
 
+// 🔐 secret وب‌هوک تلگرام (ضد جعل آپدیت از طرف غیر تلگرام).
+// هر نصب یک secret تصادفی در KV دارد؛ روی وب‌هوک ست می‌شود و هدر هر آپدیت چک می‌شود.
+async function getTgSecret(kv) {
+  try {
+    let s = await kv.get("tg_secret", "text");
+    if (!s) {
+      const b = new Uint8Array(32);
+      crypto.getRandomValues(b);
+      s = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+      await kv.put("tg_secret", s);
+    }
+    return s;
+  } catch (e) {
+    return "";
+  }
+}
+async function ensureTgWebhook(botToken, kv, env) {
+  // روزی یک‌بار: secret ساخته شده + روی وب‌هوک تلگرام ست است (خودترمیم)
+  try {
+    if (!kv) return;
+    const now = Date.now();
+    const ts = Number((await kv.get("tg_secret_ts", "text")) || 0);
+    if (now - ts < 24 * 3600000) return;
+    const secret = await getTgSecret(kv);
+    if (!secret) return;
+    const acc = await getQuotaAcct(kv, env).catch(() => null);
+    const webhook = acc ? await getSelfWebhook(env, acc.tok).catch(() => null) : null;
+    if (!webhook) return;
+    await tg(botToken, "setWebhook", { url: webhook, secret_token: secret, drop_pending_updates: false });
+    await kv.put("tg_secret_ts", String(now));
+  } catch (e) {}
+}
 async function getQuotaCfg(kv, env) {
   let cfg = null;
   try {
@@ -3084,7 +3150,8 @@ async function deleteMessage(botToken, chatId, messageId) {
 async function valueErrorReply(pending, chatId, botToken, reason, extraText) {
   const backToken = pending.srToken || pending.token;
   const text = "❌ " + String(reason || "").trim() + (extraText ? "\n\n" + extraText : "");
-  const kb = [[{ text: "⬅️ انصراف", callback_data: backToken ? `cancel:${backToken}` : "menu" }]];
+  const backCb = pending.record_id && backToken ? `e:${backToken}:${pending.record_id}` : backToken ? `cancel:${backToken}` : "menu";
+  const kb = [[{ text: "⬅️ انصراف", callback_data: backCb }]];
   if (pending.msgId) {
     await editMessage(botToken, chatId, pending.msgId, text, kb);
   } else {
@@ -3875,6 +3942,14 @@ async function cfRecordErr(kv, accounts, session, recordId) {
   }
 }
 
+// چرخه TTL با هر ضربه: خودکار ← چند دقیقه ← چند ساعت ← خودکار…
+const TTL_CYCLE = [1, 120, 300, 1800, 3600, 21600, 86400];
+function ttlLabel(t) {
+  t = Number(t);
+  if (t === 1 || t === 120) return "خودکار";
+  if (t < 3600) return `${Math.round(t / 60)} دقیقه`;
+  return `${t / 3600} ساعت`;
+}
 async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env) {
   const session = await kv.get(`s:${token}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
@@ -3890,23 +3965,6 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
         (cfErr ? "\n\n📄 خطای کلادفلر:\n" + code(cfErr) : "")
     );
   }
-  let ipBlock = "";
-  if (r.type === "CNAME") {
-    const ips = await resolveIPs(r.content, kv);
-    if (ips.length > 0) {
-      const lines = [];
-      for (let i = 0; i < ips.length; i++) {
-        const info = await ipInfo(ips[i], kv);
-        lines.push(`${i + 1}) ${fmtIpInfo(ips[i], info)}`);
-      }
-      ipBlock = `\n🌍 IP های مقصد:\n` + lines.join("\n");
-    } else {
-      ipBlock = `\n🌍 IP مقصد: یافت نشد`;
-    }
-  } else if (r.type === "A" || r.type === "AAAA") {
-    const info = await ipInfo(r.content, kv);
-    ipBlock = `\n🌍 ${fmtIpInfo(r.content, info)}`;
-  }
   const favs = await getFavs(kv, chatId);
   const zoneIdForFav = session.zone_id;
   const faved = favExists(favs, zoneIdForFav, recordId);
@@ -3914,20 +3972,22 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   const text =
     `✏️ ویرایش رکورد\n\n` +
     `📛 نام: ${code(r.name)}\n` +
-    `🏷 نوع: ${code(r.type)}\n` +
     `💡 مقدار: ${code(r.content)}\n` +
-    `⏱\u200F TTL: ${r.ttl === 1 || r.ttl === 120 ? "خودکار" : r.ttl}\n` +
-    `🌐\u200F Proxy: ${r.proxied ? "روشن" : "خاموش"}\n` +
-    `📁 دامنه: ${code(zoneName)}` +
-    ipBlock;
-  // ev: ویرایش مقدار | ct: تغییر نوع | et: تغییر TTL | ep: روشن/خاموش کردن Proxy
+    `📁 دامنه: ${code(zoneName)}`;
+  // ev: ویرایش مقدار | ct: جابه‌جایی مستقیم A↔CNAME | et: چرخه TTL | ep: روشن/خاموش Proxy
+  const typeBtn = r.type === "A" || r.type === "CNAME" ? { text: `🏷 نوع: ${r.type}`, callback_data: `ct:${token}:${recordId}` } : { text: "🔄 تغییر نوع", callback_data: `ct:${token}:${recordId}` };
+  // ترافیک امروز (کش ۱۰ دقیقه‌ای rtraf:)؛ با ضربه روی دکمه تازه می‌شود
+  let todayN = null;
+  try {
+    const tc = await kv.get(`rtraf:${token}:${recordId}`, "json");
+    if (tc && Number.isFinite(Number(tc.n))) todayN = Number(tc.n);
+  } catch (e) {}
   const detailKb = [
-    ...grid2([
-      { text: "✏️ تغییر مقدار", callback_data: `ev:${token}:${recordId}` },
-      { text: "🔄 تغییر نوع", callback_data: `ct:${token}:${recordId}` },
-      { text: "⏱ تغییر TTL", callback_data: `et:${token}:${recordId}` },
-      { text: "🛰 تغییر Proxy", callback_data: `ep:${token}:${recordId}` },
-    ]),
+    [typeBtn, { text: "✏️ تغییر مقدار", callback_data: `ev:${token}:${recordId}` }],
+    [
+      { text: `⏱ TTL: ${ttlLabel(r.ttl)}`, callback_data: `et:${token}:${recordId}` },
+      { text: `🌐 Proxy: ${r.proxied ? "روشن" : "خاموش"}`, callback_data: `ep:${token}:${recordId}` },
+    ],
   ];
   // دکمه‌های لود بالانسر (فقط برای A/AAAA/CNAME) با رنگ متفاوت از دکمه‌های بالایی
   if (lbIsLbRecord(r)) {
@@ -3937,13 +3997,24 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
       { text: "⚙️ تنظیمات لود بالانسر", callback_data: `lbs:${token}:${recordId}`, style: "success" },
     ]);
   }
-  // d: حذف رکورد | cref: فهرست دامنه‌های CNAME‌شده به این رکورد | favtg: افزودن/حذف از ساب‌های منتخب | rback: بازگشت
+  // cref: فهرست دامنه‌های CNAME‌شده به این رکورد | favtg: افزودن/حذف از ساب‌های منتخب
   detailKb.push([
-    { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "danger" },
     { text: "🔗 CNAME به این", callback_data: `cref:${token}:${recordId}`, style: "primary" },
     { text: faved ? "⭐ حذف از منتخب" : "⭐ افزودن به منتخب", callback_data: `favtg:${token}:${recordId}`, style: "primary" },
   ]);
-  detailKb.push([{ text: "🔙 بازگشت", callback_data: backCb || `rback:${token}` }]);
+  // d: حذف رکورد | rtraf: ترافیک امروز روی خود دکمه
+  detailKb.push([
+    { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "danger" },
+    {
+      text: todayN === null ? "📊 مشاهده ترافیک" : `📊 امروز: ${todayN.toLocaleString("en-US")}`,
+      callback_data: `rtraf:${token}:${recordId}`,
+    },
+  ]);
+  // بازگشت پایین + خانه سمت راستش
+  detailKb.push([
+    { text: "🔙 بازگشت", callback_data: backCb || `rback:${token}` },
+    { text: "🏠 خانه", callback_data: "menu" },
+  ]);
   await edit(text, detailKb);
 }
 
@@ -4413,9 +4484,9 @@ async function redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId,
   await renderSearchResults(srToken, stored.results, stored.query, stored.field, edit);
 }
 
-async function redrawMenuNav(kv, botToken, chatId, messageId) {
+async function redrawMenuNav(kv, botToken, chatId, messageId, env) {
   const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
-  await edit(mainMenuText(), mainMenuKeyboard());
+  await edit(await mainMenuTextFull(kv, env), mainMenuKeyboard());
 }
 
 // ===================== Linode =====================
@@ -4699,7 +4770,52 @@ function passKb(pw, backCb, backLabel) {
   ];
 }
 function passMsg(head, pw, note) {
-  return `${head}\n\n🔑 ${code(String(pw))}\n\n${note || "📋 برای کپی رمز، روی دکمهٔ زیر بزن."}`;
+  return `${head}\n\n🔑 ${code(String(pw))}\n\n${note || "📋 برای کپی رمز، روی دکمهٔ زیر بزن."}\n\n⏳ این پیام چند دقیقه دیگر خودکار حذف می‌شود.`;
+}
+// 🛡 ارسال پیام حاوی رمز: message_id را برای حذف خودکار (جارچی کرون) ثبت می‌کند
+async function sendSecret(edit, kv, chatId, text, kb, ttlSec) {
+  const res = await edit(text, kb);
+  if (!kv || !chatId) return res;
+  try {
+    const mid = res && res.result && res.result.message_id;
+    if (mid) {
+      await kv.put(`secretmsg:${chatId}:${mid}`, JSON.stringify({ chat: chatId, msg: mid, at: Date.now() + (ttlSec || 300) * 1000 }), {
+        expirationTtl: 3600,
+      });
+      // پرچم: تا رمزی در انتظار نیست، جارچی فقط همین یک کلید را می‌خواند (بدون list)
+      await kv.put("secretmsg_on", "1", { expirationTtl: 3600 });
+    }
+  } catch (e) {}
+  return res;
+}
+// 🛡 جارچی: پیام‌های رمز منقضی‌شده را پاک می‌کند (هر ۱۰ دقیقه از کرون)
+async function runSecretSweep(botToken, kv) {
+  try {
+    // حالت بیکار: فقط ۱ read ارزان؛ list فقط وقتی پرچم ست است
+    let on = "";
+    try {
+      on = (await kv.get("secretmsg_on", "text")) || "";
+    } catch (e) {}
+    if (on !== "1") return;
+    const l = await kv.list({ prefix: "secretmsg:", limit: 50 });
+    const now = Date.now();
+    let left = 0;
+    for (const k of (l && l.keys) || []) {
+      try {
+        const v = await kv.get(k.name, "json");
+        if (!v) continue;
+        if (Number(v.at) <= now) {
+          await deleteMessage(botToken, v.chat, v.msg);
+          await kv.delete(k.name);
+        } else left++;
+      } catch (e) {}
+    }
+    if (!left) {
+      try {
+        await kv.delete("secretmsg_on");
+      } catch (e) {}
+    }
+  } catch (e) {}
 }
 
 // ===================== SSL Monitor =====================
@@ -5543,6 +5659,10 @@ async function renderRelayHome(render, kv, env, back) {
     "• 🌐 رلهٔ رایگان پیش‌فرض: " + defStat,
     ...(active.url && /^http:\/\//i.test(active.url)
       ? ["⚠️ اتصال به رله با http است؛ رمز/کلید SSH رمزنگاری‌نشده منتقل می‌شود (https امن‌تر است)."]
+      : []),
+    // 🛡 توکن پیش‌فرض عمومی روی رلهٔ شخصی = هرکی آدرس را بداند می‌تواند وصل شود
+    ...(mode === "custom" && active.token === DEFAULT_RELAY_TOKEN
+      ? ["", "⚠️ توکن رله‌ات همان پیش‌فرض عمومی است؛ با «🔧 تنظیم مجدد رله» یک توکن اختصاصی و محرمانه بگذار."]
       : []),
     "",
     "⚙️ مدیریت",
@@ -7696,6 +7816,14 @@ async function inboxPut(kv, domain, rec) {
     await kv.put(`inbox_idx:${dom}`, JSON.stringify(idx), { expirationTtl: 90 * 86400 });
   } catch (e) {}
 }
+// ایمیل‌های ساخته‌شدهٔ یک دامنه (پیشوندها): fmail_alias:<domain> = ["info","support",...]
+async function fmailAliases(kv, domain) {
+  try {
+    const a = await kv.get(`fmail_alias:${String(domain || "").toLowerCase()}`, "json");
+    if (Array.isArray(a)) return a.map((x) => String(x)).filter((x) => /^[a-z0-9._-]{1,32}$/.test(x)).slice(0, 20);
+  } catch (e) {}
+  return [];
+}
 async function inboxList(kv, domain, limit) {
   const dom = String(domain || "").toLowerCase();
   if (!kv || !dom) return [];
@@ -8059,7 +8187,7 @@ async function renderFmailHome(edit, kv, accounts, env) {
     { text: "🔄 همگام‌سازی", callback_data: "fmailsync" },
     { text: "🔙 بازگشت", callback_data: "mons" },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailAdd(edit, kv, accounts) {
@@ -8081,6 +8209,20 @@ async function renderFmailAdd(edit, kv, accounts) {
     }
     if (rest.length > 20) lines.push("", `… و ${rest.length - 20} دامنه دیگر`);
   }
+  // دامنه‌های قبلاً وصل‌شده: انتخاب برای ساخت ایمیل جدید با پیشوند دلخواه
+  if (act.length) {
+    lines.push("", "📧 ساخت ایمیل جدید برای دامنه‌های وصل‌شده:");
+    for (const a of act.slice(0, 20)) {
+      const aliases = await fmailAliases(kv, String(a.zone_name || "").toLowerCase()).catch(() => []);
+      kb.push([
+        {
+          text: `📧 ${String(a.zone_name).slice(0, 24)}${aliases.length ? ` (${aliases.length})` : ""}`,
+          callback_data: `fmailaliasnew:${a.acc}:${a.zone_id}`,
+          style: "success",
+        },
+      ]);
+    }
+  }
   kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
@@ -8101,6 +8243,16 @@ async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
       lines.push(`• ${subj} — ${from}`);
       kb.push([{ text: `📨 ${(decodeRfc2047(m.subject || m.from || m.id)).slice(0, 32)}`, callback_data: `fmailview:${acc}:${zoneId}:${m.id}` }]);
     }
+  }
+  const aliases = await fmailAliases(kv, dom);
+  lines.push("", `📧 آدرس‌های این دامنه (${aliases.length}):`);
+  if (!aliases.length) lines.push(`هنوز ایمیلی نساخته‌ای — با دکمهٔ زیر بساز (مثلاً ${"info@" + zone.name}).`);
+  else for (const p of aliases) lines.push(`• ${p}@${zone.name}`);
+  kb.push([{ text: "➕ ساخت ایمیل جدید", callback_data: `fmailaliasnew:${acc}:${zoneId}`, style: "success" }]);
+  for (let i = 0; i < aliases.length; i += 3) {
+    kb.push(
+      aliases.slice(i, i + 3).map((p, j) => ({ text: `🗑 ${p}`, callback_data: `fmailaliasdel:${acc}:${zoneId}:${i + j}` }))
+    );
   }
   kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
@@ -8141,10 +8293,11 @@ async function cfGraphql(tok, query) {
   return res.json();
 }
 
-// برمی‌گرداند {counts} یا {needPerm} یا {error} — counts: نام کامل کوچک → تعداد کوئری
-async function fetchTrafficCounts(tok, zoneId) {
+// برمی‌گرداند {counts} یا {needPerm} یا {error} — counts: نام کامل کوچک → تعداد کوئری در بازه
+async function fetchTrafficCounts(tok, zoneId, days) {
+  days = [1, 7, 30].includes(Number(days)) ? Number(days) : 7;
   const now = new Date();
-  const week = new Date(now.getTime() - 7 * 86400000);
+  const week = new Date(now.getTime() - days * 86400000);
   const fmt = (d) => d.toISOString().slice(0, 19) + "Z";
   try {
     const q =
@@ -8169,14 +8322,19 @@ async function fetchTrafficCounts(tok, zoneId) {
   }
 }
 
-async function renderTrafficHome(edit, kv, accounts, token) {
+const TRAF_DAYS = [1, 7, 30];
+function trafRangeLabel(d) {
+  return d === 1 ? "۱ روز گذشته" : d === 30 ? "۱ ماه گذشته" : "۷ روز گذشته";
+}
+async function renderTrafficHome(edit, kv, accounts, token, days) {
+  days = TRAF_DAYS.includes(Number(days)) ? Number(days) : 7;
   const session = await kv.get(`s:${token}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده.");
   const tok = accounts[session.acc] && accounts[session.acc].token;
   if (!tok) return edit("❌ اکانت پیدا نشد.");
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   if (!zone) return edit("❌ دامنه پیدا نشد.");
-  const t = await fetchTrafficCounts(tok, session.zone_id);
+  const t = await fetchTrafficCounts(tok, session.zone_id, days);
   if (t.needPerm) {
     return edit(`📊 ترافیک ${zone.name}\n\n❌ دسترسی Analytics نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Analytics → Read")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`, [
       [{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }],
@@ -8190,7 +8348,7 @@ async function renderTrafficHome(edit, kv, accounts, token) {
     .filter((r) => ["A", "AAAA", "CNAME"].includes(r.type))
     .map((r) => ({ r, n: t.counts[String(r.name || "").toLowerCase()] || 0 }))
     .sort((a, b) => b.n - a.n);
-  const lines = [`📊 ترافیک ۷ روز گذشته — ${zone.name}`, ""];
+  const lines = [`📊 ترافیک ${trafRangeLabel(days)} — ${zone.name}`, ""];
   for (const { r, n } of rows.slice(0, 25)) {
     const short = r.name === zone.name ? "@" : String(r.name).slice(0, -(zone.name.length + 1));
     lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${Number(n).toLocaleString("en-US")} کوئری`);
@@ -8198,11 +8356,13 @@ async function renderTrafficHome(edit, kv, accounts, token) {
   if (rows.length > 25) lines.push(`… و ${rows.length - 25} مورد دیگر`);
   const zeros = rows.filter((x) => x.n === 0);
   lines.push("", "⚠️ سابی که خیلی به‌ندرت استفاده میشه هم صفر نشون میده؛ قبل از حذف مطمئن شو.");
-  const kb = [];
+  const kb = [
+    TRAF_DAYS.map((d) => ({ text: `${d === days ? "✅ " : ""}${d === 30 ? "۱ ماه" : d + " روز"}`, callback_data: `ztraf:${token}:${d}` })),
+  ];
   if (zeros.length) {
-    kb.push([{ text: `🗑 حذف ${zeros.length} رکورد بدون ترافیک`, callback_data: `ztrafdel:${token}`, style: "danger" }]);
+    kb.push([{ text: `🗑 حذف ${zeros.length} رکورد بدون ترافیک`, callback_data: `ztrafdel:${token}:${days}`, style: "danger" }]);
   } else if (rows.length) {
-    lines.push("✅ همهٔ ساب‌ها در ۷ روز گذشته ترافیک داشتن.");
+    lines.push(`✅ همهٔ ساب‌ها در ${trafRangeLabel(days)} ترافیک داشتن.`);
   }
   kb.push([{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
@@ -8768,6 +8928,32 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     } catch (e) {}
     await send(sent ? "✅ پیام برای کاربر ارسال شد." : `⚠️ ارسال ناموفق بود.\n🔗 آدرس ثبت‌شده: ${dest}\n🕓 آخرین پینگ: ${faAgo(v.ts)} · ورژن: ${v.v ? "v" + String(v.v).slice(0, 20) : "—"}\nاگر آدرس قدیمی است، کاربر دوباره نصب کرده؛ رکورد جدیدش را از «📊 آمار نصب‌ها» پیدا کن.`, [
       [{ text: "👤 بازگشت", callback_data: `hubuser:${iid}` }],
+    ]);
+    return;
+  }
+
+  // 📧 ایمیل سازمانی: ساخت ایمیل جدید با پیشوند دلخواه
+  if (type === "fmail_alias_new") {
+    await kv.delete(`pend:${chatId}`);
+    const al = (pending && pending.al) || {};
+    const zone = await getZoneById(al.zone, al.acc, accounts);
+    if (!zone) {
+      await send("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      return;
+    }
+    const dom = String(zone.name).toLowerCase();
+    const p = txt.trim().toLowerCase();
+    if (!/^[a-z0-9]([a-z0-9._-]{0,30}[a-z0-9])?$/.test(p)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
+      await send("❌ پیشوند معتبر نیست (فقط حروف انگلیسی، عدد و . _ - ؛ مثلاً info). دوباره بفرست:");
+      return;
+    }
+    try {
+      const arr = await fmailAliases(kv, dom);
+      if (!arr.includes(p)) await kv.put(`fmail_alias:${dom}`, JSON.stringify([...arr, p].slice(0, 20)));
+    } catch (e) {}
+    await send(`✅ ایمیل ساخته شد:\n${code(p + "@" + zone.name)}\n\nایمیل‌های این آدرس در صندوق همین دامنه می‌آیند.`, [
+      [{ text: "📥 صندوق", callback_data: `fmailbox:${al.acc}:${al.zone}` }],
     ]);
     return;
   }
@@ -10636,7 +10822,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       // menu: بازگشت به منوی اصلی و پاک کردن وضعیت‌های موقت (qa/pend)
       await kv.delete(`qa:${chatId}`);
       await kv.delete(`pend:${chatId}`);
-      await edit(mainMenuText(), mainMenuKeyboard());
+      await edit(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (data === "settings") {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
       await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
@@ -10975,7 +11161,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const pending = await kv.get(`pend:${chatId}`, "json");
       if (!pending || pending.type !== "ar_content") return edit("⏳ عملیات منقضی شده.");
       await edit(`⌨️ دامنه هدف را به‌صورت دستی تایپ کنید (مثلاً target.example.com):`, [
-        [{ text: "⬅️ انصراف", callback_data: "menu" }],
+        [{ text: "⬅️ انصراف", callback_data: "czback" }],
       ]);
     } else if (data.startsWith("czr:")) {
       const targetName = data.slice(4);
@@ -11433,23 +11619,29 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const records = await getRecords(zone, accounts, kv);
       await renderRecords(zone, records, token, rpage, edit, undefined, session.zback);
     } else if (data.startsWith("ztraf:")) {
-      const token = data.slice(6);
-      await edit("⏳ در حال خواندن آمار ۷ روزه…");
-      await renderTrafficHome(edit, kv, accounts, token);
+      const rp = data.slice(6).split(":");
+      const token = rp[0];
+      const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
+      await edit(`⏳ در حال خواندن آمار ${trafRangeLabel(days)}…`);
+      await renderTrafficHome(edit, kv, accounts, token, days);
     } else if (data.startsWith("ztrafdel:")) {
-      const token = data.slice(9);
+      const rp = data.slice(9).split(":");
+      const token = rp[0];
+      const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
-      await edit("🗑 رکوردهای بدون ترافیک ۷ روز گذشته حذف شوند؟\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟", [
-        [{ text: "✅ بله، حذف کن", callback_data: `ztrafdely:${token}` }, { text: "❌ انصراف", callback_data: `ztraf:${token}` }],
+      await edit(`🗑 رکوردهای بدون ترافیک ${trafRangeLabel(days)} حذف شوند؟\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟`, [
+        [{ text: "✅ بله، حذف کن", callback_data: `ztrafdely:${token}:${days}` }, { text: "❌ انصراف", callback_data: `ztraf:${token}:${days}` }],
       ]);
     } else if (data.startsWith("ztrafdely:")) {
-      const token = data.slice(10);
+      const rp = data.slice(10).split(":");
+      const token = rp[0];
+      const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.");
-      const t = await fetchTrafficCounts(tok, session.zone_id);
+      const t = await fetchTrafficCounts(tok, session.zone_id, days);
       if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }]]);
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
@@ -11469,7 +11661,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       }
       await invalidateCache(kv, session.zone_id);
       await edit(`✅ ${ok} از ${zeros.length} رکورد بدون ترافیک حذف شد.`, [
-        [{ text: "📊 ترافیک", callback_data: `ztraf:${token}` }, { text: "🔙 بازگشت", callback_data: `p:${token}:0` }],
+        [{ text: "📊 ترافیک", callback_data: `ztraf:${token}:${days}` }, { text: "🔙 بازگشت", callback_data: `p:${token}:0` }],
       ]);
     } else if (data === "traf") {
       await renderTrafficZones(0, "all", edit, kv, accounts, env);
@@ -11891,11 +12083,61 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const backCb = `p:${token}:${page}`;
       await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token, recordId, backCb }), { expirationTtl: 86400 });
       await renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env);
-    } else if (data.startsWith("ev:") || data.startsWith("et:")) {
+    } else if (data.startsWith("rtraf:")) {
+      // ترافیک امروز همین ساب: اسم دکمه می‌شود مقدار (می‌مانی در همین صفحه)
       const parts = data.split(":");
       const token = parts[1];
       const recordId = parts[2];
-      const field = data.startsWith("ev:") ? "edit_value" : "edit_ttl";
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const tok = accounts[session.acc] && accounts[session.acc].token;
+      if (!tok) return edit("❌ اکانت پیدا نشد.");
+      const t = await fetchTrafficCounts(tok, session.zone_id, 1);
+      if (t.needPerm || t.error)
+        return edit("❌ " + (t.needPerm ? "دسترسی Analytics نیست (Zone → Analytics → Read)." : "خطا در آمار:\n" + t.error), [
+          [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }],
+        ]);
+      const rec = await fetchRecordForSession(kv, accounts, session, recordId, env);
+      if (!rec) return edit("❌ رکورد پیدا نشد.");
+      const nn = t.counts[String(rec.name || "").toLowerCase()] || 0;
+      try {
+        await kv.put(`rtraf:${token}:${recordId}`, JSON.stringify({ n: nn }), { expirationTtl: 600 });
+      } catch (e) {}
+      await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
+    } else if (data.startsWith("et:")) {
+      // چرخه TTL با هر ضربه (بدون پرسیدن)
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const session = await kv.get(`s:${token}`, "json");
+      if (!session) return edit("⏳ نشست منقضی شده.");
+      const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+        headers: hdr(accounts[session.acc].token),
+      });
+      const recData = await recRes.json();
+      if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+      const record = recData.result;
+      const ni = TTL_CYCLE.indexOf(Number(record.ttl));
+      const nextTtl = TTL_CYCLE[(ni + 1) % TTL_CYCLE.length] ?? 1;
+      {
+        const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          method: "PATCH",
+          headers: hdr(accounts[session.acc].token),
+          body: JSON.stringify({ ttl: nextTtl }),
+        });
+        const dd = await res.json();
+        if (dd.success) {
+          await invalidateCache(kv, session.zone_id);
+          await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
+        } else {
+          await edit("❌ خطا:\n" + cfErrText(dd), [[{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }]]);
+        }
+      }
+    } else if (data.startsWith("ev:")) {
+      const parts = data.split(":");
+      const token = parts[1];
+      const recordId = parts[2];
+      const field = "edit_value";
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده.");
       await kv.put(
@@ -11903,12 +12145,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
         { expirationTtl: 600 }
       );
-      await edit(
-        field === "edit_ttl"
-          ? "⏱ TTL جدید را بفرستید (عدد به ثانیه، یا 1 برای خودکار):"
-          : "✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):",
-        [[{ text: "⬅️ انصراف", callback_data: `cancel:${token}` }]]
-      );
+      await edit("✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):", [[{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }]]);
     } else if (data.startsWith("cancel:")) {
       await kv.delete(`pend:${chatId}`);
       const token = data.slice(7);
@@ -11932,6 +12169,60 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const recData = await recRes.json();
       if (!recData.success) return edit("❌ رکورد پیدا نشد.");
       const record = recData.result;
+      if (record.type === "A" || record.type === "CNAME") {
+        // جابه‌جایی بین A و CNAME: هرجا مقدار خودکار قابل تبدیل است بدون پرسیدن
+        const newType = record.type === "A" ? "CNAME" : "A";
+        const cur = String(record.content || "").trim();
+        const curIsIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(cur) || cur.includes(":");
+        let newContent = cur;
+        if (newType === "A" && !curIsIp) {
+          // CNAME→A: هاست را خودکار به IP ریزالو می‌کنیم
+          let ips = [];
+          try {
+            ips = await resolveIPs(cur, kv);
+          } catch (e) {}
+          if (ips && ips.length) newContent = ips[0];
+          else {
+            // ریزالو نشد: فقط همین یک بار مقدار IP را بپرس
+            await kv.put(
+              `pend:${chatId}`,
+              JSON.stringify({ type: "change_type", new_type: newType, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId }),
+              { expirationTtl: 600 }
+            );
+            await edit(`🔄 ${code(cur)} IP مشخصی ندارد؛ IP جدید برای نوع A را بفرست:`, [
+              [{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }],
+            ]);
+            return;
+          }
+        }
+        if (newType === "CNAME" && curIsIp) {
+          // A→CNAME با مقدار IP: مقصد معتبر وجود ندارد، فقط همین یک بار بپرس
+          await kv.put(
+            `pend:${chatId}`,
+            JSON.stringify({ type: "change_type", new_type: newType, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId }),
+            { expirationTtl: 600 }
+          );
+          await edit(`🔄 مقدار فعلی IP است؛ هدف CNAME (مثل ${code("sub." + session.zone_name)}) را بفرست:`, [
+            [{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }],
+          ]);
+          return;
+        }
+        const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
+          method: "PUT",
+          headers: hdr(accounts[session.acc].token),
+          body: JSON.stringify({ type: newType, name: record.name, content: newContent, ttl: record.ttl, proxied: record.proxied }),
+        });
+        const dd = await res.json();
+        if (dd.success) {
+          await invalidateCache(kv, session.zone_id);
+          await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
+        } else {
+          await edit(`❌ تبدیل به ${newType} نشد:\n` + cfErrText(dd), [
+            [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }],
+          ]);
+        }
+        return;
+      }
       const kb = RECORD_TYPES.filter((t) => t !== record.type).map((t) => [
         { text: `به ${t}`, callback_data: `ctt:${token}:${recordId}:${t}` },
       ]);
@@ -11950,7 +12241,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         { expirationTtl: 600 }
       );
       await edit(`🔄 مقدار جدید برای نوع ${newType} را بفرستید:`, [
-        [{ text: "⬅️ انصراف", callback_data: `rback:${token}` }],
+        [{ text: "⬅️ انصراف", callback_data: `ct:${token}:${recordId}` }],
       ]);
     } else if (data.startsWith("ep:")) {
       const parts = data.split(":");
@@ -11976,12 +12267,6 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         const data = await res.json();
         if (data.success) {
           await invalidateCache(kv, session.zone_id);
-          const sum =
-            `✅ تغییر یافت\n\n📛 ساب‌دامین: ${code(record.name)}\n\n` +
-            `🔴 Proxy قبلی: ${record.proxied ? "روشن" : "خاموش"}\n` +
-            `🟢 Proxy فعلی: ${data.result.proxied ? "روشن" : "خاموش"}`;
-          await edit(sum, []);
-          await sleep(2000);
           await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
         } else {
           await edit("❌ خطا:\n" + cfErrText(data));
@@ -12003,7 +12288,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         record = recData.result;
       }
       await edit(`⚠️ مطمئنید رکورد زیر حذف شود؟\n\n${record.type} — ${record.name} → ${record.content}`, [
-        [{ text: "✅ بله، حذف کن", callback_data: `dy:${token}:${recordId}` }, { text: "❌ انصراف", callback_data: `rback:${token}` }],
+        [{ text: "✅ بله، حذف کن", callback_data: `dy:${token}:${recordId}` }, { text: "❌ انصراف", callback_data: `e:${token}:${recordId}` }],
       ]);
     } else if (data.startsWith("dy:")) {
       const parts = data.split(":");
@@ -12309,7 +12594,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const p = panels[i];
       if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" }]]);
       await edit(`⚠️ پنل «${escHtml(p.name)}» حذف شود؟ (مانیتور نودِ متصل به آن هم حذف می‌شود)`, [
-        [{ text: "✅ بله، حذف کن", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "nd" }],
+        [{ text: "✅ بله، حذف کن", callback_data: `pnlxx:${i}` }, { text: "❌ انصراف", callback_data: "pnld" }],
       ]);
     } else if (data.startsWith("pnlxx:")) {
       const i = Number(data.slice(6));
@@ -12357,8 +12642,12 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         try {
           await kv.put(`fmail_on:${String(zone.name).toLowerCase()}`, JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name }), { expirationTtl: 90 * 86400 });
         } catch (e) {}
-        await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند.\n\n📧 یک ایمیل تست به این آدرس بفرست و در صندوق ببین:\n${code("test@" + zone.name)}`, [
-          [{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }, { text: "🔙 بازگشت", callback_data: "fmail" }],
+        await edit(`📩 ${code(zone.name)} وصل شد.\n\nاز این به بعد همه ایمیل‌های این دامنه در صندوق ربات می‌آیند.\n\n📧 می‌توانی چند ایمیل با پیشوند دلخواه بسازی (مثلاً ${code("info@" + zone.name)}).\n\nیک ایمیل تست به این آدرس بفرست و در صندوق ببین:\n${code("test@" + zone.name)}`, [
+          [
+            { text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` },
+            { text: "➕ ساخت ایمیل", callback_data: `fmailaliasnew:${acc}:${zoneId}`, style: "success" },
+          ],
+          [{ text: "🔙 بازگشت", callback_data: "fmail" }],
         ]);
       } catch (e) {
         await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
@@ -12393,7 +12682,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
-      await edit(`🔀 ${zone.name} — ایمیل‌ها چطور دریافت شوند؟\n\n• 📥 دریافت در ربات: در صندوق تلگرام ذخیره و اعلان می‌شود\n• 📩 فوروارد به ایمیل: مستقیم به آدرس مقصد می‌رود (روتیـنگ کلادفلر)`, [
+      await edit(`🔀 ${zone.name} — ایمیل‌ها چطور دریافت شوند؟\n\n• 📥 دریافت در ربات: در صندوق تلگرام ذخیره و اعلان می‌شود\n• 📩 فوروارد به ایمیل: مستقیم به آدرس مقصد می‌رود (روتیـنگ کلادفلر)\n\n📧 آدرس‌ها به شکل ${code("name@" + zone.name)} هستند؛ هر پیشوندی به همین دامنه بفرستی به مقصد انتخابی می‌آید.`, [
         [{ text: "📥 دریافت در ربات", callback_data: `fmailon:${acc}:${zoneId}`, style: "success" }],
         [{ text: "📩 فوروارد به ایمیل مقصد", callback_data: `fmailfwd:${acc}:${zoneId}` }],
         [{ text: "🔙 بازگشت", callback_data: "fmail" }],
@@ -12468,6 +12757,33 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       ]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
+    } else if (data.startsWith("fmailaliasnew:")) {
+      // ساخت ایمیل جدید برای دامنه: فقط پیشوند از کاربر گرفته می‌شود
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "fmail_alias_new", al: { acc, zone: zoneId } }), { expirationTtl: 600 });
+      await edit(`📧 ساخت ایمیل جدید برای ${code(zone.name)}\n\nفقط پیشوند را بفرست (مثلاً ${code("info")} یعنی ${code("info@" + zone.name)}):`, [
+        [{ text: "⬅️ انصراف", callback_data: `fmailbox:${acc}:${zoneId}` }],
+      ]);
+    } else if (data.startsWith("fmailaliasdel:")) {
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts[2];
+      const idx = Number(parts[3]);
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      try {
+        const dom = String(zone.name).toLowerCase();
+        const arr = await fmailAliases(kv, dom);
+        if (arr[idx]) {
+          arr.splice(idx, 1);
+          await kv.put(`fmail_alias:${dom}`, JSON.stringify(arr));
+        }
+      } catch (e) {}
+      await renderFmailBox(edit, kv, acc, zoneId, accounts);
     } else if (data.startsWith("fmailbox:")) {
       const parts = data.split(":");
       await renderFmailBox(edit, kv, Number(parts[1]), parts[2], accounts);
@@ -13731,7 +14047,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود و نصب نود پیشنهاد می‌شود
         return srvProvisionNewServer(kv, env, edit, { host: hIp, password: pw, note: `Hetzner: ${hs.name || ""}` });
       }
-      return edit(passMsg("🎉 سرور هتزنر ساخته شد؛ رمز root:", pw), passKb(pw, `hzs:${i}:0`, "🖥️ سرورها"));
+      return sendSecret(edit, kv, chatId, passMsg("🎉 سرور هتزنر ساخته شد؛ رمز root:", pw), passKb(pw, `hzs:${i}:0`, "🖥️ سرورها"));
     } else if (data.startsWith("hzsu:")) {
       const parts = data.split(":");
       await hzServerDispatch(hzAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
@@ -13740,7 +14056,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await hzServerPick(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
     } else if (data.startsWith("hzok:")) {
       const parts = data.split(":");
-      await hzServerDo(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+      await hzServerDo(hzAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit, { kv, chatId });
     } else if (data.startsWith("hzp:")) {
       const parts = data.split(":");
       await showHzPrimaryIps(hzAccounts, Number(parts[1]), Number(parts[2]) || 0, edit);
@@ -14077,7 +14393,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
         // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود، رمز تنظیم و نصب نود پیشنهاد می‌شود
         return srvProvisionNewServer(kv, env, edit, { host: lnIp, password: pass, note: `Linode: ${r.label || ""}` });
       }
-      await edit(passMsg("🎉 سرور لینود ساخته شد؛ رمز root:", pass), passKb(pass, `lns:${i}:0`, "🖥️ سرورها"));
+      await sendSecret(edit, kv, chatId, passMsg("🎉 سرور لینود ساخته شد؛ رمز root:", pass), passKb(pass, `lns:${i}:0`, "🖥️ سرورها"));
     } else if (data.startsWith("lnsu:")) {
       const parts = data.split(":");
       await lnServerDispatch(lnAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
@@ -14086,7 +14402,7 @@ async function handleCallback(cb, botToken, adminId, kv, env) {
       await lnServerPick(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
     } else if (data.startsWith("lnok:")) {
       const parts = data.split(":");
-      await lnServerDo(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit);
+      await lnServerDo(lnAccounts, Number(parts[1]), parts[2], parts[3], parts[4], edit, { kv, chatId });
     } else if (data.startsWith("lnp:")) {
       const parts = data.split(":");
       await showLnIps(lnAccounts, Number(parts[1]), Number(parts[2]) || 0, edit, kv);
@@ -16282,7 +16598,9 @@ async function hzServerPick(hzAccounts, i, serverId, step, arg, edit) {
   ]);
 }
 
-async function hzServerDo(hzAccounts, i, serverId, step, arg, edit) {
+async function hzServerDo(hzAccounts, i, serverId, step, arg, edit, extra) {
+  const xkv = (extra && extra.kv) || null;
+  const xchat = extra && extra.chatId;
   const acc = hzAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   const token = acc.token;
@@ -16357,7 +16675,7 @@ async function hzServerDo(hzAccounts, i, serverId, step, arg, edit) {
   const r = await hzRetry(token, path, { method: "POST", body: JSON.stringify(body) });
   if (r.error) return edit("❌ خطا: " + hzErr(r), back);
   if (step === "pass" && r.root_password) {
-    return edit(passMsg("🔓 رمز سرور ریست شد؛ رمز جدید:", r.root_password), passKb(r.root_password, `hzsi:${i}:${serverId}`));
+    return sendSecret(edit, xkv, xchat, passMsg("🔓 رمز سرور ریست شد؛ رمز جدید:", r.root_password), passKb(r.root_password, `hzsi:${i}:${serverId}`));
   }
   return edit("✅ انجام شد.", back);
 }
@@ -16709,7 +17027,9 @@ async function lnServerPick(lnAccounts, i, serverId, step, arg, edit) {
   ]);
 }
 
-async function lnServerDo(lnAccounts, i, serverId, step, arg, edit) {
+async function lnServerDo(lnAccounts, i, serverId, step, arg, edit, extra) {
+  const xkv = (extra && extra.kv) || null;
+  const xchat = extra && extra.chatId;
   const acc = lnAccounts[i];
   const token = acc.token;
   const back = [[{ text: "🔙 بازگشت", callback_data: `lnsi:${i}:${serverId}` }]];
@@ -16763,13 +17083,13 @@ async function lnServerDo(lnAccounts, i, serverId, step, arg, edit) {
     const pass = lnRandomPass();
     const r = await lnFetch(token, `/linode/instances/${serverId}/disks/${disk.id}/password`, { method: "POST", body: JSON.stringify({ password: pass }) });
     if (r.errors) return edit("❌ خطا: " + lnErr(r) + "\n(برای تغییر رمز، سرور باید خاموش باشد)", back);
-    return edit(passMsg("🔓 رمز جدید سرور:", pass, "⚠️ برای اعمال، سرور را خاموش و روشن کن.\n📋 برای کپی رمز، روی دکمهٔ زیر بزن."), passKb(pass, `lnsi:${i}:${serverId}`));
+    return sendSecret(edit, xkv, xchat, passMsg("🔓 رمز جدید سرور:", pass, "⚠️ برای اعمال، سرور را خاموش و روشن کن.\n📋 برای کپی رمز، روی دکمهٔ زیر بزن."), passKb(pass, `lnsi:${i}:${serverId}`));
   }
   if (step === "rebuild") {
     const pass = lnRandomPass();
     const r = await lnFetch(token, `/linode/instances/${serverId}/rebuild`, { method: "POST", body: JSON.stringify({ image: arg, root_pass: pass, booted: true }) });
     if (r.errors) return edit("❌ خطا: " + lnErr(r));
-    return edit(passMsg("🛠️ ریبیلد شروع شد؛ رمز root:", pass), passKb(pass, `lnsi:${i}:${serverId}`));
+    return sendSecret(edit, xkv, xchat, passMsg("🛠️ ریبیلد شروع شد؛ رمز root:", pass), passKb(pass, `lnsi:${i}:${serverId}`));
   }
   if (step === "upgrade") {
     const r = await lnFetch(token, `/linode/instances/${serverId}/resize`, { method: "POST", body: JSON.stringify({ type: arg, allow_auto_disk_resize: true }) });
@@ -17394,7 +17714,7 @@ async function qaApply(io) {
   const sum = diffSummary(data.result.name, prev.content, data.result.content);
   await edit(sum, []);
   await sleep(2000);
-  await redrawMenuNav(kv, botToken, chatId, messageId);
+  await redrawMenuNav(kv, botToken, chatId, messageId, io.env);
   return true;
 }
 
@@ -17709,7 +18029,7 @@ async function dispatchFavQa(data, io) {
   if (data === "qamenu") {
     const qa = await kv.get(`qa:${chatId}`, "json");
     if (qa && qa.ip) await sendQuickIpMenu(chatId, qa.ip, kv, accounts, send, io.env);
-    else await edit(mainMenuText(), mainMenuKeyboard());
+    else await edit(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     return true;
   }
   if (data === "qasearch") {
@@ -17720,7 +18040,7 @@ async function dispatchFavQa(data, io) {
   if (data === "qacancel") {
     await kv.delete(`qa:${chatId}`);
     await kv.delete(`pend:${chatId}`);
-    await edit(mainMenuText(), mainMenuKeyboard());
+    await edit(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     return true;
   }
   if (data.startsWith("ipd:")) {
