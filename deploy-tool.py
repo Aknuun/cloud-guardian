@@ -52,6 +52,8 @@ _S = {
     "ck_noacct":       ("بدون اکانت", "no account"),
     "ck_zones":        ("زون‌ها: %s", "zones: %s"),
     "ck_nozone":       ("بدون زون", "no zones"),
+    "ck_via":          ("روی زون %s", "via zone %s"),
+    "ck_allzones":     ("هر %d زون تست‌شده شکست خورد", "all %d tested zones failed"),
     "wh_deleted":      ("حذف وبهوک تلگرام", "Telegram webhook deleted"),
     "wh_fail":         ("حذف وبهوک ناموفق (نادیده گرفته شد)", "Failed to delete webhook (ignored)"),
     "worker_deleted":  ("✅ ورکر حذف شد: %s", "✅ Worker deleted: %s"),
@@ -498,16 +500,39 @@ def cmd_check(cfg, tok, show_box=True):
             line(True, False, T("ck_zones_perm"), "", T("ck_nozone"))
         else:
             line(True, False, T("ck_zones_perm"), T("ck_zones", ", ".join(z["name"] for z in zones[:5])))
-            z = zones[0]
-            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/dns_records?per_page=1")
-            _, err = json_ok(st, out)
-            line(not err, True, T("ck_dns"), "" if not err else str(err)[:160])
-            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/settings")
-            _, err = json_ok(st, out)
-            line(not err, True, T("ck_settings"), "" if not err else str(err)[:160])
-            st, out = req(tok, "GET", f"{API}/zones/{z['id']}/email/routing")
-            _, err = json_ok(st, out)
-            line(not err, True, T("ck_mail"), "" if not err else str(err)[:160], optional=True)
+            # چند زون اول را امتحان کن: اولی ممکن است pending/حذف‌شده یا خارج از اسکوپ توکن باشد.
+            # فقط وقتی همه شکست خوردند، دسترسی ناقص حساب کن.
+            tried = [z for z in zones[:5] if z.get("id")]
+            dns_ok, dns_err, dns_zone = False, "", ""
+            set_ok, set_err, set_zone = False, "", ""
+            mail_ok, mail_err = False, ""
+            for z in tried:
+                if not dns_ok:
+                    st, out = req(tok, "GET", f"{API}/zones/{z['id']}/dns_records?per_page=1")
+                    _, e = json_ok(st, out)
+                    if not e:
+                        dns_ok, dns_zone = True, z["name"]
+                    else:
+                        dns_err = str(e)[:160]
+                if not set_ok:
+                    st, out = req(tok, "GET", f"{API}/zones/{z['id']}/settings")
+                    _, e = json_ok(st, out)
+                    if not e:
+                        set_ok, set_zone = True, z["name"]
+                    else:
+                        set_err = str(e)[:160]
+                if not mail_ok:
+                    st, out = req(tok, "GET", f"{API}/zones/{z['id']}/email/routing")
+                    _, e = json_ok(st, out)
+                    if not e:
+                        mail_ok = True
+                    else:
+                        mail_err = str(e)[:160]
+                if dns_ok and set_ok and mail_ok:
+                    break
+            line(dns_ok, True, T("ck_dns"), (T("ck_via", dns_zone) if dns_ok and dns_zone else "") if dns_ok else (dns_err or T("ck_allzones", len(tried)))),
+            line(set_ok, True, T("ck_settings"), (T("ck_via", set_zone) if set_ok and set_zone else "") if set_ok else (set_err or T("ck_allzones", len(tried)))),
+            line(mail_ok, True, T("ck_mail"), "" if mail_ok else (mail_err or T("ck_allzones", len(tried))), optional=True)
 
     print(YELLOW + "ℹ️ " + RST + T("ck_analytics_note"))
     if show_box:
