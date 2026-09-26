@@ -442,15 +442,10 @@ do_install() {
   local arg
   for arg in "$@"; do case "$arg" in --no-relay) NO_RELAY=1 ;; --force|-y) FORCE=1 ;; esac; done
 
+  # نصب قبلی هست؟ بدون سؤال آپدیت کن (نصب تازه و تمیز فقط با پاک‌کردن کانفیگ یا --force)
   if [ -f "$CFG" ] && [ -z "${FORCE:-}" ]; then
-    if [ -t 0 ]; then
-      warn "$(t existing_found): $CFG"
-      local a=""; read -rp "  $(t update_instead)" a || a=""
-      if [[ "${a,,}" != "n" ]]; then do_update; return 0; fi
-    else
-      b "$(t auto_update)"
-      do_update; return 0
-    fi
+    b "$(t auto_update)"
+    do_update; return 0
   fi
 
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t install_title)"
