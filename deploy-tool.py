@@ -730,6 +730,16 @@ def main():
         sys.exit(1)
 
     if cmd in ("install", "update"):
+        # گیت استانداردهای UI: قبل از دپلوی، audit-ui.py باید پاس شود (رد شدن با --skip-audit)
+        skip_audit = "--skip-audit" in sys.argv
+        if not skip_audit:
+            import subprocess
+            audit = os.path.join(here, "audit-ui.py")
+            if os.path.isfile(audit):
+                r = subprocess.run([sys.executable, audit, os.path.join(here, "worker.js")])
+                if r.returncode != 0:
+                    print("UI AUDIT FAILED — deploy stopped. Fix docs/ui-standards.md violations or use --skip-audit.")
+                    sys.exit(1)
         cfg = load_cfg()
         code = load_worker_code()
         err = install(cfg, cfg["token"], code) if cmd == "install" else update(cfg, cfg["token"], code)
