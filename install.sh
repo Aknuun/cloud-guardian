@@ -54,8 +54,13 @@ t() {
     en:e_token_missing)        printf '%s' "token is missing from config." ;;
     en:e_nothing_remove)       printf '%s' "config.json not found; nothing to remove." ;;
     en:e_deploy)               printf '%s' "Deploy failed." ;;
+    en:e_webhook)              printf '%s' "Webhook NOT set — install aborted. The worker requires tg_secret; a webhook without it would silently kill the bot. Fix the API/token, then run install again." ;;
+    en:e_webhook_nosecret)     printf '%s' "tg_secret is missing from KV (incomplete deploy/API error). Refusing to set a secretless webhook." ;;
     en:e_kv_stale)             printf '%s' "The saved KV namespace id is not in this account (stale config). Delete ~/.cloud-guardian/config.json and run install again." ;;
     en:e_update)               printf '%s' "Update failed." ;;
+    en:e_update_fix_kv)        printf '%s' "Fix: the saved KV namespace is not in this account (stale config). Delete ~/.cloud-guardian/config.json and run install again." ;;
+    en:e_update_fix_auth)      printf '%s' "Fix: the token is invalid or lacks permissions. Make a new token with the 8 required permissions and run install again." ;;
+    en:e_update_fix_retry)     printf '%s' "Fix: probably a temporary Cloudflare API error. Run update again in a minute; if it persists, run: python3 deploy-tool.py check" ;;
     en:e_unknown)              printf '%s' "Unknown command:" ;;
     en:e_root)                 printf '%s' "Relay install needs root:" ;;
     en:e_systemd)              printf '%s' "systemd is required." ;;
@@ -353,9 +358,11 @@ PY
   chmod 600 "$CFG"
 }
 set_webhook() {
+  # Returns 0 only when Telegram confirms the webhook WITH the worker's tg_secret.
+  # A secretless webhook makes the worker drop every update, so it is refused.
   local sub url out secret extra
   sub="$(workers_subdomain "$TOKEN" "$ACC")"
-  if [ -z "$sub" ]; then warn "$(t w_subdomain)"; return 0; fi
+  if [ -z "$sub" ]; then err "$(t w_subdomain)"; return 1; fi
   url="https://$WORKER.$sub.workers.dev/tg"
   secret="$(python3 - "$TOKEN" "$ACC" "$CFG" <<'PYINNER' 2>/dev/null || true
 import json, sys, urllib.request
@@ -374,13 +381,15 @@ except Exception:
     print("")
 PYINNER
 )"
-  if [ -n "$secret" ]; then extra="&secret_token=$secret"; else extra=""; fi
-  out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true${extra}" 2>/dev/null || true)"
+  if [ -z "$secret" ]; then err "$(t e_webhook_nosecret)"; return 1; fi
+  out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true&secret_token=$secret" 2>/dev/null || true)"
   if printf '%s' "$out" | grep -q '"ok":true'; then
     ok "$(t ok_webhook) $url"
     printf '%s\n' "$url" > "$DIR/webhook_url"
+    return 0
   else
-    warn "$(t w_webhook) ${out:0:200}"
+    err "$(t w_webhook) ${out:0:200}"
+    return 1
   fi
 }
 install_cron_backup() {
@@ -571,7 +580,10 @@ do_install() {
   set_cfg_version "$(read_worker_version)"
 
   b "$(t ok_webhook)"
-  set_webhook
+  if ! set_webhook; then
+    err "$(t e_webhook)"
+    exit 1
+  fi
   install_cron_backup
 
   local sub url
@@ -630,7 +642,23 @@ do_update() {
   newv="$(read_worker_version)"
   oldv="$(python3 -c "import json;print(json.load(open('$CFG')).get('version',''))" 2>/dev/null || true)"
   printf "$(t upd_versions)\n" "${oldv:-?}" "${newv:-?}"
-  if ! ( cd "$DIR" && python3 deploy-tool.py update ); then err "$(t e_update)"; exit 1; fi
+  local upd_out
+  if ! upd_out=$(cd "$DIR" && python3 deploy-tool.py update 2>&1); then
+    printf "%s\n" "$upd_out"
+    err "$(t e_update)"
+    if printf "%s" "$upd_out" | grep -q "10041"; then
+      err "$(t e_update_fix_kv)"
+    elif printf "%s" "$upd_out" | grep -qiE "unauthor|401|10000|token|permission"; then
+      err "$(t e_update_fix_auth)"
+    else
+      err "$(t e_update_fix_retry)"
+    fi
+    exit 1
+  fi
+  # ترمیم وبهوک بعد از هر آپدیت موفق: اگر نصب قبلی با وبهوک بی‌secret (دیپلوی ناقص)
+  # گیر کرده بود، الان با secret درست بازسازی می‌شود. خرابی‌اش کشنده نیست چون
+  # وبهوک سالم قبلی سر جایش می‌ماند.
+  set_webhook || warn "$(t w_webhook) (update continues; old webhook untouched)"
   set_cfg_version "$newv"
   ok "$(t ok_updated) ${newv:-?}."
 }
