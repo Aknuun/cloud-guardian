@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 # Cloud Guardian — installer & manager  (bilingual: فارسی / English)
-#   install | update | uninstall | relay | status | check | help
+#   new-install | update | uninstall | relay | status | check | help
+#   (install/i kept as aliases of new-install)
 #
 # one-liner:
 #   bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/install.sh)"
@@ -88,7 +89,6 @@ t() {
     en:ok_files_removed)       printf '%s' "Local files removed." ;;
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
 
-    en:install_title)          printf '%s' "Installing Cloud Guardian" ;;
     en:using_local)            printf '%s' "Using local files:" ;;
     en:downloading)            printf '%s' "Downloading worker.js and deploy-tool.py from GitHub…" ;;
     en:step_token)             printf '%s' "Step 1 of 6 — Cloudflare token" ;;
@@ -155,7 +155,7 @@ t() {
     en:ck_title)               printf '%s' "Checking Cloudflare token permissions" ;;
 
     en:usage_title)            printf '%s' "Cloud Guardian — help" ;;
-    en:cmd_install)            printf '%s' "Full install (updates if already installed)" ;;
+    en:cmd_install)            printf '%s' "New install (fresh install from scratch)" ;;
     en:cmd_update)             printf '%s' "Update" ;;
     en:cmd_uninstall)          printf '%s' "Uninstall" ;;
     en:cmd_relay)              printf '%s' "SSH relay" ;;
@@ -170,18 +170,18 @@ t() {
     en:ok_perms)               printf '%s' "All required permissions are granted." ;;
     en:perm_opt_warn)          printf '%s' "Optional permissions are missing - install continues; those features will need them later." ;;
     en:perm_fix)               printf '%s' "Edit/create the token here:" ;;
-    en:perm_continue)          printf '%s' "Continue anyway? [y/N] " ;;
     en:perm_abort)             printf '%s' "Install aborted. Fix the token and run again." ;;
     en:menu_title)             printf '%s' "Cloud Guardian — main menu" ;;
     en:menu_exit)              printf '%s' "Exit" ;;
     en:menu_choose)            printf '%s' "Choose an option: " ;;
     en:menu_invalid)           printf '%s' "Invalid option." ;;
     en:menu_back)              printf '%s' "Press Enter to return to the menu" ;;
-    en:offer_install)          printf '%s' "Start a full install now? [y/N] " ;;
+    en:offer_install)          printf '%s' "Start a new install now? [y/N] " ;;
     en:auto_deps)              printf '%s' "Installing missing dependencies automatically:" ;;
     en:existing_found)         printf '%s' "Existing install found" ;;
-    en:update_instead)         printf '%s' "Update instead of full install? [Y/n] " ;;
-    en:auto_update)            printf '%s' "Config exists - running update instead of full install." ;;
+    en:new_install_backup)     printf '%s' "Existing config found — backing it up and starting a fresh new install." ;;
+    en:new_install_title)      printf '%s' "New install — fresh setup from scratch (never updates)" ;;
+    en:perm_retry)             printf '%s' "Token fixed? Press Enter to retry the permission check (no restart from scratch) — Ctrl+C to abort" ;;
     en:boot_title)             printf '%s' "Setting up Cloudflare credentials" ;;
     en:boot_saved)             printf '%s' "Credentials saved (mode 600 - private)" ;;
     *)                         printf '%s' "$1" ;;
@@ -469,13 +469,15 @@ do_install() {
   local arg
   for arg in "$@"; do case "$arg" in --no-relay) NO_RELAY=1 ;; --force|-y) FORCE=1 ;; esac; done
 
-  # نصب قبلی هست؟ بدون سؤال آپدیت کن (نصب تازه و تمیز فقط با پاک‌کردن کانفیگ یا --force)
+  # NEW INSTALL contract: always a fresh install from scratch.
+  # It never auto-updates, never reuses the old flow — existing config
+  # is backed up (config.json.bak.<timestamp>) and setup starts at step 1.
   if [ -f "$CFG" ] && [ -z "${FORCE:-}" ]; then
-    b "$(t auto_update)"
-    do_update; return 0
+    cp "$CFG" "$CFG.bak.$(date +%s)" 2>/dev/null || true
+    warn "$(t new_install_backup): $CFG"
   fi
 
-  printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t install_title)"
+  printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t new_install_title)"
   hr
   fetch_files
 
@@ -547,26 +549,37 @@ do_install() {
   ok "$(t ok_config): $CFG"
 
   step "$(t step_perms)"
-  set +e
-  ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box )
-  rc=$?
-  set -e
-  if [ "$rc" -eq 0 ]; then
-    ok "$(t ok_perms)"
-  elif [ "$rc" -eq 2 ]; then
-    warn "$(t perm_opt_warn)"
-  else
-    cf_perm_error
-    if [ -n "${FORCE:-}" ]; then
-      warn "$(t perm_abort)"
+  # Standard recovery: on required-permission failure, stay on this step
+  # and offer Enter-to-retry (no restart from step 1). --force keeps the
+  # old non-interactive behaviour (warn and continue).
+  while :; do
+    set +e
+    ( cd "$DIR" && CG_LANG="$CG_L" python3 deploy-tool.py check --no-box )
+    rc=$?
+    set -e
+    if [ "$rc" -eq 0 ]; then
+      ok "$(t ok_perms)"; break
+    elif [ "$rc" -eq 2 ]; then
+      warn "$(t perm_opt_warn)"; break
     else
-      err "$(t perm_abort)"; exit 1
+      cf_perm_error
+      if [ -n "${FORCE:-}" ]; then
+        warn "$(t perm_abort)"; break
+      fi
+      err "$(t perm_abort)"
+      read -rp "  ⏎ $(t perm_retry): " _ || exit 1
     fi
-  fi
+  done
 
   step "$(t deploy_step)"
-  dout=""
-  if ! dout=$(cd "$DIR" && python3 deploy-tool.py install 2>&1); then
+  # Standard recovery: retry deploy in place (no restart). Webhook is
+  # NEVER set on a failed/incomplete deploy — set_webhook runs only
+  # after a successful install below (it also refuses secretless webhooks).
+  while :; do
+    dout=""
+    if dout=$(cd "$DIR" && python3 deploy-tool.py install 2>&1); then
+      break
+    fi
     printf "%s\n" "$dout"
     if printf "%s" "$dout" | grep -q "10041"; then
       err "$(t e_kv_stale)"
@@ -574,8 +587,9 @@ do_install() {
       cf_perm_error
     fi
     err "$(t e_deploy)"
-    exit 1
-  fi
+    if [ -n "${FORCE:-}" ]; then exit 1; fi
+    read -rp "  ⏎ $(t perm_retry): " _ || exit 1
+  done
   ok "$(t ok_deploy)"
   set_cfg_version "$(read_worker_version)"
 
@@ -844,7 +858,7 @@ do_check()  { printf "\n${MAG}${BOLD}🔎 %s${RST}\n" "$(t ck_title)"; hr; ensur
 
 usage() {
   printf "\n${MAG}${BOLD}🛡️  %s${RST}\n" "$(t usage_title)"; hr
-  printf "  ${GREEN}install${RST}      %s\n" "$(t cmd_install)"
+  printf "  ${GREEN}new-install${RST}  %s\n" "$(t cmd_install)"
   printf "  ${GREEN}update${RST}       %s\n" "$(t cmd_update)"
   printf "  ${GREEN}uninstall${RST}    %s\n" "$(t cmd_uninstall)"
   printf "  ${GREEN}relay${RST}        %s\n" "$(t cmd_relay)"
@@ -909,7 +923,7 @@ if [ -z "$cmd" ]; then
   if [ -f "$CFG" ]; then cmd="update"; else cmd="install"; fi
 fi
 case "$cmd" in
-  install|i)           do_install "$@" ;;
+  new-install|new|fresh|install|i) do_install "$@" ;;
   update|u|deploy)     do_update ;;
   uninstall|remove|rm) do_uninstall "$@" ;;
   relay|r)             do_relay "$@" ;;

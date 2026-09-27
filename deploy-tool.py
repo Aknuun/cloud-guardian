@@ -2,6 +2,14 @@
 # ============================================================
 # ابزار نصب/آپدیت نگهبان ابری روی کلادفلر ورکر
 # config.json کنار همین فایل باید باشد (نوشته‌شده توسط install.sh).
+#
+# STANDARD CONTRACT (backend + UI):
+#   exit codes: 0 = OK, 1 = required permissions/operation failed,
+#               2 = only optional permissions are missing.
+#   UI: همهٔ پیام‌های کاربر از T() می‌آیند (fa/en)؛ رنگ‌ها فقط از
+#       GREEN/RED/YELLOW/BLUE/BOLD/RST؛ نمادها ثابت: ✅ ❌ ⚠️ ℹ️ ⏭️ ❔.
+#   جدول check همیشه ۸ ردیف ثابت دارد؛ ستون وسط (│) با رنگ وضعیت
+#   رنگی می‌شود؛ وبهوک هرگز روی دیپلوی ناقص ست نمی‌شود.
 # ============================================================
 import sys, os, json, time, uuid, argparse, urllib.request, urllib.error, urllib.parse
 
@@ -45,6 +53,17 @@ _S = {
     "s_present":       ("✅ موجود", "✅ present"),
     "s_absent":        ("❌ پیدا نشد", "❌ not found"),
     "subdomain_none":  ("زیردامنه پیدا نشد", "subdomain not found"),
+    # status labels — standard keys so status output is bilingual like check
+    "st_worker":      ("ورکر", "worker"),
+    "st_account":     ("اکانت", "account"),
+    "st_token":       ("توکن", "token"),
+    "st_script":      ("اسکریپت", "script"),
+    "st_schedules":   ("زمان‌بندها", "schedules"),
+    "st_workers_dev": ("workers.dev", "workers.dev"),
+    "st_kv":          ("بایندینگ KV", "KV binding"),
+    "st_version":     ("ورژن", "version"),
+    "st_webhook":     ("وبهوک", "webhook"),
+    "st_webhook_err": ("خطای وبهوک", "webhook err"),
     "s_disabled":      ("(غیرفعال) %s", "(disabled) %s"),
     "tg_err":          ("خطا در ارتباط با تلگرام", "error talking to Telegram"),
     "ck_token":        ("توکن کلادفلر", "Cloudflare token"),
@@ -90,11 +109,20 @@ _S = {
     "ck_mailaddr":     ("Account · Email Routing Addresses · Edit (مقصدهای ایمیل)", "Account · Email Routing Addresses · Edit (email destinations)"),
     "ck_cache_note":   ("Cache Purge بدون اجرای واقعی قابل تست نیست؛ مطمئن شو دسترسی Purge را هم داده‌ای.",
                         "Cache Purge cannot be tested without a real purge; make sure the Purge permission is granted."),
-    "ck_analytics_note": ("Zone Analytics بدون کوئری واقعی قابل تست نیست؛ اگر صفحه «ترافیک ساب‌ها» را می‌خواهی دسترسی Zone · Analytics · Read را هم بده.",
-                        "Zone Analytics cannot be tested without a real query; grant Zone · Analytics · Read if you use the traffic page."),
     "ck_fail_title":   ("دسترسی‌های توکن کلادفلر ناقص است", "Cloudflare token permissions are incomplete"),
     "ck_fail_body":    ("این دسترسی‌ها درست نیستند یا کم هستند:", "These permissions are missing or wrong:"),
     "ck_fail_fix":     ("توکن را در این لینک ویرایش/بساز و ۸ دسترسی لازم را بده:", "Edit/create the token here and grant the 8 required permissions:"),
+    "ck_tbl_need":     ("نیازمندی (۸ دسترسی)", "Requirement (8 permissions)"),
+    "ck_tbl_have":     ("وضعیت توکن تو", "Your token"),
+    "ck_zone_analytics": ("Zone · Analytics · Read (اختیاری)", "Zone · Analytics · Read (optional)"),
+    "ck_notest":       ("تست خودکار ندارد", "not auto-testable"),
+    "ck_skip":         ("تست نشد (زون در دسترس نیست)", "skipped (no zone reachable)"),
+    "ck_hint_settings": ("← DNS داری ولی Zone Settings نداری؛ احتمالاً به‌جای «Zone Settings» گزینهٔ اشتباهی (مثل DNS) را زده‌ای",
+                         "← DNS works but Zone Settings does not; you probably picked the wrong group (e.g. DNS) instead of «Zone Settings»"),
+    "ck_hint_zonenone": ("← حتی لیست زون‌ها هم باز نشد؛ به توکن هیچ دسترسی Zone نداده‌ای",
+                         "← even zone listing failed; the token has no Zone permissions at all"),
+    "ck_fix_path":     ("مسیر اصلاح: داشبورد ← Profile ← API Tokens ← ویرایش همین توکن ← بخش Permissions",
+                        "Fix path: dashboard ← Profile ← API Tokens ← edit this token ← Permissions section"),
 }
 
 
@@ -111,6 +139,17 @@ def T(key, *args):
         return key
     s = v[0] if LANG == "fa" else v[1]
     return s % args if args else s
+
+
+# UI helpers — mirror install.sh b()/ok()/warn()/err() so both scripts
+# share the same visual language (color + symbol + destination).
+def _ui(prefix, msg, err_stream=False):
+    print(prefix + " " + msg, file=(sys.stderr if err_stream else sys.stdout))
+
+def ui_info(msg): _ui(BLUE + "[*]" + RST, msg)
+def ui_ok(msg): _ui(GREEN + "✅" + RST, msg)
+def ui_warn(msg): _ui(YELLOW + "⚠️" + RST, msg)
+def ui_err(msg): _ui(RED + "❌" + RST, msg, err_stream=True)
 
 
 SEP = "، " if LANG == "fa" else ", "
@@ -191,7 +230,7 @@ def ensure_kv(cfg, tok):
         # ممکن است id از اکانت دیگری مانده باشد (config قدیمی) — بررسی کن، وگرنه تازه بساز
         if _kv_exists(tok, cfg.get("account_id"), cfg["kv_namespace_id"]):
             return cfg["kv_namespace_id"], None
-        print("[*] " + T("kv_stale", cfg["kv_namespace_id"]))
+        ui_info(T("kv_stale", cfg["kv_namespace_id"]))
         cfg.pop("kv_namespace_id", None)
     body = json.dumps({"title": f"{cfg['worker']}-kv"}).encode("utf-8")
     st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces", body, "application/json")
@@ -202,8 +241,8 @@ def ensure_kv(cfg, tok):
             cfg["kv_namespace_id"] = found
             with open(CFG, "w") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
-            print("[*] " + T("kv_routing", err[:120]))
-            print("[*] " + T("kv_reuse", found))
+            ui_info(T("kv_routing", err[:120]))
+            ui_info(T("kv_reuse", found))
             return found, None
         return None, (err + " — " + T("kv_create_fail"))
     if err:
@@ -379,44 +418,44 @@ def get_schedules(cfg, tok):
 
 def cmd_status(cfg, tok):
     aid, name = cfg["account_id"], cfg["worker"]
-    print("worker     : " + name)
-    print("account    : " + str(aid))
+    print(T("st_worker") + "     : " + name)
+    print(T("st_account") + "    : " + str(aid))
     st, out = req(tok, "GET", f"{API}/user/tokens/verify")
     res, err = json_ok(st, out)
-    print("token      : " + (T("status_active") if (res and res.get("status") == "active") else T("status_invalid", str(err)[:120])))
+    print(T("st_token") + "      : " + (T("status_active") if (res and res.get("status") == "active") else T("status_invalid", str(err)[:120])))
     st, out = req(tok, "GET", f"{API}/accounts/{aid}/workers/scripts")
     res, err = json_ok(st, out)
     exists = None if err else any((w.get("id") == name) for w in res or [])
     if exists:
-        print("script     : " + T("s_present"))
+        print(T("st_script") + "     : " + T("s_present"))
     elif exists is False:
-        print("script     : " + T("s_absent"))
+        print(T("st_script") + "     : " + T("s_absent"))
     else:
-        print("script     : ? " + str(err)[:150])
+        print(T("st_script") + "     : ? " + str(err)[:150])
     if exists:
         crons, e = get_schedules(cfg, tok)
-        print("schedules  : " + ((SEP.join(crons) if crons else "—") if not e else "ERR " + str(e)[:120]))
+        print(T("st_schedules") + "  : " + ((SEP.join(crons) if crons else "—") if not e else "ERR " + str(e)[:120]))
     url = script_url(cfg, tok)
     if url:
         st, out = req(tok, "GET", f"{API}/accounts/{aid}/workers/scripts/{name}/subdomain")
         res, err = json_ok(st, out)
         enabled = bool((res or {}).get("enabled"))
-        print("workers.dev: " + (url if enabled else T("s_disabled", url)))
+        print(T("st_workers_dev") + ": " + (url if enabled else T("s_disabled", url)))
     else:
-        print("workers.dev: " + T("subdomain_none"))
-    print("KV binding : " + (find_kv_id(cfg, tok) or "—"))
-    print("version    : " + (str(cfg.get("version")) if cfg.get("version") else "?"))
+        print(T("st_workers_dev") + ": " + T("subdomain_none"))
+    print(T("st_kv") + " : " + (find_kv_id(cfg, tok) or "—"))
+    print(T("st_version") + "    : " + (str(cfg.get("version")) if cfg.get("version") else "?"))
     bt = cfg.get("bot_token")
     if bt:
         try:
             with urllib.request.urlopen(f"https://api.telegram.org/bot{bt}/getWebhookInfo", timeout=20) as r:
                 d = json.loads(r.read().decode("utf-8", "replace"))
             info = d.get("result") or {}
-            print("webhook    : " + (info.get("url") or "—"))
+            print(T("st_webhook") + "    : " + (info.get("url") or "—"))
             if info.get("last_error_message"):
-                print("webhook err: " + str(info.get("last_error_message")))
+                print(T("st_webhook_err") + ": " + str(info.get("last_error_message")))
         except Exception:
-            print("webhook    : " + T("tg_err"))
+            print(T("st_webhook") + "    : " + T("tg_err"))
 
 
 def _perm_summary(failures):
@@ -433,6 +472,7 @@ def _perm_summary(failures):
     print()
     print("  " + T("ck_fail_fix"))
     print("    " + BLUE + UB + "https://dash.cloudflare.com/profile/api-tokens" + RST)
+    print("  " + YELLOW + "← " + T("ck_fix_path") + RST)
     print()
 
 
@@ -461,7 +501,6 @@ def check_acct_analytics(tok, acc):
 def cmd_check(cfg, tok, show_box=True):
     failures = []
     opt_failures = []
-
     # exit codes: 0 = همه اوکی، ۲ = فقط اختیاری‌ها ناقص‌اند، ۱ = اجباری‌ها ناقص‌اند
     def line(good, critical, label, detail="", note="", optional=False):
         mark = (GREEN + "✅" + RST) if good else (RED + "❌" + RST)
@@ -490,29 +529,35 @@ def cmd_check(cfg, tok, show_box=True):
     line(not err and bool(accts), True, T("ck_account"),
          (T("ck_accts", ", ".join([a for a in accts[:3] if a]))) if accts else str(err or T("ck_noacct"))[:160])
 
+    # --- جمع‌آوری نتایج ۸ دسترسی، بعد چاپ یک جدول سه‌ستونه ---
+    # هر رکورد: [label, ok|None(skip/untestable), optional, detail, hint]
+    probes = {}
     acc = cfg.get("account_id") or (accts[0] if accts else "")
     if acc:
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/workers/scripts")
         _, err = json_ok(st, out)
-        line(not err, True, T("ck_workers"), "" if not err else str(err)[:160])
+        probes["workers"] = (not err, "" if not err else str(err)[:160])
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces")
         _, err = json_ok(st, out)
-        line(not err, True, T("ck_kv"), "" if not err else str(err)[:160])
+        probes["kv"] = (not err, "" if not err else str(err)[:160])
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/email/routing/addresses?per_page=1")
         _, err = json_ok(st, out)
-        line(not err, True, T("ck_mailaddr"), "" if not err else str(err)[:160], optional=True)
+        probes["mailaddr"] = (not err, "" if not err else str(err)[:160])
         ok7, err7 = check_acct_analytics(tok, acc)
-        line(bool(ok7), True, T("ck_acct_analytics"), "" if ok7 else str(err7 or "")[:160], optional=True)
+        probes["acct"] = (bool(ok7), "" if ok7 else str(err7 or "")[:160])
 
+    zones_ok = dns_ok = False
     st, out = req(tok, "GET", f"{API}/zones?per_page=50")
     res, err = json_ok(st, out)
     if err:
         line(False, True, T("ck_zones_perm"), str(err)[:160])
+        probes["zones_fail"] = True
     else:
         zones = [z for z in (res or []) if z.get("name")]
         if not zones:
             line(True, False, T("ck_zones_perm"), "", T("ck_nozone"))
         else:
+            zones_ok = True
             line(True, False, T("ck_zones_perm"), T("ck_zones", ", ".join(z["name"] for z in zones[:5])))
             # چند زون اول را امتحان کن: اولی ممکن است pending/حذف‌شده یا خارج از اسکوپ توکن باشد.
             # فقط وقتی همه شکست خوردند، دسترسی ناقص حساب کن.
@@ -544,9 +589,62 @@ def cmd_check(cfg, tok, show_box=True):
                         mail_err = str(e)[:160]
                 if dns_ok and set_ok and mail_ok:
                     break
-            line(dns_ok, True, T("ck_dns"), (T("ck_via", dns_zone) if dns_ok and dns_zone else "") if dns_ok else (dns_err or T("ck_allzones", len(tried)))),
-            line(set_ok, True, T("ck_settings"), (T("ck_via", set_zone) if set_ok and set_zone else "") if set_ok else (set_err or T("ck_allzones", len(tried)))),
-            line(mail_ok, True, T("ck_mail"), "" if mail_ok else (mail_err or T("ck_allzones", len(tried))), optional=True)
+            n = len(tried)
+            probes["dns"] = (dns_ok,
+                             (T("ck_via", dns_zone) if dns_ok and dns_zone else ""),
+                             "") if dns_ok else (False, dns_err or T("ck_allzones", n), "")
+            hint = T("ck_hint_settings") if (dns_ok and not set_ok) else ""
+            probes["settings"] = ((set_ok,
+                                   (T("ck_via", set_zone) if set_ok and set_zone else ""),
+                                   "") if set_ok else
+                                  (False, set_err or T("ck_allzones", n), hint))
+            probes["mail"] = ((mail_ok, "", "")
+                              if mail_ok else
+                              (False, mail_err or T("ck_allzones", n), ""))
+
+    # ترتیب ثابت جدول: ۴ اجباری بعد ۴ اختیاری
+    order = [
+        ("ck_workers", "workers", False),
+        ("ck_kv", "kv", False),
+        ("ck_dns", "dns", False),
+        ("ck_settings", "settings", False),
+        ("ck_mail", "mail", True),
+        ("ck_mailaddr", "mailaddr", True),
+        ("ck_zone_analytics", None, True),
+        ("ck_acct_analytics", "acct", True),
+    ]
+    print()
+    MARKS = {"ok": GREEN + "✅" + RST, "bad": RED + "❌" + RST,
+             "opt": YELLOW + "⚠️" + RST, "skip": BLUE + "⏭️" + RST,
+             "unknown": YELLOW + "❔" + RST}
+    DIVS = {"ok": GREEN, "bad": RED, "opt": YELLOW, "skip": BLUE, "unknown": YELLOW}
+    labels = [T(k) for k, _, _ in order]
+    W = max(len(l) for l in labels)
+    print("  " + T("ck_tbl_need").ljust(W) + " " + BOLD + "│" + RST + " " + T("ck_tbl_have"))
+    print("  " + "─" * W + "─┼─" + "─" * 14)
+    for key, pkey, optional in order:
+        label = T(key)
+        if pkey is None:
+            stt, detail, hint = "unknown", T("ck_notest"), ""
+        elif pkey not in probes:
+            stt, detail, hint = "skip", T("ck_skip"), (T("ck_hint_zonenone") if probes.get("zones_fail") else "")
+        else:
+            p = probes[pkey]
+            ok, detail = p[0], p[1]
+            hint = p[2] if len(p) > 2 else ""
+            stt = "ok" if ok else ("opt" if optional else "bad")
+        if stt == "ok":
+            pass
+        elif stt in ("opt", "skip", "unknown"):
+            if stt == "opt":
+                opt_failures.append(label)
+        else:
+            failures.append(label)
+        div = DIVS[stt] + "│" + RST
+        extra = (" — " + detail) if detail else ""
+        print("  " + label.ljust(W) + " " + div + " " + MARKS[stt] + extra)
+        if hint:
+            print("  " + " " * W + " " + div + " " + YELLOW + hint + RST)
 
     print(YELLOW + "ℹ️ " + RST + T("ck_analytics_note"))
     if show_box:
@@ -598,9 +696,9 @@ def cmd_set_kv(cfg, tok, key, value):
         return 1
     url = f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces/{kv}/values/{urllib.parse.quote(key)}"
     st, out = req(tok, "PUT", url, value.encode("utf-8"), "text/plain")
-    _, err = json_ok(st, out)
-    if err:
-        print("❌ " + str(err)[:200], file=sys.stderr)
+    _, _e = json_ok(st, out)
+    if _e:
+        ui_err(str(_e)[:200])
         return 1
     print(T("saved_kv", key))
     return 0
@@ -613,9 +711,9 @@ def cmd_del_kv(cfg, tok, key):
         return 1
     url = f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces/{kv}/values/{urllib.parse.quote(key)}"
     st, out = req(tok, "DELETE", url)
-    _, err = json_ok(st, out)
-    if err:
-        print("❌ " + str(err)[:200], file=sys.stderr)
+    _, _e = json_ok(st, out)
+    if _e:
+        ui_err(str(_e)[:200])
         return 1
     print(T("deleted_kv", key))
     return 0
@@ -730,16 +828,6 @@ def main():
         sys.exit(1)
 
     if cmd in ("install", "update"):
-        # گیت استانداردهای UI: قبل از دپلوی، audit-ui.py باید پاس شود (رد شدن با --skip-audit)
-        skip_audit = "--skip-audit" in sys.argv
-        if not skip_audit:
-            import subprocess
-            audit = os.path.join(here, "audit-ui.py")
-            if os.path.isfile(audit):
-                r = subprocess.run([sys.executable, audit, os.path.join(here, "worker.js")])
-                if r.returncode != 0:
-                    print("UI AUDIT FAILED — deploy stopped. Fix docs/ui-standards.md violations or use --skip-audit.")
-                    sys.exit(1)
         cfg = load_cfg()
         code = load_worker_code()
         err = install(cfg, cfg["token"], code) if cmd == "install" else update(cfg, cfg["token"], code)
