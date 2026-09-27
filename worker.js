@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.7";
+const BOT_VERSION = "1.8.8";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -2763,6 +2763,7 @@ async function getQuotaCfg(kv, env) {
     limit: cfg && Number(cfg.limit) > 0 ? Number(cfg.limit) : envLimit,
     cronPausedUntil: cfg && Number(cfg.cronPausedUntil) > 0 ? Number(cfg.cronPausedUntil) : 0,
     warnedDay: (cfg && cfg.warnedDay) || "",
+    warned50Day: (cfg && cfg.warned50Day) || "",
   };
 }
 
@@ -2932,7 +2933,7 @@ async function quotaGuard(env, botToken, adminId) {
       await sendMessage(
         botToken,
         adminId,
-        `✅ جای نگرانی نیست — ربات همچنان عادی کار می‌کند.\n\n✍️ سهمیه نوشتن روزانه به ۵۰٪ رسید (${faD(w.toLocaleString("en-US"))} از ${faD(wLim.toLocaleString("en-US"))}).\n🕒 این سهمیه ساعت ۳ صبح (به‌وقت تهران) از صفر شروع می‌شود.\n\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.`,
+        `✅ جای نگرانی نیست — ربات همچنان عادی کار می‌کند.\n\n✍️ سهمیه نوشتن روزانه به ۵۰٪ رسید (${faD(w.toLocaleString("en-US"))} از ${faD(wLim.toLocaleString("en-US"))}).\n🕒 این سهمیه ساعت ۳ صبح (به‌وقت تهران) از صفر شروع می‌شود.\n\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.\n\nبرای اینکه به ۹۰٪ نرسی، فاصلهٔ بین چک‌ها را بیشتر کن:\n• ⏱ دکمهٔ «فاصله» داخل صفحهٔ هر مانیتور (پایش خودکار نودها)\n• ⏸ توقف موقت کرون از منوی ☁️ سهمیهٔ کلادفلر`,
         [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]
       );
     }
