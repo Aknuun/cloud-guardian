@@ -2737,7 +2737,8 @@ async function tgSetWebhook(botToken, url, kv, drop) {
   } catch (e) {}
 }
 async function ensureTgWebhook(botToken, kv, env) {
-  // روزی یک‌بار: secret ساخته شده + روی وب‌هوک تلگرام ست است (خودترمیم)
+  // خودترمیم وب‌هوک: روی موفقیت روزی یک‌بار، روی شکست (مثلاً DNS
+  // موقت تلگرام) حدود یک ساعت بعد دوباره تلاش می‌کند.
   try {
     if (!kv) return;
     const now = Date.now();
@@ -2748,8 +2749,13 @@ async function ensureTgWebhook(botToken, kv, env) {
     const acc = await getQuotaAcct(kv, env).catch(() => null);
     const webhook = acc ? await getSelfWebhook(env, acc.tok).catch(() => null) : null;
     if (!webhook) return;
-    await tg(botToken, "setWebhook", { url: webhook, secret_token: secret, drop_pending_updates: false });
-    await kv.put("tg_secret_ts", String(now));
+    let ok = false;
+    try {
+      const d = await tg(botToken, "setWebhook", { url: webhook, secret_token: secret, drop_pending_updates: false });
+      ok = !!(d && d.ok);
+    } catch (e) {}
+    // فقط موفقیت واقعی، گیت ۲۴ساعته را تمدید می‌کند؛ شکست یعنی تلاش مجدد ~۱ ساعت بعد
+    await kv.put("tg_secret_ts", String(ok ? now : now - 23 * 3600000));
   } catch (e) {}
 }
 async function getQuotaCfg(kv, env) {

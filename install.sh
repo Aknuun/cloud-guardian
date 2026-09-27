@@ -393,15 +393,22 @@ set_webhook() {
     secret="$(kv_get tg_secret)"
   done
   if [ -z "$secret" ]; then err "$(t e_webhook_nosecret)"; return 1; fi
-  out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true&secret_token=$secret" 2>/dev/null || true)"
-  if printf '%s' "$out" | grep -q '"ok":true'; then
-    ok "$(t ok_webhook) $url"
-    printf '%s\n' "$url" > "$DIR/webhook_url"
-    return 0
-  else
-    err "$(t w_webhook) ${out:0:200}"
-    return 1
-  fi
+  # Telegram sometimes can't resolve a freshly-deployed workers.dev host
+  # on the first try (its own DNS cache) — retry with backoff instead of
+  # failing a healthy deploy on a transient resolver error.
+  local tries=0
+  while [ "$tries" -lt 4 ]; do
+    out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true&secret_token=$secret" 2>/dev/null || true)"
+    if printf '%s' "$out" | grep -q '"ok":true'; then
+      ok "$(t ok_webhook) $url"
+      printf '%s\n' "$url" > "$DIR/webhook_url"
+      return 0
+    fi
+    tries=$((tries+1))
+    [ "$tries" -lt 4 ] && sleep 15
+  done
+  err "$(t w_webhook) ${out:0:200}"
+  return 1
 }
 install_cron_backup() {
   gh_raw "$REPO" "update.sh" > "$DIR/update.sh" 2>/dev/null || true
