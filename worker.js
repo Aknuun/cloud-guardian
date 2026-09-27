@@ -1261,7 +1261,23 @@ async function processUpdate(payload, env, botToken, adminId) {
 
   try {
     if (payload.callback_query) {
-      await handleCallback(payload.callback_query, botToken, adminId, kv, env);
+      try {
+        await handleCallback(payload.callback_query, botToken, adminId, kv, env);
+      } catch (e) {
+        // اعلان خطای سراسری (ضدنمونه‌سکوت): حداکثر هر ۵ دقیقه یک‌بار
+        try {
+          const last = Number((await kv.get("errnotice_ts", "text")) || 0);
+          if (Date.now() - last > 5 * 60000) {
+            await kv.put("errnotice_ts", String(Date.now()), { expirationTtl: 3600 });
+            const cbm = payload.callback_query;
+            const where = String((cbm && cbm.data) || "?").slice(0, 60);
+            await sendMessage(botToken, adminId, `❌ خطای داخلی موقع اجرای «${where}».\n\nاگر تکرار شد بگو کدوم دکمه بود.`, [
+              [{ text: "🏠 خانه", callback_data: "menu" }],
+            ]);
+            logE("CB_CRASH", where + " :: " + e);
+          }
+        } catch (x) {}
+      }
       return;
     }
 
@@ -2916,7 +2932,7 @@ async function quotaGuard(env, botToken, adminId) {
       await sendMessage(
         botToken,
         adminId,
-        `✍️ سهمیه نوشتن به ۵۰٪ رسید (${faD(w.toLocaleString("en-US"))} از ${faD(wLim.toLocaleString("en-US"))}).\n\nجای نگرانی نیست ✅\n• ربات همچنان عادی کار می‌کند.\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.`,
+        `✅ جای نگرانی نیست — ربات همچنان عادی کار می‌کند.\n\n✍️ سهمیه نوشتن روزانه به ۵۰٪ رسید (${faD(w.toLocaleString("en-US"))} از ${faD(wLim.toLocaleString("en-US"))}).\n🕒 این سهمیه ساعت ۳ صبح (به‌وقت تهران) از صفر شروع می‌شود.\n\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.`,
         [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]
       );
     }
@@ -10908,10 +10924,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const send = async (text, kb) => {
     const r = await applyPerm(text, kb);
     const res = await sendMessage(botToken, chatId, r.text, r.kb);
-    try {
-      const nm = res && res.result && res.result.message_id;
-      if (nm) await navRecord(nm, nm === messageId ? null : messageId);
-    } catch (e) {}
     const isPerm = text && String(text).indexOf(PERM_MARK) !== -1;
     if (!isPerm && isResultText(text)) {
       pendingReturn = findReturnCb(r.kb, parentCb(data));
@@ -10937,12 +10949,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const isMain = chatId === adminId;
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
 
-  // 👆 قفل دابل‌تپ ۵ ثانیه‌ای: اکشن‌ها دوباره اجرا نشوند (ناوبری خالص مستثناست)
-  const TAP_SAFE_PRE = ["selp:", "bulkp:", "hubstatsp:", "czp:", "favpp:", "hzp:", "hzscp:", "hzss:", "lnp:", "lnscp:", "p:", "qanp:", "qnb:", "trazf:", "lbzp:", "ndexp:", "ndip:", "lbsm:", "permretry", "permback", "back", "menu", "noop",
-    // دکمه‌های چرخشی رکورد (نوع/TTL/پروکسی/مقدار/ترافیک): ضربه‌های پشت‌سرهم لازم دارند
-    "ct:", "ctt:", "et:", "ep:", "ev:", "rtraf:"];
-  const tapSafe = data === "menu" || data === "noop" || data === "back" || data === "permretry" || data === "permback" || NAV_REC_EQ.has(data) || NAV_REC_PRE.some((p) => data.startsWith(p)) || TAP_SAFE_PRE.some((p) => data.startsWith(p));
-  if (!tapSafe) {
+  // 👆 قفل دابل‌تپ ۵ ثانیه‌ای: فقط اجراکننده‌های تغییردهنده (بقیه آزاد تا بار هر ضربه کم بماند)
+  const TAP_LOCK_PRE = ["dy:", "bulkdely:", "sdy:", "srvdelxok:", "srvpwdely:", "pnlxx:", "arvdelok:", "zmaildely:", "ztrafdely:", "trazdely:", "daccy:", "hzok:", "lnok:", "srvrebootgo:", "srvupdgo:", "srvnodego:", "srvnodecorego:", "srvprovision:", "ndadd:", "qresume", "qcron:", "srvdely:", "ipbulkok:", "ztrafdel:", "zmaildel:", "trazdel:", "bulkdne:", "pnlx:", "accdel", "srvnodecheck:", "srvpaneladd:"];
+  if (TAP_LOCK_PRE.some((p) => data === p || data.startsWith(p))) {
     try {
       const lk = `taplck:${chatId}:${data}`;
       const ts = Number((await kv.get(lk, "text")) || 0);
@@ -13776,6 +13785,24 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       cfg.enabled = !cfg.enabled;
       await saveHostFilterCfg(kv, cfg);
       await renderHostFilterHome(edit, kv, env);
+    } else if (data.startsWith("hfswap:")) {
+      // تعویض فوری همین هاست فیلترشده: ران کامل استارت می‌خورد (موتور خودش فقط موارد فیلتر را عوض می‌کند)
+      const parts = data.split(":");
+      const cfg = await getHostFilterCfg(kv);
+      cfg.manual_request = { ts: new Date().toISOString(), by: chatId, only: `${parts[1]}:${parts[2]}` };
+      let hfN = Number(cfg.last_domains) || 0;
+      if (!hfN) {
+        try {
+          const hc = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+          hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
+        } catch (e) {}
+      }
+      const hfMins = hfEstimateMin(hfN, cfg.provider);
+      cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
+      await saveHostFilterCfg(kv, cfg);
+      await edit("🔄 تعویض شروع شد؛ ران کامل تا کمتر از یک دقیقه دیگر آغاز می‌شود و نتیجه برایتان ارسال خواهد شد.", [
+        [{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }],
+      ]);
     } else if (data === "hfcheck") {
       const cfg = await getHostFilterCfg(kv);
       cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
@@ -19374,11 +19401,18 @@ async function runHostFilter(env, opts = {}) {
       }
     }
   }
+  const runStart = Date.now();
   const report = async (msg) => {
-    if (manualBy) {
+    if (!manualBy) return;
+    try {
+      await sendMessage(botToken, manualBy, msg);
+    } catch (e) {
       try {
+        await sleep(3000);
         await sendMessage(botToken, manualBy, msg);
-      } catch (e) {}
+      } catch (e2) {
+        logE("HF_REPORT", e2);
+      }
     }
   };
   if (!cfg.enabled && !opts.force && !manual) return { skipped: "disabled", cfg };
@@ -19440,6 +19474,8 @@ async function runHostFilter(env, opts = {}) {
     }
     for (const h of hosts) {
       if (h.is_disabled) continue;
+      // ران دستی تک‌هاست (دکمه تعویض): بقیه رد شوند
+      if (manual && mr.only && `${panel.id}:${h.id}` !== String(mr.only)) continue;
       // لیست سرورها برای یادآور (کش)
       {
         const addrs = Array.isArray(h.address) ? h.address : [];
@@ -19551,7 +19587,7 @@ async function runHostFilter(env, opts = {}) {
     return { checkhost_down: true, cfg };
   }
 
-  await hfProg(kv, manual, "ping", Object.keys(results).length + "/" + slice.length);
+  await hfProg(kv, manual, "ping", Object.keys(results).length + "/" + slice.length + ` (${Math.max(1, Math.round((Date.now() - runStart) / 60000))}د)`);
   // First pass filter (DNS lookups parallel).
   let filtered = {};
   {
@@ -19843,7 +19879,8 @@ async function runHostFilter(env, opts = {}) {
       `🔄 تعویض: ${changedCount}\n` +
       `🚫 آی‌پی فیلتر: ${ipBlockedCount}\n` +
       `🛑 آی‌پی خاموش: ${ipDownCount}\n` +
-      `🇮🇷 ایران‌اکسس: ${iranAccessCount}`
+      `🇮🇷 ایران‌اکسس: ${iranAccessCount}\n` +
+      `⏱ مدت: ${Math.max(1, Math.round((Date.now() - runStart) / 60000))} دقیقه`
   );
   return { checked: slice.length, filtered: Object.keys(filtered).length, changed: changedCount, ipBlocked: ipBlockedCount, ipDown: ipDownCount, iranAccess: iranAccessCount, cfg };
 }
@@ -19884,10 +19921,8 @@ async function renderHostFilterHome(edit, kv, env) {
     { text: "▶️ انتخاب ◀️", callback_data: "hfsetprov" },
     { text: (!isCh ? "✅ " : "") + "📡 گلوبال‌پینگ", callback_data: "hfprov:globalping" },
   ]);
-  // hfcheck: اجرای فوری بررسی فیلترشدن | hfhist: تاریخچهٔ تعویض‌ها
-  kb.push([{ text: "🔎 بررسی فوری", callback_data: "hfcheck" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
-  // hflist: لیست هاست‌های پنل‌ها + استثنا و بررسی تک‌تک
-  kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }]);
+  // hfhist: تاریخچهٔ تعویض‌ها | hflist: لیست هاست‌ها + استثنا و بررسی تک‌تک (جای بررسی فوری حذف‌شده)
+  kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
   // تنظیمات جداگانهٔ هر سرویس: hfsetch (چک‌هاست) | hfsetgp (گلوبال‌پینگ) — hfbk: مدیریت بکاپ
   kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }, { text: "⚙️ تنظیمات گلوبال‌پینگ", callback_data: "hfsetgp" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
@@ -20059,6 +20094,7 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     for (const v of h[f] || []) if (isDomainLike(v)) domains.add(String(v).toLowerCase());
   }
   const lines = [`🔎 بررسی هاست ${h.id}`, ""];
+  let anyBlocked = false;
   if (!domains.size) lines.push("دامنه‌ای برای بررسی ندارد.");
   for (const d of domains) {
     const ping = await pingTarget(d, cfg, env, kv);
@@ -20068,6 +20104,7 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     }
     const info = hostFilterPingBlocked(ping, cfg);
     const blocked = hostFilterIsBlocked(info, cfg);
+    if (blocked) anyBlocked = true;
     if (cfg.provider === "checkhost") lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedCities}/${cfg.citiesSel.length} شهر بلاک`);
     else lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedProbes}/${info.totalProbes} پروب بلاک`);
     for (const nid of Object.keys(ping.nodes)) {
@@ -20076,6 +20113,16 @@ async function hfHostCheck(kv, env, panelId, hostId) {
       lines.push(`   ${n.ok > 0 ? "🟢" : "🔴"} ${escHtml(who)}: ${n.ok}/${n.total}${n.failed ? " (failed/مسموم)" : ""}`);
     }
     await sleep(700);
+  }
+  if (anyBlocked) {
+    lines.push("", "🔴 این هاست فیلتر است؛ با دکمه زیر تعویضش کن:");
+    return {
+      text: lines.join("\n"),
+      kb: [
+        [{ text: "🔄 تعویض ساب‌دامنه", callback_data: `hfswap:${panelId}:${h.id}`, style: "success" }],
+        ...back,
+      ],
+    };
   }
   return { text: lines.join("\n"), kb: back };
 }
