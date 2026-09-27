@@ -353,11 +353,29 @@ PY
   chmod 600 "$CFG"
 }
 set_webhook() {
-  local sub url out
+  local sub url out secret extra
   sub="$(workers_subdomain "$TOKEN" "$ACC")"
   if [ -z "$sub" ]; then warn "$(t w_subdomain)"; return 0; fi
   url="https://$WORKER.$sub.workers.dev/tg"
-  out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true" 2>/dev/null || true)"
+  secret="$(python3 - "$TOKEN" "$ACC" "$CFG" <<'PYINNER' 2>/dev/null || true
+import json, sys, urllib.request
+tok, acc, cfgp = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    cfg = json.load(open(cfgp))
+    kvid = cfg.get("kv_namespace_id") or ""
+    if not kvid:
+        print(""); raise SystemExit
+    req = urllib.request.Request(
+        "https://api.cloudflare.com/client/v4/accounts/" + acc + "/storage/kv/namespaces/" + kvid + "/values/tg_secret",
+        headers={"Authorization": "Bearer " + tok})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        print(r.read().decode().strip())
+except Exception:
+    print("")
+PYINNER
+)"
+  if [ -n "$secret" ]; then extra="&secret_token=$secret"; else extra=""; fi
+  out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true${extra}" 2>/dev/null || true)"
   if printf '%s' "$out" | grep -q '"ok":true'; then
     ok "$(t ok_webhook) $url"
     printf '%s\n' "$url" > "$DIR/webhook_url"
