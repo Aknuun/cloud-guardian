@@ -637,11 +637,20 @@ def cmd_check(cfg, tok, show_box=True):
              "opt": YELLOW + "⚠️" + RST, "skip": BLUE + "⏭️" + RST,
              "unknown": YELLOW + "❔" + RST}
     DIVS = {"ok": GREEN, "bad": RED, "opt": YELLOW, "skip": BLUE, "unknown": YELLOW}
-    labels = [T(k) for k, _, _ in order]
-    W = max(len(l) for l in labels)
-    print("  " + T("ck_tbl_need").ljust(W) + " " + BOLD + "│" + RST + " " + T("ck_tbl_have"))
-    print("  " + "─" * W + "─┼─" + "─" * 14)
-    for key, pkey, optional in order:
+
+    def _split3(label):
+        # "Scope · Resource · Perm (note)" -> aligned columns like the
+        # token guide (1) Account · Workers Scripts · Edit ...
+        parts = [p.strip() for p in label.split("·")]
+        if len(parts) >= 3:
+            return parts[0], " · ".join(parts[1:-1]), parts[-1]
+        if len(parts) == 2:
+            return parts[0], parts[1], ""
+        return label, "", ""
+
+    # Pass 1: statuses (same contract as before).
+    rows = []
+    for num, (key, pkey, optional) in enumerate(order, start=1):
         label = T(key)
         if pkey is None:
             stt, detail, hint = "unknown", T("ck_notest"), ""
@@ -659,6 +668,15 @@ def cmd_check(cfg, tok, show_box=True):
                 opt_failures.append(label)
         else:
             failures.append(label)
+        scope, resource, perm = _split3(label)
+        rows.append((num, scope, resource, perm, stt, detail, hint))
+    W1 = max(len(r[1]) for r in rows)
+    W2 = max(len(r[2]) for r in rows)
+    W = len("0) ") + W1 + len(" · ") + W2 + len(" · ") + max(len(r[3]) for r in rows)
+    print("  " + T("ck_tbl_need").ljust(W) + " " + BOLD + "│" + RST + " " + T("ck_tbl_have"))
+    print("  " + "─" * W + "─┼─" + "─" * 14)
+    # Pass 2: aligned columns.
+    for num, scope, resource, perm, stt, detail, hint in rows:
         div = DIVS[stt] + "│" + RST
         # Standard: table cells stay short — no multi-line API blobs.
         # Optional/skipped/untestable rows show the mark only; required
@@ -669,7 +687,8 @@ def cmd_check(cfg, tok, show_box=True):
             extra = (" — " + _short_err(detail)) if detail else ""
         else:
             extra = (" — " + detail) if detail else ""
-        print("  " + label.ljust(W) + " " + div + " " + MARKS[stt] + extra)
+        cols = f"{num}) {scope.ljust(W1)} · {resource.ljust(W2)} · {perm}"
+        print("  " + cols.ljust(W) + " " + div + " " + MARKS[stt] + extra)
         if hint:
             print("  " + " " * W + " " + div + " " + YELLOW + hint + RST)
 
