@@ -87,6 +87,8 @@ t() {
     en:ok_cron_removed)        printf '%s' "Auto-update cron removed." ;;
     en:ok_files_removed)       printf '%s' "Local files removed." ;;
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
+    en:w_rename_retry)          printf '%s' "Webhook still failing — redeploying under a fresh worker name and retrying automatically:" ;;
+    en:w_old_del_fail)          printf '%s' "Could not delete superseded worker (delete it manually to avoid duplicate crons):" ;;
     en:w_webhook_pending)       printf '%s' "Webhook not set yet — the worker creates its secret on first run and self-sets the webhook within ~1 minute (cron every minute). If the bot stays silent, run: bash install.sh update" ;;
 
     en:using_local)            printf '%s' "Using local files:" ;;
@@ -480,6 +482,20 @@ cf_perm_error() {
   printf "  %s %s\n\n" "$(t perm_fix)" "$(link "$CF_TOKENS_URL")"
 }
 
+# Next free worker name for auto-heal renames: goooo -> goooo2 -> goooo3.
+next_worker_name() {
+  if [[ "$1" =~ ^(.*[^0-9])([0-9]+)$ ]]; then
+    printf '%s%s' "${BASH_REMATCH[1]}" "$((BASH_REMATCH[2]+1))"
+  else
+    printf '%s2' "$1"
+  fi
+}
+# Best-effort removal of a superseded worker (kills its duplicate crons).
+# Caller warns on failure; uses do_install/update TOKEN+ACC via dynamic scope.
+delete_worker_script() {
+  curl -sS --max-time 30 -X DELETE -H "Authorization: Bearer $TOKEN" \
+    "$API/accounts/$ACC/workers/scripts/$1" >/dev/null 2>&1
+}
 # ============================================================
 # install
 # ============================================================
@@ -615,13 +631,33 @@ do_install() {
   set_cfg_version "$(read_worker_version)"
 
   b "$(t ok_webhook)"
-  # Deploy already succeeded — a webhook miss (usually just the tg_secret
-  # race on fresh workers) must not fail the whole install. The worker
-  # self-sets the webhook on its first cron run; `update` repairs it too.
+  # AUTO-HEAL (no AI needed): Telegram sometimes cannot resolve a freshly
+  # deployed workers.dev host (its own negative DNS cache). The automatic
+  # fix is a fresh hostname — redeploy under an incremented worker name
+  # and retry the webhook, bounded attempts. Superseded workers are
+  # deleted so no duplicate crons keep running. Deploy already succeeded,
+  # so a final miss only warns (worker self-heals hourly; `update` too).
   # A secretless webhook is still never set (see set_webhook).
-  if ! set_webhook; then
-    warn "$(t w_webhook_pending)"
-  fi
+  wh_tries=0
+  while ! set_webhook; do
+    wh_tries=$((wh_tries+1))
+    if [ "$wh_tries" -ge 3 ]; then
+      warn "$(t w_webhook_pending)"
+      break
+    fi
+    OLD_W="$WORKER"
+    WORKER="$(next_worker_name "$WORKER")"
+    warn "$(t w_rename_retry) $OLD_W → $WORKER"
+    write_cfg
+    if ! dout=$(cd "$DIR" && python3 deploy-tool.py install 2>&1); then
+      printf "%s\n" "$dout"
+      err "$(t e_deploy)"
+      exit 1
+    fi
+    ok "$(t ok_deploy)"
+    set_cfg_version "$(read_worker_version)"
+    delete_worker_script "$OLD_W" || warn "$(t w_old_del_fail) $OLD_W"
+  done
   install_cron_backup
 
   local sub url
