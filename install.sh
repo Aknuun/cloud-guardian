@@ -67,7 +67,6 @@ t() {
 
     en:w_empty)                printf '%s' "Token is empty." ;;
     en:w_webhook)              printf '%s' "Failed to set webhook:" ;;
-    en:w_cron)                 printf '%s' "Failed to install the cron job (optional)." ;;
     en:w_account_auto)         printf '%s' "Auto-detection failed." ;;
     en:w_kv_delete)            printf '%s' "Failed to delete KV:" ;;
     en:w_partial)              printf '%s' "Some uninstall steps failed." ;;
@@ -81,7 +80,6 @@ t() {
     en:ok_config)              printf '%s' "Configuration saved (mode 600 — private)" ;;
     en:ok_deploy)              printf '%s' "Worker deployed successfully." ;;
     en:ok_webhook)             printf '%s' "Telegram webhook set:" ;;
-    en:ok_cron)                printf '%s' "Auto-update backup cron installed (every 10 min — new tags/releases only)." ;;
     en:ok_updated)             printf '%s' "Worker updated to version" ;;
     en:ok_uninstalled)         printf '%s' "Uninstall complete." ;;
     en:ok_cron_removed)        printf '%s' "Auto-update cron removed." ;;
@@ -89,6 +87,14 @@ t() {
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
     en:w_rename_retry)          printf '%s' "Webhook still failing — redeploying under a fresh worker name and retrying automatically:" ;;
     en:w_old_del_fail)          printf '%s' "Could not delete superseded worker (delete it manually to avoid duplicate crons):" ;;
+    en:usage_profile)          printf '%s' "Isolated profile for extra bots on one account (--profile NAME | --dir PATH)." ;;
+    en:multi_found)            printf '%s' "This Cloudflare account already runs these workers:" ;;
+    en:multi_ask)              printf '%s' "Delete any previous workers FIRST? (sensitive — a deleted worker stops at once; its KV data is kept) [y/N] " ;;
+    en:multi_pick)             printf '%s' "Numbers (comma-separated), 'all', or empty = keep everything: " ;;
+    en:multi_deleted)          printf '%s' "Worker deleted:" ;;
+    en:multi_del_fail)         printf '%s' "Could not delete worker (remove it manually if needed):" ;;
+    en:multi_kv_kept)          printf '%s' "KV data was kept and can be re-attached later." ;;
+    en:multi_exists)           printf '%s' "That worker name already exists — deploying will REPLACE it and kill that bot. Use it anyway? [y/N] " ;;
     en:w_secret_wait)           printf '%s' "Waiting for the worker to mint its secret (warming it up)…" ;;
     en:w_webhook_pending)       printf '%s' "Webhook not set yet — the worker creates its secret on first run and self-sets the webhook within ~1 minute (cron every minute). If the bot stays silent, run: bash install.sh update" ;;
 
@@ -195,15 +201,30 @@ t() {
 # Argument parsing:  --lang fa|en  then command
 # ============================================================
 LANG_ARG=""
+PROFILE=""
+DIR_OVERRIDE=""
 POS=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --lang|-l)   LANG_ARG="${2:-}"; shift 2 2>/dev/null || shift ;;
     --lang=*)    LANG_ARG="${1#*=}"; shift ;;
+    --profile|-p) PROFILE="${2:-}"; shift 2 2>/dev/null || shift ;;
+    --profile=*) PROFILE="${1#*=}"; shift ;;
+    --dir)       DIR_OVERRIDE="${2:-}"; shift 2 2>/dev/null || shift ;;
+    --dir=*)     DIR_OVERRIDE="${1#*=}"; shift ;;
     *)           POS+=("$1"); shift ;;
   esac
 done
 if [ "${#POS[@]}" -gt 0 ]; then set -- "${POS[@]}"; else set --; fi
+# Profiles isolate configs for multiple bots on one account:
+# --profile shop2 -> ~/.cloud-guardian-shop2 (default profile: ~/.cloud-guardian).
+if [ -n "$PROFILE" ]; then
+  [[ "$PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]] || { printf 'Bad --profile (letters/digits/-/_ only).\n' >&2; exit 1; }
+  DIR="${HOME}/.cloud-guardian-${PROFILE}"
+elif [ -n "$DIR_OVERRIDE" ]; then
+  DIR="$DIR_OVERRIDE"
+fi
+CFG="${DIR}/config.json"
 
 set_language() {
   CG_L=en
@@ -421,15 +442,6 @@ set_webhook() {
   err "$(t w_webhook) ${out:0:200}"
   return 1
 }
-install_cron_backup() {
-  gh_raw "$REPO" "update.sh" > "$DIR/update.sh" 2>/dev/null || true
-  chmod +x "$DIR/update.sh" 2>/dev/null || true
-  if command -v crontab >/dev/null 2>&1 && [ -f "$DIR/update.sh" ]; then
-    ( crontab -l 2>/dev/null | grep -v "cloud-guardian/update.sh" ; echo "*/10 * * * * $DIR/update.sh >> $DIR/update.log 2>&1" ) | crontab - 2>/dev/null \
-      && ok "$(t ok_cron)" || warn "$(t w_cron)"
-  fi
-}
-
 _tk_guide_block() {
   printf "${CYAN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
   printf "${CYAN}${BOLD}  │${RST}  %s\n" "$(t tk_box)"
@@ -499,6 +511,12 @@ next_worker_name() {
     printf '%s2' "$1"
   fi
 }
+# Worker names on an account, one per line (empty on any failure).
+account_workers() {
+  curl -sS --max-time 30 -H "Authorization: Bearer $1" \
+    "$API/accounts/$2/workers/scripts" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print(chr(10).join([str((w or {}).get('id') or '') for w in (d.get('result') or []) if (w or {}).get('id')]))" 2>/dev/null || true
+}
 # Best-effort removal of a superseded worker (kills its duplicate crons).
 # Caller warns on failure; uses do_install/update TOKEN+ACC via dynamic scope.
 delete_worker_script() {
@@ -558,13 +576,64 @@ do_install() {
   fi
   [ -n "$ACC" ] || { err "$(t e_account)"; exit 1; }
 
+  # MULTI-BOT: other workers may already live on this account. List them
+  # and offer (in RED — deletion is sensitive) to remove previous ones
+  # first. KV data of deleted workers is kept.
+  EXISTING="$(account_workers "$TOKEN" "$ACC")"
+  if [ -n "$EXISTING" ]; then
+    b "$(t multi_found)"
+    i=0
+    while IFS= read -r _w; do
+      [ -n "$_w" ] || continue
+      i=$((i+1))
+      printf "    ${GREEN}%s)${RST} %s\n" "$i" "$_w"
+    done <<< "$EXISTING"
+    read -rp "  ${RED}$(t multi_ask)${RST}" _ans || _ans=""
+    if [[ "${_ans,,}" == "y" ]]; then
+      read -rp "  $(t multi_pick)" _sel || _sel=""
+      _del=""
+      if [ "${_sel,,}" = "all" ]; then
+        _del="$EXISTING"
+      elif [ -n "$_sel" ]; then
+        while IFS= read -r _n; do
+          _n="$(printf '%s' "$_n" | tr -d ' ')"
+          [[ "$_n" =~ ^[0-9]+$ ]] && [ "$_n" -ge 1 ] && [ "$_n" -le "$i" ] || continue
+          _name="$(printf '%s\n' "$EXISTING" | sed -n "${_n}p")"
+          [ -n "$_name" ] && _del="${_del}${_del:+$'\n'}${_name}"
+        done <<< "$(printf '%s' "$_sel" | tr ',' '\n')"
+      fi
+      while IFS= read -r _d; do
+        [ -n "$_d" ] || continue
+        if delete_worker_script "$_d"; then
+          ok "$(t multi_deleted) $_d"
+        else
+          warn "$(t multi_del_fail) $_d"
+        fi
+      done <<< "$_del"
+      b "$(t multi_kv_kept)"
+      EXISTING="$(account_workers "$TOKEN" "$ACC")"
+    fi
+  fi
+
   step "$(t step_worker)"
+  # Profile installs default to a profiled worker name so a second bot
+  # never silently overwrites the first one.
+  DEFW="cloud-guardian"
+  [ -n "${PROFILE:-}" ] && DEFW="cloud-guardian-${PROFILE}"
   local WORKER="${WORKER_NAME:-}"
   if [ -z "$WORKER" ]; then
-    read -rp "  $(t worker_prompt)" WORKER
-    WORKER="${WORKER:-cloud-guardian}"
+    read -rp "  $(t worker_prompt)[${DEFW}]: " WORKER
+    WORKER="${WORKER:-$DEFW}"
   fi
   [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ && "$WORKER" =~ [a-zA-Z] ]] || { err "$(t e_worker_name)"; exit 1; }
+  # Collision guard: deploying over an existing name REPLACES that worker
+  # (kills the other bot). Ask explicitly, in red like deletions.
+  if printf '%s\n' "$EXISTING" | grep -qx "$WORKER"; then
+    read -rp "  ${RED}$(t multi_exists)${RST}" _yn || exit 1
+    if [[ "${_yn,,}" != "y" ]]; then
+      err "$(t e_worker_name)"; exit 1
+    fi
+  fi
 
   step "$(t step_bot)"
   printf "  %s\n" "$(t bot_hint)"
@@ -673,7 +742,6 @@ do_install() {
     set_cfg_version "$(read_worker_version)"
     delete_worker_script "$OLD_W" || warn "$(t w_old_del_fail) $OLD_W"
   done
-  install_cron_backup
 
   local sub url
   sub="$(workers_subdomain "$TOKEN" "$ACC")"
@@ -945,6 +1013,7 @@ usage() {
   hr
   printf "  %s %s\n" "$(t usage_cf)" "$(link "$CF_TOKENS_URL")"
   printf "  %s ${DIM}bash -c \"\$(curl -sL https://raw.githubusercontent.com/$REPO/main/install.sh)\"${RST}\n" "$(t usage_oneline)"
+  printf "  %s\n" "$(t usage_profile)"
   printf '\n'
 }
 
