@@ -70,9 +70,7 @@ _S = {
     "ck_account":      ("دسترسی به اکانت (Accounts Read)", "Account access (Accounts Read)"),
         "ck_accts":        ("اکانت: %s", "accounts: %s"),
     "ck_noacct":       ("بدون اکانت", "no account"),
-    "ck_zones":        ("زون‌ها: %s", "zones: %s"),
     "ck_nozone":       ("بدون زون", "no zones"),
-    "ck_via":          ("روی زون %s", "via zone %s"),
     "ck_allzones":     ("هر %d زون تست‌شده شکست خورد", "all %d tested zones failed"),
     "wh_deleted":      ("حذف وبهوک تلگرام", "Telegram webhook deleted"),
     "wh_fail":         ("حذف وبهوک ناموفق (نادیده گرفته شد)", "Failed to delete webhook (ignored)"),
@@ -98,8 +96,6 @@ _S = {
     "ck_acct_analytics": ("Account · Account Analytics · Read", "Account · Account Analytics · Read"),
     "ck_opt_title": ("دسترسی‌های اختیاری ناقص است", "Optional permissions are incomplete"),
     "ck_opt_body": ("این‌ها برای نصب لازم نیستند ولی قابلیت‌هایشان کار نمی‌کند:", "These are not needed for install, but their features will not work:"),
-    "ck_analytics_note": ("Zone Analytics بدون کوئری واقعی قابل تست نیست؛ اگر صفحه «ترافیک ساب‌ها» را می‌خواهی دسترسی Zone · Analytics · Read را هم بده.",
-                        "Zone Analytics cannot be tested without a real query; grant Zone · Analytics · Read if you use the traffic page."),
     "ck_workers":      ("Account · Workers Scripts · Edit", "Account · Workers Scripts · Edit"),
     "ck_kv":           ("Account · Workers KV Storage · Edit", "Account · Workers KV Storage · Edit"),
     "ck_zones_perm":   ("Zone · DNS · Edit (دسترسی به زون‌ها)", "Zone · DNS · Edit (zone access)"),
@@ -577,7 +573,6 @@ def cmd_check(cfg, tok, show_box=True):
             line(True, False, T("ck_zones_perm"), "", T("ck_nozone"))
         else:
             zones_ok = True
-            line(True, False, T("ck_zones_perm"), T("ck_zones", ", ".join(z["name"] for z in zones[:5])))
             # چند زون اول را امتحان کن: اولی ممکن است pending/حذف‌شده یا خارج از اسکوپ توکن باشد.
             # فقط وقتی همه شکست خوردند، دسترسی ناقص حساب کن.
             tried = [z for z in zones[:5] if z.get("id")]
@@ -609,14 +604,13 @@ def cmd_check(cfg, tok, show_box=True):
                 if dns_ok and set_ok and mail_ok:
                     break
             n = len(tried)
-            probes["dns"] = (dns_ok,
-                             (T("ck_via", dns_zone) if dns_ok and dns_zone else ""),
-                             "") if dns_ok else (False, dns_err or T("ck_allzones", n), "")
+            probes["dns"] = ((True, "", "")
+                             if dns_ok else
+                             (False, dns_err or T("ck_allzones", n), ""))
             hint = T("ck_hint_settings") if (dns_ok and not set_ok) else ""
-            probes["settings"] = ((set_ok,
-                                   (T("ck_via", set_zone) if set_ok and set_zone else ""),
-                                   "") if set_ok else
-                                  (False, set_err or T("ck_allzones", n), hint))
+            probes["settings"] = (((True, "", "")
+                                   if set_ok else
+                                   (False, set_err or T("ck_allzones", n), hint)))
             probes["mail"] = ((mail_ok, "", "")
                               if mail_ok else
                               (False, mail_err or T("ck_allzones", n), ""))
@@ -672,10 +666,11 @@ def cmd_check(cfg, tok, show_box=True):
         rows.append((num, scope, resource, perm, stt, detail, hint))
     W1 = max(len(r[1]) for r in rows)
     W2 = max(len(r[2]) for r in rows)
-    W = len("0) ") + W1 + len(" · ") + W2 + len(" · ") + max(len(r[3]) for r in rows)
-    print("  " + T("ck_tbl_need").ljust(W) + " " + BOLD + "│" + RST + " " + T("ck_tbl_have"))
+    W3 = max(len(r[3]) for r in rows)
+    W = len("8) ") + W1 + len(" · ") + W2 + len(" · ") + W3
+    print("  " + BOLD + T("ck_tbl_need").ljust(W) + RST + " " + BOLD + "│" + RST + " " + BOLD + T("ck_tbl_have") + RST)
     print("  " + "─" * W + "─┼─" + "─" * 14)
-    # Pass 2: aligned columns.
+    # Pass 2: aligned columns (padding on raw text, color around it).
     for num, scope, resource, perm, stt, detail, hint in rows:
         div = DIVS[stt] + "│" + RST
         # Standard: table cells stay short — no multi-line API blobs.
@@ -687,12 +682,14 @@ def cmd_check(cfg, tok, show_box=True):
             extra = (" — " + _short_err(detail)) if detail else ""
         else:
             extra = (" — " + detail) if detail else ""
-        cols = f"{num}) {scope.ljust(W1)} · {resource.ljust(W2)} · {perm}"
-        print("  " + cols.ljust(W) + " " + div + " " + MARKS[stt] + extra)
+        cols = (BLUE + f"{num})" + RST + " "
+                + BOLD + scope + RST + " " * (W1 - len(scope))
+                + " · " + resource + " " * (W2 - len(resource))
+                + " · " + perm + " " * (W3 - len(perm)))
+        print("  " + cols + " " + div + " " + MARKS[stt] + extra)
         if hint:
             print("  " + " " * W + " " + div + " " + YELLOW + hint + RST)
 
-    print(YELLOW + "ℹ️ " + RST + T("ck_analytics_note"))
     if show_box:
         _perm_summary(failures)
         if opt_failures:
