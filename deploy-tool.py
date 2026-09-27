@@ -152,6 +152,25 @@ def ui_warn(msg): _ui(YELLOW + "⚠️" + RST, msg)
 def ui_err(msg): _ui(RED + "❌" + RST, msg, err_stream=True)
 
 
+def _short_err(detail, limit=80):
+    """Table cells stay one short line: turn raw API error blobs into
+    'code XXXX — message' instead of multi-line JSON dumps."""
+    if not detail:
+        return ""
+    d = detail
+    try:
+        parsed = json.loads(detail) if isinstance(detail, str) and detail.strip().startswith(("[", "{")) else None
+    except Exception:
+        parsed = None
+    if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+        first = parsed[0]
+        code = first.get("code", "")
+        msg = first.get("message", "")
+        d = f"code {code} — {msg}" if code or msg else detail
+    d = " ".join(str(d).split())
+    return d if len(d) <= limit else d[:limit - 1] + "…"
+
+
 SEP = "، " if LANG == "fa" else ", "
 
 
@@ -641,7 +660,15 @@ def cmd_check(cfg, tok, show_box=True):
         else:
             failures.append(label)
         div = DIVS[stt] + "│" + RST
-        extra = (" — " + detail) if detail else ""
+        # Standard: table cells stay short — no multi-line API blobs.
+        # Optional/skipped/untestable rows show the mark only; required
+        # failures show a short 'code XXXX — message' hint.
+        if stt in ("opt", "skip", "unknown"):
+            extra = ""
+        elif stt == "bad":
+            extra = (" — " + _short_err(detail)) if detail else ""
+        else:
+            extra = (" — " + detail) if detail else ""
         print("  " + label.ljust(W) + " " + div + " " + MARKS[stt] + extra)
         if hint:
             print("  " + " " * W + " " + div + " " + YELLOW + hint + RST)

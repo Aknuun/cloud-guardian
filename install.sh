@@ -50,12 +50,11 @@ t() {
     en:e_worker_name)          printf '%s' "Invalid worker name (letters/digits/-/_, up to 63 chars)." ;;
     en:e_account)              printf '%s' "Account ID is required." ;;
     en:e_bot_token)            printf '%s' "Invalid token format (should look like 123456:AA...)." ;;
-    en:e_admin)                printf '%s' "The ID must be numeric only." ;;
+    en:e_admin)                printf '%s' "IDs must be numeric, comma-separated (e.g. 12345,67890)." ;;
     en:e_config_missing)       printf '%s' "config.json not found; run install first." ;;
     en:e_token_missing)        printf '%s' "token is missing from config." ;;
     en:e_nothing_remove)       printf '%s' "config.json not found; nothing to remove." ;;
     en:e_deploy)               printf '%s' "Deploy failed." ;;
-    en:e_webhook)              printf '%s' "Webhook NOT set — install aborted. The worker requires tg_secret; a webhook without it would silently kill the bot. Fix the API/token, then run install again." ;;
     en:e_webhook_nosecret)     printf '%s' "tg_secret is missing from KV (incomplete deploy/API error). Refusing to set a secretless webhook." ;;
     en:e_kv_stale)             printf '%s' "The saved KV namespace id is not in this account (stale config). Delete ~/.cloud-guardian/config.json and run install again." ;;
     en:e_update)               printf '%s' "Update failed." ;;
@@ -88,6 +87,7 @@ t() {
     en:ok_cron_removed)        printf '%s' "Auto-update cron removed." ;;
     en:ok_files_removed)       printf '%s' "Local files removed." ;;
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
+    en:w_webhook_pending)       printf '%s' "Webhook not set yet — the worker creates its secret on first run and self-sets the webhook within ~1 minute (cron every minute). If the bot stays silent, run: bash install.sh update" ;;
 
     en:using_local)            printf '%s' "Using local files:" ;;
     en:downloading)            printf '%s' "Downloading worker.js and deploy-tool.py from GitHub…" ;;
@@ -98,7 +98,6 @@ t() {
     en:step_admin)             printf '%s' "Step 5 of 6 — Admin ID" ;;
     en:step_save)              printf '%s' "Step 6 of 6 — Save configuration" ;;
     en:deploy_step)            printf '%s' "Deploying to Cloudflare (KV + bindings + worker + cron + workers.dev)" ;;
-    en:reuse_token)            printf '%s' "Reuse the previously stored token? [Y/n] " ;;
     en:verify_token)           printf '%s' "Verifying token…" ;;
     en:detect_account)         printf '%s' "Auto-detecting Account ID…" ;;
     en:acc_hint)               printf '%s' "From the dashboard: right sidebar, API box → Account ID:" ;;
@@ -106,7 +105,7 @@ t() {
     en:bot_hint)               printf '%s' "Get the bot token from @BotFather (command /newbot)." ;;
     en:bot_prompt)             printf '%s' "Bot token: " ;;
     en:admin_hint)             printf '%s' "Get your numeric ID from @userinfobot." ;;
-    en:admin_prompt)           printf '%s' "Numeric admin ID: " ;;
+    en:admin_prompt)           printf '%s' "Admin IDs (comma-separated, first is primary): " ;;
     en:relay_ask)              printf '%s' "Install the SSH relay on this server? (for server monitoring/SSH) [y/N] " ;;
     en:done_title)             printf '%s' "Install complete — Cloud Guardian is live" ;;
     en:done_worker)            printf '%s' "Worker:" ;;
@@ -171,6 +170,7 @@ t() {
     en:perm_opt_warn)          printf '%s' "Optional permissions are missing - install continues; those features will need them later." ;;
     en:perm_fix)               printf '%s' "Edit/create the token here:" ;;
     en:perm_abort)             printf '%s' "Install aborted. Fix the token and run again." ;;
+    en:perm_continue)          printf '%s' "Token has errors above. Deploy anyway with limited features? [y/N] " ;;
     en:menu_title)             printf '%s' "Cloud Guardian — main menu" ;;
     en:menu_exit)              printf '%s' "Exit" ;;
     en:menu_choose)            printf '%s' "Choose an option: " ;;
@@ -357,30 +357,41 @@ json.dump(cfg, open(p,"w"), ensure_ascii=False, indent=2)
 PY
   chmod 600 "$CFG"
 }
-set_webhook() {
-  # Returns 0 only when Telegram confirms the webhook WITH the worker's tg_secret.
-  # A secretless webhook makes the worker drop every update, so it is refused.
-  local sub url out secret extra
-  sub="$(workers_subdomain "$TOKEN" "$ACC")"
-  if [ -z "$sub" ]; then err "$(t w_subdomain)"; return 1; fi
-  url="https://$WORKER.$sub.workers.dev/tg"
-  secret="$(python3 - "$TOKEN" "$ACC" "$CFG" <<'PYINNER' 2>/dev/null || true
+# Read a raw value from the worker KV (empty string on any failure).
+kv_get() {
+  python3 - "$TOKEN" "$ACC" "$CFG" "$1" <<'PYINNER' 2>/dev/null || true
 import json, sys, urllib.request
-tok, acc, cfgp = sys.argv[1], sys.argv[2], sys.argv[3]
+tok, acc, cfgp, key = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 try:
     cfg = json.load(open(cfgp))
     kvid = cfg.get("kv_namespace_id") or ""
     if not kvid:
         print(""); raise SystemExit
     req = urllib.request.Request(
-        "https://api.cloudflare.com/client/v4/accounts/" + acc + "/storage/kv/namespaces/" + kvid + "/values/tg_secret",
+        "https://api.cloudflare.com/client/v4/accounts/" + acc + "/storage/kv/namespaces/" + kvid + "/values/" + key,
         headers={"Authorization": "Bearer " + tok})
     with urllib.request.urlopen(req, timeout=20) as r:
         print(r.read().decode().strip())
 except Exception:
     print("")
 PYINNER
-)"
+}
+set_webhook() {
+  # Returns 0 only when Telegram confirms the webhook WITH the worker's tg_secret.
+  # A secretless webhook makes the worker drop every update, so it is refused.
+  local sub url out secret waited
+  sub="$(workers_subdomain "$TOKEN" "$ACC")"
+  if [ -z "$sub" ]; then err "$(t w_subdomain)"; return 1; fi
+  url="https://$WORKER.$sub.workers.dev/tg"
+  # Fresh deploys have no tg_secret yet — the worker mints it on first run.
+  # Warm the worker once, then poll KV briefly before giving up.
+  curl -sS --max-time 20 "$url" >/dev/null 2>&1 || true
+  secret="$(kv_get tg_secret)"
+  waited=0
+  while [ -z "$secret" ] && [ "$waited" -lt 60 ]; do
+    sleep 10; waited=$((waited+10))
+    secret="$(kv_get tg_secret)"
+  done
   if [ -z "$secret" ]; then err "$(t e_webhook_nosecret)"; return 1; fi
   out="$(curl -sS --max-time 30 "https://api.telegram.org/bot$BOT/setWebhook?url=$url&drop_pending_updates=true&secret_token=$secret" 2>/dev/null || true)"
   if printf '%s' "$out" | grep -q '"ok":true'; then
@@ -483,11 +494,9 @@ do_install() {
 
   step "$(t step_token)"
   load_cfg
+  # NEW INSTALL: never reuse the stored token — always start clean.
+  # (Automation can still inject via CF_TOKEN env.)
   local TOKEN="${CF_TOKEN:-}" tries=0
-  if [ -z "$TOKEN" ] && [ -n "$CFG_TOKEN" ]; then
-    read -rp "  $(t reuse_token)" a
-    [[ "${a,,}" == "n" ]] || TOKEN="$CFG_TOKEN"
-  fi
   if [ -z "$TOKEN" ]; then
     cf_token_guide
     while :; do
@@ -539,7 +548,8 @@ do_install() {
   local ADMIN="${ADMIN_ID:-}"
   while :; do
     [ -n "$ADMIN" ] || read -rp "  🆔 $(t admin_prompt)" ADMIN
-    [[ "$ADMIN" =~ ^[0-9]+$ ]] && break
+    ADMIN="$(printf '%s' "$ADMIN" | tr -d ' ')"
+    [[ "$ADMIN" =~ ^[0-9]+(,[0-9]+)*$ ]] && break
     err "$(t e_admin)"; ADMIN=""
   done
 
@@ -560,7 +570,11 @@ do_install() {
     if [ "$rc" -eq 0 ]; then
       ok "$(t ok_perms)"; break
     elif [ "$rc" -eq 2 ]; then
-      warn "$(t perm_opt_warn)"; break
+      warn "$(t perm_opt_warn)"
+      if [ -n "${FORCE:-}" ]; then break; fi
+      read -rp "  $(t perm_continue)" yn || exit 1
+      if [[ "${yn,,}" == "y" ]]; then break; fi
+      read -rp "  ⏎ $(t perm_retry): " _ || exit 1
     else
       cf_perm_error
       if [ -n "${FORCE:-}" ]; then
@@ -594,9 +608,12 @@ do_install() {
   set_cfg_version "$(read_worker_version)"
 
   b "$(t ok_webhook)"
+  # Deploy already succeeded — a webhook miss (usually just the tg_secret
+  # race on fresh workers) must not fail the whole install. The worker
+  # self-sets the webhook on its first cron run; `update` repairs it too.
+  # A secretless webhook is still never set (see set_webhook).
   if ! set_webhook; then
-    err "$(t e_webhook)"
-    exit 1
+    warn "$(t w_webhook_pending)"
   fi
   install_cron_backup
 
@@ -808,12 +825,14 @@ bootstrap_creds() {
         err "$(t e_bot_token)"; BOT=""
       done
     fi
-    if [[ ! "${ADMIN:-}" =~ ^[0-9]+$ ]] || [ "${ADMIN:-0}" = "0" ]; then
+    ADMIN="$(printf '%s' "${ADMIN:-}" | tr -d ' ')"
+    if [[ ! "$ADMIN" =~ ^[0-9]+(,[0-9]+)*$ ]] || [ "${ADMIN%%,*}" = "0" ]; then
       ADMIN=""
       printf "  %s\n" "$(t admin_hint)"
       while :; do
         read -rp "  🆔 $(t admin_prompt)" ADMIN || ADMIN=""
-        [[ "$ADMIN" =~ ^[0-9]+$ ]] && break
+        ADMIN="$(printf '%s' "$ADMIN" | tr -d ' ')"
+        [[ "$ADMIN" =~ ^[0-9]+(,[0-9]+)*$ ]] && break
         err "$(t e_admin)"; ADMIN=""
       done
     fi
@@ -826,7 +845,7 @@ ctx_complete() {
   [ -n "$CFG_TOKEN" ] && [ -n "$CFG_ACCOUNT" ] && [ -n "$CFG_WORKER" ] || return 1
   [ "$1" = "basic" ] && return 0
   [ -n "$CFG_BOT" ] || return 1
-  [[ "$CFG_ADMIN" =~ ^[0-9]+$ ]] && [ "$CFG_ADMIN" != "0" ] || return 1
+  [[ "$CFG_ADMIN" =~ ^[0-9]+(,[0-9]+)*$ ]] && [ "${CFG_ADMIN%%,*}" != "0" ] || return 1
   return 0
 }
 # Ensure a usable config for management commands: stored config first, then a
