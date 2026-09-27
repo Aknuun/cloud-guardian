@@ -47,7 +47,7 @@ t() {
     en:e_download)             printf '%s' "Download failed." ;;
     en:e_bad_token)            printf '%s' "Token is invalid or lacks the required permissions." ;;
     en:e_tries)                printf '%s' "Too many failed attempts." ;;
-    en:e_worker_name)          printf '%s' "Invalid worker name (letters/digits/-/_, up to 63 chars)." ;;
+    en:e_worker_name)          printf '%s' "Invalid worker name (letters/digits/-/_, up to 63 chars, must contain at least one letter — a digits-only name looks like a pasted admin ID)." ;;
     en:e_account)              printf '%s' "Account ID is required." ;;
     en:e_bot_token)            printf '%s' "Invalid token format (should look like 123456:AA...)." ;;
     en:e_admin)                printf '%s' "IDs must be numeric, comma-separated (e.g. 12345,67890)." ;;
@@ -89,6 +89,7 @@ t() {
     en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
     en:w_rename_retry)          printf '%s' "Webhook still failing — redeploying under a fresh worker name and retrying automatically:" ;;
     en:w_old_del_fail)          printf '%s' "Could not delete superseded worker (delete it manually to avoid duplicate crons):" ;;
+    en:w_secret_wait)           printf '%s' "Waiting for the worker to mint its secret (warming it up)…" ;;
     en:w_webhook_pending)       printf '%s' "Webhook not set yet — the worker creates its secret on first run and self-sets the webhook within ~1 minute (cron every minute). If the bot stays silent, run: bash install.sh update" ;;
 
     en:using_local)            printf '%s' "Using local files:" ;;
@@ -386,15 +387,23 @@ set_webhook() {
   if [ -z "$sub" ]; then err "$(t w_subdomain)"; return 1; fi
   url="https://$WORKER.$sub.workers.dev/tg"
   # Fresh deploys have no tg_secret yet — the worker mints it on first run.
-  # Warm the worker once, then poll KV briefly before giving up.
+  # Warm it (GET plus a harmless POST that reaches the secret-minting path),
+  # then poll KV briefly before giving up. Progress is printed so the
+  # installer never looks stuck.
   curl -sS --max-time 20 "$url" >/dev/null 2>&1 || true
+  curl -sS --max-time 20 -X POST "$url" -H 'Content-Type: application/json' --data '{}' >/dev/null 2>&1 || true
   secret="$(kv_get tg_secret)"
+  if [ -z "$secret" ]; then
+    b "$(t w_secret_wait)"
+  fi
   waited=0
   while [ -z "$secret" ] && [ "$waited" -lt 60 ]; do
-    sleep 10; waited=$((waited+10))
+    sleep 5; waited=$((waited+5))
     secret="$(kv_get tg_secret)"
   done
-  if [ -z "$secret" ]; then err "$(t e_webhook_nosecret)"; return 1; fi
+  # rc 2: secret never minted — a rename cannot fix this, so the caller
+  # must NOT auto-rename on it (only warn).
+  if [ -z "$secret" ]; then err "$(t e_webhook_nosecret)"; return 2; fi
   # Telegram sometimes can't resolve a freshly-deployed workers.dev host
   # on the first try (its own DNS cache) — retry with backoff instead of
   # failing a healthy deploy on a transient resolver error.
@@ -555,7 +564,7 @@ do_install() {
     read -rp "  $(t worker_prompt)" WORKER
     WORKER="${WORKER:-cloud-guardian}"
   fi
-  [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ ]] || { err "$(t e_worker_name)"; exit 1; }
+  [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ && "$WORKER" =~ [a-zA-Z] ]] || { err "$(t e_worker_name)"; exit 1; }
 
   step "$(t step_bot)"
   printf "  %s\n" "$(t bot_hint)"
@@ -639,7 +648,13 @@ do_install() {
   # so a final miss only warns (worker self-heals hourly; `update` too).
   # A secretless webhook is still never set (see set_webhook).
   wh_tries=0
+  wh_rc=0
   while ! set_webhook; do
+    wh_rc=$?
+    if [ "$wh_rc" -eq 2 ]; then
+      warn "$(t w_webhook_pending)"
+      break
+    fi
     wh_tries=$((wh_tries+1))
     if [ "$wh_tries" -ge 3 ]; then
       warn "$(t w_webhook_pending)"
@@ -856,7 +871,7 @@ bootstrap_creds() {
     read -rp "  $(t worker_prompt)" WORKER || WORKER=""
     WORKER="${WORKER:-cloud-guardian}"
   fi
-  [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ ]] || { err "$(t e_worker_name)"; return 1; }
+  [[ "$WORKER" =~ ^[a-zA-Z0-9_-]{1,63}$ && "$WORKER" =~ [a-zA-Z] ]] || { err "$(t e_worker_name)"; return 1; }
   BOT="${BOT_TOKEN:-$CFG_BOT}"
   ADMIN="${ADMIN_ID:-$CFG_ADMIN}"
   if [ "$mode" = "full" ]; then
