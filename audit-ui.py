@@ -43,6 +43,29 @@ for need in ['data === "back"', "navhist:", "navRecOk", "srvGetBack"]:
     if need not in c:
         warns.append(f"missing mechanism piece: {need}")
 
+# 7) بک‌اند: همه fetchها signal داشته باشند
+for m in re.finditer(r'(?<![\w.])fetch\(', c):
+    i = m.end(); depth = 1
+    while i < len(c) and depth > 0:
+        if c[i] == '(': depth += 1
+        elif c[i] == ')': depth -= 1
+        i += 1
+    call = c[m.start():i]
+    if 'signal' not in call and 'fetch(request' not in call:
+        ln = c[:m.start()].count('\n') + 1
+        errors.append(f"L{ln}: fetch without timeout signal")
+# 8) بک‌اند: کلیدهای گذرا TTL داشته باشند (فقط putها چک می‌شوند)
+for m in re.finditer(r'kv\.put\(', c):
+    i = m.end(); depth = 1
+    while i < len(c) and depth > 0:
+        if c[i] == '(': depth += 1
+        elif c[i] == ')': depth -= 1
+        i += 1
+    call = c[m.start():i]
+    if ('"hf_progress"' in call or '"selfup_backoff_until"' in call) and 'expirationTtl' not in call:
+        ln = c[:m.start()].count('\n') + 1
+        errors.append(f"L{ln}: transient key without TTL")
+
 print(f"audit-ui: {len(errors)} errors, {len(warns)} warnings")
 for w in warns:
     print("  WARN:", w)
