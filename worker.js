@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.5";
+const BOT_VERSION = "1.8.7";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.7": [
+    "👆 قفل دابل‌تپ ۵ ثانیه‌ای همه اکشن‌ها (ناوبری و دکمه‌های چرخشی رکورد معاف) + ⬅️ برگشت/خانه یکدست در ۵۰۰+ ردیف",
+    "🔢 اعداد فارسی داشبوردها + نشانگر صفحه لیست رکوردها + راهنمای خطاهای پرتکرار + لودینگ و تلاش‌مجدد",
+    "⚡ بک‌اند: تایم‌اوت همه fetchها، TTL کلیدهای گذرا، لاگ تگ‌دار، جیتر کارهای هاب‌محور + گیت حسابرسی دپلوی",
+  ],
   "1.8.5": [
     "⬅️ سیستم برگشت سراسری: ربات مسیر هر پیام را یادش می‌ماند و برگشت دقیقاً به صفحه قبلی می‌رود (بدون اجرای دوباره اکشن‌ها)",
     "⏱ پایش نود دقیقه‌ای با ذخیره شرطی (write فقط موقع تغییر) + سلف‌آپدیت و گارد سهمیه ساعتی",
@@ -909,7 +914,7 @@ export default {
         : [];
       try {
         await sendMessage(botToken, adminId, lines.join("\n"), kb);
-      } catch (e) {}
+      } catch (e) { logE("CONTACT", e); }
       return ok();
     }
 
@@ -1152,11 +1157,11 @@ export default {
             patch.selfup = now;
             jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
           }
-          if (!cs.ann || now - cs.ann >= ANN_MIN_MS) {
+          if (!cs.ann || now - cs.ann >= ANN_MIN_MS - selfupJitter(env)) {
             patch.ann = now;
             jobs.push(runAnnFetch(env, botToken).catch((e) => console.error("ANN", String(e))));
           }
-          if (!cs.tm || now - cs.tm >= TM_MIN_MS) {
+          if (!cs.tm || now - cs.tm >= TM_MIN_MS - selfupJitter(env)) {
             patch.tm = now;
             jobs.push(runTelemetryPing(env).catch((e) => console.error("TM", String(e))));
           }
@@ -1361,7 +1366,7 @@ async function processUpdate(payload, env, botToken, adminId) {
       const allItems = [];
       for (const z of zones) allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
       if (!allItems.length) {
-        await send("📭 هیچ دامنه‌ای نیست.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+        await send("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
         const kb = [];
         for (let i = 0; i < allItems.length; i += 2) {
@@ -1370,7 +1375,7 @@ async function processUpdate(payload, env, botToken, adminId) {
           else row.push(EMPTY_BTN);
           kb.push(row);
         }
-        kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+        kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
         await send("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
       }
     } else if (cmd === "/mons") {
@@ -1382,7 +1387,7 @@ async function processUpdate(payload, env, botToken, adminId) {
           { text: "🟢 لینود", callback_data: "ln" },
           { text: "🇮🇷 آروان", callback_data: "arvan" },
         ],
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (cmd === "/srv") {
       await renderServersHome(send, kv, env);
@@ -1396,7 +1401,7 @@ async function processUpdate(payload, env, botToken, adminId) {
       await showRecords(zone, 0, accounts, send, kv);
     } else if (cmd === "/search") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search_any" }), { expirationTtl: 600 });
-      await send(SEARCH_PROMPT_TEXT, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await send(SEARCH_PROMPT_TEXT, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (cmd === "/add") {
       await handleAdd(args, accounts, send, kv);
     } else if (cmd === "/edit") {
@@ -1501,7 +1506,7 @@ function monsKeyboard() {
       { text: "⚖️ لود بالانسر IP", callback_data: "lb" },
     ],
     [{ text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail", style: "success" }],
-    [{ text: "🔙 بازگشت", callback_data: "menu" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 
@@ -1697,7 +1702,7 @@ function helpKeyboard() {
     // ⚙️ مدیریت و راهنما
     sec("— ⚙️ مدیریت و راهنما —"),
     [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
-    [{ text: "🔙 بازگشت", callback_data: "menu" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 
@@ -1724,7 +1729,7 @@ function settingsHomeKb() {
       { text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" },
       { text: "📞 ارتباط با سازنده", callback_data: "contactcreator", style: "plain" },
     ],
-    [{ text: "🔙 بازگشت", callback_data: "menu" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 // نسخهٔ هاب (فقط ربات اصلی): ردیف آمار نصب‌ها + پیام همگانی اضافه می‌شود
@@ -1822,7 +1827,7 @@ async function renderHubStats(edit, kv, page) {
     nav.push(pg < pages - 1 ? { text: "➡️", callback_data: `hubstatsp:${pg + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "settings" }, { text: "🏠 خانه", callback_data: "menu" }]);
   }
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
@@ -1846,7 +1851,7 @@ async function renderHubUser(edit, kv, iid) {
   try {
     if (Number.isFinite(Number(v.qw)) && Number(v.qw) >= 0) {
       const w = Math.floor(Number(v.qw));
-      quotaLine = `✍️ نوشتن: ${w.toLocaleString("en-US")} / 1,000${w >= 1000 ? " ⚠️ پر شده" : ""}`;
+      quotaLine = `✍️ نوشتن: ${faD(w.toLocaleString("en-US"))} / ۱,۰۰۰${w >= 1000 ? " ⚠️ پر شده" : ""}`;
     }
   } catch (e) {}
   const firstSeen = v.first ? new Date(Number(v.first)).toISOString().slice(0, 10) : "—";
@@ -1906,7 +1911,7 @@ async function runHubWatch(env) {
     overLines.push(`• ${who} — v${ver} — ${Number(v.q.req).toLocaleString("en-US")}/${Number(v.q.lim).toLocaleString("en-US")}`);
     try {
       await kv.put(`hubq:${iid}`, "1", { expirationTtl: 24 * 3600 });
-    } catch (e) {}
+    } catch (e) { logE("HUBQ", e); }
     if (overLines.length >= 20) break;
   }
   if (!overLines.length) return;
@@ -2018,7 +2023,7 @@ async function runTelemetryPing(env) {
     iid = (makeToken() || "i") + Date.now().toString(36);
     try {
       await kv.put("install_id", iid.slice(0, 64));
-    } catch (e) {}
+    } catch (e) { logE("TM_ID", e); }
     event = "install";
   }
   let adminTag = "";
@@ -2141,7 +2146,7 @@ async function runAnnFetch(env, botToken) {
       const kb = [];
       if (it.reply === false) kb.push([{ text: "✅ تایید", callback_data: `annok:${id}` }]);
       else kb.push([{ text: "↩️ پاسخ", callback_data: `annreply:${id}`, style: "primary" }, { text: "✅ تایید", callback_data: `annok:${id}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+      kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
       let okAny = false;
       for (const a of admins) {
         try {
@@ -2152,7 +2157,7 @@ async function runAnnFetch(env, botToken) {
       }
       try {
         await kv.put(`ann:${id}`, JSON.stringify({ text: msg }), { expirationTtl: 90 * 86400 });
-      } catch (e) {}
+      } catch (e) { logE("ANN", e); }
       if (okAny || !admins.length) {
         seen.push(id);
         changed = true;
@@ -2161,7 +2166,7 @@ async function runAnnFetch(env, botToken) {
     if (changed) {
       try {
         await kv.put("ann_seen", JSON.stringify(seen.slice(-50)), { expirationTtl: 180 * 86400 });
-      } catch (e) {}
+      } catch (e) { logE("ANN_SEEN", e); }
     }
   } catch (e) {
     console.error("ANN", String(e));
@@ -2198,7 +2203,7 @@ async function announceRelease(env, botToken, adminId) {
   }
   try {
     await kv.put("release_seen", BOT_VERSION);
-  } catch (e) {}
+  } catch (e) { logE("RELEASE", e); }
   _releaseAnnouncedFor = BOT_VERSION;
 }
 
@@ -2268,7 +2273,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     if (tRes.status === 304) {
       try {
         await kv.put("selfup_last", String(Date.now()));
-      } catch (e) {}
+      } catch (e) { logE("SELFUP", e); }
       return;
     }
     if (!tRes.ok) { await selfupBackoff(kv, 20, 60); return; }
@@ -2658,7 +2663,7 @@ function quotaAlertsList(cfg, count, kvOps, storage) {
   if (limit > 0 && count !== null) {
     const p = quotaPct(count, limit);
     if (p !== null && p >= Math.round(QUOTA_WARN_RATIO * 100)) {
-      alerts.push(`• درخواست‌های ورکر: ${count.toLocaleString("en-US")} از ${limit.toLocaleString("en-US")} (${p}٪)`);
+      alerts.push(`• درخواست‌های ورکر: ${faD(count.toLocaleString("en-US"))} از ${faD(limit.toLocaleString("en-US"))} (${faD(p)}٪)`);
     }
   }
   if (kvOps) {
@@ -2666,7 +2671,7 @@ function quotaAlertsList(cfg, count, kvOps, storage) {
       const lim = KV_LIMITS_DAILY[k];
       const p = quotaPct(kvOps[k], lim);
       if (p !== null && p >= 90) {
-        alerts.push(`• KV ${KV_ACTION_LABEL[k]}: ${kvOps[k].toLocaleString("en-US")} از ${lim.toLocaleString("en-US")} (${p}٪)`);
+        alerts.push(`• KV ${KV_ACTION_LABEL[k]}: ${faD(kvOps[k].toLocaleString("en-US"))} از ${faD(lim.toLocaleString("en-US"))} (${faD(p)}٪)`);
       }
     }
   }
@@ -2749,7 +2754,7 @@ async function saveQuotaCfg(kv, cfg) {
   if (!kv) return;
   try {
     await kv.put(QUOTA_CFG_KEY, JSON.stringify(cfg));
-  } catch (e) {}
+  } catch (e) { logE("QUOTA_CFG", e); }
 }
 
 async function getQuotaToken(kv) {
@@ -2762,7 +2767,7 @@ async function getQuotaToken(kv) {
     t = makeToken() + makeToken();
     try {
       await kv.put(QUOTA_TOKEN_KEY, t);
-    } catch (e) {}
+    } catch (e) { logE("QUOTA_TOK", e); }
   }
   return t;
 }
@@ -2911,7 +2916,7 @@ async function quotaGuard(env, botToken, adminId) {
       await sendMessage(
         botToken,
         adminId,
-        `✍️ سهمیه نوشتن به ۵۰٪ رسید (${w.toLocaleString("en-US")} از ${wLim.toLocaleString("en-US")}).\n\nجای نگرانی نیست ✅\n• ربات همچنان عادی کار می‌کند.\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.`,
+        `✍️ سهمیه نوشتن به ۵۰٪ رسید (${faD(w.toLocaleString("en-US"))} از ${faD(wLim.toLocaleString("en-US"))}).\n\nجای نگرانی نیست ✅\n• ربات همچنان عادی کار می‌کند.\n• ممکن است کلادفلر ایمیلی درباره نزدیک‌شدن به سقف بفرستد؛ خطری ندارد — صرفاً پیشنهاد تبلیغاتی برای خرید پلن ۵ دلاری با سقف بالاتر است.`,
         [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]
       );
     }
@@ -3002,7 +3007,7 @@ async function renderQuotaMenu(edit, kv, env) {
   lines.push(
     count === null
       ? "• نامشخص (آنالیتیکس در دسترس نیست)"
-      : "• " + count.toLocaleString("en-US") + " / " + cfg.limit.toLocaleString("en-US") + " — " + quotaBar(quotaPct(count, cfg.limit))
+      : "• " + faD(count.toLocaleString("en-US")) + " / " + faD(cfg.limit.toLocaleString("en-US")) + " — " + quotaBar(quotaPct(count, cfg.limit))
   );
 
   lines.push("", "🗄 Workers KV (روزانه):");
@@ -3011,7 +3016,7 @@ async function renderQuotaMenu(edit, kv, env) {
       const lim = KV_LIMITS_DAILY[k];
       const p = quotaPct(kvOps[k], lim);
       lines.push(
-        "• " + KV_ACTION_LABEL[k] + ": " + kvOps[k].toLocaleString("en-US") + " / " + lim.toLocaleString("en-US") + " — " + quotaBar(p) + (p !== null && p >= 90 ? " ⚠️" : "")
+        "• " + KV_ACTION_LABEL[k] + ": " + faD(kvOps[k].toLocaleString("en-US")) + " / " + faD(lim.toLocaleString("en-US")) + " — " + quotaBar(p) + (p !== null && p >= 90 ? " ⚠️" : "")
       );
     }
     if (storage) {
@@ -3339,6 +3344,12 @@ function makeToken() {
 // ===================== تاریخ شمسی (جلالی) + یادآور =====================
 const TEHRAN_OFFSET_MS = 3.5 * 3600 * 1000;
 const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
+const faD = (s) => String(s).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]);
+function logE(tag, e) {
+  try {
+    console.error(tag, String((e && (e.stack || e.message)) || e).slice(0, 300));
+  } catch (x) {}
+}
 
 function _div(a, b) {
   return ~~(a / b);
@@ -3457,7 +3468,7 @@ function remWhenKb() {
   return [
     [{ text: "⏳ بعد از تایم مشخص", callback_data: "remrel" }],
     [{ text: "📅 انتخاب تاریخ", callback_data: "remabs" }],
-    [{ text: "🔙 بازگشت", callback_data: "remnew" }],
+    [{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 const REM_WHEN_TEXT = "🕒 زمان یادآور:\nیکی از دو روش را انتخاب کنید:";
@@ -3476,7 +3487,7 @@ function remRelKb() {
       { text: "ماه", callback_data: "remrelu:mon" },
       { text: "سال", callback_data: "remrelu:yr" },
     ],
-    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }],
+    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 function addRel(unit, n) {
@@ -3495,7 +3506,7 @@ function remYearKb() {
     [{ text: String(jy), callback_data: `remabsy:${jy}` }, { text: String(jy + 1), callback_data: `remabsy:${jy + 1}` }],
     [{ text: String(jy + 2), callback_data: `remabsy:${jy + 2}` }, { text: String(jy + 3), callback_data: `remabsy:${jy + 3}` }],
     [{ text: "✍️ نوشتن دستی تاریخ", callback_data: "remabsman" }],
-    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }],
+    [{ text: "🔙 بازگشت", callback_data: "remwhenback" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 function remMonthKb(jy) {
@@ -3505,7 +3516,7 @@ function remMonthKb(jy) {
       JALALI_MONTHS.slice(i, i + 3).map((name, k) => ({ text: name, callback_data: `remabsm:${jy}:${i + k + 1}` }))
     );
   }
-  rows.push([{ text: "🔙 بازگشت", callback_data: "remabs" }]);
+  rows.push([{ text: "🔙 بازگشت", callback_data: "remabs" }, { text: "🏠 خانه", callback_data: "menu" }]);
   return rows;
 }
 function remPlain(s) {
@@ -4006,7 +4017,7 @@ function ttlLabel(t) {
 }
 async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, backCb, env) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره /zones را بزنید.");
   let r = await fetchRecordForSession(kv, accounts, session, recordId, env);
   if (!r) {
     await invalidateCache(kv, session.zone_id).catch(() => {});
@@ -4015,7 +4026,7 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   if (!r) {
     const cfErr = await cfRecordErr(kv, accounts, session, recordId);
     return edit(
-      "❌ رکورد پیدا نشد." +
+      "❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن." +
         (cfErr ? "\n\n📄 خطای کلادفلر:\n" + code(cfErr) : "")
     );
   }
@@ -4060,7 +4071,7 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
   detailKb.push([
     { text: "🗑 حذف", callback_data: `d:${token}:${recordId}`, style: "danger" },
     {
-      text: todayN === null ? "📊 مشاهده ترافیک" : `📊 امروز: ${todayN.toLocaleString("en-US")}`,
+      text: todayN === null ? "📊 مشاهده ترافیک" : `📊 امروز: ${faD(todayN.toLocaleString("en-US"))}`,
       callback_data: `rtraf:${token}:${recordId}`,
     },
   ]);
@@ -4156,7 +4167,7 @@ async function renderCnameReferrers(kv, accounts, edit, chatId, session, r, toke
     }
   }
   // crb: بازگشت به صفحهٔ ویرایش همان رکورد
-  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `crb:${token}:${recordId}` }]]);
+  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `crb:${token}:${recordId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 // ===================== لود بالانسر (چند رکورد A/AAAA/CNAME هم‌نام) =====================
@@ -4234,11 +4245,11 @@ async function lbGroupByName(kv, accounts, session, name, env) {
 
 async function lbLoadById(kv, accounts, token, recordId, env) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return { error: "⏳ نشست منقضی شده. دوباره باز کن." };
+  if (!session) return { error: "⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره باز کن." };
   const records = await lbFetchRecords(kv, accounts, session, env);
   if (!records) return { error: "❌ دامنه پیدا نشد." };
   const rec = records.find((x) => x.id === recordId);
-  if (!rec) return { error: "❌ رکورد پیدا نشد." };
+  if (!rec) return { error: "❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن." };
   if (!lbIsLbRecord(rec)) return { error: "ℹ️ لود بالانسر فقط برای رکوردهای A/AAAA/CNAME است." };
   const ctx = await lbGroupByName(kv, accounts, session, rec.name, env);
   if (ctx.error) return ctx;
@@ -4252,7 +4263,7 @@ async function lbLoadByGid(kv, accounts, gid, env) {
   let session = null;
   if (g.token) {
     session = await kv.get(`s:${g.token}`, "json");
-    if (!session) return { error: "⏳ نشست منقضی شده. دوباره باز کن." };
+    if (!session) return { error: "⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره باز کن." };
   } else {
     session = { acc: g.acc, zone_id: g.zone_id, zone_name: g.zone_name };
   }
@@ -4281,7 +4292,7 @@ async function lbPromptAdd(kv, edit, chatId, messageId, token, name, type, cance
 
 async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
   const ctx = await lbLoadByGid(kv, accounts, gid, env);
-  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   const entries = lbEntriesOf(ctx.group, ctx.cfg);
   const enabled = entries.filter((e) => e.on).length;
   const lines = [
@@ -4322,10 +4333,10 @@ async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
 // منوی زاپاس یک ورودی فعال: تعیین/تغییر زاپاس، جایگزینی (با تأیید)، حذف زاپاس
 async function renderLbSpareMenu(kv, accounts, edit, gid, idx, env) {
   const ctx = await lbLoadByGid(kv, accounts, gid, env);
-  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-  if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
-  if (!e.on) return edit("ℹ️ زاپاس فقط برای ورودی فعال است.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+  if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  if (!e.on) return edit("ℹ️ زاپاس فقط برای ورودی فعال است.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const sp = lbSpareOf(ctx.cfg, e.content);
   const lines = [
     `🛟 زاپاس — ${code(e.content)} (${e.type})`,
@@ -4341,13 +4352,13 @@ async function renderLbSpareMenu(kv, accounts, edit, gid, idx, env) {
     kb.push([{ text: `🔄 جایگزینی با ${sp.content.slice(0, 24)}`, callback_data: `lbsgo:${gid}:${idx}` }]);
     kb.push([{ text: "❌ حذف زاپاس", callback_data: `lbsdel:${gid}:${idx}` }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
 async function lbOpenSettings(kv, accounts, edit, chatId, messageId, token, recordId, env) {
   const ctx = await lbLoadById(kv, accounts, token, recordId, env);
-  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   const gid = makeToken();
   await kv.put(`lbg:${gid}`, JSON.stringify({ token, name: ctx.name }), { expirationTtl: 86400 });
   await kv.put(`lbn:${chatId}:${messageId}`, JSON.stringify({ gid }), { expirationTtl: 86400 });
@@ -4357,7 +4368,7 @@ async function lbOpenSettings(kv, accounts, edit, chatId, messageId, token, reco
 // صفحهٔ اختصاصی زاپاس یک گروه لود بالانسر: دیدن زاپاس هر ورودی + ورود به منوی زاپاس همان ورودی
 async function renderLbSpareHome(kv, accounts, edit, gid, env) {
   const ctx = await lbLoadByGid(kv, accounts, gid, env);
-  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   const entries = lbEntriesOf(ctx.group, ctx.cfg);
   const actives = entries.map((e, i) => ({ e, i })).filter(({ e }) => e.on);
   const lines = [
@@ -4381,13 +4392,13 @@ async function renderLbSpareHome(kv, accounts, edit, gid, env) {
     const sess = await kv.get(`lbg:${gid}`, "json");
     if (sess && sess.recordId) back = `e:${sess.token}:${sess.recordId}`;
   } catch (err) {}
-  kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
 async function lbOpenSpare(kv, accounts, edit, token, recordId, env) {
   const ctx = await lbLoadById(kv, accounts, token, recordId, env);
-  if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   const gid = makeToken();
   await kv.put(`lbg:${gid}`, JSON.stringify({ token, name: ctx.name, recordId }), { expirationTtl: 86400 });
   await renderLbSpareHome(kv, accounts, edit, gid, env);
@@ -4409,7 +4420,7 @@ const LB_PAGE = 18;
 async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
   if (!all.length) {
-    return edit("⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }]]);
+    return edit("⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const flt = filter === undefined ? "all" : String(filter);
   const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
@@ -4446,7 +4457,7 @@ async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
     nav.push(page < pages - 1 ? { text: "➡️", callback_data: `lbzf:${flt}:${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   }
   const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `⚖️ لود بالانسر IP — ${label}`;
@@ -4459,7 +4470,7 @@ const LB_GROUPS_PAGE = 15; // ۵ ردیف ۳ ستونه
 
 async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, page, env) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const records = await getRecords(zone, accounts, kv);
   const lbTypes = ["A", "AAAA", "CNAME"];
   const groups = {};
@@ -4509,14 +4520,14 @@ async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, page, env) {
     kb.push(nav);
   }
   kb.push([{ text: "➕ ساخت لود بالانسر جدید", callback_data: `lbznew:${acc}:${zoneId}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "lb" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
 async function redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, page, env) {
   const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   if (!zone) return edit("❌ دامنه پیدا نشد.");
   const records = await getRecords(zone, accounts, kv);
@@ -4524,7 +4535,7 @@ async function redrawRecordsList(kv, accounts, botToken, chatId, messageId, toke
     const kb = [
       [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
       [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
-      [{ text: "🔙 بازگشت", callback_data: "zones" }],
+      [{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }],
     ];
     return edit(`📭 رکوردی برای ${zone.name} باقی نمانده.`, kb);
   }
@@ -4534,7 +4545,7 @@ async function redrawRecordsList(kv, accounts, botToken, chatId, messageId, toke
 async function redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, srToken) {
   const edit = (text, kb) => editMessage(botToken, chatId, messageId, text, kb);
   const stored = await kv.get(`sr:${srToken}`, "json");
-  if (!stored) return edit("⏳ نشست منقضی شده.");
+  if (!stored) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   await renderSearchResults(srToken, stored.results, stored.query, stored.field, edit, { stok: stored.stok || null });
 }
 
@@ -5348,7 +5359,7 @@ async function domExpiryAddAll(kv, edit, env) {
     console.error("DOMEXP_ALL_CF", String(e));
   }
   if (!names.length) {
-    return edit("📭 دامنه‌ای در اکانت‌های کلودفلر پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
+    return edit("📭 دامنه‌ای در اکانت‌های کلودفلر پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexp" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const list = await getDomExpiry(kv);
   let added = 0;
@@ -5359,7 +5370,7 @@ async function domExpiryAddAll(kv, edit, env) {
   }
   await saveDomExpiry(kv, list);
   if (!added) {
-    return edit(`✅ همهٔ ${names.length} دامنه از قبل در مانیتور بودند.`, [[{ text: "🔙 بازگشت", callback_data: "domexp" }]]);
+    return edit(`✅ همهٔ ${names.length} دامنه از قبل در مانیتور بودند.`, [[{ text: "🔙 بازگشت", callback_data: "domexp" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   await edit(`⏳ ${added} دامنهٔ جدید اضافه شد. در حال استعلام…`);
   await domExpiryCheckAll(kv, env);
@@ -5534,7 +5545,7 @@ function selfupJitter(env) {
 async function selfupBackoff(kv, minMin, maxMin) {
   try {
     const ms = (minMin + Math.random() * (maxMin - minMin)) * 60000;
-    await kv.put("selfup_backoff_until", String(Date.now() + Math.floor(ms)));
+    await kv.put("selfup_backoff_until", String(Date.now() + Math.floor(ms)), { expirationTtl: 86400 });
   } catch (e) {}
 }
 
@@ -5941,7 +5952,7 @@ async function renderSrvPw(edit, kv) {
   ];
   const kb = pws.map((p, i) => [{ text: `🔒 رمز ${i + 1} (${maskPw(p)})`, callback_data: `srvpwdel:${i}` }]);
   kb.push([{ text: "➕ افزودن رمز", callback_data: "srvpwadd" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "srv" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -6150,7 +6161,7 @@ async function renderServersHome(edit, kv, env) {
     { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
   ]);
   if (list.length) kb.push([{ text: "📤 خروجی Termius (CSV)", callback_data: "srvtermius" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -6172,7 +6183,7 @@ async function renderSrvDetail(edit, kv, env, idx) {
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
     [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}`, style: "danger" }],
-    [{ text: "🔙 بازگشت", callback_data: "back" }],
+    [{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(lines.join("\n"), kb);
 }
@@ -6308,7 +6319,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   const kb = srvRows;
   kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
   if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   for (const a of admins) {
     try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
   }
@@ -6318,7 +6329,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
 async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
   const { url: base, token: relayToken } = await getSrvRelayCfg(kv, env);
   if (!base) {
-    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: "srv" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
     return;
   }
   const sent = await sendMessage(botToken, chatId, "📥 شروع نصب نود پاسارگارد…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت نصب…");
@@ -6335,7 +6346,7 @@ async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
     });
     if (!res.ok || !res.body) {
       const errTxt = `❌ خطا در اتصال به رله (${res.status})`;
-      if (msgId) await editMessage(botToken, chatId, msgId, errTxt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }]]);
+      if (msgId) await editMessage(botToken, chatId, msgId, errTxt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     // خواندن استریم NDJSON و به‌روزرسانی پیام با آخرین خروجی
@@ -6378,10 +6389,10 @@ async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
       txt = add.txt;
       addKb = add.addKb;
     }
-    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [...addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }]]);
+    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [...addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
   } catch (e) {
     const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
-    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, "srv") }]]);
+    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, "srv") }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
 }
 
@@ -6392,7 +6403,7 @@ const CORE_INSTALL_URL = "https://raw.githubusercontent.com/Aknuun/pg-node-deplo
 async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
   const { url: base } = await getSrvRelayCfg(kv, env);
   if (!base) {
-    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, "srv") }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, "srv") }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
     return;
   }
   const sent = await sendMessage(botToken, chatId, "🧩 شروع نصب نود با هستهٔ ویرایشی…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت…");
@@ -6421,7 +6432,7 @@ async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
     const start = await srvRelayExec(kv, env, s, launch, 30000);
     if (start.error) {
       const txt = "❌ خطا در شروع نصب: " + start.error;
-      if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }]]);
+      if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     const startedAt = Date.now();
@@ -6483,11 +6494,11 @@ async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
     if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [
       ...addKb,
       [{ text: "📊 مانیتور", callback_data: `srvstats:${idx}` }],
-      [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }],
+      [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   } catch (e) {
     const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
-    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }]]);
+    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
 }
 
@@ -7225,7 +7236,7 @@ async function panelDefineView(kv, back) {
         { text: "🗑 حذف پنل", callback_data: "pnld" },
         { text: "✏️ ویرایش پنل", callback_data: "pnle" },
       ],
-      [{ text: "🔙 بازگشت", callback_data: back || "mons" }],
+      [{ text: "🔙 بازگشت", callback_data: back || "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
     ],
   };
 }
@@ -7344,7 +7355,7 @@ async function renderNodeExclusions(edit, kv, mi) {
     "🖧 نودها (" + Object.keys(st.nodes).length + "):",
   ];
   const kb = nodeButtonRows(mi, m, st);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -7413,7 +7424,7 @@ async function renderPanelDetail(panels, monitors, idx, edit, kv) {
   }
   // pnlx: حذف کل پنل (همراه با مانیتور متصل)
   kb.push([{ text: "🗑 حذف پنل", callback_data: `pnlx:${idx}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -7441,7 +7452,7 @@ async function renderNodeMonitor(monitors, idx, edit, kv) {
     ...nodeButtonRows(idx, m, st),
     // nddel: حذف این مانیتور نود
     [{ text: "🗑 حذف", callback_data: `nddel:${idx}` }],
-    [{ text: "🔙 بازگشت", callback_data: "nd" }],
+    [{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(lines.join("\n"), kb);
 }
@@ -7541,7 +7552,7 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
         { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
         { text: "👤 افزودن اکانت کلودفلر", callback_data: "accadd" },
       ],
-      [{ text: "🔙 بازگشت", callback_data: "menu" }],
+      [{ text: "🏠 خانه", callback_data: "menu" }],
     ]);
     return;
   }
@@ -7608,7 +7619,7 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
     else nav.push(EMPTY_BTN);
     keyboard.push(nav);
   } else {
-    keyboard.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+    keyboard.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   }
 
   const label = flt === "all" ? "همه اکانت‌ها" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
@@ -7631,7 +7642,7 @@ async function showRecords(zone, page, accounts, send, kv) {
     const keyboard = [
       [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
       [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
-      [{ text: "🔙 بازگشت", callback_data: "zones" }],
+      [{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }],
     ];
     await send(`📭 رکوردی برای ${zone.name} یافت نشد.`, keyboard);
     return;
@@ -7709,10 +7720,11 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
     nav.push(page < pages - 1 ? { text: "▶️", callback_data: `selp:${token}:${page + 1}` } : EMPTY_BTN);
   } else {
     nav.push(page > 0 ? { text: "◀️", callback_data: `p:${token}:${page - 1}` } : EMPTY_BTN);
-    nav.push({ text: "🔙 بازگشت", callback_data: "back" });
+    nav.push(pages > 1 ? { text: `📄 ${page + 1}/${pages}`, callback_data: "noop" } : { text: "🔙 بازگشت", callback_data: "back" });
     nav.push(page < pages - 1 ? { text: "▶️", callback_data: `p:${token}:${page + 1}` } : EMPTY_BTN);
   }
   keyboard.push(nav);
+  if (pages > 1 && selected === undefined) keyboard.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
 
   const title = selected !== undefined
     ? `🗂 ${zone.name} — ${selSet.size} انتخاب شده`
@@ -7770,7 +7782,7 @@ function cfSortDestinations(list) {
 
 async function renderEmailHome(edit, kv, accounts, token) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const tok = accounts[session.acc] && accounts[session.acc].token;
   if (!tok) return edit("❌ اکانت پیدا نشد.");
   let st = null;
@@ -7789,7 +7801,7 @@ async function renderEmailHome(edit, kv, accounts, token) {
         (isPerm
           ? `❌ دسترسی به Email Routing نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Email Routing Rules → Edit")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`
           : `❌ خطا از کلادفلر:\n${stErr || "نامشخص"}`),
-      [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]]
+      [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]
     );
   }
   const enabled = !!st.enabled;
@@ -7837,16 +7849,16 @@ async function renderEmailHome(edit, kv, accounts, token) {
       { text: "📩 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" },
     ]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
 // انتخاب‌گر مقصد برای ساخت قانون (forCatch=false) یا catch-all (forCatch=true)
 async function renderMailDestPicker(edit, kv, accounts, token, forCatch, chatId) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const dd = await cfMailDests(accounts, session);
-  if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+  if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const verified = cfSortDestinations(dd.list).filter((x) => x.verified);
   const pending = cfSortDestinations(dd.list).filter((x) => !x.verified);
   let addrInfo = null;
@@ -7866,7 +7878,7 @@ async function renderMailDestPicker(edit, kv, accounts, token, forCatch, chatId)
   }
   if (!verified.length) lines.push("هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.");
   kb.push([{ text: "➕ مقصد جدید", callback_data: forCatch ? `zmailcnew:${token}` : `zmaildestnew:${token}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -8137,7 +8149,7 @@ async function readEmailRawText(message, maxBytes) {
 }
 async function renderInboxList(edit, kv, accounts, token) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const dom = String(session.zone_name || "").toLowerCase();
   const items = await inboxList(kv, dom, 10);
   const lines = [`📥 صندوق ورودی ${session.zone_name}`, ""];
@@ -8154,7 +8166,7 @@ async function renderInboxList(edit, kv, accounts, token) {
     }
   }
   kb.push([{ text: "📩 دریافت در ربات", callback_data: `zmailwadd:${token}`, style: "success" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 function decodeStoredPreview(p) {
@@ -8168,7 +8180,7 @@ function decodeStoredPreview(p) {
 }
 async function renderInboxOne(edit, kv, accounts, token, id) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const dom = String(session.zone_name || "").toLowerCase();
   let m = null;
   try {
@@ -8301,12 +8313,12 @@ async function renderFmailAdd(edit, kv, accounts) {
       ]);
     }
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const dom = String(zone.name || "").toLowerCase();
   const items = await inboxList(kv, dom, 10);
   const lines = [`📥 ${zone.name}`, ""];
@@ -8332,12 +8344,12 @@ async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
       aliases.slice(i, i + 3).map((p, j) => ({ text: `🗑 ${p}`, callback_data: `fmailaliasdel:${acc}:${zoneId}:${i + j}` }))
     );
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const dom = String(zone.name || "").toLowerCase();
   let m = null;
   try {
@@ -8407,7 +8419,7 @@ function trafRangeLabel(d) {
 async function renderTrafficHome(edit, kv, accounts, token, days) {
   days = TRAF_DAYS.includes(Number(days)) ? Number(days) : 7;
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const tok = accounts[session.acc] && accounts[session.acc].token;
   if (!tok) return edit("❌ اکانت پیدا نشد.");
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -8415,11 +8427,11 @@ async function renderTrafficHome(edit, kv, accounts, token, days) {
   const t = await fetchTrafficCounts(tok, session.zone_id, days);
   if (t.needPerm) {
     return edit(`📊 ترافیک ${zone.name}\n\n❌ دسترسی Analytics نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Analytics → Read")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`, [
-      [{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }],
+      [{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   if (t.error) {
-    return edit("❌ خطا در آمار:\n" + t.error, [[{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }]]);
+    return edit("❌ خطا در آمار:\n" + t.error, [[{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const records = await getRecords(zone, accounts, kv);
   const rows = records
@@ -8429,7 +8441,7 @@ async function renderTrafficHome(edit, kv, accounts, token, days) {
   const lines = [`📊 ترافیک ${trafRangeLabel(days)} — ${zone.name}`, ""];
   for (const { r, n } of rows.slice(0, 25)) {
     const short = r.name === zone.name ? "@" : String(r.name).slice(0, -(zone.name.length + 1));
-    lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${Number(n).toLocaleString("en-US")} کوئری`);
+    lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${faD(Number(n).toLocaleString("en-US"))} کوئری`);
   }
   if (rows.length > 25) lines.push(`… و ${rows.length - 25} مورد دیگر`);
   const zeros = rows.filter((x) => x.n === 0);
@@ -8442,7 +8454,7 @@ async function renderTrafficHome(edit, kv, accounts, token, days) {
   } else if (rows.length) {
     lines.push(`✅ همهٔ ساب‌ها در ${trafRangeLabel(days)} ترافیک داشتن.`);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
@@ -8454,7 +8466,7 @@ const TRAF_PAGE = 18;
 async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
   if (!all.length) {
-    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }]]);
+    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const flt = filter === undefined ? "all" : String(filter);
   const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
@@ -8491,7 +8503,7 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
     nav.push(page < pages - 1 ? { text: "➡️", callback_data: `trazf:${flt}:${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   }
   const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `📊 ترافیک ساب‌ها — ${label}`;
@@ -8502,9 +8514,9 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
 
 async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const tok = accounts[acc] && accounts[acc].token;
-  if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }]]);
+  if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const t = await fetchTrafficCounts(tok, zoneId);
   if (t.needPerm || t.error) {
     const lines = [
@@ -8514,7 +8526,7 @@ async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) 
         ? `❌ دسترسی Analytics نیست.\n\n۱) به توکن این دسترسی را اضافه کن:\n${code("Zone → Analytics → Read")}\n\n۲) چون توکن قابل ویرایش نیست، توکن جدید بساز و توی ربات جایگزین کن:\nکلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید`
         : `❌ خطا در آمار:\n${t.error}`,
     ];
-    return edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "traf" }]]);
+    return edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const records = await getRecords(zone, accounts, kv);
   const rows = records
@@ -8532,7 +8544,7 @@ async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) 
   ];
   for (const { r, n } of rows.slice(pg * TRAF_PAGE, pg * TRAF_PAGE + TRAF_PAGE)) {
     const short = r.name === zone.name ? "@" : String(r.name).slice(0, -(String(zone.name).length + 1));
-    lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${Number(n).toLocaleString("en-US")} کوئری`);
+    lines.push(`${n > 0 ? "🟢" : "⚪"} ${short} (${r.type}) — ${faD(Number(n).toLocaleString("en-US"))} کوئری`);
   }
   if (rows.length > TRAF_PAGE) lines.push("", `صفحه ${pg + 1} از ${pages}`);
   lines.push("", "⚠️ ساب کم‌استفاده هم صفر نشون میده؛ قبل از حذف مطمئن شو.");
@@ -8541,7 +8553,7 @@ async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) 
   else if (pg > 0) kb.push([{ text: "⬅️ قبلی", callback_data: `traz:${acc}:${zoneId}:${pg - 1}` }]);
   else if (pg < pages - 1) kb.push([{ text: "➡️ بعدی", callback_data: `traz:${acc}:${zoneId}:${pg + 1}` }]);
   if (zeros > 0) kb.push([{ text: `🗑 حذف ${zeros} ساب صفر`, callback_data: `trazdel:${acc}:${zoneId}`, style: "danger" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "traf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
@@ -8560,7 +8572,7 @@ async function renderSettingsGroup(token, session, accounts, edit, title, keys) 
     }
   }
   const keyboard = grid2(buttons);
-  keyboard.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]);
+  keyboard.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`${title} — ${zone.name}:\n\nبرای تغییر روی هر گزینه کلیک کنید:`, keyboard);
 }
 
@@ -8573,7 +8585,7 @@ async function renderAdmins(admins, mainAdmin, send) {
   const keyboard = [
     [{ text: "➕ افزودن ادمین", callback_data: "adminadd" }],
     [{ text: "🗑 حذف ادمین", callback_data: "admindel" }],
-    [{ text: "🔙 بازگشت", callback_data: "menu" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
   await send(text, keyboard);
 }
@@ -8601,7 +8613,7 @@ async function showAccounts(accounts, send) {
   if (accounts.length > 0) {
     keyboard.push([{ text: "🗑 حذف اکانت", callback_data: "accdel" }]);
   }
-  keyboard.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  keyboard.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await send(text, keyboard);
 }
 
@@ -8626,8 +8638,7 @@ async function handleAdd(args, accounts, send, kv) {
   const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
     method: "POST",
     headers: hdr(accounts[zone._acc].token),
-    body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: ttl || 1, proxied }),
-  });
+    body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: ttl || 1, proxied }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, zone.id);
@@ -8644,8 +8655,7 @@ async function findRecord(zone, type, name, accounts) {
   const fullName = normalizeName(name, zone.name);
   const res = await fetch(
     `${CF_API}/zones/${zone.id}/dns_records?type=${type.toUpperCase()}&name=${encodeURIComponent(fullName)}`,
-    { headers: hdr(accounts[zone._acc].token) }
-  );
+    { headers: hdr(accounts[zone._acc].token), signal: withTimeout() });
   const data = await res.json();
   if (!data.success || !data.result || data.result.length === 0) return null;
   return data.result[0];
@@ -8660,13 +8670,12 @@ async function handleEdit(args, accounts, send, kv) {
   const zone = await findZone(zoneName, accounts);
   if (!zone) return send("❌ دامنه پیدا نشد.");
   const record = await findRecord(zone, type, name, accounts);
-  if (!record) return send("❌ رکورد پیدا نشد.");
+  if (!record) return send("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
 
   const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
     method: "PATCH",
     headers: hdr(accounts[zone._acc].token),
-    body: JSON.stringify({ content }),
-  });
+    body: JSON.stringify({ content }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, zone.id);
@@ -8685,14 +8694,13 @@ async function handleSetTtl(args, accounts, send, kv) {
   const zone = await findZone(zoneName, accounts);
   if (!zone) return send("❌ دامنه پیدا نشد.");
   const record = await findRecord(zone, type, name, accounts);
-  if (!record) return send("❌ رکورد پیدا نشد.");
+  if (!record) return send("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
 
   const ttl = Number(ttlArg);
   const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
     method: "PATCH",
     headers: hdr(accounts[zone._acc].token),
-    body: JSON.stringify({ ttl: ttl || 1 }),
-  });
+    body: JSON.stringify({ ttl: ttl || 1 }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, zone.id);
@@ -8711,13 +8719,12 @@ async function handleToggleProxy(args, accounts, send, kv) {
   const zone = await findZone(zoneName, accounts);
   if (!zone) return send("❌ دامنه پیدا نشد.");
   const record = await findRecord(zone, type, name, accounts);
-  if (!record) return send("❌ رکورد پیدا نشد.");
+  if (!record) return send("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
 
   const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
     method: "PATCH",
     headers: hdr(accounts[zone._acc].token),
-    body: JSON.stringify({ proxied: !record.proxied }),
-  });
+    body: JSON.stringify({ proxied: !record.proxied }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, zone.id);
@@ -8736,12 +8743,11 @@ async function handleDelete(args, accounts, send, kv) {
   const zone = await findZone(zoneName, accounts);
   if (!zone) return send("❌ دامنه پیدا نشد.");
   const record = await findRecord(zone, type, name, accounts);
-  if (!record) return send("❌ رکورد پیدا نشد.");
+  if (!record) return send("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
 
   const del = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${record.id}`, {
     method: "DELETE",
-    headers: hdr(accounts[zone._acc].token),
-  });
+    headers: hdr(accounts[zone._acc].token), signal: withTimeout() });
   const delData = await del.json();
   if (delData.success) {
     await invalidateCache(kv, zone.id);
@@ -8803,8 +8809,7 @@ async function addRecordFromPending(pending, content, accounts, kv, chatId, send
   const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
     method: "POST",
     headers: hdr(accounts[pending.acc].token),
-    body: JSON.stringify({ type: pending.rtype, name: fullName, content, ttl: 1, proxied: false }),
-  });
+    body: JSON.stringify({ type: pending.rtype, name: fullName, content, ttl: 1, proxied: false }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, pending.zone_id);
@@ -8841,7 +8846,7 @@ async function cnameTargetPickerData(accounts, kv, name, page = 0) {
   nav.push(page < pages - 1 ? { text: "▶️", callback_data: `czp:${name}:${page + 1}` } : EMPTY_BTN);
   kb.push(nav);
   kb.push([{ text: "⌨️ ورود دستی دامنه", callback_data: "czman" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   return {
     text: `🔤 نام «${code(name)}» ثبت شد.\n\nبرای مقدار CNAME:\n• یک دامنه را انتخاب کنید تا ساب‌دامنه‌هایش را ببینید\n• یا مقدار را مستقیم تایپ کنید:`,
     kb,
@@ -8892,7 +8897,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       sent
         ? "✅ پیامت برای سازنده ارسال شد. ممنون 🙏"
         : "⚠️ ارسال پیام الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
-      [[{ text: "🔙 بازگشت", callback_data: "menu" }]]
+      [[{ text: "🏠 خانه", callback_data: "menu" }]]
     );
     return;
   }
@@ -8937,7 +8942,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       sent
         ? "✅ پاسخت برای سازنده ارسال شد. ممنون 🙏"
         : "⚠️ ارسال پاسخ الان ناموفق بود؛ کمی بعد دوباره تلاش کن.",
-      [[{ text: "🔙 بازگشت", callback_data: "menu" }]]
+      [[{ text: "🏠 خانه", callback_data: "menu" }]]
     );
     return;
   }
@@ -9020,7 +9025,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const al = (pending && pending.al) || {};
     const zone = await getZoneById(al.zone, al.acc, accounts);
     if (!zone) {
-      await send("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await send("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     const dom = String(zone.name).toLowerCase();
@@ -9052,12 +9057,12 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     }
     const aid = await getAccountId(accounts, fw.acc);
     if (!aid) {
-      await send("❌ شناسه اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await send("❌ شناسه اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     const tok = accounts[fw.acc] && accounts[fw.acc].token;
     if (!tok) {
-      await send("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await send("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     let created = null;
@@ -9085,7 +9090,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const th = tid ? await kv.get(`ct:${tid}`, "json") : null;
     const dest = th && safeReplyUrl(th.reply_url);
     if (!dest) {
-      await send("❌ مقصد مشتری پیدا نشد (شاید لینک نامعتبر یا منقضی شده).", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await send("❌ مقصد مشتری پیدا نشد (شاید لینک نامعتبر یا منقضی شده).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     let sent = false;
@@ -9099,7 +9104,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       sent = r && (r.ok || r.status === 200);
     } catch (e) {}
     await send(sent ? "✅ پاسخ برای مشتری ارسال شد." : "⚠️ ارسال پاسخ ناموفق بود (شاید ربات مشتری آپدیت نیست).", [
-      [{ text: "🔙 بازگشت", callback_data: "menu" }],
+      [{ text: "🏠 خانه", callback_data: "menu" }],
     ]);
     return;
   }
@@ -9127,7 +9132,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const limits = { interval: [1, 1440], cities: [1, cfg.citiesSel.length], maxok: [0, 3], probes: [1, 50], minfail: [1, 50], batch: [1, 30], maxchanges: [1, 20], backupkeep: [1, 10], recheck: [0, 3], recheckmin: [1, 60] };
     const lim = limits[key];
     if (!lim || !Number.isInteger(n) || n < lim[0] || n > lim[1]) {
-      await send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "🔙 بازگشت", callback_data: "hfset" }]]);
+      await send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       return;
     }
     if (key === "interval") cfg.intervalMin = n;
@@ -9199,8 +9204,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const res = await fetch(`${CF_API}/zones`, {
       method: "POST",
       headers: hdr(acc.token),
-      body: JSON.stringify({ name, account: { id: accountId }, type: "full" }),
-    });
+      body: JSON.stringify({ name, account: { id: accountId }, type: "full" }), signal: withTimeout() });
     const data = await res.json();
     if (data.success) {
       await invalidateCache(kv, null);
@@ -9222,8 +9226,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
         method: "PATCH",
         headers: hdr(accounts[pending.acc].token),
-        body: JSON.stringify({ content: txt }),
-      });
+        body: JSON.stringify({ content: txt }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) okCount++;
     }
@@ -9249,8 +9252,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
         method: "PATCH",
         headers: hdr(accounts[pending.acc].token),
-        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
-      });
+        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) okCount++;
     }
@@ -9279,7 +9281,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   if (type === "acc_token") {
     await kv.delete(`pend:${chatId}`);
     const token = txt;
-    const res = await fetch(`${CF_API}/zones?per_page=1`, { headers: hdr(token) });
+    const res = await fetch(`${CF_API}/zones?per_page=1`, { headers: hdr(token), signal: withTimeout() });
     const data = await res.json();
     if (!data.success) {
       await send("❌ توکن نامعتبر است یا دسترسی Zone Read ندارد.", mainMenuKeyboard());
@@ -9372,7 +9374,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 🌐 ${code(item.host + ":" + item.port)} (${item.user})
 🔐 ${authLabel}` +
         (item.auth === "agent" ? "\n\n⚠️ حالت agent فقط وقتی کار می‌کند که روی رله برای کاربر root کلید/agent تنظیم شده باشد." : ""),
-        [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🔙 بازگشت", callback_data: "menu" }]]
+        [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
       );
       return;
     }
@@ -9392,7 +9394,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const lines = [`✅ ${r.added} سرور از ${r.total} مورد اضافه شد.`];
     if (r.addedHosts.length) lines.push("", "🖧 افزوده‌شده:", ...r.addedHosts.map((h) => "• " + code(h)));
     if (r.skipped.length) lines.push("", `ℹ️ ${r.skipped.length} مورد تکراری بود و رد شد.`);
-    await send(lines.join("\n"), [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    await send(lines.join("\n"), [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -9431,7 +9433,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     await send(
       `✅ ${added} سرور وارد شد.${skipped ? ` (${skipped} تکراری رد شد)` : ""}` +
         (pw ? "" : "\n\n⚠️ چون رمز ندادی، برای هر سرور از «✏️ ویرایش» احراز هویت را تنظیم کن."),
-      [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🔙 بازگشت", callback_data: "menu" }]]
+      [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
     );
     return;
   }
@@ -9549,7 +9551,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       s.note = txt === "-" ? "" : txt.substring(0, 200);
     }
     await saveServersList(kv, list);
-    await send("✅ ذخیره شد.", [[{ text: "🔙 بازگشت", callback_data: `srvopen:${pending.srv}` }]]);
+    await send("✅ ذخیره شد.", [[{ text: "🔙 بازگشت", callback_data: `srvopen:${pending.srv}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -9580,7 +9582,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       const zone = await getZoneById(pending.zoneId, pending.acc, accounts);
       if (zone) session = { acc: pending.acc, zone_id: pending.zoneId, zone_name: zone.name };
     }
-    if (!session) return send("⏳ نشست منقضی شده. دوباره باز کن.");
+    if (!session) return send("⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره باز کن.");
     const ctx = await lbGroupByName(kv, accounts, session, pending.name, env);
     if (ctx.error) return send(ctx.error);
     const type0 = ctx.group.length ? lbTypeOf(ctx.group[0]) : (ctx.cfg.disabled[0] ? String(ctx.cfg.disabled[0].type).toUpperCase() : "A");
@@ -9627,11 +9629,11 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     let session = null;
     if (g.token) {
       session = await kv.get(`s:${g.token}`, "json");
-      if (!session) return send("⏳ نشست منقضی شده.");
+      if (!session) return send("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     } else if (g.acc != null && g.zone_id) {
       session = { acc: g.acc, zone_id: g.zone_id, zone_name: g.zone_name };
     }
-    if (!session) return send("⏳ نشست منقضی شده.");
+    if (!session) return send("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const ctx = await lbGroupByName(kv, accounts, session, g.name, env);
     if (ctx.error) return send(ctx.error);
     const e = lbEntriesOf(ctx.group, ctx.cfg)[pending.idx];
@@ -9653,11 +9655,11 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     let session = null;
     if (g.token) {
       session = await kv.get(`s:${g.token}`, "json");
-      if (!session) return send("⏳ نشست منقضی شده.");
+      if (!session) return send("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     } else if (g.acc != null && g.zone_id) {
       session = { acc: g.acc, zone_id: g.zone_id, zone_name: g.zone_name };
     }
-    if (!session) return send("⏳ نشست منقضی شده.");
+    if (!session) return send("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const ctx = await lbGroupByName(kv, accounts, session, g.name, env);
     if (ctx.error) return send(ctx.error);
     const e = lbEntriesOf(ctx.group, ctx.cfg)[pending.idx];
@@ -9785,8 +9787,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
       method: "PATCH",
       headers: hdr(accounts[pending.acc].token),
-      body: JSON.stringify(body),
-    });
+      body: JSON.stringify(body), signal: withTimeout() });
     const data = await res.json();
     if (data.success) {
       await invalidateCache(kv, pending.zone_id);
@@ -9837,8 +9838,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${pending.record_id}`, {
       method: "PATCH",
       headers: hdr(accounts[pending.acc].token),
-      body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
-    });
+      body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }), signal: withTimeout() });
     const data = await res.json();
     if (data.success) {
       await invalidateCache(kv, pending.zone_id);
@@ -9918,8 +9918,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
           const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
             method: "PATCH",
             headers: hdr(accounts[res.acc].token),
-            body: JSON.stringify({ content: txt }),
-          });
+            body: JSON.stringify({ content: txt }), signal: withTimeout() });
           const d = await r.json();
           if (d.success) {
             okCount++;
@@ -9945,8 +9944,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records/${id}`, {
         method: "PATCH",
         headers: hdr(accounts[pending.acc].token),
-        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }),
-      });
+        body: JSON.stringify({ type: pending.new_type, content: txt, ttl: 1 }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) okCount++;
     }
@@ -10136,7 +10134,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     if (!reachable) {
       await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
       await send(`❌ به پنل وصل نشدم.\n\n🌐 مشکل از آدرس پنل است:\n• دامنه/آی‌پی را چک کن\n• پورت را چک کن (مثلاً :8000)\n• فایروال/فیلتر مسیر؟\n\nآدرس فعلی: ${code(pending.url)}\n\nاگر آدرس را عوض کردی از «➕ افزودن پنل» دوباره شروع کن؛ وگرنه رمز را دوباره بفرست تا دوباره امتحان کنم.`, [
-        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       return;
     }
@@ -10145,7 +10143,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     if (!ptok) {
       await kv.put(`pend:${chatId}`, JSON.stringify(pending), { expirationTtl: 600 });
       await send(`❌ آدرس پنل درسته و جواب می‌دهد، ولی ورود نشد.\n\n👤 مشکل از یوزرنیم/پسورد است (یوزرنیم فعلی: ${code(pending.username || "—")}).\n\nرمز درست را بفرست:`, [
-        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       return;
     }
@@ -10732,7 +10730,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       JSON.stringify({ type: "rem_abs_time", target: pending.target || null, text: pending.text || "", jy: pending.jy, jm: pending.jm, jd: n, mode: pending.mode || "" }),
       { expirationTtl: 900 }
     );
-    await send("🕒 ساعت را وارد کنید (مثلاً 14:30):", [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+    await send("🕒 ساعت را وارد کنید (مثلاً 14:30):", [[{ text: "🔙 بازگشت", callback_data: "remabs" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -10841,7 +10839,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   }
 
   // fallback: حالت‌هایی که دکمه می‌خواهند (نه متن) — متن را بی‌صدا قورت نده
-  await send("ℹ️ برای این مرحله از دکمه‌ها استفاده کنید (متن پذیرفته نیست).", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+  await send("ℹ️ برای این مرحله از دکمه‌ها استفاده کنید (متن پذیرفته نیست).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function handleCallback(cb, botToken, adminId, kv, env, depth) {
@@ -10939,6 +10937,24 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const isMain = chatId === adminId;
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
 
+  // 👆 قفل دابل‌تپ ۵ ثانیه‌ای: اکشن‌ها دوباره اجرا نشوند (ناوبری خالص مستثناست)
+  const TAP_SAFE_PRE = ["selp:", "bulkp:", "hubstatsp:", "czp:", "favpp:", "hzp:", "hzscp:", "hzss:", "lnp:", "lnscp:", "p:", "qanp:", "qnb:", "trazf:", "lbzp:", "ndexp:", "ndip:", "lbsm:", "permretry", "permback", "back", "menu", "noop",
+    // دکمه‌های چرخشی رکورد (نوع/TTL/پروکسی/مقدار/ترافیک): ضربه‌های پشت‌سرهم لازم دارند
+    "ct:", "ctt:", "et:", "ep:", "ev:", "rtraf:"];
+  const tapSafe = data === "menu" || data === "noop" || data === "back" || data === "permretry" || data === "permback" || NAV_REC_EQ.has(data) || NAV_REC_PRE.some((p) => data.startsWith(p)) || TAP_SAFE_PRE.some((p) => data.startsWith(p));
+  if (!tapSafe) {
+    try {
+      const lk = `taplck:${chatId}:${data}`;
+      const ts = Number((await kv.get(lk, "text")) || 0);
+      if (Date.now() - ts < 5000) {
+        try {
+          await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: "⏳ کمی صبر کن…", show_alert: false });
+        } catch (e) {}
+        return;
+      }
+      await kv.put(lk, String(Date.now()), { expirationTtl: 60 });
+    } catch (e) {}
+  }
   // 🔙 برگشت سراسری: به صفحه‌ای که این پیام از آن آمد (نه حدس ثابت)
   if (data === "back") {
     let hist = [];
@@ -10980,18 +10996,18 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
       await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
     } else if (data === "hubstats") {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await renderHubStats(edit, kv, 0);
     } else if (data.startsWith("hubstatsp:")) {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await renderHubStats(edit, kv, Number(data.split(":")[1]) || 0);
     } else if (data.startsWith("hubuser:")) {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const iid = data.slice(8, 72);
       if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
       await renderHubUser(edit, kv, iid);
     } else if (data.startsWith("hubmsgsend:")) {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const iid = data.slice(11, 75);
       if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
       let v = null;
@@ -11004,7 +11020,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         [{ text: "⬅️ انصراف", callback_data: `hubuser:${iid}` }],
       ]);
     } else if (data.startsWith("hubuserdel:")) {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const iid = data.slice(11, 75);
       if (!/^[A-Za-z0-9_-]{8,64}$/.test(iid)) return edit("❌ شناسه نامعتبر است.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
       try {
@@ -11015,7 +11031,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       } catch (e) {}
       await edit("🗑 کاربر از فهرست حذف شد.", [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }]]);
     } else if (data === "hubann") {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       let arr = [];
       try {
         arr = (await kv.get("hub_ann", "json")) || [];
@@ -11029,14 +11045,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         kb.push([{ text: `🗑 ${(a.id || "?").slice(0, 28)}`, callback_data: `hubanndel:${a.id}` }]);
       }
       kb.push([{ text: "➕ پیام جدید", callback_data: "hubannadd", style: "success" }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "settings" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(lines.join("\n").slice(0, 3500), kb);
     } else if (data === "hubannadd") {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hub_ann_new" }), { expirationTtl: 600 });
       await edit("📢 متن پیام همگانی را بفرست (زیر ۳۰۰۰ کاراکتر):", [[{ text: "⬅️ انصراف", callback_data: "hubann" }]]);
     } else if (data.startsWith("hubanndel:")) {
-      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const id = data.slice(10);
       let arr = [];
       try {
@@ -11087,7 +11103,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // مشتری: تأیید و پایان گفتگو
       const tid = data.slice(8);
       try { await kv.delete(`ct:${tid}`); } catch (e) {}
-      await edit("✅ گفتگو بسته شد. خوش باشی 👋", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await edit("✅ گفتگو بسته شد. خوش باشی 👋", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("annreply:")) {
       // ادمین: پاسخ به پیام همگانی سازنده (از همان کانال ارتباط با سازنده می‌رود)
       const id = data.slice(9);
@@ -11106,7 +11122,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         const a = await kv.get(`ann:${id}`, "json");
         orig = (a && a.text) || "";
       } catch (e) {}
-      await edit(`✅ تایید شد. ممنون 🙏${orig ? "\n\n—\n" + String(orig).slice(0, 2000) : ""}`, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await edit(`✅ تایید شد. ممنون 🙏${orig ? "\n\n—\n" + String(orig).slice(0, 2000) : ""}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "help") {
       // help: نمایش صفحهٔ راهنما
       await edit(helpText(), helpKeyboard());
@@ -11132,17 +11148,18 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین اضافه کند.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "admin_add" }), { expirationTtl: 600 });
       await edit("➕ شناسه عددی تلگرام ادمین جدید را بفرستید (می‌توانید با /myid در ربات خود ببینید):", [
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "⬅️ انصراف", callback_data: "admins_menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data === "admindel") {
       // admindel: انتخاب ادمین برای حذف | admindely:<id>: تأیید حذف
       if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین حذف کند.");
       const extra = admins.filter((id) => id !== adminId);
       if (extra.length === 0) return edit("📭 ادمین دیگری وجود ندارد.", [
-        [{ text: "🔙 بازگشت", callback_data: "admins_menu" }],
+        [{ text: "🔙 بازگشت", callback_data: "admins_menu" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       const kb = extra.map((id) => [{ text: `🗑 ${id}`, callback_data: `admindely:${id}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "admins_menu" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "admins_menu" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام ادمین حذف شود؟ (ادمین اصلی قابل حذف نیست)", kb);
     } else if (data.startsWith("admindely:")) {
       if (!isMain) return edit("❌ فقط ادمین اصلی.");
@@ -11155,15 +11172,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // addzone: انتخاب اکانت برای ثبت دامنهٔ جدید | azacc:<accIndex>: انتخاب همان اکانت
       await edit("🌐 افزودن دامنه جدید\n\nدامنه را در کدام اکانت کلودفلر ثبت کنید؟", [
         ...accounts.map((a, i) => [{ text: a.name, callback_data: `azacc:${i}` }]),
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("azacc:")) {
       const i = Number(data.slice(6));
       const acc = accounts[i];
       if (!acc) return edit("❌ اکانت پیدا نشد.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "addzone_name", acc: i }), { expirationTtl: 600 });
-      await edit(`🌐 نام دامنه جدید را بفرستید (مثلاً example.com) — در اکانت «${acc.name}» ثبت می‌شود:`, [
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+      await edit(`🌐 نام دامنه جدید را بفرستید (مثلاً example.com) — در اکانت «${acc.name}» ثبت می\u200cشود:`, [
+        [{ text: "⬅️ انصراف", callback_data: "zones" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data === "zones") {
       // zones: لیست دامنه‌های کلودفلر (همهٔ اکانت‌ها)
@@ -11176,14 +11194,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "search") {
       // search: جست‌وجوی سراسری (آی‌پی یا نام) — کاربر عبارت را در چت می‌فرستد
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search_any" }), { expirationTtl: 600 });
-      await edit(SEARCH_PROMPT_TEXT, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      await edit(SEARCH_PROMPT_TEXT, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("sf:")) {
       // sf:<name|content>: انتخاب میدان جست‌وجو (نام دامنه یا مقدار/IP)
       const field = data.slice(3);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "search", field }), { expirationTtl: 600 });
       await edit(
         field === "name" ? "🔤 نام دامنه یا بخشی از آن را بفرستید:" : "🌐 IP یا بخشی از مقدار را بفرستید:",
-        [[{ text: "🔙 بازگشت", callback_data: "menu" }]]
+        [[{ text: "🏠 خانه", callback_data: "menu" }]]
       );
     } else if (data === "accounts") {
       // accounts: نمایش اکانت‌های کلودفلر | accadd: افزودن اکانت کلودفلر
@@ -11191,25 +11209,25 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "accadd") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "acc_name" }), { expirationTtl: 600 });
       await edit("👤 افزودن اکانت کلودفلر\n\nنام دلخواه اکانت را بفرستید (مثلاً: اصلی، بکاپ):", [
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data === "accdel") {
-      if (accounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (accounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = [];
       for (let i = 0; i < accounts.length; i++) kb.push([{ text: `☁️ 🗑 ${accounts[i].name}`, callback_data: `dacc:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "accounts" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "accounts" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام اکانت حذف شود؟", kb);
     } else if (data.startsWith("dacc:")) {
       const idx = Number(data.slice(5));
       const acc = accounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "accounts" }]]);
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "accounts" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`⚠️ مطمئنید اکانت «${acc.name}» حذف شود؟\nتوکن: ${maskToken(acc.token)}`, [
         [{ text: "✅ بله، حذف کن", callback_data: `daccy:${idx}` }, { text: "❌ انصراف", callback_data: "accounts" }],
       ]);
     } else if (data.startsWith("daccy:")) {
       const idx = Number(data.slice(6));
       const acc = accounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "accounts" }]]);
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "accounts" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       accounts.splice(idx, 1);
       await kvPutCached(kv, "accounts", JSON.stringify(accounts));
       await edit(`✅ اکانت «${acc.name}» حذف شد.`, [
@@ -11223,7 +11241,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       for (const z of zones) {
         allItems.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, cb: `arz:${z._acc}:${z.id}` });
       }
-      if (allItems.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (allItems.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = [];
       for (let i = 0; i < allItems.length; i += 2) {
         const row = [{ text: allItems[i].text, callback_data: allItems[i].cb }];
@@ -11231,7 +11249,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         else row.push(EMPTY_BTN);
         kb.push(row);
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+      kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
       await edit("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
     } else if (data.startsWith("arz:")) {
       const parts = data.split(":");
@@ -11247,7 +11265,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("addz:")) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       await edit(`➕ ساخت رکورد در ${zone.name}\n\nنوع رکورد را انتخاب کنید:`, typeKeyboard(token, 0));
     } else if (data.startsWith("at:")) {
@@ -11255,7 +11273,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const rtype = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const arBack = session.via === "addrec" ? `arz:${session.acc}:${session.zone_id}` : `rback:${token}`;
       await kv.put(
         `pend:${chatId}`,
@@ -11304,7 +11322,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (page >= pages) page = pages - 1;
       const slice = items.slice(page * CZR_PAGE_SIZE, page * CZR_PAGE_SIZE + CZR_PAGE_SIZE);
       const kb = [];
-      kb.push([{ text: "🔙 بازگشت", callback_data: `czr:${zone.name}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `czr:${zone.name}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       for (const row of grid2(slice)) kb.push(row);
       const nav = [];
       nav.push(page > 0 ? { text: "◀️", callback_data: `cz:${accIndex}:${zoneId}:${page - 1}` } : EMPTY_BTN);
@@ -11312,7 +11330,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       nav.push(page < pages - 1 ? { text: "▶️", callback_data: `cz:${accIndex}:${zoneId}:${page + 1}` } : EMPTY_BTN);
       kb.push(nav);
       kb.push([{ text: "⌨️ ورود دستی دامنه", callback_data: "czman" }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "czback" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "czback" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`🔤 ساب‌دامنه‌های «${zone.name}»:\n\nروی یکی کلیک کنید تا به‌عنوان هدف CNAME استفاده شود:`, kb);
     } else if (data.startsWith("czp:")) {
       const rest = data.slice(4);
@@ -11335,19 +11353,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zsearch:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zoneName = session.zone_name;
       await edit(`🔍 جستجو در ${zoneName}\n\nبر اساس چه چیزی جستجو کنیم؟`, [
         [{ text: "🔤 بر اساس نام/دامنه", callback_data: `zsf:${token}:name` }],
         [{ text: "🌐 بر اساس IP/مقدار", callback_data: `zsf:${token}:content` }],
-        [{ text: "🔙 بازگشت", callback_data: "back" }],
+        [{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("zsf:")) {
       const parts = data.split(":");
       const token = parts[1];
       const field = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(
         `pend:${chatId}`,
         JSON.stringify({ type: "search_zone", field, zone_id: session.zone_id, acc: session.acc, provider: session.provider || "cloudflare", domain: session.domain, stok: token }),
@@ -11360,7 +11378,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zset:")) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       await edit(`⚙️ تنظیمات ${zone.name}:\n\nوضعیت: ${zone.status}`, [
         ...grid2([
@@ -11373,29 +11391,29 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           { text: "✉️ ایمیل (فوروارد)", callback_data: `zmail:${token}` },
           { text: zone.status === "active" ? "⏸️ توقف دامنه" : "▶️ فعال‌سازی دامنه", callback_data: `zpause:${token}` },
         ]),
-        [{ text: "🔙 بازگشت", callback_data: `rback:${token}` }],
+        [{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("zssl:")) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await renderSettingsGroup(token, session, accounts, edit, "🔒 SSL / TLS", SSL_KEYS);
     } else if (data.startsWith("zsec:")) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await renderSettingsGroup(token, session, accounts, edit, "🛡 امنیت", SEC_KEYS);
     } else if (data.startsWith("zperf:")) {
       const token = data.slice(6);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await renderSettingsGroup(token, session, accounts, edit, "⚡ کارایی", PERF_KEYS);
     } else if (data.startsWith("ztog:")) {
       const parts = data.split(":");
       const token = parts[1];
       const setting = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const map = await getSettingsMap(zone, accounts);
       const cur = map[setting];
@@ -11411,7 +11429,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const setting = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const map = await getSettingsMap(zone, accounts);
       const info = SETTINGS_INFO[setting];
@@ -11421,7 +11439,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         callback_data: `zvset:${token}:${setting}:${v}`,
       }));
       const kb = grid2(buttons);
-      kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`🔧 ${info.label}:\n\nمقدار فعلی: ${info.values[cur] || cur}`, kb);
     } else if (data.startsWith("zvset:")) {
       const parts = data.split(":");
@@ -11429,7 +11447,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const setting = parts[2];
       const value = parts[3];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const d = await setSetting(zone, accounts, setting, value);
       if (d.success) {
@@ -11440,7 +11458,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zd:")) {
       const token = data.slice(3);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const text =
         `ℹ️ ${zone.name}\n\n` +
@@ -11449,20 +11467,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         `NS ها:\n${(zone.name_servers || []).join("\n")}\n` +
         `ایجاد شده: ${new Date(zone.created_on).toLocaleDateString("fa-IR")}\n` +
         `SSL: ${zone.ssl ? zone.ssl.status : "؟"}`;
-      await edit(text, [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }]]);
+      await edit(text, [[{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("zpurge:")) {
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = await fetch(`${CF_API}/zones/${session.zone_id}/purge_cache`, {
         method: "POST",
         headers: hdr(accounts[session.acc].token),
-        body: JSON.stringify({ purge_everything: true }),
-      });
+        body: JSON.stringify({ purge_everything: true }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) {
         await edit(`✅ کش ${session.zone_name} به طور کامل پاک شد.`, [
-          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }],
+          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
         await edit("❌ خطا:\n" + cfErrText(d));
@@ -11470,7 +11487,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zdev:")) {
       const token = data.slice(5);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       let cur = "";
@@ -11486,12 +11503,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const res = await fetch(`${CF_API}/zones/${session.zone_id}/settings/development_mode`, {
         method: "PATCH",
         headers: hdr(accounts[session.acc].token),
-        body: JSON.stringify({ value: newMode }),
-      });
+        body: JSON.stringify({ value: newMode }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) {
         await edit(`✅ حالت توسعه ${newMode === "on" ? "روشن" : "خاموش"} شد.`, [
-          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }],
+          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
         await edit("❌ خطا:\n" + cfErrText(d));
@@ -11502,7 +11518,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmailon:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await edit(
         `✉️ ایمیل روی ${session.zone_name} فعال شود؟\n\nرکوردهای MX/SPF لازم خودکار ساخته می‌شوند.\n⚠️ اگر الان سرویس ایمیل دیگری (مثل گوگل) روی این دامنه داری، خراب می‌شود.`,
         [
@@ -11512,7 +11528,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmailony:")) {
       const token = data.slice(9);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       let msg = "";
       try {
@@ -11529,7 +11545,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmailadd:")) {
       const token = data.slice(9);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "mail_rule_addr", token }), { expirationTtl: 600 });
       await edit(`✉️ آدرس جدید در ${session.zone_name} را بفرستید (مثلاً info یا info@damane.com):`, [
         [{ text: "⬅️ انصراف", callback_data: `zmail:${token}` }],
@@ -11539,14 +11555,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const di = Number(parts[2]);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const addrInfo = await kv.get(`zmailaddr:${chatId}`, "json");
       if (!addrInfo || !addrInfo.addr) return edit("⏳ آدرس انتخاب نشده. از اول تلاش کن.", [[{ text: "✉️ ایمیل", callback_data: `zmail:${token}` }]]);
       const dd = await cfMailDests(accounts, session);
-      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const verified = cfSortDestinations(dd.list).filter((x) => x.verified);
       const dest = verified[di];
-      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[session.acc].token;
       let msg = "";
       try {
@@ -11571,15 +11587,15 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmaildests:")) {
       const token = data.slice(11);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const dd = await cfMailDests(accounts, session);
-      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const lines = [`📧 مقصدهای اکانت (${dd.list.length}):`, ""];
       for (const d of dd.list.slice(0, 15)) lines.push(`• ${d.email} — ${d.verified ? "✅ تأییدشده" : "⏳ در انتظار تأیید"}`);
       if (dd.list.length > 15) lines.push(`… و ${dd.list.length - 15} مورد دیگر`);
       await edit(lines.join("\n"), [
         [{ text: "➕ مقصد جدید", callback_data: `zmaildestnew2:${token}` }],
-        [{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }],
+        [{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("zmaildel:")) {
       const m = data.match(/^zmaildel:([^:]+):(.+)$/);
@@ -11591,7 +11607,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const m = data.match(/^zmaildely:([^:]+):(.+)$/);
       if (!m) return edit("❌ درخواست نامعتبر است.");
       const session = await kv.get(`s:${m[1]}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       try {
         const r = await cfEmailSend(tok, "DELETE", `/zones/${session.zone_id}/email/routing/rules/${m[2]}`, null);
@@ -11602,7 +11618,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmailcatch:")) {
       const token = data.slice(11);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       let ca = null;
       try {
@@ -11625,11 +11641,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const di = Number(parts[2]);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const dd = await cfMailDests(accounts, session);
-      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const dest = cfSortDestinations(dd.list).filter((x) => x.verified)[di];
-      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }]]);
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `zmail:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[session.acc].token;
       try {
         const r = await cfEmailSend(tok, "PUT", `/zones/${session.zone_id}/email/routing/rules/catch_all`, {
@@ -11645,7 +11661,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("zmailcoff:")) {
       const token = data.slice(11);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       try {
         const wname = (env && env.WORKER_NAME) || "";
@@ -11677,7 +11693,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const m = data.match(/^zmailvdel:([^:]+):(.+)$/);
       if (!m) return edit("❌ درخواست نامعتبر است.");
       const session = await kv.get(`s:${m[1]}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await inboxDel(kv, session.zone_name, m[2]);
       await edit("🗑 ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `zmailinbox:${m[1]}` }]]);
       await sleep(800);
@@ -11686,7 +11702,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // دریافت در ربات برای کل دامنه (بدون تایپ آدرس): catch-all به ورکر وصل می‌شود.
       const token = data.slice(10);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const wname = (env && env.WORKER_NAME) || "";
       if (!wname) {
         return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [
@@ -11718,23 +11734,22 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // ساخت قانون worker (رزرو؛ جریان اصلی از pend می‌آید)
       const token = data.slice(9);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await renderEmailHome(edit, kv, accounts, token);
     } else if (data.startsWith("zpause:")) {
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const newPaused = zone.status === "active";
       const res = await fetch(`${CF_API}/zones/${session.zone_id}`, {
         method: "PATCH",
         headers: hdr(accounts[session.acc].token),
-        body: JSON.stringify({ paused: newPaused }),
-      });
+        body: JSON.stringify({ paused: newPaused }), signal: withTimeout() });
       const d = await res.json();
       if (d.success) {
         await edit(`✅ دامنه ${newPaused ? "متوقف" : "فعال"} شد.`, [
-          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }],
+          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
         await edit("❌ خطا:\n" + cfErrText(d));
@@ -11756,7 +11771,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         const kb = [
           [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
           [{ text: "⚙️ تنظیمات", callback_data: `zset:${token}` }],
-          [{ text: "🔙 بازگشت", callback_data: zback }],
+          [{ text: "🔙 بازگشت", callback_data: zback }, { text: "🏠 خانه", callback_data: "menu" }],
         ];
         await edit(`📭 رکوردی برای ${zone.name} یافت نشد.`, kb);
       } else {
@@ -11767,7 +11782,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const page = Number(parts[2]);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده. دوباره /zones را بزنید.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره /zones را بزنید.");
       session.page = page;
       await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -11776,7 +11791,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("rback:")) {
       const token = data.slice(6);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const rpage = Number(session.page) || 0;
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
@@ -11793,7 +11808,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = rp[0];
       const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -11801,12 +11816,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const t = await fetchTrafficCounts(tok, session.zone_id, days);
       if (t.needPerm || t.error)
         return edit("❌ " + (t.needPerm ? "دسترسی Analytics نیست." : "خطا در آمار:\n" + t.error), [
-          [{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }],
+          [{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       const records = await getRecords(zone, accounts, kv);
       const zeros = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !(t.counts[String(r.name || "").toLowerCase()] || 0));
       if (!zeros.length)
-        return edit("✅ چیزی برای حذف نیست؛ همه ساب‌ها ترافیک دارند.", [[{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }]]);
+        return edit("✅ چیزی برای حذف نیست؛ همه ساب‌ها ترافیک دارند.", [[{ text: "🔙 بازگشت", callback_data: `ztraf:${token}:${days}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const names = zeros.map((r) => (r.name === zone.name ? "@" : String(r.name).slice(0, -(zone.name.length + 1))) + ` (${r.type})`);
       const shown = names.slice(0, 30);
       await edit(
@@ -11818,11 +11833,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = rp[0];
       const days = TRAF_DAYS.includes(Number(rp[1])) ? Number(rp[1]) : 7;
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.");
       const t = await fetchTrafficCounts(tok, session.zone_id, days);
-      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }]]);
+      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 بازگشت", callback_data: `p:${token}:0` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -11861,7 +11876,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`🗑 همهٔ ساب‌های ${code(zone.name)} با ترافیک صفر حذف شوند؟\n\n⚠️ ساب کم‌استفاده هم صفر حساب می‌شود؛ مطمئنی؟`, [
         [{ text: "✅ بله، حذف کن", callback_data: `trazdely:${acc}:${zoneId}` }, { text: "❌ انصراف", callback_data: `traz:${acc}:${zoneId}:0` }],
       ]);
@@ -11870,11 +11885,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }]]);
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const t = await fetchTrafficCounts(tok, zoneId);
-      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 بازگشت", callback_data: "traf" }]]);
+      if (t.needPerm || t.error) return edit("❌ خطا در آمار.", [[{ text: "🔙 بازگشت", callback_data: "traf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const records = await getRecords(zone, accounts, kv);
       const zeros = records.filter((r) => ["A", "AAAA", "CNAME"].includes(r.type) && !(t.counts[String(r.name || "").toLowerCase()] || 0));
       let ok = 0;
@@ -11920,7 +11935,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_new_name", acc, zoneId, zoneName: zone.name, msgId: messageId }), { expirationTtl: 600 });
       await edit(`➕ ساب‌دامین جدید لود بالانسر برای ${code(zone.name)} را بفرستید (مثلاً ${code("lb." + zone.name)}):`, [
         [{ text: "⬅️ انصراف", callback_data: `lbz:${acc}:${zoneId}` }],
@@ -11930,7 +11945,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       let name = "";
       if (/^\d+$/.test(String(parts[3] || "")) && parts.length === 4) {
         try {
@@ -11941,9 +11956,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       } else {
         name = parts.slice(3).join(":");
       }
-      if (!name) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }]]);
+      if (!name) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }]]);
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "lb" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const sessionToken = makeToken();
       await kv.put(`s:${sessionToken}`, JSON.stringify({ zone_id: zoneId, zone_name: zone.name, acc, page: 0, zback: `lbz:${acc}:${zoneId}` }), { expirationTtl: 86400 });
       const gid = makeToken();
@@ -11953,7 +11968,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("lbzback:")) {
       const gid = data.slice(8);
       const g = await kv.get(`lbg:${gid}`, "json");
-      if (!g || !g.backCb) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!g || !g.backCb) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const parts = g.backCb.split(":");
       if (parts[0] === "lbz") {
         await renderLbZonesList(0, "all", edit, kv, accounts, env);
@@ -11963,7 +11978,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("selmode:")) {
       const token = data.slice(8);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const page = Number(session.page) || 0;
       await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids: [], page }), { expirationTtl: 3600 });
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -11974,7 +11989,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const selState = (await kv.get(`sel:${chatId}`, "json")) || { token, ids: [], page: 0 };
-      if (selState.token !== token) return edit("⏳ نشست منقضی شده.");
+      if (selState.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const ids = selState.ids || [];
       const idx = ids.indexOf(recordId);
       if (idx >= 0) ids.splice(idx, 1);
@@ -11982,7 +11997,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const page = Number(selState.page) || 0;
       await kv.put(`sel:${chatId}`, JSON.stringify({ token, ids, page }), { expirationTtl: 3600 });
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -11995,7 +12010,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       selState.page = page;
       await kv.put(`sel:${chatId}`, JSON.stringify(selState), { expirationTtl: 3600 });
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -12006,7 +12021,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const page = selState && Number(selState.page) ? Number(selState.page) : 0;
       await kv.delete(`sel:${chatId}`);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -12015,9 +12030,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // بازگشت به حالت انتخاب بدون پاک‌کردن تیک‌ها (برای انصراف از تأیید حذف/ویرایش)
       const token = data.slice(8);
       const selState = await kv.get(`sel:${chatId}`, "json");
-      if (!selState || selState.token !== token) return edit("⏳ نشست منقضی شده.");
+      if (!selState || selState.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
@@ -12027,7 +12042,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const selState = await kv.get(`sel:${chatId}`, "json");
       if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const favs = await getFavs(kv, chatId);
       let added = 0;
       for (const rid of selState.ids) {
@@ -12052,15 +12067,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("bulkdely:")) {
       const token = data.slice(9);
       const selState = await kv.get(`sel:${chatId}`, "json");
-      if (!selState || !selState.ids) return edit("⏳ نشست منقضی شده.");
+      if (!selState || !selState.ids) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       let okCount = 0;
       for (const id of selState.ids) {
         const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${id}`, {
           method: "DELETE",
-          headers: hdr(accounts[session.acc].token),
-        });
+          headers: hdr(accounts[session.acc].token), signal: withTimeout() });
         const d = await del.json();
         if (d.success) okCount++;
       }
@@ -12074,7 +12088,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const selState = await kv.get(`sel:${chatId}`, "json");
       if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(
         `pend:${chatId}`,
         JSON.stringify({ type: "bulk_edit", zone_id: session.zone_id, acc: session.acc, ids: selState.ids, token, msgId: messageId }),
@@ -12098,7 +12112,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const selState = await kv.get(`sel:${chatId}`, "json");
       if (!selState || !selState.ids || selState.ids.length === 0) return edit("⚠️ چیزی انتخاب نشده.");
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(
         `pend:${chatId}`,
         JSON.stringify({ type: "bulk_type", zone_id: session.zone_id, acc: session.acc, ids: selState.ids, new_type: newType, token, msgId: messageId }),
@@ -12112,7 +12126,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       // نتیجهٔ آروانی: رفتن به جزئیات رکورد آروان
       if (res.provider === "arvan") {
@@ -12131,14 +12145,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           { text: "⚙️ تنظیمات لود بالانسر", callback_data: `selbs:${token}:${idx}`, style: "success" },
         ]);
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: `sr:${token}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `sr:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`✏️ ${res.record.type}-${code(res.record.name)} (${code(res.zone_name)})`, kb);
     } else if (data.startsWith("sev:")) {
       const parts = data.split(":");
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       await kv.put(
         `pend:${chatId}`,
@@ -12153,15 +12167,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       const record = res.record;
       {
         const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${record.id}`, {
           method: "PATCH",
           headers: hdr(accounts[res.acc].token),
-          body: JSON.stringify({ proxied: !record.proxied }),
-        });
+          body: JSON.stringify({ proxied: !record.proxied }), signal: withTimeout() });
         const d = await r.json();
         if (d.success) {
           await invalidateCache(kv, res.zone_id);
@@ -12181,12 +12194,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       const kb = RECORD_TYPES.filter((t) => t !== res.record.type).map((t) => [
         { text: `به ${t}`, callback_data: `sett:${token}:${idx}:${t}` },
       ]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: `sr:${token}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `sr:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`🔄 تبدیل نوع ${res.record.name} از ${res.record.type} به:`, kb);
     } else if (data.startsWith("sett:")) {
       const parts = data.split(":");
@@ -12194,7 +12207,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const idx = Number(parts[2]);
       const newType = parts[3];
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       await kv.put(
         `pend:${chatId}`,
@@ -12210,7 +12223,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const stored = await kv.get(`sr:${srt}`, "json");
       const stok = stored && stored.stok;
       const session = stok ? await kv.get(`s:${stok}`, "json") : null;
-      if (!stored || !session) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const field = stored.field === "content" ? "content" : "name";
       await kv.put(
         `pend:${chatId}`,
@@ -12223,14 +12236,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("sr:")) {
       const token = data.slice(3);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored) return edit("⏳ نشست منقضی شده.");
+      if (!stored) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await renderSearchResults(token, stored.results, stored.query, stored.field, edit);
     } else if (data.startsWith("sd:")) {
       const parts = data.split(":");
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       // نتیجهٔ آروانی: تأیید حذف در جریان آروان
       if (res.provider === "arvan") {
@@ -12248,14 +12261,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${token}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       let delData;
       {
         const del = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
           method: "DELETE",
-          headers: hdr(accounts[res.acc].token),
-        });
+          headers: hdr(accounts[res.acc].token), signal: withTimeout() });
         delData = await del.json();
       }
       if (delData.success) {
@@ -12285,16 +12297,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const tok = accounts[session.acc] && accounts[session.acc].token;
       if (!tok) return edit("❌ اکانت پیدا نشد.");
       const t = await fetchTrafficCounts(tok, session.zone_id, 1);
       if (t.needPerm || t.error)
         return edit("❌ " + (t.needPerm ? "دسترسی Analytics نیست (Zone → Analytics → Read)." : "خطا در آمار:\n" + t.error), [
-          [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }],
+          [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       const rec = await fetchRecordForSession(kv, accounts, session, recordId, env);
-      if (!rec) return edit("❌ رکورد پیدا نشد.");
+      if (!rec) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
       const nn = t.counts[String(rec.name || "").toLowerCase()] || 0;
       try {
         await kv.put(`rtraf:${token}:${recordId}`, JSON.stringify({ n: nn }), { expirationTtl: 600 });
@@ -12306,12 +12318,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
-        headers: hdr(accounts[session.acc].token),
-      });
+        headers: hdr(accounts[session.acc].token), signal: withTimeout() });
       const recData = await recRes.json();
-      if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+      if (!recData.success) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
       const record = recData.result;
       const ni = TTL_CYCLE.indexOf(Number(record.ttl));
       const nextTtl = TTL_CYCLE[(ni + 1) % TTL_CYCLE.length] ?? 1;
@@ -12319,14 +12330,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "PATCH",
           headers: hdr(accounts[session.acc].token),
-          body: JSON.stringify({ ttl: nextTtl }),
-        });
+          body: JSON.stringify({ ttl: nextTtl }), signal: withTimeout() });
         const dd = await res.json();
         if (dd.success) {
           await invalidateCache(kv, session.zone_id);
           await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
         } else {
-          await edit("❌ خطا:\n" + cfErrText(dd), [[{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }]]);
+          await edit("❌ خطا:\n" + cfErrText(dd), [[{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
         }
       }
     } else if (data.startsWith("ev:")) {
@@ -12335,7 +12345,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const recordId = parts[2];
       const field = "edit_value";
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(
         `pend:${chatId}`,
         JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
@@ -12346,7 +12356,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.delete(`pend:${chatId}`);
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const rp = Number(session.page) || 0;
       {
         const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -12358,12 +12368,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
-        headers: hdr(accounts[session.acc].token),
-      });
+        headers: hdr(accounts[session.acc].token), signal: withTimeout() });
       const recData = await recRes.json();
-      if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+      if (!recData.success) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
       const record = recData.result;
       if (record.type === "A" || record.type === "CNAME") {
         // جابه‌جایی بین A و CNAME: هرجا مقدار خودکار قابل تبدیل است بدون پرسیدن
@@ -12406,15 +12415,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "PUT",
           headers: hdr(accounts[session.acc].token),
-          body: JSON.stringify({ type: newType, name: record.name, content: newContent, ttl: record.ttl, proxied: record.proxied }),
-        });
+          body: JSON.stringify({ type: newType, name: record.name, content: newContent, ttl: record.ttl, proxied: record.proxied }), signal: withTimeout() });
         const dd = await res.json();
         if (dd.success) {
           await invalidateCache(kv, session.zone_id);
           await redrawRecordDetailNav(kv, accounts, botToken, chatId, messageId, env);
         } else {
           await edit(`❌ تبدیل به ${newType} نشد:\n` + cfErrText(dd), [
-            [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }],
+            [{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }, { text: "🏠 خانه", callback_data: "menu" }],
           ]);
         }
         return;
@@ -12422,7 +12430,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const kb = RECORD_TYPES.filter((t) => t !== record.type).map((t) => [
         { text: `به ${t}`, callback_data: `ctt:${token}:${recordId}:${t}` },
       ]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `e:${token}:${recordId}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`🔄 تبدیل نوع ${record.name} از ${record.type} به:`, kb);
     } else if (data.startsWith("ctt:")) {
       const parts = data.split(":");
@@ -12430,7 +12438,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const recordId = parts[2];
       const newType = parts[3];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       await kv.put(
         `pend:${chatId}`,
         JSON.stringify({ type: "change_type", new_type: newType, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId }),
@@ -12444,22 +12452,20 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       let record;
       {
         const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
-          headers: hdr(accounts[session.acc].token),
-        });
+          headers: hdr(accounts[session.acc].token), signal: withTimeout() });
         const recData = await recRes.json();
-        if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+        if (!recData.success) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
         record = recData.result;
       }
       {
         const res = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "PATCH",
           headers: hdr(accounts[session.acc].token),
-          body: JSON.stringify({ proxied: !record.proxied }),
-        });
+          body: JSON.stringify({ proxied: !record.proxied }), signal: withTimeout() });
         const data = await res.json();
         if (data.success) {
           await invalidateCache(kv, session.zone_id);
@@ -12473,14 +12479,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       let record;
       {
         const recRes = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
-          headers: hdr(accounts[session.acc].token),
-        });
+          headers: hdr(accounts[session.acc].token), signal: withTimeout() });
         const recData = await recRes.json();
-        if (!recData.success) return edit("❌ رکورد پیدا نشد.");
+        if (!recData.success) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
         record = recData.result;
       }
       await edit(`⚠️ مطمئنید رکورد زیر حذف شود؟\n\n${record.type} — ${record.name} → ${record.content}`, [
@@ -12491,7 +12496,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = parts[1];
       const recordId = parts[2];
       const session = await kv.get(`s:${token}`, "json");
-      if (!session) return edit("⏳ نشست منقضی شده.");
+      if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       {
         const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${recordId}`, {
           method: "DELETE",
@@ -12519,11 +12524,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("lba:")) {
       const parts = data.split(":");
       const ctx = await lbLoadById(kv, accounts, parts[1], parts[2], env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await lbPromptAdd(kv, edit, chatId, messageId, parts[1], ctx.name, lbTypeOf(ctx.rec), `e:${parts[1]}:${parts[2]}`);
     } else if (data.startsWith("lbadd:")) {
       const ctx = await lbLoadByGid(kv, accounts, data.slice(6), env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const type0 = ctx.group.length ? lbTypeOf(ctx.group[0]) : (ctx.cfg.disabled[0] ? String(ctx.cfg.disabled[0].type).toUpperCase() : "A");
       const extra = (!ctx.token && ctx.session) ? { acc: ctx.session.acc, zoneId: ctx.session.zone_id } : {};
       await lbPromptAdd(kv, edit, chatId, messageId, ctx.token || "", ctx.name, type0, `lbsr:${ctx.gid}`, extra);
@@ -12532,9 +12537,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_weight", gid, idx, msgId: messageId }), { expirationTtl: 600 });
       await edit(`⚖️ وزن جدید برای ${code(e.content)} را بفرستید (عدد ۰ یا بیشتر):`, [
         [{ text: "⬅️ انصراف", callback_data: `lbsr:${gid}` }],
@@ -12544,9 +12549,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`${e.on ? "⏸ این آی‌پی از لود بالانسر حذف (غیرفعال) شود؟" : "▶️ این آی‌پی به لود بالانسر اضافه (فعال) شود؟"}\n\n${code(e.content)}`, [
         [{ text: "✅ بله", callback_data: `lbtc:${gid}:${idx}` }, { text: "❌ انصراف", callback_data: `lbsr:${gid}` }],
       ]);
@@ -12555,9 +12560,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       let ok = false;
       let errText = "";
       if (e.on) {
@@ -12572,7 +12577,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           if (!ok) errText = cfErrText(d);
           if (ok) await invalidateCache(kv, ctx.session.zone_id);
         }
-        if (!ok) return edit("❌ خطا در غیرفعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+        if (!ok) return edit("❌ خطا در غیرفعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
         ctx.cfg.disabled.push({ content: e.content, type: e.type, ttl: e.ttl, proxied: e.proxied });
       } else {
         const ref = ctx.group[0] || {};
@@ -12590,7 +12595,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           if (!ok) errText = cfErrText(d);
           if (ok) await invalidateCache(kv, ctx.session.zone_id);
         }
-        if (!ok) return edit("❌ خطا در فعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }]]);
+        if (!ok) return edit("❌ خطا در فعال‌سازی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsr:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
         ctx.cfg.disabled = ctx.cfg.disabled.filter((d) => String(d.content) !== e.content);
       }
       await saveLbCfg(kv, ctx.key, ctx.cfg);
@@ -12603,9 +12608,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e || !e.on) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+      if (!e || !e.on) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "lb_spare", gid, idx, msgId: messageId }), { expirationTtl: 600 });
       await edit(`🛟 زاپاس ${code(e.content)} را بفرستید:\n\nآی‌پی IPv4/IPv6 یا دامنه (CNAME رزرو). اگر فیلتر شد، با یک دکمه جایگزین می‌شود:`, [
         [{ text: "⬅️ انصراف", callback_data: `lbsm:${gid}:${idx}` }],
@@ -12615,9 +12620,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
-      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+      if (!e) return edit("❌ مورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       if (ctx.cfg.spares) delete ctx.cfg.spares[e.content];
       await saveLbCfg(kv, ctx.key, ctx.cfg);
       await renderLbSpareMenu(kv, accounts, edit, gid, idx, env);
@@ -12626,13 +12631,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
       const sp = e && e.on ? lbSpareOf(ctx.cfg, e.content) : null;
-      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
-      if (!e.id) return edit("❌ رکورد فعال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      if (!e.id) return edit("❌ رکورد فعال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       if (ctx.group.some((r) => String(r.content) === sp.content) || (ctx.cfg.disabled || []).some((d) => String(d.content) === sp.content)) {
-        return edit(`ℹ️ ${code(sp.content)} از قبل در لود بالانسر هست؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: `lbsm:${gid}:${idx}` }]]);
+        return edit(`ℹ️ ${code(sp.content)} از قبل در لود بالانسر هست؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: `lbsm:${gid}:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
       let ok = false;
       let errText = "";
@@ -12655,7 +12660,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       } catch (err) {
         errText = String((err && err.message) || err).slice(0, 150);
       }
-      if (!ok) return edit("❌ خطا در جایگزینی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsm:${gid}:${idx}` }]]);
+      if (!ok) return edit("❌ خطا در جایگزینی:\n" + errText, [[{ text: "🔙 بازگشت", callback_data: `lbsm:${gid}:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       if (ctx.cfg.weights[e.content] != null) {
         ctx.cfg.weights[sp.content] = ctx.cfg.weights[e.content];
         delete ctx.cfg.weights[e.content];
@@ -12671,10 +12676,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const idx = Number(parts[2]);
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const e = lbEntriesOf(ctx.group, ctx.cfg)[idx];
       const sp = e && e.on ? lbSpareOf(ctx.cfg, e.content) : null;
-      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }]]);
+      if (!e || !sp) return edit("❌ زاپاسی برای این ورودی نیست.", [[{ text: "🔙 بازگشت", callback_data: `lbsh:${gid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`🔄 رکورد DNS با زاپاس جایگزین شود؟\n\n${code(e.content)} (${e.type}) → ${code(sp.content)} (${sp.type})`, [
         [{ text: "✅ بله، جایگزین کن", callback_data: `lbsgoc:${gid}:${idx}` }, { text: "❌ انصراف", callback_data: `lbsm:${gid}:${idx}` }],
       ]);
@@ -12683,7 +12688,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const gid = parts[1];
       const want = parts[2] === "on";
       const ctx = await lbLoadByGid(kv, accounts, gid, env);
-      if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+      if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       let ok = 0;
       let fail = 0;
       for (const r of ctx.group) {
@@ -12709,14 +12714,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const srToken = parts[1];
       const idx = Number(parts[2]);
       const stored = await kv.get(`sr:${srToken}`, "json");
-      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+      if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const res = stored.results[idx];
       const stoken = makeToken();
       await kv.put(`s:${stoken}`, JSON.stringify({ zone_id: res.zone_id, zone_name: res.zone_name, acc: res.acc, provider: res.provider, domain: res.domain, zback: "qnb:" + srToken }), { expirationTtl: 86400 });
       if (isAdd) {
         await kv.put(`dd:${chatId}:${messageId}`, JSON.stringify({ token: stoken, recordId: res.record.id, backCb: `sr:${srToken}` }), { expirationTtl: 86400 });
         const ctx = await lbLoadById(kv, accounts, stoken, res.record.id, env);
-        if (ctx.error) return edit(ctx.error, [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+        if (ctx.error) return edit(ctx.error, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
         await lbPromptAdd(kv, edit, chatId, messageId, stoken, ctx.name, lbTypeOf(ctx.rec), `sr:${srToken}`);
       } else {
         await lbOpenSettings(kv, accounts, edit, chatId, messageId, stoken, res.record.id, env);
@@ -12736,10 +12741,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const panels = await getPanels(kv);
       if (!panels.length) return edit("📭 پنلی ثبت نشده.", [
         [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
-        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       const kb = panels.map((p, i) => [{ text: `✏️ ${p.name}`, callback_data: `pnle:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("کدام پنل را ویرایش کنم؟", kb);
     } else if (data.startsWith("pnle:")) {
       // منوی ویرایش یک پنل مشخص
@@ -12757,7 +12762,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(lines.join("\n"), [
         [{ text: "✏️ نام", callback_data: `pnleN:${i}` }, { text: "🌐 آدرس", callback_data: `pnleU:${i}` }],
         [{ text: "👤 نام‌کاربری", callback_data: `pnleP:${i}` }, { text: "🔑 رمز", callback_data: `pnleW:${i}` }],
-        [{ text: "🔙 بازگشت", callback_data: "pnle" }],
+        [{ text: "🔙 بازگشت", callback_data: "pnle" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("pnleN:") || data.startsWith("pnleU:") || data.startsWith("pnleP:") || data.startsWith("pnleW:")) {
       // شروع ویزارد ویرایش یکی از فیلدهای پنل
@@ -12780,10 +12785,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const panels = await getPanels(kv);
       if (!panels.length) return edit("📭 پنلی ثبت نشده.", [
         [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
-        [{ text: "🔙 بازگشت", callback_data: "pndef" }],
+        [{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       const kb = panels.map((p, i) => [{ text: `🗑 ${p.name}`, callback_data: `pnlx:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("کدام پنل را حذف کنم؟", kb);
     } else if (data.startsWith("pnlx:")) {
       const i = Number(data.slice(5));
@@ -12825,17 +12830,17 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const wname = (env && env.WORKER_NAME) || "";
-      if (!wname) return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!wname) return edit("❌ نام ورکر در بایندینگ‌ها نیست (WORKER_NAME). اول با deploy-tool آپدیت کن.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       try {
         const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, {
           enabled: true,
           actions: [{ type: "worker", value: [wname] }],
         });
-        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
         try {
           await kv.put(`fmail_on:${String(zone.name).toLowerCase()}`, JSON.stringify({ acc, zone_id: zoneId, zone_name: zone.name }), { expirationTtl: 90 * 86400 });
         } catch (e) {}
@@ -12844,10 +12849,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             { text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` },
             { text: "➕ ساخت ایمیل", callback_data: `fmailaliasnew:${acc}:${zoneId}`, style: "success" },
           ],
-          [{ text: "🔙 بازگشت", callback_data: "fmail" }],
+          [{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } catch (e) {
-        await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+        await edit("❌ خطا در فعال‌سازی.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
     } else if (data.startsWith("fmailoff:")) {
       const parts = data.split(":");
@@ -12855,21 +12860,21 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone || !tok) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       try {
         // کلادفلر حتی برای «کات» هم یک actions معتبر لازم دارد؛ همان ورکر را بتون‌درستی بفرست تا ۲۰۰۷ ندهد
         const wname = (env && env.WORKER_NAME) || "";
         const actions = wname ? [{ type: "worker", value: [wname] }] : [{ type: "drop", value: [] }];
         const r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, { enabled: false, actions });
-        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+        if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } catch (e) {
-        return edit("❌ خطا.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+        return edit("❌ خطا.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
       try {
         await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
         await kv.delete(`fmail_fwd:${String(zone.name).toLowerCase()}`);
       } catch (e) {}
-      await edit(`📩 دریافت/فوروارد ${code(zone.name)} قطع شد.`, [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await edit(`📩 دریافت/فوروارد ${code(zone.name)} قطع شد.`, [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data.startsWith("fmode:")) {
@@ -12878,11 +12883,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`🔀 ${zone.name} — ایمیل‌ها چطور دریافت شوند؟\n\n• 📥 دریافت در ربات: در صندوق تلگرام ذخیره و اعلان می‌شود\n• 📩 فوروارد به ایمیل: مستقیم به آدرس مقصد می‌رود (روتیـنگ کلادفلر)\n\n📧 آدرس‌ها به شکل ${code("name@" + zone.name)} هستند؛ هر پیشوندی به همین دامنه بفرستی به مقصد انتخابی می‌آید.`, [
         [{ text: "📥 دریافت در ربات", callback_data: `fmailon:${acc}:${zoneId}`, style: "success" }],
         [{ text: "📩 فوروارد به ایمیل مقصد", callback_data: `fmailfwd:${acc}:${zoneId}` }],
-        [{ text: "🔙 بازگشت", callback_data: "fmail" }],
+        [{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("fmailfwd:")) {
       // فورواردینگ: انتخاب مقصد تأییدشده برای catch-all همان دامنه
@@ -12890,9 +12895,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const dd = await cfMailDests(accounts, { acc });
-      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const verified = cfSortDestinations(dd.list).filter((x) => x.verified);
       const pendingD = cfSortDestinations(dd.list).filter((x) => !x.verified);
       const lines = [`📩 فوروارد ${code(zone.name)} به کدام آدرس؟`, ""];
@@ -12904,7 +12909,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       if (!verified.length) lines.push("هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.");
       kb.push([{ text: "➕ مقصد جدید", callback_data: `fmailfwdnew:${acc}:${zoneId}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(lines.join("\n"), kb);
     } else if (data.startsWith("fmailfwdnew:")) {
       // مقصد جدید: آدرس ایمیل باید اول در اکانت ثبت و تأیید شود
@@ -12912,7 +12917,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "fmail_dest_new", fw: { acc, zone: zoneId, zname: zone.name } }), { expirationTtl: 600 });
       await edit("📧 ایمیل مقصد (مثلاً جیمیل خودت) را بفرست؛ لینک تأیید به همان ایمیل می‌رود:", [
         [{ text: "⬅️ انصراف", callback_data: `fmailfwd:${acc}:${zoneId}` }],
@@ -12924,13 +12929,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zoneId = parts[2];
       const di = Number(parts[3]);
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const dd = await cfMailDests(accounts, { acc });
-      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (dd.error) return edit("❌ " + dd.error, [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const dest = cfSortDestinations(dd.list).filter((x) => x.verified)[di];
-      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!dest) return edit("❌ مقصد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const tok = accounts[acc] && accounts[acc].token;
-      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       let r = null;
       try {
         r = await cfEmailSend(tok, "PUT", `/zones/${zoneId}/email/routing/rules/catch_all`, {
@@ -12938,9 +12943,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           actions: [{ type: "forward", value: [dest.email] }],
         });
       } catch (e) {
-        return edit("❌ خطا.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+        return edit("❌ خطا.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
-      if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!r.success) return edit("❌ خطا:\n" + cfErrText(r), [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       try {
         await kv.delete(`fmail_on:${String(zone.name).toLowerCase()}`);
         await kv.put(
@@ -12950,7 +12955,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         );
       } catch (e) {}
       await edit(`📩 ${code(zone.name)} به ${code(dest.email)} فوروارد می‌شود.\n\n⚠️ ایمیل‌های آینده مستقیم به مقصد می‌روند و وارد صندوق ربات نمی‌شوند.`, [
-        [{ text: "🔙 بازگشت", callback_data: "fmail" }],
+        [{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
@@ -12960,7 +12965,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = Number(parts[1]);
       const zoneId = parts[2];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "fmail_alias_new", al: { acc, zone: zoneId } }), { expirationTtl: 600 });
       await edit(`📧 ساخت ایمیل جدید برای ${code(zone.name)}\n\nفقط پیشوند را بفرست (مثلاً ${code("info")} یعنی ${code("info@" + zone.name)}):`, [
         [{ text: "⬅️ انصراف", callback_data: `fmailbox:${acc}:${zoneId}` }],
@@ -12971,7 +12976,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zoneId = parts[2];
       const idx = Number(parts[3]);
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       try {
         const dom = String(zone.name).toLowerCase();
         const arr = await fmailAliases(kv, dom);
@@ -12993,13 +12998,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zoneId = parts[2];
       const id = parts[3];
       const zone = await getZoneById(zoneId, acc, accounts);
-      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await inboxDel(kv, zone.name, id);
       await edit("🗑 ایمیل حذف شد.", [[{ text: "📥 صندوق", callback_data: `fmailbox:${acc}:${zoneId}` }]]);
       await sleep(800);
       await renderFmailBox(edit, kv, acc, zoneId, accounts);
     } else if (data === "fmailsync") {
       // همگام‌سازی پرچم‌ها با وضعیت واقعی catch-all روی کلادفلر
+      await edit("⏳ در حال همگام‌سازی…");
       let zones = [];
       try {
         zones = await getAllZones(accounts, kv);
@@ -13041,7 +13047,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           }
         } catch (e) {}
       }
-      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه صندوق ربات + ${fwd} دامنه فوروارد.`, [[{ text: "🔙 بازگشت", callback_data: "fmail" }]]);
+      await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه صندوق ربات + ${fwd} دامنه فوروارد.`, [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "quota") {
@@ -13118,7 +13124,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(lines.join("\n"), kb);
     } else if (data === "srvimportgo") {
       const fresh = (await kv.get(`srvimp:${chatId}`, "json")) || [];
-      if (!fresh.length) return edit("ℹ️ چیزی برای وارد کردن نیست.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      if (!fresh.length) return edit("ℹ️ چیزی برای وارد کردن نیست.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_import_pw" }), { expirationTtl: 900 });
       await edit(
         `🔐 رمز پیش‌فرض root برای ${fresh.length} سرور جدید را بفرستید (یکی برای همه؛ اگر رمزها فرق دارند «-» بفرستید تا بعداً از «✏️ ویرایش» هر سرور تنظیم کنید):`,
@@ -13138,7 +13144,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         fileOk
           ? `✅ فایل CSV ${list.length} سرور فرستاده شد.\n\nدر Termius: صفحهٔ Hosts ← منوی New Host ← گزینهٔ Import ← گزینهٔ CSV ← فایل را بدهید.`
           : "❌ ارسال فایل ناموفق بود. دوباره تلاش کنید.",
-        [[{ text: "🔙 بازگشت", callback_data: "srv" }]]
+        [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]
       );
     } else if (data === "srvadd") {
       // افزودن سرور: مستقیم آی‌پی/هاست → رمز/کلید (نام پیش‌فرض = هاست، کاربر = root)
@@ -13190,7 +13196,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       );
     } else if (data === "srvdel") {
       const list = await getServersList(kv);
-      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = list.map((s) => [{ text: `🗑 ${s.name}`, callback_data: `srvdely:${s.id}` }]);
       kb.push([{ text: "⬅️ انصراف", callback_data: "srv" }]);
       await edit("🗑 کدام سرور حذف شود؟", kb);
@@ -13199,7 +13205,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const id = data.slice(8);
       const list = await getServersList(kv);
       const s = list.find((x) => x.id === id);
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`⚠️ سرور «${escHtml(s.name)}» (${code(s.host)}) حذف شود؟`, [
         [{ text: "✅ بله، حذف شود", callback_data: `srvdelxok:${id}` }, { text: "❌ انصراف", callback_data: "srvdel" }],
       ]);
@@ -13208,7 +13214,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const id = data.slice(8);
       const list = await getServersList(kv);
       const s = list.find((x) => x.id === id);
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const backIdx = list.findIndex((x) => x.id === id);
       await edit(`⚠️ سرور «${escHtml(s.name)}» (${code(s.host)}) حذف شود؟`, [
         [{ text: "✅ بله، حذف شود", callback_data: `srvdelxok:${id}` }, { text: "❌ انصراف", callback_data: `srvopen:${backIdx}` }],
@@ -13217,7 +13223,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const id = data.slice(10);
       const list = await getServersList(kv);
       const s = list.find((x) => x.id === id);
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await saveServersList(kv, list.filter((x) => x.id !== id));
       await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
     } else if (data.startsWith("srvopen:")) {
@@ -13234,7 +13240,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         [{ text: "🧩 نصب با هستهٔ ویرایشی", callback_data: `srvnodecore:${i}` }],
         [{ text: "➕ افزودن نود نصب‌شده به پنل", callback_data: `srvpaneladd:${i}` }],
         [{ text: "🔎 بررسی وضعیت نصب", callback_data: `srvnodecheck:${i}` }],
-        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("srvnodecheck:")) {
       // بررسی وضعیت نصب نود از روی سرور (لاگ نصب، فایل اطلاعات، کانتینر/سرویس)
@@ -13242,7 +13248,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال بررسی وضعیت نود روی سرور…");
       const chk = await srvRelayExec(kv, env,
         s,
@@ -13250,7 +13256,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         "echo ===INFO===; ls -la /root/pg-node-info.txt 2>/dev/null || echo no-info; " +
         "echo ===RUN===; (docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null || true); (systemctl is-active pg-node 2>/dev/null || true)",
         30000);
-      if (chk.error) return edit("❌ خطا در بررسی: " + chk.error, [[{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }]]);
+      if (chk.error) return edit("❌ خطا در بررسی: " + chk.error + "\n\nاگر رله/سرور موقتاً در دسترس نبود، دوباره تلاش کن.", [[{ text: "🔄 تلاش دوباره", callback_data: `srvnodecheck:${i}` }, { text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const raw = String(chk.out || "");
       const logPart = (raw.split("===INFO===")[0] || "").replace("===LOG===", "").trim();
       const infoPart = (raw.split("===INFO===")[1] || "").split("===RUN===")[0].trim();
@@ -13268,14 +13274,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         (hasInfo ? "\n\n📋 فایل اطلاعات نود موجود است؛ می‌توانی آن را به پنل اضافه کنی." : "");
       const kb = [];
       if (hasInfo) kb.push([{ text: "➕ افزودن نود به پنل", callback_data: `srvpaneladd:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(txt.substring(0, 4000), kb);
     } else if (data.startsWith("srvnode:")) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit(`⚠️ نصب خودکار نود پاسارگارد روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت رسمی PasarGuard اجرا می‌شود (چند دقیقه طول می‌کشد).`, [
         [{ text: "✅ شروع نصب", callback_data: `srvnodego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
       ]);
@@ -13291,7 +13297,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit(`🧩 نصب نود با «هستهٔ ویرایشی» روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت pg-node به‌همراه هستهٔ xray-amd64 سفارشی نصب می‌شود (چند دقیقه طول می‌کشد).`, [
         [{ text: "✅ شروع نصب", callback_data: `srvnodecorego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
       ]);
@@ -13311,12 +13317,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
       const srvBack = await srvGetBack(kv, chatId, i, `srvopen:${i}`);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: srvBack }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       const prep = await srvPrepServer(kv, env, edit, i, s);
       if (!prep.ready) {
         return edit(`⚠️ سرور هنوز به SSH پاسخ نداد. کمی بعد دوباره تلاش کن.${prep.pwNote}`, [
           [{ text: "🔁 تلاش دوباره", callback_data: `srvprovision:${i}:${mode}` }],
-          [{ text: "🔙 بازگشت", callback_data: srvBack }],
+          [{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
       const l2 = await getServersList(kv);
@@ -13335,16 +13341,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال خواندن اطلاعات نود از سرور…");
       const rr = await srvFinishNodeInstall(kv, env, { ...s, _idx: i }, `🖧 افزودن نود سرور «${escHtml(s.name)}» به پنل`);
-      await edit(rr.txt, [...rr.addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }]]);
+      await edit(rr.txt, [...rr.addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvstats:")) {
       const i = Number(data.slice(9));
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال جمع‌آوری آمار…");
       let st = await srvRelayStats(kv, env, s);
       if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) st = await srvRelayStats(kv, env, s);
@@ -13353,7 +13359,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await edit(txt, [
           [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
           [{ text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault" }, { text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
-          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
         const upD = Math.floor((st.uptimeS || 0) / 86400);
@@ -13377,7 +13383,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             { text: `⏱ ${upD}r ${upH}h`, callback_data: "noop", style: "plain" },
           ],
           [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
-          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+          [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
     } else if (data.startsWith("srvreboot:")) {
@@ -13411,13 +13417,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!s) return edit("❌ سرور پیدا نشد.");
       await edit("⏳ شروع آپدیت…");
       const r = await srvRelayExec(kv, env, s, "export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -y && sudo apt-get upgrade -y", 300000);
-      if (r.error) return edit(`❌ خطا: ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      if (r.error) return edit(`❌ خطا: ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const out = String(r.out || "").slice(-1200);
       // اگر مهلت اجرا تمام شد، نتیجه را قلابی «موفق» نشان نده
       const head = r.timedOut
         ? `⏱ مهلت اجرا به پایان رسید؛ آپدیت ممکن است ناقص باشد. بعداً دوباره اجرا کنید.\n\n📄 انتهای خروجی:\n` + code(out)
         : `✅ آپدیت و آپگرید انجام شد.\n\n📄 انتهای خروجی:\n` + code(out);
-      await edit(head, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      await edit(head, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvinfo:")) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
@@ -13426,7 +13432,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال خواندن مشخصات…");
       const r = await srvRelayExec(kv, env, s, "uname -a; echo ---; lsb_release -a 2>/dev/null || cat /etc/os-release | head -3; echo ---; systemd-detect-virt 2>/dev/null; echo ---; ip -4 addr show | grep inet | grep -v 127.0.0.1", 30000);
       const out = String(r.out || "—").trim();
-      await edit(`ℹ️ مشخصات سیستم «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      await edit(`ℹ️ مشخصات سیستم «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvdisk:")) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
@@ -13435,7 +13441,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال خواندن دیسک…");
       const r = await srvRelayExec(kv, env, s, "df -h; echo ---; lsblk", 30000);
       const out = String(r.out || "—").trim();
-      await edit(`💾 دیسک‌های «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }]]);
+      await edit(`💾 دیسک‌های «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvedit:")) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
@@ -13445,7 +13451,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         [{ text: "✏️ نام", callback_data: `srvedith:${i}:name` }, { text: `🌐 هاست/پورت`, callback_data: `srvedith:${i}:host` }],
         [{ text: "👤 کاربر", callback_data: `srvedith:${i}:user` }, { text: "🔐 رمز/کلید", callback_data: `srvedith:${i}:auth` }],
         [{ text: "📝 یادداشت", callback_data: `srvedith:${i}:note` }],
-        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }],
+        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ];
       await edit(`✏️ ویرایش «${escHtml(s.name)}» — کدام مورد؟`, kb);
     } else if (data.startsWith("srvedith:")) {
@@ -13560,7 +13566,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const avail = panels.filter((p) => !monitors.some((mo) => mo.panel_id === p.id));
       if (!avail.length) return edit("✅ برای همه پنل‌های ثبت‌شده، مانیتور نود ساخته شده.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const kb = avail.map((p) => [{ text: `🖥 ${p.name}`, callback_data: `nda:${p.id}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("برای کدام پنل، مانیتور نود بسازم؟", kb);
     } else if (data.startsWith("nda:")) {
       const panelId = data.slice(4);
@@ -13573,7 +13579,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const idx = monitors.length - 1;
       await edit("⏳ در حال ساخت مانیتور نود و همگام‌سازی اولیه…");
       const r = await nodeSyncFromPanel(monitors[idx], kv);
-      if (r.error) return edit(`✅ مانیتور نود ساخته شد.\n❌ ${r.error}\nبعداً از «🔄 همگام‌سازی» دوباره امتحان کنید.`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      if (r.error) return edit(`✅ مانیتور نود ساخته شد.\n❌ ${r.error}\nبعداً از «🔄 همگام‌سازی» دوباره امتحان کنید.`, [[{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await renderNodeHome(edit, kv);
     } else if (data.startsWith("ndd:")) {
       const i = Number(data.slice(4));
@@ -13587,7 +13593,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       await edit("⏳ در حال همگام‌سازی نودها با پنل…");
       const r = await nodeSyncFromPanel(m, kv);
-      if (r.error) return edit(`❌ ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      if (r.error) return edit(`❌ ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await renderNodeHome(edit, kv);
     } else if (data.startsWith("ndtg:")) {
       const i = Number(data.slice(5));
@@ -13626,7 +13632,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const panel = panelId ? panels.find((p) => p.id === panelId) : panels[0];
       if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const idx = rec.srvIdx;
-      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }]] : [[{ text: "📡 مانیتور نود", callback_data: "nd" }]];
+      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]] : [[{ text: "📡 مانیتور نود", callback_data: "nd" }]];
       await edit(`⏳ در حال افزودن نود «${escHtml(rec.info.ip)}» به پنل «${escHtml(panel.name)}»…`);
       const r = await pgPanelAddNode(panel, rec.info);
       if (r.error) {
@@ -13663,7 +13669,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         "",
         "اگر WORKER_URL تعریف نشده باشد، آدرس کامل بعد از اولین پیام به ربات به‌صورت خودکار تشخیص داده می‌شود.",
       ];
-      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("ndtest:")) {
       const i = Number(data.slice(7));
       const monitors = await getNodeMonitors(kv);
@@ -13692,7 +13698,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const st = await getNodeState(kv, m.id);
       const nm = sortedNodeNames(st)[ni];
-      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
+      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const nd = st.nodes[nm];
       if (data.startsWith("ndx:")) {
         const set = new Set(m.excluded || []);
@@ -13702,7 +13708,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await saveNodeMonitors(kv, monitors);
         await renderNodeExclusions(edit, kv, mi);
       } else if (data.startsWith("ndip:")) {
-        await edit(`🌐 آی‌پی نود «${escHtml(nm)}»:\n${code(nd.address || "—")}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }]]);
+        await edit(`🌐 آی‌پی نود «${escHtml(nm)}»:\n${code(nd.address || "—")}`, [[{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
         const exc = (m.excluded || []).includes(nm);
         const lines = ["🖧 نود «" + escHtml(nm) + "»", nodeStatusEmoji(nd.status) + " " + nodeStatusLabel(nd.status)];
@@ -13718,7 +13724,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             { text: exc ? "✅ استثنا" : "🚫 استثنا", callback_data: `ndx:${mi}:${ni}` },
           ],
           [{ text: "⏰ ایجاد یادآور انقضا سرور", callback_data: `ndexp:${mi}:${ni}` }],
-          [{ text: "🔙 بازگشت", callback_data: "nd" }],
+          [{ text: "🔙 بازگشت", callback_data: "nd" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
     } else if (data.startsWith("ndexp:")) {
@@ -13730,7 +13736,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!m) return edit("❌ مانیتور نود پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
       const st = await getNodeState(kv, m.id);
       const nm = sortedNodeNames(st)[ni];
-      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }]]);
+      if (!nm) return edit("❌ نود پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `ndd:${mi}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const nd = st.nodes[nm];
       const target = { type: "server", label: `${nd.address || "—"} — ${nm}`, ip: nd.address || "", dc: nm, panel_id: m.panel_id };
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", mode: "expiry", target, text: "" }), { expirationTtl: 1200 });
@@ -13749,7 +13755,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         return edit("⚠️ «چک هاست» هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن، سپس دوباره تست کن.", [
           [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
           [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
-          [{ text: "🔙 بازگشت", callback_data: "hflist" }],
+          [{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
       await edit("⏳ در حال بررسی این هاست…");
@@ -13784,19 +13790,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
       await saveHostFilterCfg(kv, cfg);
       const hfScope = hfN ? " (" + hfN + " دامنه، حدود " + hfMins + " دقیقه)" : "";
-      await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+      await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfforeign") {
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
         return edit("⚠️ بررسی دسترسی خارج هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن.", [
           [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
           [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
-          [{ text: "🔙 بازگشت", callback_data: "hfset" }],
+          [{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
       await edit("⏳ در حال بررسی دسترسی خارج (آلمان) برای همهٔ ساب‌ها… کمی طول می‌کشد.");
       const txt = await hfForeignScan(kv, env);
-      await edit(txt, [[{ text: "🔙 بازگشت", callback_data: "hfset" }]]);
+      await edit(txt, [[{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfhist") {
       const log = await kv.get("host_filter_log", "json");
       const lines = ["📜 تاریخچهٔ تعویض خودکار", ""];
@@ -13826,7 +13832,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           }
         }
       }
-      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+      await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfset") {
       await renderHostFilterSettings(edit, kv);
     } else if (data === "hfsetch") {
@@ -13894,7 +13900,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "hfbknow") {
       await edit("⏳ در حال گرفتن بکاپ از هاست‌ها…");
       const b = await hfSnapshot(kv, env, "دستی");
-      await edit("✅ بکاپ «" + ndFmtTs(b.ts) + "» با " + b.count + " هاست ساخته شد.", [[{ text: "🔙 بازگشت", callback_data: "hfbk" }]]);
+      await edit("✅ بکاپ «" + ndFmtTs(b.ts) + "» با " + b.count + " هاست ساخته شد.", [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("hfbkr:")) {
       const id = data.slice(6);
       await edit("⚠️ بازگردانی این بکاپ، مقادیر address/sni/host همهٔ هاست‌ها را به آن زمان برمی‌گرداند. مطمئنی؟", [
@@ -13906,9 +13912,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال بازگردانی بکاپ…");
       const r = await hfRestoreBackup(kv, env, id);
       if (r.error) {
-        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hfbk" }]]);
+        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
-        await edit("✅ بازگردانی انجام شد.\nموفق: " + r.ok + " — ناموفق: " + r.fail, [[{ text: "🔙 بازگشت", callback_data: "hfbk" }]]);
+        await edit("✅ بازگردانی انجام شد.\nموفق: " + r.ok + " — ناموفق: " + r.fail, [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
     } else if (data.startsWith("hfbkdel:")) {
       const id = data.slice(8);
@@ -13921,7 +13927,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال بازگردانی…");
       const r = await hostFilterRevert(kv, env, parts[0], parts[1]);
       if (r.error) {
-        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hf" }]]);
+        await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
         await edit("✅ به دامنهٔ قبلی برگشت.", [[{ text: "🧭 تعویض خودکار هاست فیلتر", callback_data: "hf" }]]);
       }
@@ -13943,7 +13949,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         // sslm: بررسی مجدد وضعیت گواهی همهٔ دامنه‌ها | sslmd: انتخاب دامنه برای حذف از نظارت
         kb.push([{ text: "🔄 بررسی دوباره", callback_data: "sslm" }, { text: "🗑 حذف دامنه", callback_data: "sslmd" }]);
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(text, kb);
     } else if (data === "sslma") {
       // درخواست نام دامنه از کاربر و ذخیره در pending
@@ -13951,10 +13957,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("🔐 دامنه یا ساب‌دامنه‌ای که می‌خواهید گواهی‌اش نظارت شود را بفرستید (مثلاً example.com):", [[{ text: "🔙 انصراف", callback_data: "sslm" }]]);
     } else if (data === "sslmd") {
       const monitors = await getSslMonitors(kv);
-      if (monitors.length === 0) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "sslm" }]]);
+      if (monitors.length === 0) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "sslm" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       // هر دکمه: sslmdy:<index> = حذف همان دامنه از نظارت
       const kb = monitors.map((m, i) => [{ text: `🗑 ${m.host}`, callback_data: `sslmdy:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "sslm" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "sslm" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام دامنه از نظارت حذف شود؟", kb);
     } else if (data.startsWith("sslmdy:")) {
       const idx = Number(data.slice(7));
@@ -13987,7 +13993,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       ];
       if (has) kb.push([{ text: "🧪 تست روی pcapps.ir", callback_data: "domexptest" }]);
       if (has) kb.push([{ text: "🗑 حذف کلید", callback_data: "domexpkdel" }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(
         "🔑 کلید API انقضای دامنه\n\n" +
           `وضعیت: ${has ? "ثبت‌شده ✅" : "ثبت‌نشده ❌"}\n` +
@@ -14006,22 +14012,22 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "domexpkdel") {
       // domexpkdel: حذف کلید API
       await saveDomExpCfg(kv, { provider: DOMEXP_DEFAULT_PROVIDER, key: "" });
-      await edit("🗑 کلید API حذف شد.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }]]);
+      await edit("🗑 کلید API حذف شد.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "domexptest") {
       // domexptest: تست کلید ذخیره‌شده روی pcapps.ir
       const cfg = await getDomExpCfg(kv);
-      if (!cfg.key) return edit("❌ کلیدی ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }]]);
+      if (!cfg.key) return edit("❌ کلیدی ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit("⏳ در حال تست کلید روی pcapps.ir…");
       const r = await whoisXmlDomainInfo("pcapps.ir", cfg.key);
       if (r.status === "ok") {
         await edit(
           `✅ کلید معتبر است.\n🗓 انقضای pcapps.ir: ${fmtJalali(r.expiry).split(" - ")[0]}\n⏳ باقی‌مانده: ${domExpiryRemaining(r.expiry)}`,
-          [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }]]
+          [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }, { text: "🏠 خانه", callback_data: "menu" }]]
         );
       } else if (r.status === "api_error") {
-        await edit(`⚠️ تست ناموفق:\n${code(String(r.message || ""))}`, [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }]]);
+        await edit(`⚠️ تست ناموفق:\n${code(String(r.message || ""))}`, [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
-        await edit("⚠️ کلید کار می‌کند اما برای pcapps.ir تاریخی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }]]);
+        await edit("⚠️ کلید کار می‌کند اما برای pcapps.ir تاریخی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: "domexpkey" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
     } else if (data === "domexpa") {
       // domexpa: افزودن دستی — کاربر نام دامنه را می‌فرستد
@@ -14034,20 +14040,20 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "domexpcal") {
       // domexpcal: ثبت/اصلاح دستی تاریخ انقضا برای یک دامنه (لیست انتخاب)
       const list = await getDomExpiry(kv);
-      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const hidden = list.filter((x) => x.status !== "ok");
       const showList = hidden.length ? hidden : list;
       const kb = showList.slice(0, 30).map((x) => [
         { text: `🗓 ${x.domain}`, callback_data: `domexpi:${encodeURIComponent(x.domain)}` },
       ]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗓 برای کدام دامنه تاریخ انقضا را دستی ثبت/اصلاح کنیم؟", kb);
     } else if (data.startsWith("domexpi:")) {
       // domexpi:<domain>: ورود دستی تاریخ شمسی انقضا برای دامنه
       const dom = decodeURIComponent(data.slice(8));
       const list = await getDomExpiry(kv);
       const item = list.find((x) => x.domain === dom);
-      if (!item) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      if (!item) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "domexp_date", domain: dom }), { expirationTtl: 900 });
       const cur = Number.isFinite(item.expiry) ? `\n\n🗓 فعلی: ${fmtJalali(item.expiry).split(" - ")[0]}` : "";
       await edit(
@@ -14058,11 +14064,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "domexpd") {
       // domexpd: لیست حذف دامنه از مانیتور
       const list = await getDomExpiry(kv);
-      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]]);
+      if (!list.length) return edit("📭 دامنه‌ای ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = list.slice(0, 40).map((x, i) => [
         { text: `🗑 ${x.domain}`, callback_data: `domexpdy:${i}` },
       ]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "domexpp:0" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام دامنه از مانیتور حذف شود؟", kb);
     } else if (data.startsWith("domexpdy:")) {
       // domexpdy:<index>: حذف تأییدشدهٔ یک دامنه
@@ -14080,22 +14086,22 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           { text: "🇩🇪 هتزنر", callback_data: "hz" },
           { text: "🟢 لینود", callback_data: "ln" },
         ],
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data === "hz") {
       await showHzHome(hzAccounts, edit, kv);
     } else if (data === "hza") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_add_name" }), { expirationTtl: 600 });
-      await edit("👤 چه اسمی برای این اکانت بزارم؟", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      await edit("👤 چه اسمی برای این اکانت بزارم؟", [[{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hzdel") {
-      if (hzAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      if (hzAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = hzAccounts.map((a, idx) => [{ text: `🗑 ${a.name}`, callback_data: `hzd:${idx}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام اکانت حذف شود؟", kb);
     } else if (data.startsWith("hzd:")) {
       const idx = Number(data.slice(4));
       const acc = hzAccounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
         [{ text: "✅ بله، حذف کن", callback_data: `hzdy:${idx}` }, { text: "❌ انصراف", callback_data: "hzdel" }],
       ]);
@@ -14188,7 +14194,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         kb.push([{ text: "🚫 ناموجود در این لوکیشن", callback_data: "noop", style: "plain" }]);
         kb.push(...grid2(unavailTypes.slice(0, 18).map((t) => ({ text: `🚫 ${t.name}`, callback_data: "noop", style: "plain" }))));
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]);
       const title = availTypes.length
         ? `💰 پلن سرور را انتخاب کن (لوکیشن: ${location}):`
         : `⚠️ هیچ پلنی در لوکیشن ${location} موجود نیست؛ پلن‌های ناموجود پایین نشان داده شده‌اند.`;
@@ -14204,11 +14210,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const type = (await hzFetch(acc.token, `/server_types/${planId}`)).server_type;
       const imgs = await hzGetAll(acc.token, "/images");
       const avail = imgs.filter((im) => (im.type === "system" || im.type === "snapshot") && (!type || !type.architecture || im.architecture === type.architecture));
-      if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }]]);
+      if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       avail.sort((a, b) => (b.type === "system" ? 1 : 0) - (a.type === "system" ? 1 : 0));
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, planId }), { expirationTtl: 600 });
       const kb = grid2(avail.slice(0, 50).map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsci:${i}:${im.id}` })));
-      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "hz" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
     } else if (data.startsWith("hzsci:")) {
       const parts = data.split(":");
@@ -14235,7 +14241,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (r.error) {
         // خطای ساخت (مثلاً پلن ناموجود در لوکیشن) با پیام فارسی + دکمهٔ بازگشت به انتخاب پلن
         return edit(`❌ ساخت سرور ناموفق بود:\n${hzErrFa(r)}`, [
-          [{ text: "🔙 بازگشت", callback_data: `hzsl:${i}:${pend.location}` }],
+          [{ text: "🔙 بازگشت", callback_data: `hzsl:${i}:${pend.location}` }, { text: "🏠 خانه", callback_data: "menu" }],
           [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
         ]);
       }
@@ -14332,7 +14338,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       for (let i = 0; i < opts.length; i += 3) {
         rk.push(opts.slice(i, i + 3).map((h) => ({ text: (h === cfg.leadHours ? "✅ " : "") + h + " ساعت", callback_data: `remseth:${h}` })));
       }
-      rk.push([{ text: "🔙 بازگشت", callback_data: "rem" }]);
+      rk.push([{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(`⚙️ تنظیمات یادآور\n\nچند ساعت قبل از انقضا خبر بدم؟ (الان: ${cfg.leadHours} ساعت)`, rk);
     } else if (data.startsWith("remseth:")) {
       const h = Number(data.slice(8));
@@ -14343,13 +14349,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // remsrv: انتخاب سرور از ساب‌ها به‌عنوان هدف یادآور | remsrvf: همان کار با اجبار به بروزرسانی لیست
       const force = data === "remsrvf";
       await edit(force ? "⏳ در حال بروزرسانی سرورها…" : "⏳ در حال خواندن سرورها…", [
-        [{ text: "🔙 بازگشت", callback_data: "menu" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
       let servers = null;
       try {
         servers = await getServersPicker(kv, force);
       } catch (e) {
-        return edit("❌ خطا در خواندن سرورها: " + remPlain(e && e.message ? e.message : e), [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+        return edit("❌ خطا در خواندن سرورها: " + remPlain(e && e.message ? e.message : e), [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       }
       if (!servers || !servers.length) return edit("📭 سروری پیدا نشد.\n(ابتدا در «✨ فیچرهای جدید» پنل ثبت و نودها را همگام‌سازی کنید؛ سپس 🔄 بروزرسانی.)", [[{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }, { text: "🔙 بازگشت", callback_data: "remnew" }]]);
       const token = makeToken();
@@ -14362,7 +14368,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const p = data.split(":");
       const servers = await kv.get(`rmsess:${p[1]}`, "json");
       const s = Array.isArray(servers) ? servers[Number(p[2])] : null;
-      if (!s) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      if (!s) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const target = {
         type: "server",
         label: `${s.ip || "—"} — ${s.remark || s.panel_name || ""}`.trim(),
@@ -14374,12 +14380,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_text", target }), { expirationTtl: 600 });
       await edit("✍️ متن یادآور را بفرستید:", [
         [{ text: "⏭ بدون متن", callback_data: "remnote" }],
-        [{ text: "🔙 بازگشت", callback_data: "remnew" }],
+        [{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data === "remtxt") {
       // remtxt: یادآور با متن آزاد (بدون هدف سرور)
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_text", target: null }), { expirationTtl: 600 });
-      await edit("✍️ متن یادآور را بفرستید:", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+      await edit("✍️ متن یادآور را بفرستید:", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "remnote") {
       // remnote: رد کردن مرحلهٔ متن و رفتن به انتخاب زمان
       const pend = await kv.get(`pend:${chatId}`, "json");
@@ -14404,7 +14410,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const pend = await kv.get(`pend:${chatId}`, "json");
       if (!pend || pend.type !== "rem_rel") return edit("⏳ عملیات منقضی شده.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_rel_num", target: pend.target || null, text: pend.text || "", unit, mode: pend.mode || "" }), { expirationTtl: 900 });
-      await edit(`⏳ بعد از چند ${REL_UNITS[unit]}؟ (فقط عدد بفرستید):`, [[{ text: "🔙 بازگشت", callback_data: "remrel" }]]);
+      await edit(`⏳ بعد از چند ${REL_UNITS[unit]}؟ (فقط عدد بفرستید):`, [[{ text: "🔙 بازگشت", callback_data: "remrel" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "remabs") {
       // remabs: زمان‌بندی مطلق (تاریخ شمسی مشخص) — remabsman = ورود دستی تاریخ
       const pend = await kv.get(`pend:${chatId}`, "json");
@@ -14424,26 +14430,26 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const pend = await kv.get(`pend:${chatId}`, "json");
       if (!pend || (pend.type !== "rem_abs_m" && pend.type !== "rem_abs")) return edit("⏳ عملیات منقضی شده.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, type: "rem_abs_day", jy, jm }), { expirationTtl: 900 });
-      await edit(`📅 روز را وارد کنید (عدد) — ${jy}/${String(jm).padStart(2, "0")}:`, [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+      await edit(`📅 روز را وارد کنید (عدد) — ${jy}/${String(jm).padStart(2, "0")}:`, [[{ text: "🔙 بازگشت", callback_data: "remabs" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "remabsman") {
       const pend = await kv.get(`pend:${chatId}`, "json");
       if (!pend || (pend.type !== "rem_abs" && pend.type !== "rem_abs_m")) return edit("⏳ عملیات منقضی شده.");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "rem_when", target: pend.target || null, text: pend.text || "", mode: pend.mode || "" }), { expirationTtl: 900 });
-      await edit("✍️ تاریخ و ساعت را بنویسید:\nمثال: 1405/06/20 14:30", [[{ text: "🔙 بازگشت", callback_data: "remabs" }]]);
+      await edit("✍️ تاریخ و ساعت را بنویسید:\nمثال: 1405/06/20 14:30", [[{ text: "🔙 بازگشت", callback_data: "remabs" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "remdel") {
       // remdel: نمایش لیست یادآورها برای حذف | remdelx:<id> انتخاب یک مورد | remdely:<id> تأیید حذف
       const list = (await getReminders(kv)).slice().sort((a, b) => a.at - b.at);
-      if (!list.length) return edit("📭 یادآوری نیست.", [[{ text: "🔙 بازگشت", callback_data: "rem" }]]);
+      if (!list.length) return edit("📭 یادآوری نیست.", [[{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = list.slice(0, 20).map((r) => [
         { text: `🗑 ${fmtJalali(r.at)} ${r.text || (r.target && r.target.label) || ""}`.substring(0, 60), callback_data: `remdelx:${r.id}` },
       ]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "rem" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام یادآور حذف شود؟", kb);
     } else if (data.startsWith("remdelx:")) {
       const id = data.slice(8);
       const list = await getReminders(kv);
       const item = list.find((r) => r.id === id);
-      if (!item) return edit("❌ پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "rem" }]]);
+      if (!item) return edit("❌ پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`⚠️ این یادآور حذف شود؟\n🕒 ${fmtJalali(item.at)}\n📝 ${remPlain(item.text || "-")}`, [
         [{ text: "✅ بله، حذف کن", callback_data: `remdely:${id}` }, { text: "❌ انصراف", callback_data: "rem" }],
       ]);
@@ -14469,7 +14475,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           { text: "۶ ساعت", callback_data: `remagainx:${id}:6` },
           { text: "۲۴ ساعت", callback_data: `remagainx:${id}:24` },
         ],
-        [{ text: "🔙 بازگشت", callback_data: "rem" }],
+        [{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("remagainx:")) {
       const p = data.split(":");
@@ -14488,16 +14494,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await showLnHome(lnAccounts, edit, kv);
     } else if (data === "lna") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ln_add_name" }), { expirationTtl: 600 });
-      await edit("👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      await edit("👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):", [[{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "lndel") {
-      if (lnAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      if (lnAccounts.length === 0) return edit("📭 اکانتی نیست.", [[{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const kb = lnAccounts.map((a, idx) => [{ text: `🗑 ${a.name}`, callback_data: `lnd:${idx}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🗑 کدام اکانت حذف شود؟", kb);
     } else if (data.startsWith("lnd:")) {
       const idx = Number(data.slice(4));
       const acc = lnAccounts[idx];
-      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      if (!acc) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await edit(`⚠️ اکانت «${acc.name}» حذف شود؟`, [
         [{ text: "✅ بله، حذف کن", callback_data: `lndy:${idx}` }, { text: "❌ انصراف", callback_data: "ln" }],
       ]);
@@ -14556,7 +14562,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           return { text: `${t.label} ($${pr.monthly || "?"}/m)`, callback_data: `lnscp:${i}:${region}:${t.id}` };
         })
       );
-      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("💰 پلن سرور را انتخاب کنید:", kb);
     } else if (data.startsWith("lnscp:")) {
       const parts = data.split(":");
@@ -14568,10 +14574,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = lnAccounts[i];
       const imgs = (await lnGetAll(acc.token, "/images")).filter((im) => im.is_public && im.status === "available");
       imgs.sort((a, b) => String(a.label).localeCompare(String(b.label)));
-      if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }]]);
+      if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pend, region, planId }), { expirationTtl: 600 });
       const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsci:${i}:${im.id}` })));
-      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "ln" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit("🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb);
     } else if (data.startsWith("lnsci:")) {
       const parts = data.split(":");
@@ -14636,7 +14642,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const acc = lnAccounts[i];
       const disks = await lnGetAll(acc.token, `/linode/instances/${serverId}/disks`);
       const disk = disks.find((d) => d.filesystem && d.filesystem !== "swap") || disks[0];
-      if (!disk) return edit("❌ دیسکی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }]]);
+      if (!disk) return edit("❌ دیسکی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const r = await lnFetch(acc.token, "/images", { method: "POST", body: JSON.stringify({ disk_id: disk.id, label: pend.remark, description: pend.remark }) });
       if (r.errors) return edit("❌ خطا: " + lnErr(r));
       await kv.delete(`pend:${chatId}`);
@@ -14677,7 +14683,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
 // at:<token>:<type> = انتخاب نوع (A/AAAA/CNAME) | p:<token>:<page> = بازگشت به صفحهٔ قبل
 function typeKeyboard(token, backPage, backCb) {
   const kb = [RECORD_TYPES.map((t) => ({ text: t, callback_data: `at:${token}:${t}` }))];
-  kb.push([{ text: "🔙 بازگشت", callback_data: backCb || `p:${token}:${backPage}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: backCb || `p:${token}:${backPage}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   return kb;
 }
 
@@ -14713,14 +14719,14 @@ async function renderReminderTargets(edit) {
     // remsrv: انتخاب سرور از لیست ساب‌های پنل | remtxt: ثبت متن آزاد
     [{ text: "🖥 انتخاب از سرورها (ساب‌ها)", callback_data: "remsrv" }],
     [{ text: "✍️ متن آزاد", callback_data: "remtxt" }],
-    [{ text: "🔙 بازگشت", callback_data: "rem" }],
+    [{ text: "🔙 بازگشت", callback_data: "rem" }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
 }
 
 async function renderReminderServers(kv, token, page, edit) {
   const servers = await kv.get(`rmsess:${token}`, "json");
-  if (!Array.isArray(servers)) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
-  if (!servers.length) return edit("📭 سروری در پنل‌ها پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }]]);
+  if (!Array.isArray(servers)) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  if (!servers.length) return edit("📭 سروری در پنل‌ها پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const per = 8;
   const pages = Math.max(1, Math.ceil(servers.length / per));
   if (page < 0) page = 0;
@@ -14747,7 +14753,7 @@ async function renderReminderServers(kv, token, page, edit) {
   kb.push(nav);
   // remsrvf: خواندن دوبارهٔ سرورها از پنل | remnew: بازگشت
   kb.push([{ text: "🔄 بروزرسانی", callback_data: "remsrvf" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "remnew" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit("🖥 یک سرور انتخاب کنید (ستون آدرس / ستون نام):", kb);
 }
 
@@ -15070,7 +15076,7 @@ async function arvanDomains(ctx, page = 0) {
   if (!arvanAccounts.length) {
     return edit("🇮🇷 آروان — دامنه‌ها\n\n📭 اکانتی ثبت نشده.", [
       [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
-      [{ text: "🔙 بازگشت", callback_data: "arvan" }],
+      [{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const items = [];
@@ -15089,7 +15095,7 @@ async function arvanDomains(ctx, page = 0) {
       [
         [{ text: "➕ افزودن دامنه در پنل آروان", url: "https://my.arvancloud.ir/cdn/domains" }],
         [{ text: "🔄 همگام‌سازی", callback_data: "arvsync" }],
-        [{ text: "🔙 بازگشت", callback_data: "arvan" }],
+        [{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]
     );
   }
@@ -15109,26 +15115,26 @@ async function arvanDomains(ctx, page = 0) {
     ]);
   }
   kb.push([{ text: "🔄 همگام‌سازی", callback_data: "arvsync" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🇮🇷 آروان — دامنه‌ها (${items.length})`, kb);
 }
 
 async function arvanRecords(ctx, acc, domain, page = 0) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let records = [];
   try {
     records = await arvanGetAllRecords(a.token, domain, kv, env);
   } catch (e) {
-    return edit("❌ خطا در خواندن رکوردها:\n" + escHtml(String(e).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    return edit("❌ خطا در خواندن رکوردها:\n" + escHtml(String(e).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const t = arvanSessId();
   await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan", domain, acc }), { expirationTtl: 3600 });
   if (!records.length) {
     return edit(`📭 رکوردی برای ${code(domain)} یافت نشد.`, [
       [{ text: "➕ افزودن رکورد", callback_data: `arvaadd:${t}` }],
-      [{ text: "🔙 بازگشت", callback_data: "arvdoms" }],
+      [{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const per = 9;
@@ -15170,7 +15176,7 @@ async function arvanFindRecord(ctx, t, rid) {
 async function arvanRecordDetail(ctx, t, rid) {
   const { edit } = ctx;
   const found = await arvanFindRecord(ctx, t, rid);
-  if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+  if (!found) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const { rec, session } = found;
   const lines = [
     `${rec.type}-${code(rec.name)}`,
@@ -15189,7 +15195,7 @@ async function arvanRecordDetail(ctx, t, rid) {
     [{ text: rec.proxied ? "☁️ خاموش‌کردن ابری" : "☁️ روشن‌کردن ابری", callback_data: `arvcloud:${t}:${rid}` }],
     [{ text: "🗑 حذف رکورد", callback_data: `arvdel:${t}:${rid}` }],
     [{ text: faved ? "⭐ حذف از منتخب" : "⭐ افزودن به منتخب", callback_data: `arvfav:${t}:${rid}` }],
-    [{ text: "🔙 بازگشت", callback_data: `arvdom:${session.acc}:${session.domain}` }],
+    [{ text: "🔙 بازگشت", callback_data: `arvdom:${session.acc}:${session.domain}` }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
 }
 
@@ -15242,7 +15248,7 @@ async function arvanRegions(ctx, force) {
   if (!arvanAccounts.length) {
     return edit("🖥 سرورهای ابری آروان\n\n📭 اکانتی ثبت نشده.", [
       [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
-      [{ text: "🔙 بازگشت", callback_data: "arvan" }],
+      [{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
   const all = await Promise.all(arvanAccounts.map((a, i) => arvanGetRegionsCached(i, a.token, kv, env, force)));
@@ -15254,7 +15260,7 @@ async function arvanRegions(ctx, force) {
   }
   kb.push([{ text: "⌨️ ریجن دستی", callback_data: "arvregcustom" }]);
   kb.push([{ text: "🔄 تازه‌سازی ریجن‌ها", callback_data: "arvregrefresh" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit("🖥 سرورهای ابری آروان\n\nیک اکانت و ریجن را انتخاب کنید:", kb);
 }
 
@@ -15277,13 +15283,13 @@ async function arvanEccServers(ctx, acc, region) {
 async function arvanServersView(ctx, acc, region) {
   const { edit, kv } = ctx;
   const r = await arvanEccServers(ctx, acc, region);
-  if (r.error) return edit("❌ " + escHtml(r.error), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (r.error) return edit("❌ " + escHtml(r.error), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const t = arvanSessId();
   await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-srv", acc, region, servers: r.servers }), { expirationTtl: 3600 });
   const kb = [];
   if (!r.servers.length) {
     kb.push([{ text: "➕ ساخت سرور جدید", callback_data: `arvnew:${t}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`🖥 ${code(region)} — سروری نیست.`, kb);
   }
   for (let i = 0; i < r.servers.length; i++) {
@@ -15297,7 +15303,7 @@ async function arvanServersView(ctx, acc, region) {
     { text: "🌐 آی‌پی شناور", callback_data: `arvfloat:${acc}:${region}` },
     { text: "💾 دیسک‌ها", callback_data: `arvvol:${acc}:${region}` },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🖥 سرورهای ${code(region)} (${r.servers.length})`, kb);
 }
 
@@ -15318,7 +15324,7 @@ async function arvanServerDetail(ctx, t, idx) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
   if (!session || session.provider !== "arvan-srv" || !session.servers[idx]) {
-    return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const a = arvanAccounts[session.acc];
   // جزئیات تازه برای وضعیت دقیق
@@ -15350,7 +15356,7 @@ async function arvanServerDetail(ctx, t, idx) {
       { text: "🗑 حذف سرور", callback_data: `arvterm:${t}:${idx}` },
     ],
     [{ text: "📷 اسنپ‌شات‌ها", callback_data: `arvsnapls:${t}:${idx}` }],
-    [{ text: "🔙 بازگشت", callback_data: `arvregback:${t}` }],
+    [{ text: "🔙 بازگشت", callback_data: `arvregback:${t}` }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
 }
 
@@ -15358,7 +15364,7 @@ async function arvanSrvAction(ctx, t, idx, action, extraBody) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
   if (!session || session.provider !== "arvan-srv" || !session.servers[idx]) {
-    return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const a = arvanAccounts[session.acc];
   const s = session.servers[idx];
@@ -15366,14 +15372,14 @@ async function arvanSrvAction(ctx, t, idx, action, extraBody) {
   try {
     data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/${action}`, { method: "POST", body: extraBody ? JSON.stringify(extraBody) : undefined }, kv, env);
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   if (data.message === "Unauthenticated.") {
-    return edit("❌ کلید دسترسی این عمل را ندارد.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+    return edit("❌ کلید دسترسی این عمل را ندارد.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   if (data.message && data.message !== "ok" && !data.data && !data.result) {
     // بعضی اکشن‌ها ۲۰۲ با message برمی‌گردانند — همان را نشان بده
-    await edit("ℹ️ " + escHtml(String(data.message).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }]]);
+    await edit("ℹ️ " + escHtml(String(data.message).slice(0, 300)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
   return { session, server: s, data };
@@ -15403,7 +15409,7 @@ async function handleArvanCallback(data, ctx) {
   let m = data.match(/^arvanaccdel:(\d+)$/);
   if (m) {
     const i = Number(m[1]);
-    if (!arvanAccounts[i]) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvanacc" }]]);
+    if (!arvanAccounts[i]) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvanacc" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit(`🗑 اکانت «${code(arvanAccounts[i].name)}» حذف شود؟`, [
       [{ text: "✅ بله، حذف کن", callback_data: `arvanaccdelok:${i}` }, { text: "❌ انصراف", callback_data: "arvanacc" }],
     ]);
@@ -15426,7 +15432,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvev:([^:]+):(.+)$/);
   if (m) {
     const found = await arvanFindRecord(ctx, m[1], m[2]);
-    if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    if (!found) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     await kvPutPend({ type: "arvan_rec_value", t: m[1], rid: m[2] });
     return edit(`✏️ مقدار جدید برای ${code(found.rec.name)} را بفرستید:\n(فعلی: ${code(found.rec.content || "—")})`, [
       [{ text: "⬅️ انصراف", callback_data: `arvrec:${m[1]}:${m[2]}` }],
@@ -15435,7 +15441,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvcloud:([^:]+):(.+)$/);
   if (m) {
     const found = await arvanFindRecord(ctx, m[1], m[2]);
-    if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    if (!found) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const res = await arvanUpdateRecord(found.token, found.session.domain, found.rec, found.rec.content, kv, env, !found.rec.proxied);
     if (!arvanOk(res) || res.message === "Unauthenticated.") {
       return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${m[1]}:${m[2]}` }]]);
@@ -15452,7 +15458,7 @@ async function handleArvanCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const a = session && arvanAccounts[session.acc];
-    if (!a) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    if (!a) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const res = await arvanDeleteRecord(a.token, session.domain, m[2], kv, env);
     if (!arvanOk(res)) return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${m[1]}:${m[2]}` }]]);
     return arvanRecords(ctx, session.acc, session.domain, 0);
@@ -15460,14 +15466,14 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvfav:([^:]+):(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || session.provider !== "arvan") return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+    if (!session || session.provider !== "arvan") return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const favs = await getFavs(kv, chatId);
     const zid = "arvan:" + session.domain;
     if (favExists(favs, zid, m[2])) {
       await saveFavs(kv, chatId, favs.filter((f) => !(f.zone_id === zid && f.record_id === m[2])));
     } else {
       const found = await arvanFindRecord(ctx, m[1], m[2]);
-      if (!found) return edit("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      if (!found) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       favs.push({ zone_id: zid, zone_name: session.domain, acc: session.acc, record_id: m[2], name: found.rec.name, type: found.rec.type, provider: "arvan", domain: session.domain });
       await saveFavs(kv, chatId, favs);
     }
@@ -15499,7 +15505,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvwafset:(\d+):(.+):(on|off)$/);
   if (m) {
     const a = arvanAccounts[Number(m[1])];
-    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     try {
       await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/waf/settings`, { method: "PATCH", body: JSON.stringify({ is_enabled: m[3] === "on" }) }, 30000, kv, env);
     } catch (e) {}
@@ -15508,7 +15514,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvfwt:(\d+):(.+):(.+)$/);
   if (m) {
     const a = arvanAccounts[Number(m[1])];
-    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+    if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     try {
       const cur = await arvanFetch(a.token, `/domains/${encodeURIComponent(m[2])}/firewall/rules/${encodeURIComponent(m[3])}`, {}, 30000, kv, env);
       const curOn = !(((cur.data || cur.result) || {}).is_enabled === false);
@@ -15542,7 +15548,7 @@ async function handleArvanCallback(data, ctx) {
   m = data.match(/^arvfwact:([^:]+):(allow|deny|challenge|bypass)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || session.provider !== "arvan-fw") return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+    if (!session || session.provider !== "arvan-fw") return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     session.action = m[2];
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 900 });
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "arvan_fw_name", t: m[1], msgId: messageId }), { expirationTtl: 600 });
@@ -15561,7 +15567,7 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const key = arvanNormKey(txt);
     if (!key) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ کلید خالی است.", [[{ text: "🔙 بازگشت", callback_data: "arvanacc" }]]);
+      return editId("❌ کلید خالی است.", [[{ text: "🔙 بازگشت", callback_data: "arvanacc" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     let ok = false;
     let errT = "";
@@ -15575,7 +15581,7 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     await kv.delete(`pend:${chatId}`);
     if (!ok) {
       return editId("❌ کلید قبول نشد:\n" + escHtml(errT) + "\n\nدسترسی‌های ماشین‌یوزر را در پنل آروان بررسی کنید.", [
-        [{ text: "🔙 بازگشت", callback_data: "arvanacc" }],
+        [{ text: "🔙 بازگشت", callback_data: "arvanacc" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     }
     const list = await getArvanAccounts(kv);
@@ -15604,12 +15610,12 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const a = session && arvanAccounts[session.acc];
     if (!a) {
       await kv.delete(`pend:${chatId}`);
-      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      return editId("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const res = await arvanCreateRecord(a.token, session.domain, pending.rtype, pending.name, txt, true, kv, env);
     await kv.delete(`pend:${chatId}`);
     if (!arvanOk(res)) {
-      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await editId(`✅ رکورد ساخته شد:\n${pending.rtype}-${code(pending.name)} → ${code(txt)}`, []);
     await sleep(1500);
@@ -15621,13 +15627,13 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const a = session && arvanAccounts[session.acc];
     if (!a) {
       await kv.delete(`pend:${chatId}`);
-      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      return editId("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const records = await arvanGetAllRecords(a.token, session.domain, kv, env);
     const rec = records.find((r) => r.id === pending.rid);
     if (!rec) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ رکورد پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }]]);
+      return editId("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.", [[{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const hint = valueIssueHint(txt, rec.type);
     if (hint) {
@@ -15636,7 +15642,7 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const res = await arvanUpdateRecord(a.token, session.domain, rec, txt, kv, env);
     await kv.delete(`pend:${chatId}`);
     if (!arvanOk(res)) {
-      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${pending.t}:${pending.rid}` }]]);
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvrec:${pending.t}:${pending.rid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await editId(`✅ تغییر یافت\n\n📛 ${code(rec.name)}\n\n🔴 قبلی: ${code(rec.content || "—")}\n🟢 فعلی: ${code(txt)}`, []);
     await sleep(1500);
@@ -15659,7 +15665,7 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const session = await kv.get(`s:${pending.t}`, "json");
     if (!session || session.provider !== "arvan-fw") {
       await kv.delete(`pend:${chatId}`);
-      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+      return editId("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const a = arvanAccounts[session.acc];
     let res = null;
@@ -15667,11 +15673,11 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
       res = await arvanFetch(a.token, `/domains/${encodeURIComponent(session.domain)}/firewall/rules`, { method: "POST", body: JSON.stringify({ name: txt, filter_expr: session.expr, action: session.action, is_enabled: true }) }, 30000, kv, env);
     } catch (e) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }]]);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await kv.delete(`pend:${chatId}`);
     if (!arvanOk(res)) {
-      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }]]);
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfws:${session.acc}:${session.domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await editId(`✅ قانون «${code(txt)}» ساخته شد.`, []);
     await sleep(1200);
@@ -15691,7 +15697,7 @@ async function handleArvanPending(pending, txt, chatId, accounts, send, kv, botT
     const session = await kv.get(`s:${pending.t}`, "json");
     if (!session) {
       await kv.delete(`pend:${chatId}`);
-      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return editId("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     session.volNew = { name: pending.name, size: n };
     await kv.put(`s:${pending.t}`, JSON.stringify(session), { expirationTtl: 3600 });
@@ -15715,18 +15721,18 @@ async function handleArvanServerPending(pending, txt, chatId, accounts, send, kv
     const a = arvanAccounts[pending.acc];
     if (!a) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return editId("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     let data;
     try {
       data = await arvanEcc(a.token, region, "/servers", {}, kv, env);
     } catch (e) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     if (data.message && !arvanEccList(data)) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ ریجن نامعتبر:\n" + escHtml(String(data.message).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return editId("❌ ریجن نامعتبر:\n" + escHtml(String(data.message).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await kv.delete(`pend:${chatId}`);
     const ctx2 = { edit: editId, kv, env, arvanAccounts, chatId };
@@ -15738,7 +15744,7 @@ async function handleArvanServerPending(pending, txt, chatId, accounts, send, kv
     const session = await kv.get(`s:${pending.t}`, "json");
     if (!session) {
       await kv.delete(`pend:${chatId}`);
-      return editId("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return editId("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
   }
 
@@ -15752,11 +15758,11 @@ async function handleArvanServerPending(pending, txt, chatId, accounts, send, kv
       data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/snapshot`, { method: "POST", body: JSON.stringify({ name: txt }) }, kv, env);
     } catch (e) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await kv.delete(`pend:${chatId}`);
     if (data.message === "Unauthenticated." || (data.message && !data.data && !data.result)) {
-      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await editId(`✅ اسنپ‌شات «${code(txt)}» ساخته شد (ممکن است چند دقیقه طول بکشد).`, []);
     await sleep(1500);
@@ -15774,11 +15780,11 @@ async function handleArvanServerPending(pending, txt, chatId, accounts, send, kv
       data = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}/rename`, { method: "POST", body: JSON.stringify({ name: txt }) }, kv, env);
     } catch (e) {
       await kv.delete(`pend:${chatId}`);
-      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+      return editId("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     await kv.delete(`pend:${chatId}`);
     if (data.message === "Unauthenticated." || (data.message && !data.data && !data.result)) {
-      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }]]);
+      return editId("❌ خطا:\n" + escHtml(arvanErrText(data)), [[{ text: "🔙 بازگشت", callback_data: `arvs:${pending.t}:${pending.idx}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     s.name = txt;
     session.servers[pending.idx] = s;
@@ -15836,7 +15842,7 @@ async function arvanServerCallback(data, ctx) {
       return edit("⌨️ کد ریجن را بفرستید (مثل ir-thr-c2):", [[{ text: "⬅️ انصراف", callback_data: "arvsrv" }]]);
     }
     const kb = arvanAccounts.map((a, i) => [{ text: `👤 ${a.name}`, callback_data: `arvregcustom:${i}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("کدام اکانت؟", kb);
   }
   m = data.match(/^arvregcustom:(\d+)$/);
@@ -15849,7 +15855,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvregback:(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return arvanServersView(ctx, session.acc, session.region);
   }
   m = data.match(/^arvs:([^:]+):(\d+)$/);
@@ -15901,7 +15907,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvyterm:([^:]+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     const s = session.servers[Number(m[2])];
     let data2;
@@ -15920,7 +15926,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvsnapls:([^:]+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     let data2;
     try {
@@ -15946,7 +15952,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvsnapdel:([^:]+):(\d+):(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit(`🗑 اسنپ‌شات «${code(String(m[3]).slice(0, 40))}» حذف شود؟`, [
       [{ text: "✅ بله، حذف کن", callback_data: `arvsnapdely:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvsnapls:${m[1]}:${m[2]}` }],
     ]);
@@ -15954,17 +15960,17 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvsnapdely:([^:]+):(\d+):(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, `/snapshots/${encodeURIComponent(m[3])}`, { method: "DELETE" }, kv, env);
     } catch (e) {}
-    return edit("✅ درخواست حذف اسنپ‌شات ارسال شد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    return edit("✅ درخواست حذف اسنپ‌شات ارسال شد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   m = data.match(/^arvsize:([^:]+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     let sizes = [];
     try {
@@ -15987,7 +15993,7 @@ async function arvanServerCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const f = session && session.flavors && session.flavors[Number(m[3])];
-    if (!f) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!f) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit(`⬆️ پلن به «${code(f.name)}» تغییر کند؟\n(ممکن است سرور ریبوت شود)`, [
       [{ text: "✅ بله", callback_data: `arvsizeok:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
     ]);
@@ -15996,7 +16002,7 @@ async function arvanServerCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const f = session && session.flavors && session.flavors[Number(m[3])];
-    if (!f) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!f) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "resize", { flavor_id: f.id });
     if (!r) return;
     await edit("✅ دستور تغییر سایز ارسال شد (چند دقیقه طول می‌کشد).", []);
@@ -16006,7 +16012,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvbuild:([^:]+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.servers[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     const imgs = await arvanFetchImages(a.token, session.region, kv, env);
     if (!imgs.length) return edit("❌ ایمیجی برنگشت.", [[{ text: "🔙 بازگشت", callback_data: `arvs:${m[1]}:${m[2]}` }]]);
@@ -16021,7 +16027,7 @@ async function arvanServerCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const im = session && session.images && session.images[Number(m[3])];
-    if (!im) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!im) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit(`⚠️ ریبیلد با «${code(im.name)}»؟\n\n❌ همهٔ داده‌های سرور پاک می‌شود!`, [
       [{ text: "✅ بله، ریبیلد کن", callback_data: `arvbuildok:${m[1]}:${m[2]}:${m[3]}` }, { text: "❌ انصراف", callback_data: `arvs:${m[1]}:${m[2]}` }],
     ]);
@@ -16030,7 +16036,7 @@ async function arvanServerCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const im = session && session.images && session.images[Number(m[3])];
-    if (!im) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!im) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "rebuild", { image_id: im.id });
     if (!r) return;
     await edit("✅ دستور ریبیلد ارسال شد (نصب مجدد چند دقیقه طول می‌کشد).", []);
@@ -16044,23 +16050,23 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvflnew:(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     let res;
     try {
       res = await arvanEcc(a.token, session.region, "/float-ips", { method: "POST", body: JSON.stringify({ description: "guardian" }) }, kv, env);
     } catch (e) {
-      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
-      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     return arvanFloatView(ctx, session.acc, session.region);
   }
   m = data.match(/^arvfldel:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const f = session.floats[Number(m[2])];
     return edit(`🗑 آی‌پی شناور ${code(f.ip || f.id)} حذف شود؟`, [
       [{ text: "✅ بله، حذف کن", callback_data: `arvfl-del-ok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvfloat:${session.acc}:${session.region}` }],
@@ -16069,7 +16075,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvfl-del-ok:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, `/float-ips/${encodeURIComponent(session.floats[Number(m[2])].id)}`, { method: "DELETE" }, kv, env);
@@ -16079,7 +16085,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvfl-det:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     const f = session.floats[Number(m[2])];
     // port_id از آبجکت تازه
@@ -16089,7 +16095,7 @@ async function arvanServerCallback(data, ctx) {
       const cur = (arvanEccList(d) || []).find((x) => (x.id || x.uuid) === f.id);
       portId = (cur && (cur.port_id || (cur.port && cur.port.id))) || "";
     } catch (e) {}
-    if (!portId) return edit("❌ شناسه اتصال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+    if (!portId) return edit("❌ شناسه اتصال پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     try {
       await arvanEcc(a.token, session.region, "/float-ips/detach", { method: "PATCH", body: JSON.stringify({ port_id: portId }) }, kv, env);
     } catch (e) {}
@@ -16098,16 +16104,16 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvflatt:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.floats[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
     if (r.error || !r.servers.length) {
-      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]]);
+      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     session.servers = r.servers.slice(0, 12);
     session.flIdx = Number(m[2]);
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
     const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvflatto:${m[1]}:${i}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvfloat:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`🔗 آی‌پی ${code(session.floats[Number(m[2])].ip || "?")} به کدام سرور وصل شود؟`, kb);
   }
   m = data.match(/^arvflatto:(.+):(\d+)$/);
@@ -16115,7 +16121,7 @@ async function arvanServerCallback(data, ctx) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const s = session && session.servers && session.servers[Number(m[2])];
     const f = session && session.floats && session.floats[session.flIdx];
-    if (!s || !f) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!s || !f) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, `/float-ips/${encodeURIComponent(f.id)}/attach`, { method: "PATCH", body: JSON.stringify({ server_id: s.id }) }, kv, env);
@@ -16130,7 +16136,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvvolt:(.+):(ssd|hdd|skip)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.volNew) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.volNew) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     const body = { name: session.volNew.name, size: session.volNew.size };
     if (m[2] !== "skip") body.type = m[2];
@@ -16138,26 +16144,26 @@ async function arvanServerCallback(data, ctx) {
     try {
       res = await arvanEcc(a.token, session.region, "/volumes", { method: "POST", body: JSON.stringify(body) }, kv, env);
     } catch (e) {
-      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
-      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     return arvanVolView(ctx, session.acc, session.region);
   }
   m = data.match(/^arvvolatt:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
     if (r.error || !r.servers.length) {
-      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+      return edit("❌ سروری برای اتصال نیست." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     session.servers = r.servers.slice(0, 12);
     session.volIdx = Number(m[2]);
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
     const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvvolatto:${m[1]}:${i}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`🔗 دیسک «${code(session.vols[Number(m[2])].name)}» به کدام سرور وصل شود؟`, kb);
   }
   m = data.match(/^arvvolatto:(.+):(\d+)$/);
@@ -16165,7 +16171,7 @@ async function arvanServerCallback(data, ctx) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const s = session && session.servers && session.servers[Number(m[2])];
     const v = session && session.vols && session.vols[session.volIdx];
-    if (!s || !v) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!s || !v) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, "/volumes/attach", { method: "PATCH", body: JSON.stringify({ server_id: s.id, volume_id: v.id }) }, kv, env);
@@ -16175,16 +16181,16 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvvol-det:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const r = await arvanEccServers({ kv, env, arvanAccounts }, session.acc, session.region);
     if (r.error || !r.servers.length) {
-      return edit("❌ سروری پیدا نشد." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]]);
+      return edit("❌ سروری پیدا نشد." + (r.error ? "\n" + escHtml(r.error) : ""), [[{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     session.servers = r.servers.slice(0, 12);
     session.volIdx = Number(m[2]);
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
     const kb = session.servers.map((s, i) => [{ text: `🖥 ${s.name}`, callback_data: `arvvol-detto:${m[1]}:${i}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `arvvol:${session.acc}:${session.region}` }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`❌ دیسک «${code(session.vols[Number(m[2])].name)}» از کدام سرور جدا شود؟`, kb);
   }
   m = data.match(/^arvvol-detto:(.+):(\d+)$/);
@@ -16192,7 +16198,7 @@ async function arvanServerCallback(data, ctx) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const s = session && session.servers && session.servers[Number(m[2])];
     const v = session && session.vols && session.vols[session.volIdx];
-    if (!s || !v) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!s || !v) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, "/volumes/detach", { method: "PATCH", body: JSON.stringify({ server_id: s.id, volume_id: v.id }) }, kv, env);
@@ -16202,7 +16208,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvvol-del:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const v = session.vols[Number(m[2])];
     return edit(`🗑 دیسک «${code(v.name)}» حذف شود؟`, [
       [{ text: "✅ بله، حذف کن", callback_data: `arvvol-delok:${m[1]}:${m[2]}` }, { text: "❌ انصراف", callback_data: `arvvol:${session.acc}:${session.region}` }],
@@ -16211,7 +16217,7 @@ async function arvanServerCallback(data, ctx) {
   m = data.match(/^arvvol-delok:(.+):(\d+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session || !session.vols[Number(m[2])]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     try {
       await arvanEcc(a.token, session.region, `/volumes/${encodeURIComponent(session.vols[Number(m[2])].id)}`, { method: "DELETE" }, kv, env);
@@ -16227,7 +16233,7 @@ async function arvanServerCallback(data, ctx) {
 async function arvanMkImages(ctx, t) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
   const imgs = await arvanFetchImages(a.token, session.region, kv, env);
   session.images = imgs.slice(0, 40);
@@ -16247,7 +16253,7 @@ async function arvanMkImages(ctx, t) {
 async function arvanMkFlavors(ctx, t) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
   let sizes = [];
   try {
@@ -16272,7 +16278,7 @@ async function arvanMkFlavors(ctx, t) {
 async function arvanMkNetworks(ctx, t) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
   let nets = [];
   try {
@@ -16295,7 +16301,7 @@ async function arvanMkNetworks(ctx, t) {
 async function arvanMkSsh(ctx, t) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const session = await kv.get(`s:${t}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
   let keys = [];
   try {
@@ -16313,7 +16319,7 @@ async function arvanMkSsh(ctx, t) {
 async function arvanMkConfirm(ctx, t) {
   const { edit, kv } = ctx;
   const session = await kv.get(`s:${t}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const price = session.flavorPrice ? `\n💰 حدود ${code(Number(session.flavorPrice).toLocaleString("en-US"))}/ماه` : "";
   await edit(
     `➕ تأیید ساخت سرور\n\n📍 ریجن: ${code(session.region)}\n📛 نام: ${code(session.name)}\n💿 ایمیج: ${code(session.imageName)}\n📦 پلن: ${code(session.flavorName)}${price}\n🌐 شبکه: ${code(session.networkName || "پیش‌فرض")}\n🔑 کلید: ${code(session.sshKey || "—")}\n\n⚠️ ساخت سرور هزینه دارد. مطمئنی؟`,
@@ -16331,7 +16337,7 @@ async function arvanMkCallback(data, ctx) {
   m = data.match(/^arvnew:(.+)$/);
   if (m) {
     const src = await kv.get(`s:${m[1]}`, "json");
-    if (!src) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!src) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const t = arvanSessId();
     await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-mk", acc: src.acc, region: src.region }), { expirationTtl: 3600 });
     await kvPutPend({ type: "arvan_mk_name", t });
@@ -16341,7 +16347,7 @@ async function arvanMkCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const im = session && session.images[Number(m[2])];
-    if (!im) return edit("❌ ایمیج پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!im) return edit("❌ ایمیج پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     session.imageId = im.id;
     session.imageName = im.name;
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
@@ -16356,7 +16362,7 @@ async function arvanMkCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const f = session && session.flavors[Number(m[2])];
-    if (!f) return edit("❌ پلن پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!f) return edit("❌ پلن پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     session.flavorId = f.id;
     session.flavorName = f.name;
     session.flavorPrice = f.price;
@@ -16367,7 +16373,7 @@ async function arvanMkCallback(data, ctx) {
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
     const n = session && session.networks[Number(m[2])];
-    if (!n) return edit("❌ شبکه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!n) return edit("❌ شبکه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     session.networkId = n.id;
     session.networkName = n.name;
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
@@ -16376,7 +16382,7 @@ async function arvanMkCallback(data, ctx) {
   m = data.match(/^arvsshk:(.+):(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     session.sshKey = decodeURIComponent(m[2]);
     await kv.put(`s:${m[1]}`, JSON.stringify(session), { expirationTtl: 3600 });
     return arvanMkConfirm(ctx, m[1]);
@@ -16391,7 +16397,7 @@ async function arvanMkCallback(data, ctx) {
   m = data.match(/^arvcreate:(.+)$/);
   if (m) {
     const session = await kv.get(`s:${m[1]}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const a = arvanAccounts[session.acc];
     const body = { name: session.name, flavor_id: session.flavorId, image_id: session.imageId, enable_ipv4: true };
     if (session.networkId) body.network_ids = [session.networkId];
@@ -16400,10 +16406,10 @@ async function arvanMkCallback(data, ctx) {
     try {
       res = await arvanEcc(a.token, session.region, "/servers", { method: "POST", body: JSON.stringify(body) }, kv, env);
     } catch (e) {
-      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     if (res.message === "Unauthenticated." || (res.message && !res.data && !res.result)) {
-      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+      return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const created = res.data && typeof res.data === "object" && !Array.isArray(res.data) ? res.data : res.result || {};
     const pwd = created.password ? `\n🔑 رمز root: ${code(String(created.password))}\n(یادداشت کن؛ دوباره نمایش داده نمی‌شود)` : "";
@@ -16412,7 +16418,7 @@ async function arvanMkCallback(data, ctx) {
     ]);
     return;
   }
-  return edit("❓ دستور ناشناخته.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  return edit("❓ دستور ناشناخته.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 // ---------- امنیت دامنه آروان (فایروال، WAF، SSL، گزارش) ----------
@@ -16422,21 +16428,21 @@ async function arvanSecMenu(ctx, acc, domain) {
     [{ text: "🧱 قوانین فایروال", callback_data: `arvfws:${acc}:${domain}` }],
     [{ text: "🛡 WAF", callback_data: `arvwaf:${acc}:${domain}` }, { text: "🔒 SSL", callback_data: `arvssl:${acc}:${domain}` }],
     [{ text: "📊 ترافیک ۲۴ ساعت", callback_data: `arvrep:${acc}:${domain}` }],
-    [{ text: "🔙 بازگشت", callback_data: `arvdom:${acc}:${domain}` }],
+    [{ text: "🔙 بازگشت", callback_data: `arvdom:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
 }
 
 async function arvanFwList(ctx, acc, domain) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let rules = [];
   try {
     const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/firewall/rules?per_page=50`, {}, 30000, kv, env);
     const arr = arvanEccList(d) || [];
     rules = arr.map((r) => ({ id: r.id || "", name: r.name || "؟", action: r.action || "؟", expr: r.filter_expr || r.filter || "", enabled: r.is_enabled !== false }));
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const kb = [];
   for (const r of rules.slice(0, 12)) {
@@ -16448,40 +16454,40 @@ async function arvanFwList(ctx, acc, domain) {
     ]);
   }
   kb.push([{ text: "➕ قانون جدید", callback_data: `arvwadd:${acc}:${domain}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🧱 قوانین فایروال ${code(domain)} (${rules.length})`, kb);
 }
 
 async function arvanWafView(ctx, acc, domain) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let s = null;
   try {
     const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/waf/settings`, {}, 30000, kv, env);
     s = (d.data && typeof d.data === "object" ? d.data.data || d.data : d.result) || d.data || null;
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const on = s ? s.is_enabled !== false : false;
   const lines = [`🛡 WAF — ${code(domain)}`, "", `وضعیت: ${on ? "🟢 روشن" : "⚪ خاموش"}`];
   if (s && s.mode) lines.push(`حالت: ${code(String(s.mode))}`);
   await edit(lines.join("\n"), [
     [{ text: on ? "⏸ خاموش‌کردن WAF" : "▶️ روشن‌کردن WAF", callback_data: `arvwafset:${acc}:${domain}:${on ? "off" : "on"}` }],
-    [{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }],
+    [{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
 }
 
 async function arvanSslView(ctx, acc, domain) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let s = null;
   try {
     const d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/ssl`, {}, 30000, kv, env);
     s = (d.data && typeof d.data === "object" && !Array.isArray(d.data) ? d.data : d.result) || null;
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const lines = [`🔒 SSL — ${code(domain)}`, ""];
   if (!s) lines.push("📭 اطلاعاتی برنگشت.");
@@ -16492,18 +16498,18 @@ async function arvanSslView(ctx, acc, domain) {
     if (s.certificate_mode) lines.push(`گواهی: ${code(String(s.certificate_mode))}`);
     if (s.fingerprint_status != null) lines.push(`فینگرپرینت: ${s.fingerprint_status ? "روشن" : "خاموش"}`);
   }
-  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function arvanTrafficView(ctx, acc, domain) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvan" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let d = null;
   try {
     d = await arvanFetch(a.token, `/domains/${encodeURIComponent(domain)}/reports/traffics?period=24h`, {}, 30000, kv, env);
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const lines = [`📊 ترافیک ۲۴ ساعت — ${code(domain)}`, ""];
   const data = (d && d.data) || {};
@@ -16514,7 +16520,7 @@ async function arvanTrafficView(ctx, acc, domain) {
     if (++shown >= 12) break;
   }
   if (!shown) lines.push("📭 داده‌ای برنگشت (یا ساختار متفاوت است).");
-  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }]]);
+  await edit(lines.join("\n"), [[{ text: "🔙 بازگشت", callback_data: `arvsec:${acc}:${domain}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 // ---------- آی‌پی شناور و دیسک‌های آروان ----------
@@ -16525,13 +16531,13 @@ function arvanNetSess(acc, region, extra) {
 async function arvanFloatView(ctx, acc, region) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let list = [];
   try {
     const d = await arvanEcc(a.token, region, "/float-ips", {}, kv, env);
     list = arvanEccList(d) || [];
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const t = arvanSessId();
   await kv.put(`s:${t}`, JSON.stringify(arvanNetSess(acc, region, { floats: list.slice(0, 20).map((f) => ({ id: f.id || f.uuid || "", ip: f.ip || f.address || f.floating_ip || "", attached: !!(f.port_id || f.port || f.server_id || f.server || f.attached) })) })), { expirationTtl: 3600 });
@@ -16548,20 +16554,20 @@ async function arvanFloatView(ctx, acc, region) {
     ]);
   }
   kb.push([{ text: "➕ ساخت آی‌پی شناور", callback_data: `arvflnew:${t}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`🌐 آی‌پی‌های شناور ${code(region)} (${list.length})`, kb);
 }
 
 async function arvanVolView(ctx, acc, region) {
   const { edit, kv, env, arvanAccounts } = ctx;
   const a = arvanAccounts[acc];
-  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }]]);
+  if (!a) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   let list = [];
   try {
     const d = await arvanEcc(a.token, region, "/volumes", {}, kv, env);
     list = arvanEccList(d) || [];
   } catch (e) {
-    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }]]);
+    return edit("❌ خطا: " + escHtml(String(e).slice(0, 200)), [[{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const t = arvanSessId();
   await kv.put(`s:${t}`, JSON.stringify(arvanNetSess(acc, region, { vols: list.slice(0, 20).map((v) => ({ id: v.id || v.uuid || "", name: v.name || v.id || "؟", size: v.size || "", attached: !!(v.server_id || v.server || v.attachments) })) })), { expirationTtl: 3600 });
@@ -16577,7 +16583,7 @@ async function arvanVolView(ctx, acc, region) {
     ]);
   }
   kb.push([{ text: "➕ ساخت دیسک", callback_data: `arvvolnew:${t}` }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `arvreg:${acc}:${region}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(`💾 دیسک‌های ${code(region)} (${list.length})`, kb);
 }
 
@@ -16615,7 +16621,7 @@ async function showHzHome(hzAccounts, edit, kv) {
     kb.push([{ text: multi ? `➕ ساخت سرور در ${nm}` : "➕ ساخت سرور", callback_data: `hzsc:${sel}` }]);
     kb.push([{ text: multi ? `🌐 آیپی‌ها (${nm})` : "🌐 آیپی‌ها", callback_data: `hzp:${sel}:0` }, { text: multi ? `⚙️ تنظیمات (${nm})` : "⚙️ تنظیمات", callback_data: `hzacc:${sel}` }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "hzaccs" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "hzaccs" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -16725,7 +16731,7 @@ async function showHzServerInfo(hzAccounts, i, serverId, edit, kv) {
     { text: "🔄 بروزرسانی", callback_data: `hzsi:${i}:${serverId}` },
     { text: "🗑 حذف سرور", callback_data: `hzsu:${i}:${serverId}:del`, style: "danger" },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -16744,10 +16750,10 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
     const imgs = await hzGetAll(acc.token, "/images");
     const arch = s.image && s.image.architecture;
     const avail = imgs.filter((x) => (x.type === "system" || x.type === "snapshot") && (!arch || x.architecture === arch));
-    if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!avail.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     avail.sort((a, b) => (b.type === "system" ? 1 : 0) - (a.type === "system" ? 1 : 0));
     const kb = grid2(avail.slice(0, 50).map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsv:${i}:${serverId}:rebuild:${im.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🛠️ ریبیلد\n⚠️ همهٔ داده‌های سرور پاک می‌شود.\n\nتصویر جدید را انتخاب کنید:", kb);
   }
   if (step === "upgrade") {
@@ -16756,7 +16762,7 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
     const up = types.filter(
       (t) => t.architecture === cur.architecture && t.id !== cur.id && (t.memory >= cur.memory || t.cores >= cur.cores || t.disk >= cur.disk)
     );
-    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     up.sort((a, b) => a.memory + a.cores + a.disk - (b.memory + b.cores + b.disk));
     const upLocObj = (s.datacenter && s.datacenter.location) || s.location;
     const upLoc = upLocObj ? upLocObj.name : null;
@@ -16768,27 +16774,27 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
     const kb = grid2(
       up.map((t) => ({ text: hzPlanLabel(t, priceOf(t)), callback_data: `hzsv:${i}:${serverId}:upgrade:${t.id}` }))
     );
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`⬆️ ارتقا\n${s.status !== "off" ? "⚠️ برای ارتقا اول سرور را خاموش کن.\n" : ""}پلن جدید را انتخاب کنید:`, kb);
   }
   if (step === "a4" || step === "a6") {
     const type = step === "a4" ? "ipv4" : "ipv6";
     if (s.public_net && s.public_net[type === "ipv4" ? "primary_ipv4" : "primary_ipv6"]) {
-      return edit(`⚠️ این سرور از قبل ${type} اختصاصی دارد؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: back }]]);
+      return edit(`⚠️ این سرور از قبل ${type} اختصاصی دارد؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const ips = await hzGetAll(acc.token, "/primary_ips");
     const avail = ips.filter((ip) => !ip.assignee_id && ip.type === type);
-    if (!avail.length) return edit(`❌ آی‌پی ${type} خالی پیدا نشد.`, [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!avail.length) return edit(`❌ آی‌پی ${type} خالی پیدا نشد.`, [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = grid2(avail.map((ip) => ({ text: `${ip.name || ""} ${ip.ip}`.trim(), callback_data: `hzsv:${i}:${serverId}:${step}:${ip.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit(`🔗 آی‌پی ${type.toUpperCase()} برای اختصاص (سرور خاموش می‌شود):`, kb);
   }
   if (step === "dsnap") {
     const imgs = await hzGetAll(acc.token, "/images");
     const snaps = imgs.filter((im) => im.type === "snapshot" && im.created_from && im.created_from.id === Number(serverId));
-    if (!snaps.length) return edit("❌ اسنپ‌شاتی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!snaps.length) return edit("❌ اسنپ‌شاتی برای این سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = grid2(snaps.map((im) => ({ text: im.name || im.description || String(im.id), callback_data: `hzsv:${i}:${serverId}:dsnap:${im.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🗑 اسنپ‌شات برای حذف:", kb);
   }
   const label = {
@@ -16825,7 +16831,7 @@ async function hzServerDo(hzAccounts, i, serverId, step, arg, edit, extra) {
   const acc = hzAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   const token = acc.token;
-  const back = [[{ text: "🔙 بازگشت", callback_data: `hzsi:${i}:${serverId}` }]];
+  const back = [[{ text: "🔙 بازگشت", callback_data: `hzsi:${i}:${serverId}` }, { text: "🏠 خانه", callback_data: "menu" }]];
   const backList = [[{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }]];
   if (step === "del") {
     const r = await hzRetry(token, `/servers/${serverId}`, { method: "DELETE" });
@@ -16950,7 +16956,7 @@ async function showHzPrimaryIpInfo(hzAccounts, i, ipId, edit) {
     { text: "❌ حذف اختصاص", callback_data: `hzpu:${i}:${ipId}:unassign` },
     { text: "🗑 حذف آی‌پی", callback_data: `hzpu:${i}:${ipId}:del` },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `hzp:${i}:0` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzp:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -16965,9 +16971,9 @@ async function hzIpDispatch(hzAccounts, i, ipId, step, edit, kv, chatId) {
   }
   if (step === "assign") {
     const servers = await hzGetAll(acc.token, "/servers");
-    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = grid2(servers.map((s) => ({ text: s.name, callback_data: `hzpv:${i}:${ipId}:assign:${s.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🔗 سرور مقصد را انتخاب کنید:", kb);
   }
   const label = step === "unassign" ? "حذف اختصاص آی‌پی" : "حذف آی‌پی";
@@ -16989,8 +16995,8 @@ async function hzIpPick(hzAccounts, i, ipId, step, arg, edit) {
     method: "POST",
     body: JSON.stringify({ assignee_id: Number(arg), assignee_type: "server" }),
   });
-  if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
-  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+  if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function hzIpDo(hzAccounts, i, ipId, step, edit) {
@@ -16998,15 +17004,15 @@ async function hzIpDo(hzAccounts, i, ipId, step, edit) {
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   if (step === "del") {
     const r = await hzRetry(acc.token, `/primary_ips/${ipId}`, { method: "DELETE" });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit("✅ آی‌پی حذف شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
   }
   if (step === "unassign") {
     const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
     if (ip && ip.assignee_id) await hzEnsureOff(acc.token, ip.assignee_id);
     const r = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
-    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }]]);
+    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   return edit("❓ عملیات ناشناخته.");
 }
@@ -17050,7 +17056,7 @@ async function showHzSnapshotInfo(hzAccounts, i, imageId, edit) {
     `📅 ساخته‌شده: ${code(im.created ? im.created.slice(0, 10) : "—")} [${code(hzAgeDays(im.created) + " روز پیش")}]`;
   const kb = [
     [{ text: "✏️ تغییر نام", callback_data: `hznu:${i}:${imageId}:rename` }, { text: "🗑 حذف", callback_data: `hznu:${i}:${imageId}:del` }],
-    [{ text: "🔙 بازگشت", callback_data: `hzn:${i}:0` }],
+    [{ text: "🔙 بازگشت", callback_data: `hzn:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(text, kb);
 }
@@ -17108,7 +17114,7 @@ async function showLnHome(lnAccounts, edit, kv) {
     kb.push([{ text: multi ? `➕ ساخت سرور در ${nm}` : "➕ ساخت سرور", callback_data: `lnsc:${sel}` }]);
     kb.push([{ text: multi ? `🌐 آیپی‌ها (${nm})` : "🌐 آیپی‌ها", callback_data: `lnp:${sel}:0` }, { text: multi ? `⚙️ تنظیمات (${nm})` : "⚙️ تنظیمات", callback_data: `lnacc:${sel}` }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "lnaccs" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "providers" }, { text: "👤 اکانت‌ها", callback_data: "lnaccs" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -17187,7 +17193,7 @@ async function showLnServerInfo(lnAccounts, i, serverId, edit) {
     { text: "❌ IPv6", callback_data: `lnsu:${i}:${serverId}:u6` },
     { text: "🗑 حذف سرور", callback_data: `lnsu:${i}:${serverId}:del` },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -17204,17 +17210,17 @@ async function lnServerDispatch(lnAccounts, i, serverId, step, edit, kv, chatId)
   }
   if (step === "rebuild") {
     const imgs = (await lnGetAll(acc.token, "/images")).filter((x) => x.status === "available");
-    if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!imgs.length) return edit("❌ تصویری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     imgs.sort((a, b) => String(a.label).localeCompare(String(b.label)));
     const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsv:${i}:${serverId}:rebuild:${im.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🛠️ تصویر جدید برای ریبیلد:", kb);
   }
   if (step === "upgrade") {
     const types = await lnGetAll(acc.token, "/linode/types");
     const cur = s.specs || {};
     const up = types.filter((t) => t.id !== s.type && (t.memory > (cur.memory || 0) || t.vcpus > (cur.vcpus || 0) || t.disk > (cur.disk || 0)));
-    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!up.length) return edit("❌ پلن ارتقای بالاتری موجود نیست.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     up.sort((a, b) => a.memory + a.vcpus + a.disk - (b.memory + b.vcpus + b.disk));
     const kb = grid2(
       up.slice(0, 60).map((t) => {
@@ -17222,14 +17228,14 @@ async function lnServerDispatch(lnAccounts, i, serverId, step, edit, kv, chatId)
         return { text: `${t.label} ($${pr.monthly || "?"}/m)`, callback_data: `lnsv:${i}:${serverId}:upgrade:${t.id}` };
       })
     );
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("⬆️ پلن جدید را انتخاب کنید:", kb);
   }
   if (step === "dsnap") {
     const imgs = (await lnGetAll(acc.token, "/images?is_public=false")).filter((x) => x.status === "available");
-    if (!imgs.length) return edit("❌ اسنپ‌شاتی برای حذف پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }]]);
+    if (!imgs.length) return edit("❌ اسنپ‌شاتی برای حذف پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = grid2(imgs.slice(0, 60).map((im) => ({ text: im.label, callback_data: `lnsv:${i}:${serverId}:dsnap:${im.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: back }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🗑 اسنپ‌شات برای حذف:", kb);
   }
   const label = { on: "روشن کردن", off: "خاموش کردن", reset: "ریست", reboot: "ریبوت", pass: "ریست رمز", del: "حذف سرور", snap: "ساخت اسنپ‌شات", a4: "افزودن IPv4", a6: "افزودن IPv6", u4: "حذف IPv4", u6: "حذف IPv6" }[step];
@@ -17253,7 +17259,7 @@ async function lnServerDo(lnAccounts, i, serverId, step, arg, edit, extra) {
   const xchat = extra && extra.chatId;
   const acc = lnAccounts[i];
   const token = acc.token;
-  const back = [[{ text: "🔙 بازگشت", callback_data: `lnsi:${i}:${serverId}` }]];
+  const back = [[{ text: "🔙 بازگشت", callback_data: `lnsi:${i}:${serverId}` }, { text: "🏠 خانه", callback_data: "menu" }]];
   const backList = [[{ text: "🖥️ سرورها", callback_data: `lns:${i}:0` }]];
   if (step === "del") {
     const r = await lnFetch(token, `/linode/instances/${serverId}`, { method: "DELETE" });
@@ -17367,7 +17373,7 @@ async function showLnIpInfo(lnAccounts, i, token, edit, kv) {
   const acc = lnAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   const rec = await kv.get(`lnip:${token}`, "json");
-  if (!rec) return edit("⏳ نشست منقضی شده.");
+  if (!rec) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const ips = await lnGetAll(acc.token, "/networking/ips");
   const ip = ips.find((x) => x.address === rec.address);
   if (!ip) return edit("❌ آی‌پی پیدا نشد.");
@@ -17389,7 +17395,7 @@ async function showLnIpInfo(lnAccounts, i, token, edit, kv) {
     { text: "❌ حذف اختصاص", callback_data: `lnpu:${i}:${token}:unassign` },
     { text: "🗑 حذف آی‌پی", callback_data: `lnpu:${i}:${token}:del` },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: `lnp:${i}:0` }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lnp:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -17403,9 +17409,9 @@ async function lnIpDispatch(lnAccounts, i, token, step, edit, kv, chatId) {
   }
   if (step === "assign") {
     const servers = await lnGetAll(acc.token, "/linode/instances");
-    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+    if (!servers.length) return edit("❌ سروری پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = grid2(servers.map((s) => ({ text: s.label, callback_data: `lnpv:${i}:${token}:assign:${s.id}` })));
-    kb.push([{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]);
     return edit("🔗 سرور مقصد را انتخاب کنید:", kb);
   }
   const label = step === "unassign" ? "حذف اختصاص آی‌پی" : "حذف آی‌پی";
@@ -17423,7 +17429,7 @@ async function lnIpPick(lnAccounts, i, token, step, arg, edit, kv) {
     body: JSON.stringify({ linode_id: Number(arg) }),
   });
   if (r.errors) return edit("❌ خطا: " + lnErr(r));
-  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+  return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function lnIpDo(lnAccounts, i, token, step, edit, kv) {
@@ -17439,7 +17445,7 @@ async function lnIpDo(lnAccounts, i, token, step, edit, kv) {
   if (step === "unassign") {
     const r = await lnFetch(acc.token, `${base}/unassign`, { method: "POST", body: "{}" });
     if (r.errors) return edit("❌ خطا: " + lnErr(r));
-    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }]]);
+    return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `lnpi:${i}:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   return edit("❓ عملیات ناشناخته.");
 }
@@ -17484,7 +17490,7 @@ async function showLnSnapshotInfo(lnAccounts, i, imageId, edit) {
   // lnnu:...:rename تغییر نام | lnnu:...:del حذف اسنپ‌شات
   const kb = [
     [{ text: "✏️ تغییر نام", callback_data: `lnnu:${i}:${imageId}:rename` }, { text: "🗑 حذف", callback_data: `lnnu:${i}:${imageId}:del` }],
-    [{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }],
+    [{ text: "🔙 بازگشت", callback_data: `lnn:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(text, kb);
 }
@@ -17518,13 +17524,13 @@ function nameShortStr(name, zoneName) {
 
 async function favPickOpen(kv, chatId, accounts, edit, token, page) {
   const session = await kv.get(`s:${token}`, "json");
-  if (!session) return edit("⏳ نشست منقضی شده.");
+  if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const zone = await getZoneById(session.zone_id, session.acc, accounts);
   if (!zone) return edit("❌ دامنه پیدا نشد.");
   const records = await getRecords(zone, accounts, kv);
-  if (!records.length) return edit(`📭 رکوردی در ${zone.name} نیست.`, [[{ text: "🔙 بازگشت", callback_data: "zones" }]]);
+  if (!records.length) return edit(`📭 رکوردی در ${zone.name} نیست.`, [[{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
-  if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+  if (st.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
   const favs = await getFavs(kv, chatId);
   const favIds = new Set(favs.filter((f) => f.zone_id === zone.id).map((f) => f.record_id));
   const chosen = new Set(st.ids || []);
@@ -17569,8 +17575,7 @@ async function favPickZoneScreen(kv, accounts, edit) {
   const kb = grid2(
     zones.map((z) => ({ text: `📁 ${z.name}`, callback_data: `favz:${z._acc}:${z.id}` }))
   );
-  kb.push([{ text: "🔙 بازگشت", callback_data: "favs" }]);
-  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "favs" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(zones.length ? "دامنه‌ای را که می‌خواهید از رکوردهایش به منتخب اضافه کنید انتخاب کنید:" : "📭 دامنه‌ای یافت نشد.", kb);
 }
 
@@ -17749,7 +17754,7 @@ async function renderIpSearchMenu(io, token, page, note) {
     if (results.length) kb.push([{ text: "🗂 گروهی", callback_data: `ipselmode:${token}` }]);
     kb.push([{ text: "➕ افزودن ساب جدید", callback_data: "qanadd", style: "danger" }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await fn((note || "") + lines.join("\n"), kb);
 }
 
@@ -17774,7 +17779,7 @@ async function renderQanZonePicker(io, page) {
     items.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ☁️ ${z.name}`, callback_data: `qanz:${z._acc}:${z.id}` });
   }
   if (!items.length) {
-    return fn("📭 هیچ دامنه‌ای برای ساخت ساب وجود ندارد.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    return fn("📭 هیچ دامنه‌ای برای ساخت ساب وجود ندارد.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const pages = Math.max(1, Math.ceil(items.length / ZONE_PAGE_SIZE));
   if (page < 0) page = 0;
@@ -17818,8 +17823,8 @@ async function createQaSub(pending, io) {
 async function renderQuickResults(token, results, query, qa, send) {
   if (!results.length) {
     const kb = qa && qa.ip
-      ? [[{ text: "🔙 بازگشت", callback_data: "qamenu" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
-      : [[{ text: "🔙 بازگشت", callback_data: "menu" }]];
+      ? [[{ text: "🔙 بازگشت", callback_data: "qamenu" }, { text: "🏠 خانه", callback_data: "menu" }]]
+      : [[{ text: "🏠 خانه", callback_data: "menu" }]];
     return send(`🔍 نتیجه‌ای برای «${escHtml(query)}» پیدا نشد.`, kb);
   }
   const slice = results.slice(0, 10);
@@ -17836,7 +17841,7 @@ async function renderQuickResults(token, results, query, qa, send) {
     const useQasel = qa && qa.ip && res.provider !== "arvan";
     kb.push([{ text: useQasel ? `⚡ ${label}` : `✏️ ${label}`, callback_data: useQasel ? `qasel:${token}:${i}` : `qn:${token}:${i}` }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await send(lines.join("\n"), kb);
 }
 
@@ -17896,7 +17901,7 @@ async function showQaConfirm(io) {
   const rec = await getRecordById(qa.acc, qa.zone_id, qa.record_id, accounts);
   if (!rec) {
     await kv.delete(`qa:${chatId}`);
-    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     return true;
   }
   // qaok: اعمال تغییر مقدار رکورد | qacancel: لغو عملیات
@@ -17910,13 +17915,13 @@ async function qaApply(io) {
   const { kv, chatId, messageId, accounts, botToken, edit } = io;
   const qa = await kv.get(`qa:${chatId}`, "json");
   if (!qa || !qa.record_id) {
-    await edit("⏳ انتخاب منقضی شد.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    await edit("⏳ انتخاب منقضی شد.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     return true;
   }
   const prev = await getRecordById(qa.acc, qa.zone_id, qa.record_id, accounts);
   if (!prev) {
     await kv.delete(`qa:${chatId}`);
-    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    await edit("❌ رکورد پیدا نشد (شاید حذف شده).", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     return true;
   }
   const res = await fetch(`${CF_API}/zones/${qa.zone_id}/dns_records/${qa.record_id}`, {
@@ -17948,9 +17953,9 @@ async function dispatchFavQa(data, io) {
   }
   if (data === "bulk_main") {
     const zones = await getAllZones(accounts, kv);
-    if (zones.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🔙 بازگشت", callback_data: "menu" }]]);
+    if (zones.length === 0) return edit("📭 هیچ دامنه‌ای نیست.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     const kb = zones.map((z) => [{ text: `${z.status === "active" ? "🟢" : "⚪"} ${z.name}`, callback_data: `bulkz:${z._acc}:${z.id}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: "menu" }]);
+    kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
     await edit("🗂 عملیات گروهی\n\nروی دامنه‌ای که می‌خواهید رکوردها را انتخاب کنید کلیک کنید:", kb);
     return true;
   }
@@ -17984,7 +17989,7 @@ async function dispatchFavQa(data, io) {
   if (data.startsWith("favpick:")) {
     const token = data.slice(8);
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.put(`favpk:${chatId}`, JSON.stringify({ token, ids: [], page: 0 }), { expirationTtl: 3600 });
     await favPickOpen(kv, chatId, accounts, edit, token, 0);
     return true;
@@ -17994,9 +17999,9 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const recordId = parts[2];
     const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
-    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    if (st.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const ids = st.ids || [];
     const idx = ids.indexOf(recordId);
     if (idx >= 0) ids.splice(idx, 1);
@@ -18011,7 +18016,7 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const page = Number(parts[2]) || 0;
     const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [], page: 0 };
-    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    if (st.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     st.page = page;
     await kv.put(`favpk:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
     await favPickOpen(kv, chatId, accounts, edit, token, page);
@@ -18026,9 +18031,9 @@ async function dispatchFavQa(data, io) {
   if (data.startsWith("favpsave:")) {
     const token = data.slice(9);
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const st = (await kv.get(`favpk:${chatId}`, "json")) || { token, ids: [] };
-    if (st.token !== token) return edit("⏳ نشست منقضی شده.");
+    if (st.token !== token) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.delete(`favpk:${chatId}`);
     const favs = await getFavs(kv, chatId);
     let added = 0;
@@ -18049,7 +18054,7 @@ async function dispatchFavQa(data, io) {
     const favs = await getFavs(kv, chatId);
     if (!favs.length) return edit("📭 سابی در منتخب‌ها نیست.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
     const kb = favs.map((f, i) => [{ text: `🗑 ${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, callback_data: `favdelx:${i}` }]);
-    kb.push([{ text: "🔙 بازگشت", callback_data: "favs" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "favs" }, { text: "🏠 خانه", callback_data: "menu" }]);
     await edit("🗑 کدام ساب از منتخب‌ها حذف شود؟", kb);
     return true;
   }
@@ -18067,7 +18072,7 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const recordId = parts[2];
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const favs = await getFavs(kv, chatId);
     const zoneIdForFav = session.zone_id;
     const zoneNameForFav = session.zone_name;
@@ -18076,7 +18081,7 @@ async function dispatchFavQa(data, io) {
       await saveFavs(kv, chatId, keep);
     } else {
       const rec = await getRecordById(session.acc, session.zone_id, recordId, accounts);
-      if (!rec) return edit("❌ رکورد پیدا نشد.");
+      if (!rec) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
       favs.push({ zone_id: zoneIdForFav, zone_name: zoneNameForFav, acc: session.acc, record_id: recordId, name: rec.name, type: rec.type });
       await saveFavs(kv, chatId, favs);
     }
@@ -18089,9 +18094,9 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const recordId = parts[2];
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const r = await fetchRecordForSession(kv, accounts, session, recordId, io.env);
-    if (!r) return edit("❌ رکورد پیدا نشد.");
+    if (!r) return edit("❌ رکورد پیدا نشد (شاید حذف شده). از لیست دوباره بازش کن.");
     await renderCnameReferrers(kv, accounts, edit, chatId, session, r, token, recordId, io.env);
     return true;
   }
@@ -18114,7 +18119,7 @@ async function dispatchFavQa(data, io) {
     else selected.push(recordId);
     await kv.put(`sel:${chatId}`, JSON.stringify(selected), { expirationTtl: 3600 });
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const zone = await getZoneById(session.zone_id, session.acc, accounts);
     await showBulkSelect(kv, accounts, edit, token, zone, Number(session.bpage) || 0, selected);
     return true;
@@ -18123,7 +18128,7 @@ async function dispatchFavQa(data, io) {
     await kv.delete(`sel:${chatId}`);
     const token = data.slice(8);
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     const zone = await getZoneById(session.zone_id, session.acc, accounts);
     const records = await getRecords(zone, accounts, kv);
     await renderRecords(zone, records, token, Number(session.bpage) || 0, edit, undefined, session.zback);
@@ -18134,7 +18139,7 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const page = Number(parts[2]);
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     session.bpage = page;
     await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
     const zone = await getZoneById(session.zone_id, session.acc, accounts);
@@ -18148,10 +18153,10 @@ async function dispatchFavQa(data, io) {
     const selected = await kv.get(`sel:${chatId}`, "json");
     if (!Array.isArray(selected) || selected.length === 0) {
       await kv.delete(`sel:${chatId}`);
-      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_del", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
     await edit(`⚠️ ${selected.length} رکورد انتخاب شده. مطمئنید حذف شوند؟`, [
       [{ text: "✅ بله، حذف کن", callback_data: `bdely:${token}` }, { text: "❌ انصراف", callback_data: `bulkdne:${token}` }],
@@ -18163,10 +18168,10 @@ async function dispatchFavQa(data, io) {
     const selected = await kv.get(`sel:${chatId}`, "json");
     if (!Array.isArray(selected) || selected.length === 0) {
       await kv.delete(`sel:${chatId}`);
-      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     let ok = 0;
     for (const id of selected) {
       const del = await fetch(`${CF_API}/zones/${session.zone_id}/dns_records/${id}`, {
@@ -18179,7 +18184,7 @@ async function dispatchFavQa(data, io) {
     }
     await invalidateCache(kv, session.zone_id);
     await kv.delete(`sel:${chatId}`);
-    await edit(`✅ ${ok} از ${selected.length} رکورد حذف شد.`, [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+    await edit(`✅ ${ok} از ${selected.length} رکورد حذف شد.`, [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return true;
   }
   if (data.startsWith("bedit:")) {
@@ -18187,10 +18192,10 @@ async function dispatchFavQa(data, io) {
     const selected = await kv.get(`sel:${chatId}`, "json");
     if (!Array.isArray(selected) || selected.length === 0) {
       await kv.delete(`sel:${chatId}`);
-      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_edit", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
     await edit("✏️ مقدار جدید را بفرستید:", [[{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]]);
     return true;
@@ -18200,10 +18205,10 @@ async function dispatchFavQa(data, io) {
     const selected = await kv.get(`sel:${chatId}`, "json");
     if (!Array.isArray(selected) || selected.length === 0) {
       await kv.delete(`sel:${chatId}`);
-      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_type", ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
     const kb = RECORD_TYPES.map((t) => [{ text: `به ${t}`, callback_data: `bty:${token}:${t}` }]);
     kb.push([{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]);
@@ -18217,10 +18222,10 @@ async function dispatchFavQa(data, io) {
     const selected = await kv.get(`sel:${chatId}`, "json");
     if (!Array.isArray(selected) || selected.length === 0) {
       await kv.delete(`sel:${chatId}`);
-      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }]]);
+      return edit("❌ هیچ رکوردی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: `rback:${token}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const session = await kv.get(`s:${token}`, "json");
-    if (!session) return edit("⏳ نشست منقضی شده.");
+    if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "bulk_type_convert", new_type: newType, ids: selected, zone_id: session.zone_id, acc: session.acc, token, msgId: messageId }), { expirationTtl: 600 });
     await edit(`🔄 مقدار جدید را برای نوع ${newType} بفرستید:`, [[{ text: "❌ انصراف", callback_data: `bulkdne:${token}` }]]);
     return true;
@@ -18515,7 +18520,7 @@ async function dispatchFavQa(data, io) {
     const token = parts[1];
     const idx = Number(parts[2]);
     const stored = await kv.get(`sr:${token}`, "json");
-    if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده.");
+    if (!stored || !stored.results[idx]) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
     const res = stored.results[idx];
     // نتیجهٔ آروانی: جزئیات رکورد آروان
     if (res.provider === "arvan") {
@@ -18542,7 +18547,7 @@ async function dispatchFavQa(data, io) {
   if (data.startsWith("qnb:")) {
     const token = data.slice(4);
     const stored = await kv.get(`sr:${token}`, "json");
-    if (!stored) return edit("⏳ نشست منقضی شده.", mainMenuKeyboard());
+    if (!stored) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", mainMenuKeyboard());
     const qa = await kv.get(`qa:${chatId}`, "json");
     await renderQuickResults(token, stored.results || [], stored.query, qa, edit);
     return true;
@@ -18939,7 +18944,7 @@ function hfEff(cfg) {
 // Manual-run progress marker (manual runs only — zero quota impact on scheduled runs).
 async function hfProg(kv, manual, stage, detail) {
   if (!manual) return;
-  try { await kv.put("hf_progress", JSON.stringify({ stage, detail: String(detail || "").slice(0, 120), ts: Date.now() })); } catch (e) {}
+  try { await kv.put("hf_progress", JSON.stringify({ stage, detail: String(detail || "").slice(0, 120), ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
 }
 
 // Estimate full-check minutes from domain count (parallel batches: ~3s/domain checkhost, ~5s/domain globalping + ~45s overhead).
@@ -19887,7 +19892,7 @@ async function renderHostFilterHome(edit, kv, env) {
   kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }, { text: "⚙️ تنظیمات گلوبال‌پینگ", callback_data: "hfsetgp" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
   // mons: بازگشت به صفحهٔ مانیتورها
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -19934,7 +19939,7 @@ async function renderHostFilterSettingsCh(edit, kv, cfg0) {
   kb.push([{ text: "🌆 انتخاب شهرها", callback_data: "hfcities" }]);
   kb.push([{ text: "🎯 حداقل شهر", callback_data: "hfsetedit:cities" }, { text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
   kb.push(...hfCommonSettingsKb(cfg));
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -19961,7 +19966,7 @@ async function renderHostFilterSettingsGp(edit, kv, cfg0) {
   // hfsettoken: ثبت/حذف توکن Globalping
   kb.push([{ text: "🔑 توکن Globalping", callback_data: "hfsettoken" }]);
   kb.push(...hfCommonSettingsKb(cfg));
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -19969,7 +19974,7 @@ async function renderHostFilterSettingsGp(edit, kv, cfg0) {
 async function renderHostFilterCities(edit, kv) {
   const cfg = await getHostFilterCfg(kv);
   const kb = IR_CITIES.map((c) => [{ text: (cfg.citiesSel.includes(c) ? "✅ " : "⬜ ") + c, callback_data: "hfcityt:" + c }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hfsetch" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hfsetch" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit("🌆 کدام شهرها بررسی شوند؟\n(حداقل یک شهر باید فعال بماند؛ حداقل شهرها خودکار اصلاح می‌شود)", kb);
 }
 
@@ -19983,7 +19988,7 @@ async function renderHostFilterBackups(edit, kv) {
   for (const b of backups) {
     kb.push([{ text: "↩️ " + ndFmtTs(b.ts), callback_data: "hfbkr:" + b.id }, { text: "🗑", callback_data: "hfbkdel:" + b.id }]);
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -20018,12 +20023,12 @@ async function renderHostFilterHosts(edit, kv, env) {
     }
   }
   if (!n) lines.push("📭 هاستی پیدا نشد.");
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
 async function hfHostCheck(kv, env, panelId, hostId) {
-  const back = [[{ text: "🔙 بازگشت", callback_data: "hflist" }]];
+  const back = [[{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }]];
   const cfg = await getHostFilterCfg(kv);
   cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
   const panels = await getPanels(kv);
