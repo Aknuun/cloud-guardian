@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.17";
+const BOT_VERSION = "1.8.18";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.18": [
+    "⚡ سرعت: راهنمای توکن رایگان Globalping + هشدار بدون‌توکنی؛ نکته استثنا بالای صفحه؛ استثنای گروهی (همه / هر پنل) در لیست هاست‌ها",
+  ],
   "1.8.17": [
     "⚡ فورس دیگر با کرون قاطی نمی‌کند: ران تکراری و پیام گیرکرده نداریم؛ اگر چیزی گیر کرد، واچ‌داگ مرحله‌اش را خبر می‌دهد",
   ],
@@ -14010,6 +14013,49 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       cfg.exceptions = [...set];
       await saveHostFilterCfg(kv, cfg);
       await renderHostFilterHosts(edit, kv, env);
+    } else if (data === "hfexcall" || data === "hfunexcall") {
+      // استثنای گروهی سراسری: همهٔ هاست‌های همهٔ پنل‌ها
+      const put = data === "hfexcall";
+      const cfg = await getHostFilterCfg(kv);
+      const set = new Set(cfg.exceptions || []);
+      const panels = await getPanels(kv);
+      for (const panel of panels) {
+        let token = null;
+        try { token = await panelLogin(panel); } catch (e) {}
+        if (!token) continue;
+        let hosts = [];
+        try { hosts = await panelHosts(panel, token); } catch (e) {}
+        for (const h of hosts || []) {
+          const key = panel.id + ":" + h.id;
+          if (put) set.add(key);
+          else set.delete(key);
+        }
+      }
+      cfg.exceptions = [...set];
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterHosts(edit, kv, env);
+    } else if (data.startsWith("hfexcpanel:") || data.startsWith("hfunexcpanel:")) {
+      // استثنای گروهی یک پنل
+      const put = data.startsWith("hfexcpanel:");
+      const pid = data.split(":")[1];
+      const cfg = await getHostFilterCfg(kv);
+      const set = new Set(cfg.exceptions || []);
+      const panels = await getPanels(kv);
+      const panel = panels.find((p) => String(p.id) === String(pid));
+      if (panel) {
+        let token = null;
+        try { token = await panelLogin(panel); } catch (e) {}
+        let hosts = [];
+        try { hosts = token ? await panelHosts(panel, token) : []; } catch (e) {}
+        for (const h of hosts || []) {
+          const key = panel.id + ":" + h.id;
+          if (put) set.add(key);
+          else set.delete(key);
+        }
+      }
+      cfg.exceptions = [...set];
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterHosts(edit, kv, env);
     } else if (data === "hftg") {
       const cfg = await getHostFilterCfg(kv);
       cfg.enabled = !cfg.enabled;
@@ -14226,7 +14272,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "hfsettoken") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_gptoken" }), { expirationTtl: 600 });
       await edit(
-        "🔑 توکن Globalping را بفرستید (از dash.globalping.io).\nبرای حذف توکن، یک خط «-» بفرستید.",
+        "🔑 توکن رایگان Globalping را همین‌جا بفرست.\n\nگرفتن توکن (۲ دقیقه):\n۱) وارد dash.globalping.io شو (ثبت‌نام با گیت‌هاب/گوگل)\n۲) بخش API Tokens ← Create new token\n۳) توکن را کپی و همین‌جا بفرست\n\nبدون توکن، سهمیه خیلی کم است و بررسی کند/ناقص می‌شود. برای حذف توکن، یک خط «-» بفرست.",
         [[{ text: "🔙 انصراف", callback_data: "hfsetgp" }]]
       );
     } else if (data === "hfcities") {
@@ -20291,6 +20337,8 @@ async function renderHostFilterHome(edit, kv, env) {
   const backups = await getHfBackups(kv);
   const count = Object.keys(states).length;
   const lines = ["🧭 تعویض خودکار هاست فیلتر", ""];
+  lines.push("💡 برای بررسی سریع‌تر: هاست‌هایی که نیاز به تعویض ندارند را از «📋 لیست هاست‌ها» با «🚫 استثنا» از چرخه خارج کن؛ هرچه هاست کمتر، ران زودتر تمام می‌شود.");
+  lines.push("");
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
   lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping (پیش‌فرض)") + (cfg.failover ? " (⏳ موقتاً با " + (cfg.provider === "checkhost" ? "گلوبال‌پینگ" : "چک‌هاست") + ")" : ""));
   lines.push("⏱ فاصلهٔ اجرا: هر " + cfg.intervalMin + " دقیقه");
@@ -20299,6 +20347,9 @@ async function renderHostFilterHome(edit, kv, env) {
     lines.push("🎯 آستانه: " + cfg.cities + " شهر از " + cfg.citiesSel.length + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
   } else {
     lines.push("🎯 آستانه: " + cfg.minFail + " پروب ایرانی از " + cfg.probes + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
+  }
+  if (!isCh && !((env && env.GLOBALPING_TOKEN) || cfg.gpToken)) {
+    lines.push("🔑 توکن Globalping ثبت نشده؛ بدون توکن سهمیه خیلی کم است و بررسی کند/ناقص می‌شود — از «⚙️ تنظیمات گلوبال‌پینگ ← 🔑 توکن Globalping» راهنمای ۲دقیقه‌ای گرفتن توکن رایگان را ببین.");
   }
   lines.push("📦 تعداد هر اجرا: " + cfg.batch + " · 🔁 حداکثر تعویض: " + cfg.maxChanges);
   lines.push("🔁 بررسی مجدد: " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار، هر " + cfg.recheckMin + " دقیقه" : "غیرفعال (تعویض فوری)"));
@@ -20393,7 +20444,7 @@ async function renderHostFilterSettingsGp(edit, kv, cfg0) {
   lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
   lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
   lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
-  lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده"));
+  lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده — دکمهٔ «🔑 توکن Globalping» راهنمای ۲دقیقه‌ای گرفتن توکن رایگان را نشان می‌دهد"));
   const kb = [];
   kb.push([{ text: "⏱ فاصلهٔ اجرا", callback_data: "hfsetedit:interval" }]);
   // probes: تعداد پروب ایرانی | minfail: حداقل پروب فیلتر | maxok: حداکثر پینگ موفق
@@ -20432,8 +20483,12 @@ async function renderHostFilterHosts(edit, kv, env) {
   const panels = await getPanels(kv);
   const cfg = await getHostFilterCfg(kv);
   const exc = new Set(cfg.exceptions || []);
-  const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · ⚡ فورس = بررسی و تعویض فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", ""];
+  const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · ⚡ فورس = بررسی و تعویض فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
   const kb = [];
+  kb.push([
+    { text: "🚫 استثنای همه", callback_data: "hfexcall" },
+    { text: "✅ لغو استثنای همه", callback_data: "hfunexcall" },
+  ]);
   let n = 0;
   for (const panel of panels) {
     const token = await panelLogin(panel);
@@ -20444,6 +20499,12 @@ async function renderHostFilterHosts(edit, kv, env) {
     } catch (e) {
       continue;
     }
+    lines.push("");
+    lines.push("— 🖥 " + String(panel.name || panel.id) + " —");
+    kb.push([
+      { text: "🚫 همهٔ این پنل", callback_data: `hfexcpanel:${panel.id}` },
+      { text: "✅ فعال‌سازی همه", callback_data: `hfunexcpanel:${panel.id}` },
+    ]);
     for (const h of hosts) {
       n++;
       const addr = (Array.isArray(h.address) && h.address[0]) || "";
