@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.28";
+const BOT_VERSION = "1.8.29";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.29": [
+    "🔔 latch هشدارها تک‌کلیده با انقضای خودکار شد (write کمتر، بدون race، بدون prune)",
+  ],
   "1.8.28": [
     "🔔 ضداسپم وبهوک: فقط آستانه صریح پنل یا باند دقیق (ساخت کاربر و تمام‌شده‌ها ساکت)",
   ],
@@ -7681,7 +7684,6 @@ async function renderNodeMonitor(monitors, idx, edit, kv) {
 
 // ===================== هشدار انقضا/حجم پاسارگارد (pghook) =====================
 // پنل در تنظیمات webhook خودش به /pghook/<secret> خبر می‌دهد (days_left/usage_percent).
-const PGHOOK_SENT_TTL_MS = 7 * 86400000;
 async function getPgHookCfg(kv) {
   let c = null;
   try { c = await kv.get("pghook_cfg", "json"); } catch (e) {}
@@ -7842,17 +7844,21 @@ async function handlePgHook(token, payload, env, botToken) {
       try { logE("PGHOOK_UNKNOWN", panel.id + " :: " + pgSafePreview(payload)); } catch (e) {}
       return;
     }
-    let sent = null;
-    try { sent = (await kv.get("pghook_sent", "json")) || {}; } catch (e) { sent = {}; }
-    if (!sent || typeof sent !== "object") sent = {};
     const nowMs = Date.now();
-    for (const k of Object.keys(sent)) {
-      if (!sent[k] || nowMs - Number(sent[k]) >= PGHOOK_SENT_TTL_MS) delete sent[k];
-    }
+    const pgSeen = async (key) => {
+      try {
+        const v = await kv.get("pgs:" + key, "text");
+        return v !== null && v !== undefined;
+      } catch (e) { return false; }
+    };
+    const pgMark = async (key) => {
+      try { await kv.put("pgs:" + key, String(nowMs), { expirationTtl: 7 * 86400 }); } catch (e) {}
+    };
     let anyJob = false;
     for (const ev of events) {
       if (!ev.username) continue;
       const jobs = [];
+      const markKeys = [];
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
       // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
@@ -7861,7 +7867,7 @@ async function handlePgHook(token, payload, env, botToken) {
         const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
         if (ok) {
           const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
-          if (!sent[key]) { jobs.push({ kind: "days", value: dv, key }); sent[key] = nowMs; }
+          if (!(await pgSeen(key))) { jobs.push({ kind: "days", value: dv, key }); markKeys.push(key); }
         }
       }
       if (ev.usage !== null && ev.usage !== undefined) {
@@ -7869,7 +7875,7 @@ async function handlePgHook(token, payload, env, botToken) {
         const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
         if (ok) {
           const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
-          if (!sent[key]) { jobs.push({ kind: "usage", value: uv, key }); sent[key] = nowMs; }
+          if (!(await pgSeen(key))) { jobs.push({ kind: "usage", value: uv, key }); markKeys.push(key); }
         }
       }
       if (!jobs.length) continue;
@@ -7889,7 +7895,7 @@ async function handlePgHook(token, payload, env, botToken) {
       }
     }
     if (anyJob) {
-      try { await kv.put("pghook_sent", JSON.stringify(sent)); } catch (e) {}
+      for (const k of markKeys) await pgMark(k);
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
