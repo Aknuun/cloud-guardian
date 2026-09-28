@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.27";
+const BOT_VERSION = "1.8.28";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.28": [
+    "🔔 ضداسپم وبهوک: فقط آستانه صریح پنل یا باند دقیق (ساخت کاربر و تمام‌شده‌ها ساکت)",
+  ],
   "1.8.27": [
     "🔔 آستانه‌ها فقط در پنل تنظیم می‌شوند؛ ربات فقط فوروارد می‌کند (دکمه‌های آستانه حذف شد)",
   ],
@@ -7744,16 +7747,21 @@ function pgParseOne(p) {
   const username = str(p.username || p.user_name || u.username || p.name);
   const owner = str(by.username || p.admin || p.owner || (u.admin && (u.admin.username || u.admin)) || "");
   const ownerTg = pgNum(by.telegram_id != null ? by.telegram_id : p.telegram_id);
-  let days = pgNum(p.days_left != null ? p.days_left : p.daysLeft != null ? p.daysLeft : p.expire_days != null ? p.expire_days : p.remaining_days);
-  if (days === null) days = pgExpireDays(u.expire != null ? u.expire : u.expire_date != null ? u.expire_date : p.expire);
-  let usage = pgNum(p.usage_percent != null ? p.usage_percent : p.used_percent != null ? p.used_percent : p.usage_percentage);
-  if (usage === null) {
+  const daysExplicit = p.days_left != null || p.daysLeft != null || p.expire_days != null || p.remaining_days != null;
+  const usageExplicit = p.usage_percent != null || p.used_percent != null || p.usage_percentage != null;
+  let days = daysExplicit
+    ? pgNum(p.days_left != null ? p.days_left : p.daysLeft != null ? p.daysLeft : p.expire_days != null ? p.expire_days : p.remaining_days)
+    : pgExpireDays(u.expire != null ? u.expire : u.expire_date != null ? u.expire_date : p.expire);
+  let usage = null;
+  if (usageExplicit) {
+    usage = pgNum(p.usage_percent != null ? p.usage_percent : p.used_percent != null ? p.used_percent : p.usage_percentage);
+  } else {
     const used = pgNum(u.used_traffic != null ? u.used_traffic : p.used_traffic);
     const lim = pgNum(u.data_limit != null ? u.data_limit : p.data_limit);
     if (used !== null && lim !== null && lim > 0) usage = (used / lim) * 100;
   }
   const ev = str(p.action || p.event || p.type || p.kind).toLowerCase();
-  return { username, owner, ownerTg, days, usage, ev };
+  return { username, owner, ownerTg, days, usage, daysExplicit, usageExplicit, ev };
 }
 function pgParseEvents(payload) {
   const arr = Array.isArray(payload) ? payload : [payload];
@@ -7845,16 +7853,24 @@ async function handlePgHook(token, payload, env, botToken) {
     for (const ev of events) {
       if (!ev.username) continue;
       const jobs = [];
-      // پنل مرجع آستانه است؛ ربات فقط فوروارد می‌کند (latch روی پله مقدار تا تکرار نیاید)
+      // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
+      // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
+      // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
       if (ev.days !== null && ev.days !== undefined) {
         const dv = Math.floor(ev.days * 10) / 10;
-        const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
-        if (!sent[key]) { jobs.push({ kind: "days", value: dv, key }); sent[key] = nowMs; }
+        const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
+        if (ok) {
+          const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
+          if (!sent[key]) { jobs.push({ kind: "days", value: dv, key }); sent[key] = nowMs; }
+        }
       }
       if (ev.usage !== null && ev.usage !== undefined) {
         const uv = Math.floor(ev.usage * 10) / 10;
-        const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
-        if (!sent[key]) { jobs.push({ kind: "usage", value: uv, key }); sent[key] = nowMs; }
+        const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
+        if (ok) {
+          const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
+          if (!sent[key]) { jobs.push({ kind: "usage", value: uv, key }); sent[key] = nowMs; }
+        }
       }
       if (!jobs.length) continue;
       anyJob = true;
