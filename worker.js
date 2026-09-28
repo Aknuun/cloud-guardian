@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.15";
+const BOT_VERSION = "1.8.16";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.16": [
+    "🛡 نصب دستی نسخه: تلاش مجدد خودکار روی خطای لحظه‌ای دیپلوی + نمایش جزئیات خطای کلادفلر در پیام",
+  ],
   "1.8.15": [
     "🔄 منوی نسخه‌ها تگ‌ها را هم می‌بیند (مثل آپدیت خودکار) — نسخه‌های تگ‌خورده بدون ریلیز هم در لیست و «آخر» حساب می‌شوند",
   ],
@@ -2442,8 +2445,30 @@ async function selfDeployTag(env, botToken, adminId, o) {
       body: enc.encode(bodyStr),
       signal: withTimeout(90000),
     });
-    const upData = await upRes.json();
-    if (!upData.success) { await selfupBackoff(kv, 30, 90); return { ok: false, reason: "deploy" }; }
+    let upData = await upRes.json();
+    if (!upData.success) {
+      // خطای لحظه‌ای کلادفلر؟ یک‌بار دیگر تلاش کن، بعد با جزئیات گزارش بده
+      try { await sleep(5000); } catch (e) {}
+      try {
+        const upRes2 = await fetch(base, {
+          method: "PUT",
+          headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+          body: enc.encode(bodyStr),
+          signal: withTimeout(90000),
+        });
+        upData = await upRes2.json();
+      } catch (e) {}
+    }
+    if (!upData.success) {
+      await selfupBackoff(kv, 30, 90);
+      let cfErr = "";
+      try {
+        const es = (upData && upData.errors) || [];
+        cfErr = es.filter((x) => x && (x.code || x.message)).slice(0, 2)
+          .map((x) => "code " + x.code + " — " + String(x.message || "")).join(" / ");
+      } catch (e) {}
+      return { ok: false, reason: "deploy", detail: (cfErr || "unknown error").slice(0, 160) };
+    }
     try {
       await fetch(base + "/subdomain", {
         method: "POST",
@@ -11177,7 +11202,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         } catch (e) {}
         await edit("✅ نسخه " + vTag + " نصب شد." + (vLatest2 && vTag === vLatest2 ? "" : "\n📌 پین شد — آپدیت خودکار تا تغییر پین دخالت نمی‌کند."), vBack);
       } else {
-        await edit("❌ نصب ناموفق بود (" + String(vr.reason || "unknown") + ").", vBack);
+        await edit("❌ نصب ناموفق بود (" + String(vr.reason || "unknown") + (vr.detail ? ": " + vr.detail : "") + ").", vBack);
       }
     } else if (data === "verlatest") {
       const vBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
@@ -11204,7 +11229,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         try { await kv.delete("selfup_pinned"); } catch (e) {}
         await edit("✅ به نسخه آخر آپدیت شد: " + vLatest3, vBack2);
       } else {
-        await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + ").", vBack2);
+        await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + (vr2.detail ? ": " + vr2.detail : "") + ").", vBack2);
       }
     } else if (data === "hubstats") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
