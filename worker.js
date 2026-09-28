@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.23";
+const BOT_VERSION = "1.8.24";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.24": [
+    "🔔 هر کاربر در هر موج فقط یک پیام می‌گیرد (تنگ‌ترین آستانه؛ دیگر پیام تکراری ۹۰/۱۰۰ نیست)",
+  ],
   "1.8.23": [
     "📤 دکمه allmarzbot با اشتراک‌گذاری کار می‌کند (یوزرنیم‌های نقطه‌دار هم سالم می‌رسند)",
   ],
@@ -7835,21 +7838,36 @@ async function handlePgHook(token, payload, env, botToken) {
     for (const ev of events) {
       if (!ev.username) continue;
       const jobs = [];
+      // هر کاربر در هر موج فقط یک پیام می‌گیرد: تنگ‌ترین آستانه؛ بقیه آستانه‌های ردشده ساکت latch می‌شوند
       if (ev.days !== null && ev.days !== undefined) {
         const dv = Math.floor(ev.days * 10) / 10;
+        let best = null;
+        for (const t of cfg.days) {
+          if (dv <= t && (best === null || t < best)) best = t;
+        }
         for (const t of cfg.days) {
           if (dv <= t) {
             const key = panel.id + ":" + ev.username + ":d:" + t;
-            if (!sent[key]) { jobs.push({ kind: "days", value: dv, threshold: t, key }); sent[key] = nowMs; }
+            if (!sent[key]) {
+              sent[key] = nowMs;
+              if (t === best) jobs.push({ kind: "days", value: dv, threshold: t, key });
+            }
           }
         }
       }
       if (ev.usage !== null && ev.usage !== undefined) {
         const uv = Math.floor(ev.usage * 10) / 10;
+        let best = null;
+        for (const t of cfg.usage) {
+          if (uv >= t && (best === null || t > best)) best = t;
+        }
         for (const t of cfg.usage) {
           if (uv >= t) {
             const key = panel.id + ":" + ev.username + ":u:" + t;
-            if (!sent[key]) { jobs.push({ kind: "usage", value: uv, threshold: t, key }); sent[key] = nowMs; }
+            if (!sent[key]) {
+              sent[key] = nowMs;
+              if (t === best) jobs.push({ kind: "usage", value: uv, threshold: t, key });
+            }
           }
         }
       }
