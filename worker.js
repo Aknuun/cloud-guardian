@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.25";
+const BOT_VERSION = "1.8.26";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.26": [
+    "📤 دکمه نهایی allmarzbot: باز شدن ربات با یوزر همان مشتری (tg resolve)",
+  ],
   "1.8.25": [
     "🧪 سه مدل دکمه ارسال یوزر به allmarzbot برای تست (start / اشتراک فقط‌متن / اشتراک لینک‌دار)",
   ],
@@ -7788,17 +7791,13 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   else lines.push(`⏳ روزهای مانده: ${a.value} (آستانه ${a.threshold})`);
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
-  // چند مدل دکمه برای تست: کدام‌یک یوزرنیم را سالم به allmarzbot می‌رساند
-  const kb = [];
-  if (a.username) {
-    const un = String(a.username).slice(0, 200);
-    kb.push([{ text: "1️⃣ start با یوزر", url: "https://t.me/allmarzbot?start=" + encodeURIComponent(un.slice(0, 64)) }]);
-    kb.push([{ text: "2️⃣ اشتراک فقط‌متن", url: "https://t.me/share/url?text=" + encodeURIComponent(un) }]);
-    kb.push([{
-      text: "3️⃣ اشتراک لینک‌دار",
-      url: "https://t.me/share/url?url=" + encodeURIComponent("https://t.me/allmarzbot") + "&text=" + encodeURIComponent(un),
-    }]);
-  }
+  // باز کردن allmarzbot با متن آماده = یوزرنیم همان مشتری
+  const kb = a.username
+    ? [[{
+      text: "📤 ارسال یوزر به allmarzbot",
+      url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(String(a.username).slice(0, 200)),
+    }]]
+    : [];
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
     return true;
