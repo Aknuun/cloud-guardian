@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.11";
+const BOT_VERSION = "1.8.12";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.12": [
+    "⚡ دکمه فورس تک‌هاست: بررسی و تعویض فوری همان‌جا (بدون انتظار کرون) + استثنا و هاست غیرفعال همچنان پابرجا",
+  ],
   "1.8.11": [
     "⏰ چک آپدیت خودکار روزی یک‌بار شد (به‌جای ساعتی) + 🔄 منوی نسخه‌ها در تنظیمات: انتخاب از ۲۰ ریلیز آخر و دکمهٔ آپدیت به نسخهٔ آخر",
   ],
@@ -13951,6 +13954,59 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("🔄 تعویض شروع شد؛ ران کامل تا کمتر از یک دقیقه دیگر آغاز می‌شود و نتیجه برایتان ارسال خواهد شد.", [
         [{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
+    } else if (data.startsWith("hfforce:")) {
+      // فورس تک‌هاست: همین‌جا و فوری بررسی + تعویض (بدون انتظار کرون).
+      // استثنا و هاست غیرفعال پابرجاست (فورس فقط یعنی «الان»، نه «به هر قیمت»).
+      // درخواست دستی بعد از اتمام/خطا حتماً پاک می‌شود تا هیچ‌وقت گیر نکند.
+      const parts = data.split(":");
+      const fKey = `${parts[1]}:${parts[2]}`;
+      const fBack = [[{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }]];
+      const fCfg = await getHostFilterCfg(kv);
+      const fPanels = await getPanels(kv);
+      const fPanel = fPanels.find((x) => String(x.id) === String(parts[1]));
+      if (!fPanel) return edit("❌ پنل پیدا نشد.", fBack);
+      const fToken = await panelLogin(fPanel);
+      if (!fToken) return edit("❌ ورود به پنل ناموفق.", fBack);
+      let fHosts;
+      try {
+        fHosts = await panelHosts(fPanel, fToken);
+      } catch (e) {
+        return edit("❌ خطا در خواندن هاست‌های پنل.", fBack);
+      }
+      const fHost = (fHosts || []).find((x) => String(x.id) === String(parts[2]));
+      if (!fHost) return edit("❌ هاست پیدا نشد.", fBack);
+      if (fHost.is_disabled) return edit("⏸ این هاست غیرفعال است؛ فورس اجرا نمی‌شود.", fBack);
+      if ((fCfg.exceptions || []).includes(fKey)) {
+        return edit("🚫 این هاست در لیست استثناست؛ فورس اجرا نمی‌شود.\n\nبرای تعویض، اول از لیست هاست دکمهٔ «✅ استثنا» را بزن.", fBack);
+      }
+      await edit("⚡ فورس شروع شد؛ همین حالا بررسی و تعویض این هاست…");
+      fCfg.manual_request = { ts: new Date().toISOString(), by: chatId, only: fKey };
+      await saveHostFilterCfg(kv, fCfg);
+      try {
+        const fr = await runHostFilter(env, { force: true });
+        const fFresh = await getHostFilterCfg(kv);
+        if (fFresh && fFresh.manual_request && String((fFresh.manual_request.only || "")) === fKey) {
+          fFresh.manual_request = null;
+          await saveHostFilterCfg(kv, fFresh);
+        }
+        await edit(
+          "⚡ فورس تمام شد.\n" +
+            `🔎 بررسی‌شده: ${fr && fr.checked != null ? fr.checked : "؟"}\n` +
+            `🔴 فیلتر: ${fr && fr.filtered != null ? fr.filtered : "؟"}\n` +
+            `🔄 تعویض: ${fr && fr.changed != null ? fr.changed : "؟"}` +
+            (fr && fr.changed ? "" : "\n\nاگر چیزی تعویض نشد، جزئیات در پیام گزارش زیر است."),
+          fBack
+        );
+      } catch (e) {
+        try {
+          const fCur = await getHostFilterCfg(kv);
+          if (fCur && fCur.manual_request && String((fCur.manual_request.only || "")) === fKey) {
+            fCur.manual_request = null;
+            await saveHostFilterCfg(kv, fCur);
+          }
+        } catch (x) {}
+        await edit("❌ فورس با خطا متوقف شد؛ درخواست پاک شد تا گیر نکند.\n" + String((e && e.message) || e).slice(0, 200), fBack);
+      }
     } else if (data === "hfcheck") {
       const cfg = await getHostFilterCfg(kv);
       cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
@@ -20236,7 +20292,7 @@ async function renderHostFilterHosts(edit, kv, env) {
   const panels = await getPanels(kv);
   const cfg = await getHostFilterCfg(kv);
   const exc = new Set(cfg.exceptions || []);
-  const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", ""];
+  const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · ⚡ فورس = بررسی و تعویض فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", ""];
   const kb = [];
   let n = 0;
   for (const panel of panels) {
@@ -20255,9 +20311,10 @@ async function renderHostFilterHosts(edit, kv, env) {
       const key = panel.id + ":" + h.id;
       const isExc = exc.has(key);
       lines.push(`${n}) ${h.is_disabled ? "⏸ " : ""}${label}`);
-      // hfchk: بررسی فوری فیلترشدن همین هاست | hfexc: افزودن/حذف همین هاست از استثناهای تعویض خودکار
+      // hfchk: بررسی فوری همین هاست | hfforce: بررسی و تعویض فوری همین هاست | hfexc: استثنای تعویض خودکار
       kb.push([
         { text: "🔎 " + label.substring(0, 16), callback_data: `hfchk:${panel.id}:${h.id}` },
+        { text: "⚡ فورس", callback_data: `hfforce:${panel.id}:${h.id}` },
         { text: (isExc ? "✅" : "🚫") + " استثنا", callback_data: `hfexc:${panel.id}:${h.id}` },
       ]);
     }
@@ -20320,11 +20377,12 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     await sleep(700);
   }
   if (anyBlocked) {
-    lines.push("", "🔴 این هاست فیلتر است؛ با دکمه زیر تعویضش کن:");
+    lines.push("", "🔴 این هاست فیلتر است؛ تعویض با کرون (دکمه اول) یا فوری و همین‌جا (دکمه دوم):");
     return {
       text: lines.join("\n"),
       kb: [
         [{ text: "🔄 تعویض ساب‌دامنه", callback_data: `hfswap:${panelId}:${h.id}`, style: "success" }],
+        [{ text: "⚡ فورس و تعویض فوری", callback_data: `hfforce:${panelId}:${h.id}`, style: "success" }],
         ...back,
       ],
     };
