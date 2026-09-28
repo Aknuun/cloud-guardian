@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.20";
+const BOT_VERSION = "1.8.21";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.21": [
+    "🔔 وبهوک پاسارگارد با فرمت واقعی سازگار شد (بچ، action، by، محاسبه روز/حجم از خود ایونت) + دیباگ بدون اطلاعات حساس",
+  ],
   "1.8.20": [
     "🔔 هشدار انقضا و حجم پاسارگارد: وبهوک هر پنل + آستانه روز/درصد + لینک ادمین پنل به ادمین ربات + پیام تستی",
   ],
@@ -7698,22 +7701,72 @@ async function pgRecipients(kv, env, adminId, panelId, owner) {
   }
   return [...out];
 }
-function pgParseEvent(payload) {
-  let p = payload;
-  if (!p || typeof p !== "object") return { username: "", kind: "unknown", value: null, owner: "", raw: payload };
-  const u = p.user && typeof p.user === "object" ? p.user : p;
+function pgNum(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function pgExpireDays(v) {
+  // timestamp (sec/ms) یا رشته تاریخ → روزهای مانده
+  if (v === null || v === undefined || v === "" || v === 0) return null;
+  let ms = null;
+  if (typeof v === "number" && Number.isFinite(v)) ms = v > 1e12 ? v : v > 1e9 ? v * 1000 : null;
+  else if (typeof v === "string") {
+    const t = Date.parse(v);
+    if (Number.isFinite(t)) ms = t;
+    else { const n = Number(v); if (Number.isFinite(n)) return pgExpireDays(n); else return null; }
+  } else return null;
+  if (ms === null) return null;
+  return (ms - Date.now()) / 86400000;
+}
+function pgParseOne(p) {
   const str = (v) => String(v == null ? "" : v).trim();
-  const num = (v) => {
-    if (v === null || v === undefined || v === "") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  };
+  const u = p.user && typeof p.user === "object" ? p.user : {};
+  const by = p.by && typeof p.by === "object" ? p.by : {};
   const username = str(p.username || p.user_name || u.username || p.name);
-  const owner = str(p.admin || p.owner || (u.admin && (u.admin.username || u.admin)) || "");
-  const days = num(p.days_left != null ? p.days_left : p.daysLeft != null ? p.daysLeft : p.expire_days != null ? p.expire_days : p.remaining_days);
-  const usage = num(p.usage_percent != null ? p.usage_percent : p.used_percent != null ? p.used_percent : p.usage_percentage);
-  const ev = str(p.event || p.type || p.kind).toLowerCase();
-  return { username, kind: "parsed", value: null, owner, days, usage, ev, raw: payload };
+  const owner = str(by.username || p.admin || p.owner || (u.admin && (u.admin.username || u.admin)) || "");
+  const ownerTg = pgNum(by.telegram_id != null ? by.telegram_id : p.telegram_id);
+  let days = pgNum(p.days_left != null ? p.days_left : p.daysLeft != null ? p.daysLeft : p.expire_days != null ? p.expire_days : p.remaining_days);
+  if (days === null) days = pgExpireDays(u.expire != null ? u.expire : u.expire_date != null ? u.expire_date : p.expire);
+  let usage = pgNum(p.usage_percent != null ? p.usage_percent : p.used_percent != null ? p.used_percent : p.usage_percentage);
+  if (usage === null) {
+    const used = pgNum(u.used_traffic != null ? u.used_traffic : p.used_traffic);
+    const lim = pgNum(u.data_limit != null ? u.data_limit : p.data_limit);
+    if (used !== null && lim !== null && lim > 0) usage = (used / lim) * 100;
+  }
+  const ev = str(p.action || p.event || p.type || p.kind).toLowerCase();
+  return { username, owner, ownerTg, days, usage, ev };
+}
+function pgParseEvents(payload) {
+  const arr = Array.isArray(payload) ? payload : [payload];
+  const out = [];
+  for (const p of arr) {
+    if (!p || typeof p !== "object") continue;
+    out.push(pgParseOne(p));
+  }
+  return out;
+}
+// خلاصه امن برای دیباگ: بدون پسورد/کلید/توکن
+function pgSafePreview(payload) {
+  try {
+    const arr = (Array.isArray(payload) ? payload : [payload]).slice(0, 3);
+    const clean = arr.map((p) => {
+      if (!p || typeof p !== "object") return "?";
+      const u = p.user && typeof p.user === "object" ? p.user : {};
+      const by = p.by && typeof p.by === "object" ? p.by : {};
+      return {
+        username: p.username || u.username || null,
+        action: p.action || p.event || p.type || null,
+        by: by.username || p.admin || null,
+        days_left: p.days_left != null ? p.days_left : undefined,
+        usage_percent: p.usage_percent != null ? p.usage_percent : undefined,
+        expire: u.expire != null ? u.expire : undefined,
+        used_traffic: u.used_traffic != null ? u.used_traffic : undefined,
+        data_limit: u.data_limit != null ? u.data_limit : undefined,
+      };
+    });
+    return JSON.stringify(clean).slice(0, 800);
+  } catch (e) { return "(unparseable)"; }
 }
 async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
@@ -7742,18 +7795,20 @@ async function handlePgHook(token, payload, env, botToken) {
     const panel = panels.find((x) => (cfg.panels[x.id] || {}).token === token);
     if (!panel) return;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
-    const ev = pgParseEvent(payload);
-    if (!ev.username) {
-      // شکل ناشناخته: فقط یک‌بار در ساعت به ادمین اصلی برای دیباگ
+    const admins = await getAdmins(kv, env);
+    const events = pgParseEvents(payload);
+    const unknowns = events.filter((e) => !e.username);
+    if (unknowns.length && events.length === unknowns.length) {
+      // هیچ‌کدام username ندارند: فقط یک‌بار در ساعت به ادمین اصلی برای دیباگ (بدون اطلاعات حساس)
       try {
         const dk = "pgdbg:" + panel.id;
         const last = Number((await kv.get(dk, "text")) || 0);
         if (Date.now() - last > 3600000) {
           await kv.put(dk, String(Date.now()), { expirationTtl: 7200 });
-          await sendMessage(botToken, adminId, "⚠️ وبهوک ناشناخته از پنل " + escHtml(panel.name || panel.id) + " (username پیدا نشد):\n" + code(JSON.stringify(payload).slice(0, 800)));
+          await sendMessage(botToken, adminId, "⚠️ وبهوک ناشناخته از پنل " + escHtml(panel.name || panel.id) + " (username پیدا نشد):\n" + code(pgSafePreview(payload)));
         }
       } catch (e) {}
-      try { logE("PGHOOK_UNKNOWN", panel.id + " :: " + JSON.stringify(payload).slice(0, 300)); } catch (e) {}
+      try { logE("PGHOOK_UNKNOWN", panel.id + " :: " + pgSafePreview(payload)); } catch (e) {}
       return;
     }
     let sent = null;
@@ -7763,33 +7818,46 @@ async function handlePgHook(token, payload, env, botToken) {
     for (const k of Object.keys(sent)) {
       if (!sent[k] || nowMs - Number(sent[k]) >= PGHOOK_SENT_TTL_MS) delete sent[k];
     }
-    const jobs = [];
-    if (ev.days !== null && ev.days !== undefined) {
-      for (const t of cfg.days) {
-        if (ev.days <= t) {
-          const key = panel.id + ":" + ev.username + ":d:" + t;
-          if (!sent[key]) { jobs.push({ kind: "days", value: ev.days, threshold: t, key }); sent[key] = nowMs; }
+    let anyJob = false;
+    for (const ev of events) {
+      if (!ev.username) continue;
+      const jobs = [];
+      if (ev.days !== null && ev.days !== undefined) {
+        const dv = Math.floor(ev.days * 10) / 10;
+        for (const t of cfg.days) {
+          if (dv <= t) {
+            const key = panel.id + ":" + ev.username + ":d:" + t;
+            if (!sent[key]) { jobs.push({ kind: "days", value: dv, threshold: t, key }); sent[key] = nowMs; }
+          }
         }
       }
-    }
-    if (ev.usage !== null && ev.usage !== undefined) {
-      for (const t of cfg.usage) {
-        if (ev.usage >= t) {
-          const key = panel.id + ":" + ev.username + ":u:" + t;
-          if (!sent[key]) { jobs.push({ kind: "usage", value: ev.usage, threshold: t, key }); sent[key] = nowMs; }
+      if (ev.usage !== null && ev.usage !== undefined) {
+        const uv = Math.floor(ev.usage * 10) / 10;
+        for (const t of cfg.usage) {
+          if (uv >= t) {
+            const key = panel.id + ":" + ev.username + ":u:" + t;
+            if (!sent[key]) { jobs.push({ kind: "usage", value: uv, threshold: t, key }); sent[key] = nowMs; }
+          }
         }
       }
-    }
-    if (!jobs.length) return;
-    try { await kv.put("pghook_sent", JSON.stringify(sent)); } catch (e) {}
-    const to = await pgRecipients(kv, env, adminId, panel.id, ev.owner);
-    for (const j of jobs) {
-      for (const id of to) {
-        await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, threshold: j.threshold, owner: ev.owner }, false);
+      if (!jobs.length) continue;
+      anyJob = true;
+      // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
+      const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner));
+      if (ev.ownerTg && Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 && admins.includes(ev.ownerTg) && (await pgStarted(kv, ev.ownerTg))) {
+        to.add(ev.ownerTg);
+      }
+      for (const j of jobs) {
+        for (const id of to) {
+          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, threshold: j.threshold, owner: ev.owner }, false);
+        }
+      }
+      if (!to.size) {
+        try { logE("PGHOOK_NORECIP", panel.id + " :: " + ev.username); } catch (e) {}
       }
     }
-    if (!to.length) {
-      try { logE("PGHOOK_NORECIP", panel.id + " :: " + ev.username); } catch (e) {}
+    if (anyJob) {
+      try { await kv.put("pghook_sent", JSON.stringify(sent)); } catch (e) {}
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
