@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.21";
+const BOT_VERSION = "1.8.22";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.22": [
+    "📤 دکمه ارسال یوزر به allmarzbot در پیام هشدار انقضا/حجم (به‌جای لینک پنل)",
+  ],
   "1.8.21": [
     "🔔 وبهوک پاسارگارد با فرمت واقعی سازگار شد (بچ، action، by، محاسبه روز/حجم از خود ایونت) + دیباگ بدون اطلاعات حساس",
   ],
@@ -7776,8 +7779,9 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   else lines.push(`⏳ روزهای مانده: ${a.value} (آستانه ${a.threshold})`);
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
-  if (!test) lines.push("\n💡 برای تمدید، از همین پنل اقدام کن.");
-  const kb = panel.url ? [[{ text: "🖥 باز کردن پنل", url: String(panel.url).replace(/\/+$/, "") }]] : [];
+  const kb = a.username
+    ? [[{ text: "📤 ارسال یوزر به allmarzbot", url: "https://t.me/allmarzbot?start=" + encodeURIComponent(String(a.username).slice(0, 64)) }]]
+    : [];
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
     return true;
