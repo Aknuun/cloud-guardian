@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.13";
+const BOT_VERSION = "1.8.14";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.14": [
+    "⚡ دکمه فورس بررسی کامل در صفحه تعویض خودکار: کل هاست‌ها همان‌جا و فوری بررسی و تعویض می‌شوند",
+  ],
   "1.8.13": [
     "🛡 لیست نسخه‌ها مقاوم شد: کش کهنه به‌جای خطا، تلاش مجدد، هدر User-Agent و پیام جدا برای تمام‌شدن سهمیه گیت‌هاب",
   ],
@@ -14030,6 +14033,42 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         } catch (x) {}
         await edit("❌ فورس با خطا متوقف شد؛ درخواست پاک شد تا گیر نکند.\n" + String((e && e.message) || e).slice(0, 200), fBack);
       }
+    } else if (data === "hfforceall") {
+      // فورس سراسری: بررسی+تعویض همهٔ هاست‌ها همین‌جا و فوری (بدون انتظار کرون).
+      // درخواست دستی بعد از اتمام/خطا حتماً پاک می‌شود تا هیچ‌وقت گیر نکند.
+      const fBackA = [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]];
+      await edit("⚡ فورس شروع شد؛ همین حالا بررسی کامل همهٔ هاست‌ها…");
+      const fTsA = new Date().toISOString();
+      const fcA = await getHostFilterCfg(kv);
+      fcA.manual_request = { ts: fTsA, by: chatId };
+      await saveHostFilterCfg(kv, fcA);
+      try {
+        const frA = await runHostFilter(env, { force: true });
+        try {
+          const fFreshA = await getHostFilterCfg(kv);
+          if (fFreshA && fFreshA.manual_request && String((fFreshA.manual_request.ts || "")) === fTsA) {
+            fFreshA.manual_request = null;
+            await saveHostFilterCfg(kv, fFreshA);
+          }
+        } catch (x) {}
+        await edit(
+          "⚡ فورس تمام شد.\n" +
+            `🔎 بررسی‌شده: ${frA && frA.checked != null ? frA.checked : "؟"}\n` +
+            `🔴 فیلتر: ${frA && frA.filtered != null ? frA.filtered : "؟"}\n` +
+            `🔄 تعویض: ${frA && frA.changed != null ? frA.changed : "؟"}` +
+            (frA && frA.changed ? "" : "\n\nاگر چیزی تعویض نشد، جزئیات در پیام گزارش زیر است."),
+          fBackA
+        );
+      } catch (e) {
+        try {
+          const fCurA = await getHostFilterCfg(kv);
+          if (fCurA && fCurA.manual_request && String((fCurA.manual_request.ts || "")) === fTsA) {
+            fCurA.manual_request = null;
+            await saveHostFilterCfg(kv, fCurA);
+          }
+        } catch (x) {}
+        await edit("❌ فورس با خطا متوقف شد؛ درخواست پاک شد تا گیر نکند.\n" + String((e && e.message) || e).slice(0, 200), fBackA);
+      }
     } else if (data === "hfcheck") {
       const cfg = await getHostFilterCfg(kv);
       cfg.manual_request = { ts: new Date().toISOString(), by: chatId };
@@ -20199,6 +20238,7 @@ async function renderHostFilterHome(edit, kv, env) {
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
+  kb.push([{ text: "⚡ فورس بررسی کامل", callback_data: "hfforceall" }]);
   // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود (دکمه وسط هم جابه‌جا می‌کند)
   kb.push([
     { text: (isCh ? "✅ " : "") + "🌐 چک‌هاست", callback_data: "hfprov:checkhost" },
