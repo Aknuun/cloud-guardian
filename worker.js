@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.22";
+const BOT_VERSION = "1.8.23";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.23": [
+    "📤 دکمه allmarzbot با اشتراک‌گذاری کار می‌کند (یوزرنیم‌های نقطه‌دار هم سالم می‌رسند)",
+  ],
   "1.8.22": [
     "📤 دکمه ارسال یوزر به allmarzbot در پیام هشدار انقضا/حجم (به‌جای لینک پنل)",
   ],
@@ -7779,8 +7782,14 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   else lines.push(`⏳ روزهای مانده: ${a.value} (آستانه ${a.threshold})`);
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
+  // start تلگرام نقطه و کاراکتر خاص قبول نمی‌کند و payload می‌پرد؛ اشتراک‌گذاری هر متنی را سالم می‌رساند
+  // (دو ضربه: انتخاب allmarzbot و ارسال — یوزرنیم دقیق، حتی با نقطه)
   const kb = a.username
-    ? [[{ text: "📤 ارسال یوزر به allmarzbot", url: "https://t.me/allmarzbot?start=" + encodeURIComponent(String(a.username).slice(0, 64)) }]]
+    ? [[{
+      text: "📤 ارسال یوزر به allmarzbot",
+      url: "https://t.me/share/url?url=" + encodeURIComponent("https://t.me/allmarzbot") +
+        "&text=" + encodeURIComponent(String(a.username).slice(0, 200)),
+    }]]
     : [];
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
