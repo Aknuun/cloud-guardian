@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.12";
+const BOT_VERSION = "1.8.13";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.13": [
+    "🛡 لیست نسخه‌ها مقاوم شد: کش کهنه به‌جای خطا، تلاش مجدد، هدر User-Agent و پیام جدا برای تمام‌شدن سهمیه گیت‌هاب",
+  ],
   "1.8.12": [
     "⚡ دکمه فورس تک‌هاست: بررسی و تعویض فوری همان‌جا (بدون انتظار کرون) + استثنا و هاست غیرفعال همچنان پابرجا",
   ],
@@ -2266,28 +2269,47 @@ function selfLatestTag(names) {
 
 // ---- نسخه‌ها (منوی تنظیمات): لیست کش‌شده + پین + دیپلوی مشترک ----
 // ۲۰ ریلیز پایدار آخر (کش یک‌ساعته در KV تا سهمیهٔ گیت‌هاب مصرف نشود).
+// هدر مشترک گیت‌هاب (بدون User-Agent بعضی پاسخ‌ها 403 می‌شوند).
+function ghApiHeaders(extra) {
+  return Object.assign({ Accept: "application/vnd.github+json", "User-Agent": "cloud-guardian-worker" }, extra || {});
+}
+
 async function selfCachedReleases(kv) {
+  // -> { items, stale, status }: خرابی فچ، کش قبلی (حتی کهنه) را برمی‌گرداند؛
+  // خالی فقط وقتی که هیچ‌وقت چیزی گرفته نشده باشد. خالی هرگز کش نمی‌شود.
   const KEY = "selfup_rels_cache";
+  let prev = null;
   try {
     const c = await kv.get(KEY, "json");
-    if (c && Array.isArray(c.items) && c.ts && Date.now() - Number(c.ts) < 3600000) return c.items;
+    if (c && Array.isArray(c.items)) prev = c;
   } catch (e) {}
+  if (prev && prev.ts && Date.now() - Number(prev.ts) < 3600000 && prev.items.length) {
+    return { items: prev.items, stale: false, status: 200 };
+  }
   let items = [];
-  try {
-    const r = await fetch(SELF_RELEASES_URL, {
-      headers: { Accept: "application/vnd.github+json" },
-      signal: AbortSignal.timeout(30000),
-    });
-    if (r.ok) {
-      const rels = await r.json();
-      items = (Array.isArray(rels) ? rels : [])
-        .filter((x) => x && !x.draft && !x.prerelease && x.tag_name && selfVerParts(x.tag_name))
-        .slice(0, 20)
-        .map((x) => ({ tag: x.tag_name, at: String(x.published_at || "").slice(0, 10) }));
-    }
-  } catch (e) {}
-  try { await kv.put(KEY, JSON.stringify({ ts: Date.now(), items })); } catch (e) {}
-  return items;
+  let status = 0;
+  for (let attempt = 0; attempt < 2 && !items.length; attempt++) {
+    try {
+      const r = await fetch(SELF_RELEASES_URL, {
+        headers: ghApiHeaders(),
+        signal: AbortSignal.timeout(30000),
+      });
+      status = r.status;
+      if (r.ok) {
+        const rels = await r.json();
+        items = (Array.isArray(rels) ? rels : [])
+          .filter((x) => x && !x.draft && !x.prerelease && x.tag_name && selfVerParts(x.tag_name))
+          .slice(0, 20)
+          .map((x) => ({ tag: x.tag_name, at: String(x.published_at || "").slice(0, 10) }));
+      }
+    } catch (e) {}
+  }
+  if (items.length) {
+    try { await kv.put(KEY, JSON.stringify({ ts: Date.now(), items })); } catch (e) {}
+    return { items, stale: false, status: status || 200 };
+  }
+  if (prev && prev.items.length) return { items: prev.items, stale: true, status };
+  return { items: [], stale: false, status };
 }
 
 // دیپلوی یک تگ مشخص (هستهٔ مشترک آپدیت خودکار و دکمه‌های دستی).
@@ -2312,7 +2334,7 @@ async function selfDeployTag(env, botToken, adminId, o) {
     const res = await fetch(
       `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
       {
-        headers: { Accept: "application/vnd.github.raw" },
+        headers: { Accept: "application/vnd.github.raw", "User-Agent": "cloud-guardian-worker" },
         signal: AbortSignal.timeout(30000),
       }
     );
@@ -2483,7 +2505,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     const tHeaders = { Accept: "application/vnd.github+json" };
     if (tagEtag) tHeaders["If-None-Match"] = tagEtag;
     const tRes = await fetch(SELF_TAGS_URL, {
-      headers: tHeaders,
+      headers: ghApiHeaders(tHeaders),
       signal: AbortSignal.timeout(30000),
     });
     if (tRes.status === 304) {
@@ -2519,7 +2541,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       const rHeaders = { Accept: "application/vnd.github+json" };
       if (relEtag) rHeaders["If-None-Match"] = relEtag;
       const rRes = await fetch(SELF_RELEASES_URL, {
-        headers: rHeaders,
+        headers: ghApiHeaders(rHeaders),
         signal: AbortSignal.timeout(30000),
       });
       if (rRes.ok) {
@@ -11083,11 +11105,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "vers") {
       // نسخه‌ها: ۲۰ ریلیز آخر + پین + آپدیت به آخر
       await edit("⏳ در حال گرفتن لیست نسخه‌ها از گیت‌هاب…");
-      const vItems = await selfCachedReleases(kv);
+      const vList = await selfCachedReleases(kv);
+      const vItems = vList.items;
       let vPinned = "";
       try { vPinned = (await kv.get("selfup_pinned", "text")) || ""; } catch (e) {}
       if (!vItems.length) {
-        await edit("❌ لیست نسخه‌ها گرفته نشد (گیت‌هاب در دسترس نیست). کمی بعد دوباره بزن.", [
+        await edit(vList.status === 403 ? "❌ سهمیهٔ ساعتی گیت‌هاب تمام شده؛ کمی بعد دوباره بزن (خودکار هم با کش ادامه می‌دهد)." : "❌ لیست نسخه‌ها گرفته نشد (گیت‌هاب در دسترس نیست). کمی بعد دوباره بزن.", [
           [{ text: "🔙 بازگشت", callback_data: "settings" }],
         ]);
       } else {
@@ -11114,7 +11137,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const vTag = data.slice(8);
       const vBack = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
       if (!/^v?\d+(\.\d+){1,2}$/.test(vTag)) return edit("❌ نسخه نامعتبر است.", vBack);
-      const vItems2 = await selfCachedReleases(kv);
+      const vItems2 = (await selfCachedReleases(kv)).items;
       if (!vItems2.some((x) => x.tag === vTag)) return edit("❌ این نسخه در لیست ۲۰ ریلیز آخر نیست.", vBack);
       const vLatest2 = selfLatestTag(vItems2.map((x) => x.tag));
       await edit("⏳ در حال نصب " + vTag + " … (ممکن است تا یک دقیقه طول بکشد)");
@@ -11133,13 +11156,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال بررسی آخرین نسخه…");
       let vTagNames = [];
       try {
-        const tRes = await fetch(SELF_TAGS_URL, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30000) });
+        const tRes = await fetch(SELF_TAGS_URL, { headers: ghApiHeaders(), signal: AbortSignal.timeout(30000) });
         if (tRes.ok) {
           const tj = await tRes.json();
           if (Array.isArray(tj)) vTagNames = tj.map((t) => t && t.name).filter(Boolean);
         }
       } catch (e) {}
-      const vItems3 = await selfCachedReleases(kv);
+      const vItems3 = (await selfCachedReleases(kv)).items;
       for (const x of vItems3) if (x && x.tag) vTagNames.push(x.tag);
       const vLatest3 = selfLatestTag(vTagNames);
       if (!vLatest3) return edit("❌ آخرین نسخه پیدا نشد.", vBack2);
