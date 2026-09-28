@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.10";
+const BOT_VERSION = "1.8.11";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.11": [
+    "⏰ چک آپدیت خودکار روزی یک‌بار شد (به‌جای ساعتی) + 🔄 منوی نسخه‌ها در تنظیمات: انتخاب از ۲۰ ریلیز آخر و دکمهٔ آپدیت به نسخهٔ آخر",
+  ],
   "1.8.10": [
     "🎯 تشخیص خاموش/فیلتر دقیق‌تر شد: هر آی‌پی در هر بررسی فقط یک‌بار پروب می‌شود (دیگر یک IP هم‌زمان هم «خاموش» هم «فیلتر» گزارش نمی‌شود) + «فیلتر» فقط با دیدن پاسخ واقعی از خارج گفته می‌شود",
     "🔕 هشدار آی‌پی/سرور یکی شد: هر قطعی فقط یک پیام می‌آید (به‌جای یک پیام برای هر ساب‌دامنه)؛ بعد از وصل‌شدن و قطعی دوباره، دوباره خبر می‌دهد",
@@ -1732,7 +1735,8 @@ function settingsHomeText() {
     "⚙️ تنظیمات و راهنما\n\n" +
     "🧩 مدیریت\n" +
     "• 🌐 تنظیم رله — وضعیت و مدیریت رلهٔ SSH (شخصی / رایگان / خودکار)\n" +
-    "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n\n" +
+    "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n" +
+    "• 🔄 نسخه‌ها — انتخاب از ۲۰ ریلیز آخر، پین نسخه، یا آپدیت به آخر\n\n" +
     "📖 راهنما\n" +
     "• راهنمای بخش‌ها — توضیح کامل هر بخش ربات\n\n" +
     "📞 ارتباط با سازنده\n" +
@@ -1749,6 +1753,7 @@ function settingsHomeKb() {
       { text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" },
       { text: "📞 ارتباط با سازنده", callback_data: "contactcreator", style: "plain" },
     ],
+    [{ text: "🔄 نسخه‌ها (v" + BOT_VERSION + ")", callback_data: "vers" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -2256,6 +2261,194 @@ function selfLatestTag(names) {
   return best;
 }
 
+// ---- نسخه‌ها (منوی تنظیمات): لیست کش‌شده + پین + دیپلوی مشترک ----
+// ۲۰ ریلیز پایدار آخر (کش یک‌ساعته در KV تا سهمیهٔ گیت‌هاب مصرف نشود).
+async function selfCachedReleases(kv) {
+  const KEY = "selfup_rels_cache";
+  try {
+    const c = await kv.get(KEY, "json");
+    if (c && Array.isArray(c.items) && c.ts && Date.now() - Number(c.ts) < 3600000) return c.items;
+  } catch (e) {}
+  let items = [];
+  try {
+    const r = await fetch(SELF_RELEASES_URL, {
+      headers: { Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (r.ok) {
+      const rels = await r.json();
+      items = (Array.isArray(rels) ? rels : [])
+        .filter((x) => x && !x.draft && !x.prerelease && x.tag_name && selfVerParts(x.tag_name))
+        .slice(0, 20)
+        .map((x) => ({ tag: x.tag_name, at: String(x.published_at || "").slice(0, 10) }));
+    }
+  } catch (e) {}
+  try { await kv.put(KEY, JSON.stringify({ ts: Date.now(), items })); } catch (e) {}
+  return items;
+}
+
+// دیپلوی یک تگ مشخص (هستهٔ مشترک آپدیت خودکار و دکمه‌های دستی).
+// via: 'auto' | 'manual'. allowDowngrade فقط برای انتخاب صریح کاربر.
+async function selfDeployTag(env, botToken, adminId, o) {
+  const kv = env.BOT_KV;
+  const tag = o && o.tag;
+  const latestSha = (o && o.latestSha) || null;
+  const moved = !!(o && o.moved);
+  const allowDowngrade = !!(o && o.allowDowngrade);
+  const via = (o && o.via) || "auto";
+  const skipGuard = !!(o && o.skipGuard);
+  if (!kv || !tag) return { ok: false, reason: "bad-tag" };
+  const aid = env.WORKER_ACCOUNT_ID || "";
+  const wname = env.WORKER_NAME || "";
+  if (!aid || !wname) return { ok: false, reason: "no-env" };
+  const accounts = await getAccounts(kv, env);
+  const tok = accounts && accounts[0] && accounts[0].token;
+  if (!tok) return { ok: false, reason: "no-token" };
+  if (selfVerGreater(BOT_VERSION, tag) && !allowDowngrade && !moved) return { ok: false, reason: "not-newer", version: tag };
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
+      {
+        headers: { Accept: "application/vnd.github.raw" },
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+    if (!res.ok) { await selfupBackoff(kv, 30, 90); return { ok: false, reason: "fetch" }; }
+    const code = await res.text();
+    const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
+    if (!m || !code.includes("export default {")) return { ok: false, reason: "bad-code" };
+    if (!selfVerGreater(m[1], BOT_VERSION) && !moved && !allowDowngrade) {
+    // تگ جدید است ولی کد سرو شده قدیمی است (تگ وسط راه جابه‌جا شده):
+    if (via === "auto" && tag && selfVerGreater(tag, BOT_VERSION)) {
+      try { await kv.delete("selfup_etag_tags"); } catch (e) {}
+      try { await kv.delete("selfup_etag_rels"); } catch (e) {}
+    }
+    return { ok: false, reason: "stale-code", version: m[1] };
+  }
+  if (moved && selfVerGreater(BOT_VERSION, m[1]) && !allowDowngrade) return { ok: false, reason: "no-downgrade" };
+    // ⚠️ بایندینگ‌ها را از env بازسازی کن و با API نصب (PUT) دیپلوی کن.
+    // API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
+    // بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
+    let kvId = env.KV_ID || "";
+    if (!kvId) {
+      try {
+        const kvRes = await fetch(`${CF_API}/accounts/${aid}/storage/kv/namespaces?per_page=100`, {
+          headers: hdr(tok),
+          signal: withTimeout(),
+        });
+        const kvData = await kvRes.json();
+        const list = (kvData.success && Array.isArray(kvData.result)) ? kvData.result : [];
+        const found = list.find((n) => n && n.title === `${wname}-kv`) || null;
+        if (found && found.id) kvId = found.id;
+      } catch (e) {}
+    }
+    if (!kvId) return { ok: false, reason: "no-kv" };
+    let cfAccountsText = env.CF_ACCOUNTS || "";
+    if (!cfAccountsText) {
+      try {
+        cfAccountsText = JSON.stringify(accounts);
+      } catch (e) {}
+    }
+    const binds = [
+      { type: "kv_namespace", name: "BOT_KV", namespace_id: kvId },
+      { type: "plain_text", name: "BOT_TOKEN", text: env.BOT_TOKEN || botToken },
+      { type: "plain_text", name: "ADMIN_ID", text: String(env.ADMIN_ID ?? adminId) },
+      { type: "plain_text", name: "CF_ACCOUNTS", text: cfAccountsText },
+      { type: "plain_text", name: "WORKER_ACCOUNT_ID", text: aid },
+      { type: "plain_text", name: "WORKER_NAME", text: wname },
+      { type: "plain_text", name: "KV_ID", text: kvId },
+    ];
+    if (env.PROMO_URL) binds.push({ type: "plain_text", name: "PROMO_URL", text: String(env.PROMO_URL) });
+    if (env.REQUEST_LIMIT_DAILY) binds.push({ type: "plain_text", name: "REQUEST_LIMIT_DAILY", text: String(env.REQUEST_LIMIT_DAILY) });
+    const base = `${CF_API}/accounts/${aid}/workers/scripts/${encodeURIComponent(wname)}`;
+    // زمان‌بندهای فعلی را نگه دار چون PUT ممکن است پاکشان کند
+    let savedCrons = null;
+    try {
+      const scRes = await fetch(base + "/schedules", { headers: hdr(tok), signal: withTimeout() });
+      const scData = await scRes.json();
+      if (scData.success && scData.result && Array.isArray(scData.result.schedules)) {
+        savedCrons = scData.result.schedules.map((s) => s.cron).filter(Boolean);
+      }
+    } catch (e) {}
+    const meta = {
+      main_module: "worker.js",
+      modules: [{ name: "worker.js" }],
+      compatibility_date: "2024-11-01",
+      usage_model: "standard",
+      bindings: binds,
+    };
+    const boundary = "----negahban" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const bodyStr =
+      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${code}\r\n` +
+      `--${boundary}--\r\n`;
+    const enc = new TextEncoder();
+    const upRes = await fetch(base, {
+      method: "PUT",
+      headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body: enc.encode(bodyStr),
+      signal: withTimeout(90000),
+    });
+    const upData = await upRes.json();
+    if (!upData.success) { await selfupBackoff(kv, 30, 90); return { ok: false, reason: "deploy" }; }
+    try {
+      await fetch(base + "/subdomain", {
+        method: "POST",
+        headers: hdr(tok),
+        body: JSON.stringify({ enabled: true, previews_enabled: true }),
+        signal: withTimeout(),
+      });
+    } catch (e) {}
+    if (savedCrons && savedCrons.length) {
+      try {
+        await fetch(base + "/schedules", {
+          method: "PUT",
+          headers: hdr(tok),
+          body: JSON.stringify(savedCrons.map((cron) => ({ cron }))),
+          signal: withTimeout(),
+        });
+      } catch (e) {}
+    }
+    try {
+      await kv.put("selfup_seen", JSON.stringify({ tag, sha: latestSha || (seen && seen.sha) || "" }));
+    } catch (e) {}
+    try { await kv.delete("selfup_backoff_until"); } catch (e) {}
+    if (!skipGuard) await kv.put("selfup_last", String(Date.now()));
+    try {
+      await kv.put("release_seen", m[1]);
+    } catch (e) {}
+    if (via === "auto" && botToken && adminId) {
+      // یادداشت همهٔ نسخه‌های جامانده (نه فقط نسخهٔ آخر) تا پرش چندنسخه‌ای چیزی را قایم نکند
+      let notes = [];
+      try {
+        const vers = Object.keys(RELEASE_NOTES || {}).filter(
+          (k) => selfVerParts(k) && selfVerGreater(k, BOT_VERSION) && !selfVerGreater(k, m[1])
+        );
+        vers.sort((a, b) => (selfVerGreater(a, b) ? 1 : selfVerGreater(b, a) ? -1 : 0));
+        for (const v of vers) {
+          const arr = RELEASE_NOTES[v] || [];
+          if (vers.length > 1 && arr.length) notes.push(`— v${v}:`);
+          for (const n of arr) notes.push("• " + n);
+        }
+      } catch (e) {
+        notes = RELEASE_NOTES[m[1]] || [];
+      }
+      if (moved && !notes.length) notes = RELEASE_NOTES[m[1]] || [];
+      const lines = [
+        `${via === "auto" ? "🔄 آپدیت خودکار از مخزن انجام شد" : "🔄 آپدیت دستی انجام شد"}: v${BOT_VERSION} ← v${m[1]}${moved ? " (بازنشر تگ)" : ""}`,
+        ...(notes.length ? ["", "✨ تغییرات جدید:", ...notes] : []),
+      ];
+      try {
+        await sendMessage(botToken, adminId, lines.join("\n").slice(0, 3800), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
+      } catch (e) {}
+    }
+    return { ok: true, version: m[1] };
+  } catch (e) {
+    console.error("SELFDEPLOY", String(e));
+    return { ok: false, reason: "throw" };
+  }
+}
+
 // آپدیت خودکار از گیت‌هاب: ربات آخرین worker.js را از «آخرین تگ نسخه یا آخرین ریلیز» مخزن
 // می‌گیرد و با همان توکن CF خودش را روی ورکر خودش دیپلوی می‌کند (بدون کرون/سرور).
 // فقط روی کرون ۱۰دقیقه‌ای و فقط وقتی تگ نسخهٔ جدید یا ریلیز جدیدی در مخزن ساخته شده باشد.
@@ -2341,6 +2534,11 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     let tag = tagFromTags;
     if (tagFromRelease && (!tag || selfVerGreater(tagFromRelease, tag))) tag = tagFromRelease;
     if (!tag) return;
+    // نسخهٔ پین‌شدهٔ دستی: آپدیت خودکار دخالت نمی‌کند تا کاربر پین را عوض کند
+    try {
+      const pinned = await kv.get("selfup_pinned", "text");
+      if (pinned) return;
+    } catch (e) {}
     const latestSha = (tag && tagSha[tag]) || null;
     let seen = null;
     try { seen = await kv.get("selfup_seen", "json"); } catch (e) {}
@@ -2356,143 +2554,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       return;
     }
 
-    const res = await fetch(
-      `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
-      {
-        headers: { Accept: "application/vnd.github.raw" },
-        signal: AbortSignal.timeout(30000),
-      }
-    );
-    if (!res.ok) { await selfupBackoff(kv, 30, 90); return; }
-    const code = await res.text();
-    const m = /^const\s+BOT_VERSION\s*=\s*"([^"]+)"/m.exec(code);
-    if (!m || !code.includes("export default {")) return;
-    if (!selfVerGreater(m[1], BOT_VERSION) && !moved) {
-      // تگ جدید است ولی کد سرو شده قدیمی است (مثلاً تگ وسط راه جابه‌جا شده):
-      // کش ETag را پاک کن تا چرخهٔ بعد کامل و تازه چک شود و ربات روی نسخهٔ میانی گیر نکند
-      if (tag && selfVerGreater(tag, BOT_VERSION)) {
-        try { await kv.delete("selfup_etag_tags"); } catch (e) {}
-        try { await kv.delete("selfup_etag_rels"); } catch (e) {}
-      }
-      return;
-    }
-    if (moved && selfVerGreater(BOT_VERSION, m[1])) return; // هرگز دانگرید نکن
-    // ⚠️ بایندینگ‌ها را از env بازسازی کن و با API نصب (PUT) دیپلوی کن.
-    // API جدید (‎/settings و ‎/versions) بایندینگ خالی برمی‌گرداند؛ اگر همان را
-    // بفرستیم ورکر بدون BOT_KV/BOT_TOKEN بالا می‌آید و ربات برای همیشه می‌میرد.
-    let kvId = env.KV_ID || "";
-    if (!kvId) {
-      try {
-        const kvRes = await fetch(`${CF_API}/accounts/${aid}/storage/kv/namespaces?per_page=100`, {
-          headers: hdr(tok),
-          signal: withTimeout(),
-        });
-        const kvData = await kvRes.json();
-        const list = (kvData.success && Array.isArray(kvData.result)) ? kvData.result : [];
-        const found = list.find((n) => n && n.title === `${wname}-kv`) || null;
-        if (found && found.id) kvId = found.id;
-      } catch (e) {}
-    }
-    if (!kvId) return;
-    let cfAccountsText = env.CF_ACCOUNTS || "";
-    if (!cfAccountsText) {
-      try {
-        cfAccountsText = JSON.stringify(accounts);
-      } catch (e) {}
-    }
-    const binds = [
-      { type: "kv_namespace", name: "BOT_KV", namespace_id: kvId },
-      { type: "plain_text", name: "BOT_TOKEN", text: env.BOT_TOKEN || botToken },
-      { type: "plain_text", name: "ADMIN_ID", text: String(env.ADMIN_ID ?? adminId) },
-      { type: "plain_text", name: "CF_ACCOUNTS", text: cfAccountsText },
-      { type: "plain_text", name: "WORKER_ACCOUNT_ID", text: aid },
-      { type: "plain_text", name: "WORKER_NAME", text: wname },
-      { type: "plain_text", name: "KV_ID", text: kvId },
-    ];
-    if (env.PROMO_URL) binds.push({ type: "plain_text", name: "PROMO_URL", text: String(env.PROMO_URL) });
-    if (env.REQUEST_LIMIT_DAILY) binds.push({ type: "plain_text", name: "REQUEST_LIMIT_DAILY", text: String(env.REQUEST_LIMIT_DAILY) });
-    const base = `${CF_API}/accounts/${aid}/workers/scripts/${encodeURIComponent(wname)}`;
-    // زمان‌بندهای فعلی را نگه دار چون PUT ممکن است پاکشان کند
-    let savedCrons = null;
-    try {
-      const scRes = await fetch(base + "/schedules", { headers: hdr(tok), signal: withTimeout() });
-      const scData = await scRes.json();
-      if (scData.success && scData.result && Array.isArray(scData.result.schedules)) {
-        savedCrons = scData.result.schedules.map((s) => s.cron).filter(Boolean);
-      }
-    } catch (e) {}
-    const meta = {
-      main_module: "worker.js",
-      modules: [{ name: "worker.js" }],
-      compatibility_date: "2024-11-01",
-      usage_model: "standard",
-      bindings: binds,
-    };
-    const boundary = "----negahban" + Math.random().toString(36).slice(2) + Date.now().toString(36);
-    const bodyStr =
-      `--${boundary}\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
-      `--${boundary}\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${code}\r\n` +
-      `--${boundary}--\r\n`;
-    const enc = new TextEncoder();
-    const upRes = await fetch(base, {
-      method: "PUT",
-      headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
-      body: enc.encode(bodyStr),
-      signal: withTimeout(90000),
-    });
-    const upData = await upRes.json();
-    if (!upData.success) { await selfupBackoff(kv, 30, 90); return; }
-    try {
-      await fetch(base + "/subdomain", {
-        method: "POST",
-        headers: hdr(tok),
-        body: JSON.stringify({ enabled: true, previews_enabled: true }),
-        signal: withTimeout(),
-      });
-    } catch (e) {}
-    if (savedCrons && savedCrons.length) {
-      try {
-        await fetch(base + "/schedules", {
-          method: "PUT",
-          headers: hdr(tok),
-          body: JSON.stringify(savedCrons.map((cron) => ({ cron }))),
-          signal: withTimeout(),
-        });
-      } catch (e) {}
-    }
-    try {
-      await kv.put("selfup_seen", JSON.stringify({ tag, sha: latestSha || (seen && seen.sha) || "" }));
-    } catch (e) {}
-    try { await kv.delete("selfup_backoff_until"); } catch (e) {}
-    if (!skipGuard) await kv.put("selfup_last", String(Date.now()));
-    try {
-      await kv.put("release_seen", m[1]);
-    } catch (e) {}
-    if (botToken && adminId) {
-      // یادداشت همهٔ نسخه‌های جامانده (نه فقط نسخهٔ آخر) تا پرش چندنسخه‌ای چیزی را قایم نکند
-      let notes = [];
-      try {
-        const vers = Object.keys(RELEASE_NOTES || {}).filter(
-          (k) => selfVerParts(k) && selfVerGreater(k, BOT_VERSION) && !selfVerGreater(k, m[1])
-        );
-        vers.sort((a, b) => (selfVerGreater(a, b) ? 1 : selfVerGreater(b, a) ? -1 : 0));
-        for (const v of vers) {
-          const arr = RELEASE_NOTES[v] || [];
-          if (vers.length > 1 && arr.length) notes.push(`— v${v}:`);
-          for (const n of arr) notes.push("• " + n);
-        }
-      } catch (e) {
-        notes = RELEASE_NOTES[m[1]] || [];
-      }
-      if (moved && !notes.length) notes = RELEASE_NOTES[m[1]] || [];
-      const lines = [
-        `🔄 آپدیت خودکار از مخزن انجام شد: v${BOT_VERSION} ← v${m[1]}${moved ? " (بازنشر تگ)" : ""}`,
-        ...(notes.length ? ["", "✨ تغییرات جدید:", ...notes] : []),
-      ];
-      try {
-        await sendMessage(botToken, adminId, lines.join("\n").slice(0, 3800), [[{ text: "🚀 استارت", callback_data: "menu" }]]);
-      } catch (e) {}
-    }
+    return await selfDeployTag(env, botToken, adminId, { tag, latestSha, moved, skipGuard, via: "auto" });
   } catch (e) {
     console.error("SELFUPDATE", String(e));
   }
@@ -5558,7 +5620,7 @@ const UM_REPORT_TOP = 10;
 // حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۶۰ دقیقه اجرا می‌شود — کاهش مصرف KV)
 const UM_MIN_INTERVAL_MS = 60 * 60000;
 const NODEADD_MIN_MS = 30 * 60000;
-const SELFUP_MIN_MS = 60 * 60000; // ساعتی یک‌بار — کاهش مصرف KV و ریکوئست
+const SELFUP_MIN_MS = 24 * 3600000; // روزی یک‌بار — چک خودکار آپدیت
 // jitter قطعی هر ورکر (۰ تا ۵ دقیقه از هش اسم ورکر): چک‌های همه ربات‌ها روی هم نمی‌افتد
 function selfupJitter(env) {
   try {
@@ -11015,6 +11077,81 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "settings") {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
       await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
+    } else if (data === "vers") {
+      // نسخه‌ها: ۲۰ ریلیز آخر + پین + آپدیت به آخر
+      await edit("⏳ در حال گرفتن لیست نسخه‌ها از گیت‌هاب…");
+      const vItems = await selfCachedReleases(kv);
+      let vPinned = "";
+      try { vPinned = (await kv.get("selfup_pinned", "text")) || ""; } catch (e) {}
+      if (!vItems.length) {
+        await edit("❌ لیست نسخه‌ها گرفته نشد (گیت‌هاب در دسترس نیست). کمی بعد دوباره بزن.", [
+          [{ text: "🔙 بازگشت", callback_data: "settings" }],
+        ]);
+      } else {
+        const vLines = ["🔄 نسخه‌های ربات", "", "فعلی: v" + BOT_VERSION];
+        if (vPinned) vLines.push("📌 پین شده روی " + vPinned + " (آپدیت خودکار دخالت نمی‌کند)");
+        else vLines.push("☁️ آپدیت خودکار روشن است (روزی یک‌بار)");
+        vLines.push("", "یک نسخه را برای نصب انتخاب کن:");
+        const vKb = [];
+        for (let vi = 0; vi < vItems.length; vi += 2) {
+          const row = [];
+          for (let vj = vi; vj < Math.min(vi + 2, vItems.length); vj++) {
+            const it = vItems[vj];
+            const cur = it.tag.replace(/^v/, "") === String(BOT_VERSION);
+            row.push({ text: (cur ? "✅ " : vPinned === it.tag ? "📌 " : "") + it.tag + (it.at ? " · " + it.at : ""), callback_data: cur ? "noop" : "verpick:" + it.tag });
+          }
+          vKb.push(row);
+        }
+        const vLatest = selfLatestTag(vItems.map((x) => x.tag));
+        if (vLatest) vKb.push([{ text: "⬆️ آپدیت به نسخه آخر (" + vLatest + ")", callback_data: "verlatest" }]);
+        vKb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
+        await edit(vLines.join("\n").slice(0, 3500), vKb);
+      }
+    } else if (data.startsWith("verpick:")) {
+      const vTag = data.slice(8);
+      const vBack = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      if (!/^v?\d+(\.\d+){1,2}$/.test(vTag)) return edit("❌ نسخه نامعتبر است.", vBack);
+      const vItems2 = await selfCachedReleases(kv);
+      if (!vItems2.some((x) => x.tag === vTag)) return edit("❌ این نسخه در لیست ۲۰ ریلیز آخر نیست.", vBack);
+      const vLatest2 = selfLatestTag(vItems2.map((x) => x.tag));
+      await edit("⏳ در حال نصب " + vTag + " … (ممکن است تا یک دقیقه طول بکشد)");
+      const vr = await selfDeployTag(env, botToken, adminId, { tag: vTag, allowDowngrade: true, via: "manual", skipGuard: false });
+      if (vr.ok) {
+        try {
+          if (vLatest2 && vTag === vLatest2) await kv.delete("selfup_pinned");
+          else await kv.put("selfup_pinned", vTag);
+        } catch (e) {}
+        await edit("✅ نسخه " + vTag + " نصب شد." + (vLatest2 && vTag === vLatest2 ? "" : "\n📌 پین شد — آپدیت خودکار تا تغییر پین دخالت نمی‌کند."), vBack);
+      } else {
+        await edit("❌ نصب ناموفق بود (" + String(vr.reason || "unknown") + ").", vBack);
+      }
+    } else if (data === "verlatest") {
+      const vBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      await edit("⏳ در حال بررسی آخرین نسخه…");
+      let vTagNames = [];
+      try {
+        const tRes = await fetch(SELF_TAGS_URL, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(30000) });
+        if (tRes.ok) {
+          const tj = await tRes.json();
+          if (Array.isArray(tj)) vTagNames = tj.map((t) => t && t.name).filter(Boolean);
+        }
+      } catch (e) {}
+      const vItems3 = await selfCachedReleases(kv);
+      for (const x of vItems3) if (x && x.tag) vTagNames.push(x.tag);
+      const vLatest3 = selfLatestTag(vTagNames);
+      if (!vLatest3) return edit("❌ آخرین نسخه پیدا نشد.", vBack2);
+      if (!selfVerGreater(vLatest3, BOT_VERSION)) {
+        try { await kv.delete("selfup_pinned"); } catch (e) {}
+        return edit("✅ همین حالا روی آخرین نسخه هستی (v" + BOT_VERSION + ").", vBack2);
+      }
+      await edit("⏳ در حال نصب " + vLatest3 + " … (ممکن است تا یک دقیقه طول بکشد)");
+      const vr2 = await selfDeployTag(env, botToken, adminId, { tag: vLatest3, allowDowngrade: false, via: "manual", skipGuard: false });
+      if (vr2.ok) {
+        try { await kv.delete("selfup_pinned"); } catch (e) {}
+        await edit("✅ به نسخه آخر آپدیت شد: " + vLatest3, vBack2);
+      } else {
+        await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + ").", vBack2);
+      }
     } else if (data === "hubstats") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await renderHubStats(edit, kv, 0);
