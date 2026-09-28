@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.14";
+const BOT_VERSION = "1.8.15";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.15": [
+    "🔄 منوی نسخه‌ها تگ‌ها را هم می‌بیند (مثل آپدیت خودکار) — نسخه‌های تگ‌خورده بدون ریلیز هم در لیست و «آخر» حساب می‌شوند",
+  ],
   "1.8.14": [
     "⚡ دکمه فورس بررسی کامل در صفحه تعویض خودکار: کل هاست‌ها همان‌جا و فوری بررسی و تعویض می‌شوند",
   ],
@@ -2302,10 +2305,32 @@ async function selfCachedReleases(kv) {
         const rels = await r.json();
         items = (Array.isArray(rels) ? rels : [])
           .filter((x) => x && !x.draft && !x.prerelease && x.tag_name && selfVerParts(x.tag_name))
-          .slice(0, 20)
           .map((x) => ({ tag: x.tag_name, at: String(x.published_at || "").slice(0, 10) }));
       }
     } catch (e) {}
+    // تگ‌های بدون ریلیز را هم ببین (مثل آپدیت خودکار): وگرنه نسخه‌های تگ‌خورده
+    // در منو «آخر» به حساب نمی‌آیند
+    if (!items.length) break;
+    try {
+      const t = await fetch(SELF_TAGS_URL, {
+        headers: ghApiHeaders(),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (t.ok) {
+        const tj = await t.json();
+        const have = new Set(items.map((x) => x.tag));
+        if (Array.isArray(tj)) {
+          for (const x of tj) {
+            if (x && x.name && selfVerParts(x.name) && !have.has(x.name)) {
+              items.push({ tag: x.name, at: "" });
+              have.add(x.name);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    items.sort((a, b) => (selfVerGreater(a.tag, b.tag) ? -1 : selfVerGreater(b.tag, a.tag) ? 1 : 0));
+    items = items.slice(0, 20);
   }
   if (items.length) {
     try { await kv.put(KEY, JSON.stringify({ ts: Date.now(), items })); } catch (e) {}
