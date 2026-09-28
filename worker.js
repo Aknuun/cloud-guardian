@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.9";
+const BOT_VERSION = "1.8.10";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.10": [
+    "🎯 تشخیص خاموش/فیلتر دقیق‌تر شد: هر آی‌پی در هر بررسی فقط یک‌بار پروب می‌شود (دیگر یک IP هم‌زمان هم «خاموش» هم «فیلتر» گزارش نمی‌شود) + «فیلتر» فقط با دیدن پاسخ واقعی از خارج گفته می‌شود",
+    "🔕 هشدار آی‌پی/سرور یکی شد: هر قطعی فقط یک پیام می‌آید (به‌جای یک پیام برای هر ساب‌دامنه)؛ بعد از وصل‌شدن و قطعی دوباره، دوباره خبر می‌دهد",
+  ],
   "1.8.7": [
     "👆 قفل دابل‌تپ ۵ ثانیه‌ای همه اکشن‌ها (ناوبری و دکمه‌های چرخشی رکورد معاف) + ⬅️ برگشت/خانه یکدست در ۵۰۰+ ردیف",
     "🔢 اعداد فارسی داشبوردها + نشانگر صفحه لیست رکوردها + راهنمای خطاهای پرتکرار + لودینگ و تلاش‌مجدد",
@@ -18621,8 +18625,9 @@ const HOSTFILTER_FOREIGN_CITIES = ["Frankfurt", "Nuremberg", "Amsterdam", "Meppe
 const HOSTFILTER_IP_DOWN_FAILS = 4;
 const HOSTFILTER_DEFAULT_RECHECK = 1;
 const HOSTFILTER_DEFAULT_RECHECK_MIN = 1;
-// ضداسپم پیام «آی‌پی/سرور خاموش — تعویض انجام نشد»: هر ساب‌دامنه فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد
-// (مثل پیام ساب فیلترشده که یک‌بار می‌آید)؛ بعد از تعویض موفق یا بهبود، حافظه پاک می‌شود تا دفعهٔ بعد دوباره خبر بدهد.
+// ضداسپم سطح آی‌پی: هر قطعی (وضعیت + آی‌پی) فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد —
+// نه یک‌بار برای هر ساب‌دامنه. تعویض موفق، ساب را از latch کم می‌کند و با خالی‌شدن،
+ // latch پاک می‌شود تا قطعی بعدی (بعد از وصل‌شدن) دوباره خبر بدهد.
 const HOSTFILTER_IP_NOTICE_TTL_MS = 24 * 3600000;
 
 async function getHostIpNoticeAll(kv) {
@@ -19007,23 +19012,43 @@ async function hfPMap(list, fn, limit) {
 }
 
 // Diagnose one domain's IP (pure: no notifications/state writes) — safe to run in parallel; results cached in ipCache.
+// حکم واحد از روی یک جفت پروب (ایران + خارج) — همهٔ ساب‌دامنه‌های یک آی‌پی همین حکم را می‌گیرند.
+// «فیلتر» فقط با مدرک مثبت گفته می‌شود (پاسخ واقعی از خارج + بلاک ایران)؛
+// اگر پروب خارجی ناموفق/بی‌پاسخ بود و ایران هم بلاک است، حکم «خاموش» است (نه فیلتر).
+function hfVerdictIp(ipp, fp, cfg) {
+  const iranMeasured = !ipp.error;
+  const iranBlocked = iranMeasured && hostFilterIsBlocked(hostFilterPingBlocked(ipp, cfg), cfg);
+  const fstat = pingFailStats(fp);
+  // «خارج سالم است» یعنی اکثریت پروب‌های خارجی جواب داده‌اند — نه فقط یک پاسخ
+  // (تک‌پاسخ پراکنده وسط قطعی، مدرک فیلترشدن نیست).
+  const foreignOk = !fp.error && fstat.total > 0 && (fstat.total - fstat.fail) * 2 >= fstat.total;
+  const foreignDown = !fp.error && fstat.fail >= HOSTFILTER_IP_DOWN_FAILS;
+  const foreignUnknown = !foreignOk && !foreignDown;
+  return {
+    iranBlocked, foreignFail: fstat.fail, foreignUnknown,
+    ipDown: (foreignDown || foreignUnknown) && (!iranMeasured || iranBlocked),
+    iranAccess: foreignDown && iranMeasured && !iranBlocked,
+    ipBlocked: iranMeasured && iranBlocked && foreignOk && !foreignDown,
+  };
+}
+
+// پروب یک آی‌پی (یک‌بار در هر بررسی، مشترک بین همهٔ ساب‌دامنه‌هایش).
+async function hfDiagIp(ip, cfg, env, kv) {
+  const diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip, handled: false, foreignUnknown: false, iranBlocked: false, foreignFail: 0 };
+  const ipp = await pingTarget(ip, cfg, env, kv);
+  const fp = await foreignPing(ip, cfg, env, kv);
+  Object.assign(diag, hfVerdictIp(ipp, fp, cfg));
+  return diag;
+}
+
 async function hfDiagDomain(dv, cfg, env, kv) {
-  const diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
+  const diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false, foreignUnknown: false, iranBlocked: false, foreignFail: 0 };
   let ips = null;
   try { ips = await resolveIPs(dv, kv); } catch (e) { ips = null; }
   if (ips && ips[0]) {
-    diag.ip = ips[0];
-    const ipp = await pingTarget(ips[0], cfg, env, kv);
-    const iranMeasured = !ipp.error;
-    const iranBlocked = iranMeasured && hostFilterIsBlocked(hostFilterPingBlocked(ipp, cfg), cfg);
-    const fp = await foreignPing(ips[0], cfg, env, kv);
-    const fstat = pingFailStats(fp);
-    const foreignDown = !fp.error && fstat.fail >= HOSTFILTER_IP_DOWN_FAILS;
-    diag.iranBlocked = iranBlocked;
-    diag.foreignFail = fstat.fail;
-    diag.ipDown = foreignDown && (!iranMeasured || iranBlocked);
-    diag.iranAccess = foreignDown && iranMeasured && !iranBlocked;
-    diag.ipBlocked = iranMeasured && iranBlocked && !foreignDown;
+    const d = await hfDiagIp(ips[0], cfg, env, kv);
+    d.ip = ips[0];
+    return d;
   }
   return diag;
 }
@@ -19655,7 +19680,10 @@ async function runHostFilter(env, opts = {}) {
   let iranAccessCount = 0;
   let didBackup = false;
 
-  // Pre-warm IP diagnosis for all filtered domains in parallel (max 4 concurrent; each warms IR + foreign checks).
+  // Pre-warm IP diagnosis: resolve all filtered domains, group by IP, probe
+  // each IP ONCE (max 4 concurrent). One verdict per IP — the same IP can
+  // never be reported both down and filtered in one run (plus less quota).
+  const ipMembers = {}; // ip -> [dv] checked in this run (for the scope line)
   {
     const warmSet = new Set();
     for (const item of hostItems) {
@@ -19671,12 +19699,27 @@ async function runHostFilter(env, opts = {}) {
       }
     }
     const warmKeys = [...warmSet];
-    if (warmKeys.length) {
-      const warmDiags = await hfPMap(warmKeys, (dv) => hfDiagDomain(dv, cfg, env, kv), 4);
-      for (let wi = 0; wi < warmKeys.length; wi++) {
-        ipCache[warmKeys[wi]] = warmDiags[wi] && !warmDiags[wi].error
-          ? warmDiags[wi]
-          : { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false };
+    const dvIp = {};
+    await hfPMap(warmKeys, async (dv) => {
+      try {
+        const ips = await resolveIPs(dv, kv);
+        dvIp[dv] = ips && ips[0] ? ips[0] : null;
+      } catch (e) { dvIp[dv] = null; }
+    }, 4);
+    const blank = () => ({ ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false, foreignUnknown: false, iranBlocked: false, foreignFail: 0 });
+    for (const dv of warmKeys) {
+      const ip = dvIp[dv];
+      if (!ip) { ipCache[dv] = blank(); continue; }
+      (ipMembers[ip] = ipMembers[ip] || []).push(dv);
+    }
+    const uniqIps = Object.keys(ipMembers);
+    if (uniqIps.length) {
+      const ipDiags = await hfPMap(uniqIps, (ip) => hfDiagIp(ip, cfg, env, kv), 4);
+      for (let wi = 0; wi < uniqIps.length; wi++) {
+        const d = ipDiags[wi] && !ipDiags[wi].error ? ipDiags[wi] : null;
+        for (const dv of ipMembers[uniqIps[wi]]) {
+          ipCache[dv] = d || Object.assign(blank(), { ip: uniqIps[wi] });
+        }
       }
     }
   }
@@ -19750,13 +19793,15 @@ async function runHostFilter(env, opts = {}) {
           else if (diag.iranAccess) iranAccessCount++;
           else ipBlockedCount++;
           const kind = diag.ipDown ? "ip_down" : diag.iranAccess ? "iran_access" : "ip_blocked";
-          // ضداسپم: هر ساب‌دامنه برای همین وضعیت و همین آی‌پی فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد.
+          // ضداسپم سطح آی‌پی: هر قطعی (وضعیت + آی‌پی) فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد،
+          // نه یک‌بار برای هر ساب‌دامنه — وگرنه چند ساب روی یک IP خراب پشت‌سرهم اسپم می‌شود.
+          // وصل‌شدن و قطعی دوباره = پیام تازه: چرخهٔ تعویض موفق، ساب را از latch کم می‌کند و
+          // با خالی‌شدن، latch پاک می‌شود تا قطعی بعدی دوباره خبر بدهد.
           // بررسی دستی (manual/force) همیشه پیام می‌دهد تا نتیجهٔ همان لحظه دیده شود.
-          const prev = ipNotices[dv];
+          const latchKey = "ip:" + kind + ":" + String(diag.ip || "");
+          const prev = ipNotices[latchKey];
           const fresh =
             prev &&
-            prev.kind === kind &&
-            String(prev.ip || "") === String(diag.ip || "") &&
             Number(prev.ts || 0) > 0 &&
             Date.now() - Number(prev.ts) < HOSTFILTER_IP_NOTICE_TTL_MS;
           const mustNotify = manual || opts.force || !fresh;
@@ -19767,21 +19812,30 @@ async function runHostFilter(env, opts = {}) {
                 ? "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
                 : "🚫 آی‌پی فیلتر شده است (نه دامنه)";
             const tail = diag.ipDown
-              ? "❌ از ایران و آلمان/هلند پاسخی نیامد (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ). احتمالاً سرور/IP خاموش است؛ تا روشن‌شدن سرور تعویض نکن."
+              ? (diag.foreignUnknown
+                ? "❌ از ایران پاسخی نیامد و بررسی خارجی هم ناموفق بود (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ)؛ احتمالاً سرور/IP خاموش است — در صورت روشن‌بودن سرور، بررسی بعدی دقیق‌تر خبر می‌دهد."
+                : "❌ از ایران و آلمان/هلند پاسخی نیامد (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ). احتمالاً سرور/IP خاموش است؛ تا روشن‌شدن سرور تعویض نکن.")
               : diag.iranAccess
                 ? "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست (ایران‌اکسس)."
                 : "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر ساب‌دامنهٔ این هاست قرار دارد.";
+            const members = (ipMembers[diag.ip] || []).filter((x) => x !== dv);
             const txt =
               head + "\n" +
               "🖥 پنل: " + escHtml(item.panel.name) + "\n" +
               "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
               "🌐 آی‌پی: " + code(diag.ip || "?") + "\n" +
               "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
+              (members.length ? "➕ " + members.length + " ساب‌دامنهٔ دیگر روی همین آی‌پی در این بررسی\n" : "") +
               "📝 " + tail + "\n" +
               "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
             await hfNotify(botToken, admins, txt);
             await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
-            ipNotices[dv] = { kind, ip: diag.ip || "", ts: Date.now() };
+          }
+          // ساب را زیر نظر latch نگه دار (حتی در حالت suppress) تا تعویض/بهبود، latch را آزاد کند.
+          {
+            const subs = new Set(Array.isArray(prev && prev.subs) ? prev.subs : []);
+            subs.add(dv);
+            ipNotices[latchKey] = { kind, ip: diag.ip || "", ts: mustNotify ? Date.now() : (prev && prev.ts) || Date.now(), subs: [...subs] };
             ipNoticesDirty = true;
           }
           continue;
@@ -19855,6 +19909,13 @@ async function runHostFilter(env, opts = {}) {
     for (const ev of events) {
       if (ipNotices[ev.from]) {
         delete ipNotices[ev.from];
+        ipNoticesDirty = true;
+      }
+      for (const k of Object.keys(ipNotices)) {
+        const le = ipNotices[k];
+        if (!le || !Array.isArray(le.subs) || !le.subs.includes(ev.from)) continue;
+        le.subs = le.subs.filter((x) => x !== ev.from);
+        if (!le.subs.length) delete ipNotices[k];
         ipNoticesDirty = true;
       }
     }
