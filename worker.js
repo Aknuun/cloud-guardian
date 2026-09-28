@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.16";
+const BOT_VERSION = "1.8.17";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.17": [
+    "⚡ فورس دیگر با کرون قاطی نمی‌کند: ران تکراری و پیام گیرکرده نداریم؛ اگر چیزی گیر کرد، واچ‌داگ مرحله‌اش را خبر می‌دهد",
+  ],
   "1.8.16": [
     "🛡 نصب دستی نسخه: تلاش مجدد خودکار روی خطای لحظه‌ای دیپلوی + نمایش جزئیات خطای کلادفلر در پیام",
   ],
@@ -14056,7 +14059,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         return edit("🚫 این هاست در لیست استثناست؛ فورس اجرا نمی‌شود.\n\nبرای تعویض، اول از لیست هاست دکمهٔ «✅ استثنا» را بزن.", fBack);
       }
       await edit("⚡ فورس شروع شد؛ همین حالا بررسی و تعویض این هاست…");
-      fCfg.manual_request = { ts: new Date().toISOString(), by: chatId, only: fKey };
+      // inline یعنی «خودم دارم اجراش می‌کنم» تا کرون وسط کار درخواست را ندزدد و ران تکراری نزند
+      fCfg.manual_request = { ts: new Date().toISOString(), by: chatId, only: fKey, inline: true };
+      {
+        let fN = 0;
+        try {
+          for (const f of ["address", "sni", "host"]) for (const v of fHost[f] || []) if (isDomainLike(v)) fN++;
+        } catch (e) {}
+        const fMins = hfEstimateMin(Math.max(fN, 1), fCfg.provider);
+        fCfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (fMins + 3) * 60000, reported: false };
+      }
       await saveHostFilterCfg(kv, fCfg);
       try {
         const fr = await runHostFilter(env, { force: true });
@@ -14090,7 +14102,18 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⚡ فورس شروع شد؛ همین حالا بررسی کامل همهٔ هاست‌ها…");
       const fTsA = new Date().toISOString();
       const fcA = await getHostFilterCfg(kv);
-      fcA.manual_request = { ts: fTsA, by: chatId };
+      fcA.manual_request = { ts: fTsA, by: chatId, inline: true };
+      {
+        let fNA = Number(fcA.last_domains) || 0;
+        if (!fNA) {
+          try {
+            const hcA = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+            fNA = (Array.isArray(hcA) ? hcA.length : 0) * 2;
+          } catch (e) {}
+        }
+        const fMinsA = hfEstimateMin(Math.max(fNA, 1), fcA.provider);
+        fcA.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (fMinsA + 3) * 60000, reported: false };
+      }
       await saveHostFilterCfg(kv, fcA);
       try {
         const frA = await runHostFilter(env, { force: true });
@@ -19698,6 +19721,10 @@ async function runHostFilter(env, opts = {}) {
     await saveHostFilterCfg(kv, cfg);
   }
   const mr = cfg.manual_request;
+  // درخواست inline یعنی یک فورس همین حالا دارد اجرایش می‌کند؛ کرون نباید بدزددش (ران تکراری).
+  // اگر بیشتر از ۲۰ دقیقه گذشت و هنوز هست، یعنی اجراکننده مرده — کرون پس می‌گیرد تا گیر نکند.
+  const mrInlineFresh = !!(mr && mr.inline && Date.parse(mr.ts || "") > 0 && Date.now() - Date.parse(mr.ts) < 20 * 60000);
+  if (mrInlineFresh) return { skipped: "inline_busy", cfg };
   const manual = !!(mr && (!cfg.last_run || Date.parse(mr.ts) >= Date.parse(cfg.last_run)));
   const manualBy = manual ? mr.by : null;
   if (manual) {
