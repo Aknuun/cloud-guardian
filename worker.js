@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.26";
+const BOT_VERSION = "1.8.27";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.27": [
+    "🔔 آستانه‌ها فقط در پنل تنظیم می‌شوند؛ ربات فقط فوروارد می‌کند (دکمه‌های آستانه حذف شد)",
+  ],
   "1.8.26": [
     "📤 دکمه نهایی allmarzbot: باز شدن ربات با یوزر همان مشتری (tg resolve)",
   ],
@@ -7787,8 +7790,8 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
   const lines = [(test ? "🧪 تستی — " : "") + head + " — " + (panel.name || panel.id), ""];
   lines.push("👤 کاربر: " + code(a.username || "؟"));
-  if (a.kind === "usage") lines.push(`📈 مصرف: ${a.value}٪ (آستانه ${a.threshold}٪)`);
-  else lines.push(`⏳ روزهای مانده: ${a.value} (آستانه ${a.threshold})`);
+  if (a.kind === "usage") lines.push(`📈 مصرف: ${a.value}٪`);
+  else lines.push(`⏳ روزهای مانده: ${a.value}`);
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
   // باز کردن allmarzbot با متن آماده = یوزرنیم همان مشتری
@@ -7842,38 +7845,16 @@ async function handlePgHook(token, payload, env, botToken) {
     for (const ev of events) {
       if (!ev.username) continue;
       const jobs = [];
-      // هر کاربر در هر موج فقط یک پیام می‌گیرد: تنگ‌ترین آستانه؛ بقیه آستانه‌های ردشده ساکت latch می‌شوند
+      // پنل مرجع آستانه است؛ ربات فقط فوروارد می‌کند (latch روی پله مقدار تا تکرار نیاید)
       if (ev.days !== null && ev.days !== undefined) {
         const dv = Math.floor(ev.days * 10) / 10;
-        let best = null;
-        for (const t of cfg.days) {
-          if (dv <= t && (best === null || t < best)) best = t;
-        }
-        for (const t of cfg.days) {
-          if (dv <= t) {
-            const key = panel.id + ":" + ev.username + ":d:" + t;
-            if (!sent[key]) {
-              sent[key] = nowMs;
-              if (t === best) jobs.push({ kind: "days", value: dv, threshold: t, key });
-            }
-          }
-        }
+        const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
+        if (!sent[key]) { jobs.push({ kind: "days", value: dv, key }); sent[key] = nowMs; }
       }
       if (ev.usage !== null && ev.usage !== undefined) {
         const uv = Math.floor(ev.usage * 10) / 10;
-        let best = null;
-        for (const t of cfg.usage) {
-          if (uv >= t && (best === null || t > best)) best = t;
-        }
-        for (const t of cfg.usage) {
-          if (uv >= t) {
-            const key = panel.id + ":" + ev.username + ":u:" + t;
-            if (!sent[key]) {
-              sent[key] = nowMs;
-              if (t === best) jobs.push({ kind: "usage", value: uv, threshold: t, key });
-            }
-          }
-        }
+        const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
+        if (!sent[key]) { jobs.push({ kind: "usage", value: uv, key }); sent[key] = nowMs; }
       }
       if (!jobs.length) continue;
       anyJob = true;
@@ -7884,7 +7865,7 @@ async function handlePgHook(token, payload, env, botToken) {
       }
       for (const j of jobs) {
         for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, threshold: j.threshold, owner: ev.owner }, false);
+          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner }, false);
         }
       }
       if (!to.size) {
@@ -7903,17 +7884,13 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   const panels = await getPanels(kv);
   const lines = ["🔔 هشدار انقضا و حجم پاسارگارد", ""];
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال (پیام نمی‌آید)"));
-  lines.push("📅 آستانه روز: " + cfg.days.join("، "));
-  lines.push("📊 آستانه حجم٪: " + cfg.usage.join("، "));
+  lines.push("📅 آستانه‌ها در خود پنل تنظیم می‌شوند (پیشنهاد: روز ۱، حجم ۹۰٪) — ربات فقط فوروارد می‌کند.");
   lines.push("🖥 پنل‌های متصل: " + Object.keys(cfg.panels).length + " از " + panels.length);
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر ادمین فرعی فقط کاربرهای ادمین پنلِ لینک‌شده به خودش (باید استارت زده و آیدی‌اش از قبل ثبت شده باشد).");
   const kb = [];
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "pgtoggle" }]);
-  kb.push([
-    { text: "📅 آستانه روز", callback_data: "pgdays" },
-    { text: "📊 آستانه حجم٪", callback_data: "pgusage" },
-  ]);
+
   for (const p of panels) {
     const reg = !!cfg.panels[p.id];
     kb.push([{ text: (reg ? "✅ " : "⬜ ") + String(p.name || p.id).substring(0, 28), callback_data: `pgpanel:${p.id}` }]);
@@ -9678,24 +9655,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     qc.limit = n;
     await saveQuotaCfg(kv, qc);
     await send("✅ سقف روزانه به " + n.toLocaleString("en-US") + " تغییر کرد.", [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]);
-    return;
-  }
-
-  if (type === "pg_days" || type === "pg_usage") {
-    await kv.delete(`pend:${chatId}`);
-    const arr = String(txt).split(/[،,\s]+/).map((x) => Number(x)).filter((x) => Number.isFinite(x));
-    const cfg = await getPgHookCfg(kv);
-    if (type === "pg_days") {
-      const v = arr.filter((x) => x >= 0).slice(0, 10);
-      if (!v.length) { await send("❌ عدد معتبر نیست."); return; }
-      cfg.days = v;
-    } else {
-      const v = arr.filter((x) => x > 0 && x <= 100).slice(0, 10);
-      if (!v.length) { await send("❌ عدد معتبر نیست (۱ تا ۱۰۰)."); return; }
-      cfg.usage = v;
-    }
-    await savePgHookCfg(kv, cfg);
-    await send("✅ ذخیره شد.", [[{ text: "🔔 هشدارها", callback_data: "pghook" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -14438,15 +14397,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       cfg.enabled = !cfg.enabled;
       await savePgHookCfg(kv, cfg);
       await renderPgHookHome(edit, kv, env, adminId);
-    } else if (data === "pgdays" || data === "pgusage") {
-      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: data === "pgdays" ? "pg_days" : "pg_usage" }), { expirationTtl: 600 });
-      await edit(
-        data === "pgdays"
-          ? "📅 آستانه‌های روز را با کاما بفرست (مثلاً 1,3,7) — هر کاربر وقتی روزهای مانده‌اش به هرکدام رسید، یک‌بار خبر می‌آید."
-          : "📊 آستانه‌های درصد حجم را با کاما بفرست (مثلاً 80,90,100) — هر کاربر وقتی مصرفش به هرکدام رسید، یک‌بار خبر می‌آید.",
-        [[{ text: "🔙 انصراف", callback_data: "pghook" }]]
-      );
     } else if (data.startsWith("pgpanel:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       await renderPgPanel(edit, kv, env, data.slice(8));
@@ -14464,9 +14414,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const panels = await getPanels(kv);
       const panel = panels.find((x) => String(x.id) === String(pid));
       if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 هشدارها", callback_data: "pghook" }]]);
-      const cfg = await getPgHookCfg(kv);
-      const t = (cfg.days[0] != null ? cfg.days[0] : 3);
-      await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: t, threshold: t, owner: "-" }, true);
+      await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: 1, owner: "-" }, true);
       await renderPgPanel(edit, kv, env, pid);
     } else if (data.startsWith("pglink:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
