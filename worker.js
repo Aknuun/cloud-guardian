@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.71";
+const BOT_VERSION = "1.8.72";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.72": [
+    "🔴 واچ‌داگ رله: هشدار قطعی + وصل مجدد (ساعتی، سوار تیک موجود، بدون سهمیه اضافه)",
+  ],
   "1.8.71": [
     "🌐 حذف کامل گلوبال‌پینگ (کد + دکمه‌ها)؛ تشخیص خارج با نودهای خارجی چک‌هاست",
   ],
@@ -1365,6 +1368,8 @@ export default {
           if (!cs.hubwatch || now - cs.hubwatch >= 60 * 60000) {
             patch.hubwatch = now;
             jobs.push(runHubWatch(env).catch((e) => console.error("HUBWATCH", String(e))));
+            // واچ‌داگ رله سوار همین تیک ساعتی است (خوانش KV و سهمیه اضافه ندارد)
+            jobs.push(runRelayWatch(env).catch((e) => console.error("RELAYWATCH", String(e))));
           }
           jobs.push(ensureTgWebhook(botToken, ckv, env).catch((e) => console.error("TGSEC", String(e))));
           jobs.push(runSecretSweep(botToken, ckv).catch((e) => console.error("SECDEL", String(e))));
@@ -6134,6 +6139,54 @@ async function relayPing(url, token) {
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e).slice(0, 120) };
   }
+}
+
+const RELAY_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار هشدار قطعی (ریکاوری همیشه خبر داده می‌شود)
+
+// واچ‌داگ رله: قطعی رله‌های مورداستفاده را به ادمین‌ها هشدار می‌دهد + وصل‌شدن مجدد را خبر می‌دهد
+async function runRelayWatch(env) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  let cands = [];
+  try { cands = await relayCandidates(kv, env); } catch (e) { return; }
+  if (!cands.length) return;
+  let st = {};
+  try { st = (await kv.get("relay_watch", "json")) || {}; } catch (e) {}
+  if (!st || typeof st !== "object") st = {};
+  let admins = [];
+  try { admins = await getAdmins(kv, env); } catch (e) {}
+  if (!admins.length) return;
+  const now = Date.now();
+  let dirty = false;
+  for (const c of cands) {
+    if (!c.url) continue;
+    const key = (c.isDefault ? "default:" : "custom:") + c.url;
+    const label = c.isDefault ? "رلهٔ رایگان پیش‌فرض" : "رلهٔ شخصی";
+    let r;
+    try { r = await relayPing(c.url, c.token); } catch (e) { r = { ok: false, error: "ping_throw" }; }
+    const prev = st[key] || {};
+    if (!r.ok) {
+      const err = String(r.error || ("http_" + r.status) || "unknown").slice(0, 120);
+      if (!prev.down) { st[key] = { down: now, err, notified: 0 }; dirty = true; }
+      else if (st[key].err !== err) { st[key].err = err; dirty = true; }
+      const lastN = Number((st[key] || {}).notified) || 0;
+      if (!lastN || now - lastN >= RELAY_ALERT_COOLDOWN_MS) {
+        st[key].notified = now; dirty = true;
+        const msg = `🔴 قطع ارتباط رله\n\n${label}\n${code(c.url)}\n❌ ${code(err)}\n\nSSH، آمار سرور و بررسی چک‌هاست مختل می‌شود.`;
+        for (const a of admins) {
+          try { await sendMessage(botToken, a, msg, [[{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]); } catch (e) {}
+        }
+      }
+    } else if (prev.down) {
+      delete st[key]; dirty = true;
+      const msg = `🟢 رله وصل شد\n\n${label}\n${code(c.url)}`;
+      for (const a of admins) {
+        try { await sendMessage(botToken, a, msg, [[{ text: "🏠 خانه", callback_data: "menu" }]]); } catch (e) {}
+      }
+    }
+  }
+  if (dirty) { try { await kv.put("relay_watch", JSON.stringify(st)); } catch (e) {} }
 }
 
 // POST به رله با fallback خودکار به رلهٔ پیش‌فرض (وقتی حالت custom نیست)
