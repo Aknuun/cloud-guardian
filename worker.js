@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.46";
+const BOT_VERSION = "1.8.47";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.47": [
+    "🔔 ربات داخلی هر پنل جدا شد (به‌جای قالب لینک) + چیدمان منوی فیچرها با دکمه‌های سبز پاسارگارد",
+  ],
   "1.8.46": [
     "🔔 مسیر داشبورد موقع تعریف پنل پرسیده می‌شود + ربات داخلی قابل تنظیم (بدون پیش‌فرض) + راهنمای بار اول",
   ],
@@ -1489,6 +1492,7 @@ async function processUpdate(payload, env, botToken, adminId) {
         }
         const pgc = await getPgHookCfg(kv);
         const linkedNames = [];
+        const linkedPids = [];
         if (pgc.enabled) {
           // اول تطبیق مستقیم با آیدی عددی (یوزرنیم لازم نیست)، بعد جدول لینک
           const liveTg = [];
@@ -1500,6 +1504,7 @@ async function processUpdate(payload, env, botToken, adminId) {
               for (const a of la) {
                 if (a.tg && Number(a.tg) === chatId) {
                   liveTg.push(`«${a.u || "?"}» (${pn.name || pn.id})`);
+                  if (!linkedPids.includes(pn.id)) linkedPids.push(pn.id);
                   try {
                     if (!pgc.owner_map[pn.id]) pgc.owner_map[pn.id] = {};
                     if (!pgc.owner_map[pn.id][a.u]) {
@@ -1518,7 +1523,10 @@ async function processUpdate(payload, env, botToken, adminId) {
             for (const pn of panels) {
               const om = om0[pn.id] || {};
               for (const un of Object.keys(om)) {
-                if (Number(om[un]) === chatId) linkedNames.push(`«${un}» (${pn.name || pn.id})`);
+                if (Number(om[un]) === chatId) {
+                  linkedNames.push(`«${un}» (${pn.name || pn.id})`);
+                  if (!linkedPids.includes(pn.id)) linkedPids.push(pn.id);
+                }
               }
             }
           }
@@ -1543,9 +1551,10 @@ async function processUpdate(payload, env, botToken, adminId) {
           const cur = linkedNames.slice().sort().join("|");
           if (prev !== cur) {
             try { await kv.put(`pgstartmsg:${chatId}`, cur, { expirationTtl: 180 * 86400 }); } catch (e) {}
+            const wb = linkedPids.map((pid) => pgPanelBot(pgc, pid)).find(Boolean) || "";
             await send(
-              `👋 سلام! شما به‌عنوان ${linkedNames.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.` + pgRenewBotLine(pgc.renewbot),
-              pgRenewBotKb(pgc.renewbot)
+              `👋 سلام! شما به‌عنوان ${linkedNames.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.` + pgRenewBotLine(wb),
+              pgRenewBotKb(wb)
             );
           }
         }
@@ -1710,14 +1719,14 @@ function mainMenuKeyboard() {
 // کیبورد مشترک منوی فیچرهای جدید (دکمهٔ mons و دستور /mons) — یک‌جا و هماهنگ نگه داشته می‌شود
 function monsKeyboard() {
   return [
-    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef" }],
+    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "success" }],
     [
       { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
-      { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" },
+      { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd", style: "success" },
     ],
     [
-      { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
-      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" },
+      { text: "🔔 هشدار انقضا و حجم", callback_data: "pghook", style: "success" },
+      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um", style: "success" },
     ],
     [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
@@ -1725,8 +1734,10 @@ function monsKeyboard() {
       { text: "📊 ترافیک ساب‌ها", callback_data: "traf" },
       { text: "⚖️ لود بالانسر IP", callback_data: "lb" },
     ],
-    [{ text: "🔔 هشدار انقضا و حجم", callback_data: "pghook" }],
-    [{ text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail", style: "success" }],
+    [
+      { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
+      { text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail", style: "success" },
+    ],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -7809,7 +7820,6 @@ async function renderNodeMonitor(monitors, idx, edit, kv) {
 
 // ===================== هشدار انقضا/حجم پاسارگارد (pghook) =====================
 // پنل در تنظیمات webhook خودش به /pghook/<secret> خبر می‌دهد (days_left/usage_percent).
-const PG_RENEW_DEFAULT = "{base}{dash}/#/users?search={user}";
 function pgDashOf(cfg, panelId) {
   try {
     const d = ((cfg.panels || {})[panelId] || {}).dashpath;
@@ -7827,7 +7837,6 @@ async function getPgHookCfg(kv) {
     usage: Array.isArray(c.usage) && c.usage.length ? c.usage.map(Number).filter((x) => Number.isFinite(x) && x > 0 && x <= 100).slice(0, 10) : [90, 100],
     panels: c.panels && typeof c.panels === "object" ? c.panels : {},
     owner_map: c.owner_map && typeof c.owner_map === "object" ? c.owner_map : {},
-    renewbot: typeof c.renewbot === "string" ? c.renewbot.replace(/^@/, "").trim() : "",
   };
 }
 async function savePgHookCfg(kv, cfg) {
@@ -8029,6 +8038,13 @@ function pgSafePreview(payload) {
   } catch (e) { return "(unparseable)"; }
 }
 const PG_STATUS_FA = { active: ["🟢", "فعال"], expired: ["🔴", "منقضی"], limited: ["🟠", "محدود"], on_hold: ["⏸", "تعلیق"], disabled: ["⛔", "غیرفعال"] };
+function pgPanelBot(cfg, panelId) {
+  try {
+    const b = ((cfg.panels || {})[panelId] || {}).renewbot;
+    if (typeof b === "string" && /^[A-Za-z0-9_]{3,64}$/.test(b.trim()) && /bot$/i.test(b.trim())) return b.trim();
+  } catch (e) {}
+  return "";
+}
 function pgRenewBotKb(renewbot) {
   return renewbot ? [[{ text: "🤖 استارت " + renewbot, url: "https://t.me/" + renewbot }]] : [];
 }
@@ -8054,7 +8070,7 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   }
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   try { lines.push("⏱ " + fmtJalali(Date.now())); } catch (e) {}
-  // تمدید با ربات (سبز، فقط اگر ربات داخلی تعریف شده) + تمدید با پنل (آبی) کنار هم
+  // تمدید با ربات همان پنل (سبز، فقط اگر تعریف شده) + تمدید با پنل (آبی) کنار هم
   const kb = [];
   if (a.username) {
     const un = String(a.username).slice(0, 200);
@@ -8064,12 +8080,10 @@ async function pgSendAlert(botToken, to, panel, a, test) {
     }
     const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
     if (pbase) {
-      // قالب لینک هر پنل جدا قابل تنظیم است (پیش‌فرض همین پایین)؛ اگر پنلی مسیر دیگری داشت مشتری خودش عوض می‌کند
-      const tpl = a.renewtpl || PG_RENEW_DEFAULT;
-      const url = tpl.split("{base}").join(pbase).split("{dash}").join(a.dashpath || "/dashboard").split("{user}").join(encodeURIComponent(un));
-      row.push({ text: "🖥 تمدید با پنل", url, style: "primary" });
+      const dash = a.dashpath && a.dashpath.startsWith("/") ? a.dashpath : "/dashboard";
+      row.push({ text: "🖥 تمدید با پنل", url: pbase + dash + "/#/users?search=" + encodeURIComponent(un), style: "primary" });
     }
-    kb.push(row);
+    if (row.length) kb.push(row);
   }
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
@@ -8186,7 +8200,7 @@ async function handlePgHook(token, payload, env, botToken) {
       }
       for (const j of jobs) {
         for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner, renewtpl: ((cfg.panels || {})[panel.id] || {}).renewtpl || null, dashpath: pgDashOf(cfg, panel.id), renewbot: cfg.renewbot || null }, false);
+          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
         }
       }
       if (!to.size) {
@@ -8221,7 +8235,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   if (!seenIntro) {
     lines.push("👋 راهنمای شروع (فقط همین یک‌بار می‌بینی):");
     lines.push("۱️⃣ تو صفحه هر پنل، آدرس وبهوک را کپی کن و در تنظیمات webhook همان پنل بگذار (days_left و usage_percent هم همان‌جاست).");
-    lines.push("۲️⃣ برای دکمه «🔄 تمدید با ربات» اول با دکمه «🤖 تعریف ربات داخلی» ربات خودت را معرفی کن؛ تا آن موقع فقط دکمه «تمدید با پنل» می‌آید.");
+    lines.push("۲️⃣ برای دکمه «🔄 تمدید با ربات»، تو صفحه هر پنل با «🤖 ربات داخلی» ربات همان پنل را معرفی کن؛ تا آن موقع فقط دکمه «تمدید با پنل» می‌آید.");
     lines.push("۳️⃣ هر ادمین پنل که telegram_id داشته باشد (یا با /start و یوزر/پسورد وصل شود) هشدار کاربرهایش را می‌گیرد.");
     lines.push("");
     try { await kv.put("pghook_seen", "1"); } catch (e) {}
@@ -8231,10 +8245,8 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   lines.push("🖥 پنل‌های متصل: " + Object.keys(cfg.panels).length + " از " + panels.length);
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر لینک‌شده‌ای (ادمین یا نه) فقط کاربرهای خودش را می‌گیرد (باید استارت زده باشد).");
-  lines.push("🤖 ربات داخلی: " + (cfg.renewbot ? "@" + cfg.renewbot : "تعریف نشده"));
   const kb = [];
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "pgtoggle" }]);
-  kb.push([{ text: cfg.renewbot ? "🤖 تغییر ربات داخلی" : "🤖 تعریف ربات داخلی", callback_data: "pgrenewbot" }]);
 
   for (const p of panels) {
     const reg = !!cfg.panels[p.id];
@@ -8288,10 +8300,9 @@ async function renderPgPanel(edit, kv, env, pid) {
   }
   lines.push("");
   lines.push("🛣 مسیر داشبورد این پنل: " + code(pgDashOf(cfg, panel.id)));
-  lines.push("🔗 قالب لینک «تمدید با پنل» (متغیرها: {base} آدرس پنل، {dash} مسیر داشبورد، {user} یوزر):");
-  lines.push(code((((cfg.panels || {})[panel.id] || {}).renewtpl) || PG_RENEW_DEFAULT));
+  lines.push("🤖 ربات داخلی این پنل: " + (pgPanelBot(cfg, panel.id) ? "@" + pgPanelBot(cfg, panel.id) : "تعریف نشده"));
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
-  kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🔗 قالب لینک تمدید", callback_data: `pgrenew:${panel.id}` }]);
+  kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🤖 ربات داخلی", callback_data: `pgrenewbot:${panel.id}` }]);
   kb.push([{ text: "🔄 توکن جدید", callback_data: `pgregen:${panel.id}` }]);
   kb.push(...back);
   await edit(lines.join("\n"), kb);
@@ -10012,25 +10023,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
-  if (type === "pg_renewtpl") {
-    await kv.delete(`pend:${chatId}`);
-    const cfg = await getPgHookCfg(kv);
-    if (!cfg.panels[pending.pid]) cfg.panels[pending.pid] = {};
-    if (String(txt).trim() === "-") {
-      delete cfg.panels[pending.pid].renewtpl;
-    } else {
-      const v = String(txt).trim().slice(0, 300);
-      if (!v.includes("{user}")) {
-        await send("❌ قالب باید {user} داشته باشد (وگرنه دکمه بی‌فایده است).");
-        return;
-      }
-      cfg.panels[pending.pid].renewtpl = v;
-    }
-    await savePgHookCfg(kv, cfg);
-    await send("✅ ذخیره شد.", [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
-    return;
-  }
-
   if (type === "pg_self_user") {
     await kv.delete(`pend:${chatId}`);
     const u = String(txt).trim();
@@ -10092,7 +10084,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     } catch (e) {}
     {
       let rb = "";
-      try { rb = (await getPgHookCfg(kv)).renewbot || ""; } catch (e) {}
+      try { rb = pgPanelBot(await getPgHookCfg(kv), pending.pid) || ""; } catch (e) {}
       await send(
         `✅ وصل شدی «${pending.username}»! از این به بعد گزارش انقضا و حجم کاربرهات همین‌جا برات میاد.` + pgRenewBotLine(rb),
         pgRenewBotKb(rb)
@@ -10125,18 +10117,19 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   if (type === "pg_renewbot") {
     await kv.delete(`pend:${chatId}`);
     const cfg = await getPgHookCfg(kv);
+    if (!cfg.panels[pending.pid]) cfg.panels[pending.pid] = {};
     if (String(txt).trim() === "-") {
-      cfg.renewbot = "";
+      delete cfg.panels[pending.pid].renewbot;
     } else {
       const v = String(txt).trim().replace(/^@/, "");
       if (!/^[A-Za-z0-9_]{3,64}$/.test(v) || !/bot$/i.test(v)) {
         await send("❌ آیدی ربات معتبر نیست (مثلاً `allmarzbot`).");
         return;
       }
-      cfg.renewbot = v;
+      cfg.panels[pending.pid].renewbot = v;
     }
     await savePgHookCfg(kv, cfg);
-    await send("✅ ذخیره شد.", [[{ text: "🔔 هشدارها", callback_data: "pghook" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    await send("✅ ذخیره شد.", [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -14908,12 +14901,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "pghook") {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       await renderPgHookHome(edit, kv, env, adminId);
-    } else if (data === "pgrenewbot") {
+    } else if (data.startsWith("pgrenewbot:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_renewbot" }), { expirationTtl: 600 });
+      const pid = data.slice(11);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_renewbot", pid }), { expirationTtl: 600 });
       await edit(
-        "🤖 آیدی ربات داخلی پاسارگارد خودت را بفرست (بدون @، مثلاً `allmarzbot`).\n\nهمین ربات در دکمه «🔄 تمدید با ربات» پیام‌های هشدار استفاده می‌شود.\n\nبرای حذف (فقط دکمه پنل بماند) یک خط «-» بفرست.",
-        [[{ text: "🔙 انصراف", callback_data: "pghook" }]]
+        "🤖 آیدی ربات داخلی همین پنل را بفرست (بدون @، مثلاً `allmarzbot`).\n\nهمین ربات در دکمه «🔄 تمدید با ربات» هشدارهای همین پنل استفاده می‌شود.\n\nبرای حذف (فقط دکمه پنل بماند) یک خط «-» بفرست.",
+        [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
       );
     } else if (data === "pgtoggle") {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
@@ -14940,17 +14934,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 هشدارها", callback_data: "pghook" }]]);
       {
         const cfgT = await getPgHookCfg(kv);
-        await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: 1, owner: "-", renewtpl: ((cfgT.panels || {})[panel.id] || {}).renewtpl || null, dashpath: pgDashOf(cfgT, panel.id), renewbot: cfgT.renewbot || null }, true);
+        await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: 1, owner: "-", renewbot: pgPanelBot(cfgT, panel.id), dashpath: pgDashOf(cfgT, panel.id) }, true);
       }
       await renderPgPanel(edit, kv, env, pid);
-    } else if (data.startsWith("pgrenew:")) {
-      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
-      const pid = data.slice(8);
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_renewtpl", pid }), { expirationTtl: 600 });
-      await edit(
-        "🛣 قالب کامل لینک دکمه «تمدید با پنل» را بفرست.\n\nمتغیرها:\n• {base} = آدرس پنل\n• {dash} = مسیر داشبورد این پنل\n• {user} = یوزرنیم همان مشتری\n\nپیش‌فرض:\n" + PG_RENEW_DEFAULT + "\n\nبرای برگشت به پیش‌فرض، یک خط «-» بفرست.",
-        [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
-      );
     } else if (data.startsWith("pgself:")) {
       const pid = data.slice(7);
       const panels = await getPanels(kv);
