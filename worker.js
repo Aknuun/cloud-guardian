@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.77";
+const BOT_VERSION = "1.8.78";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.78": [
+    "🐞 رفع خطای qSectionModel گم‌شده در صفحات سهمیه",
+  ],
   "1.8.77": [
     "📊 سهم هر دکمه سهمیه جدا شد: مدل تسهیمی فقط با خوانش، بدون حتی یک write اضافه",
   ],
@@ -3219,6 +3222,59 @@ function qProj(cur) {
     if (!(el >= 0.5)) return null;
     return Math.round(Number(cur) * 24 / el);
   } catch (e) { return null; }
+}
+// مدل تخمینی سهم هر بخش — فقط خوانش (qstat/qal/آنالیتیکس)؛ هیچ write اضافه ندارد
+async function qSectionModel(kv, env, acc) {
+  const M = { ticks: { min: 0, ten: 0, day: 0 }, invCron: 0, invWeb: null, runs: {}, alerts: {}, kv: null, count: null, elapsedH: 0 };
+  try {
+    const day = new Date(); day.setUTCHours(0, 0, 0, 0);
+    const elMin = Math.max(0, Math.floor((Date.now() - day.getTime()) / 60000));
+    M.elapsedH = (Date.now() - day.getTime()) / 3600000;
+    M.ticks.min = elMin + Math.floor(elMin / 5);
+    M.ticks.ten = Math.floor(elMin / 10);
+    M.ticks.day = elMin >= 540 ? 1 : 0;
+    M.invCron = M.ticks.min + M.ticks.ten + M.ticks.day;
+  } catch (e) {}
+  try {
+    const qb = kv ? await kv.get(qTodayKey(), "json") : null;
+    M.runs = (qb && qb.runs) || {};
+  } catch (e) {}
+  try {
+    const qa = kv ? await kv.get("qal:" + new Date().toISOString().slice(0, 10), "json") : null;
+    M.alerts = (qa && qa.cats) || {};
+  } catch (e) {}
+  try {
+    if (acc) {
+      M.count = await fetchRequestsToday(acc.tok, acc.aid);
+      M.kv = await fetchKvUsageToday(acc.tok, acc.aid);
+    }
+  } catch (e) {}
+  M.invWeb = M.count === null ? null : Math.max(0, M.count - M.invCron);
+  // واحد فعالیت: اجراهای شمرده‌شده + تیک‌ها (هر تیک واقعاً KV می‌خواند) + تعامل + هشدار
+  let runsU = 0;
+  for (const k of Object.keys(M.runs)) runsU += Number(M.runs[k]) || 0;
+  let alertU = 0;
+  for (const k of Object.keys(M.alerts)) alertU += Number(M.alerts[k]) || 0;
+  const cronU = runsU + M.invCron;
+  const webU = M.invWeb === null ? 0 : M.invWeb;
+  const totU = cronU + webU + alertU;
+  M.share = { cron: totU ? cronU / totU : 0, web: totU ? webU / totU : 0, alert: totU ? alertU / totU : 0 };
+  M.units = { cron: Math.round(cronU), web: Math.round(webU), alert: Math.round(alertU) };
+  return M;
+}
+// سهم KV یک بخش از کل اندازه‌گیری‌شده (تخمین تسهیمی)
+function qKvShare(M, sec) {
+  const out = {};
+  for (const k of ["read", "write", "delete", "list"]) {
+    const tot = M.kv ? Number(M.kv[k]) || 0 : 0;
+    out[k] = Math.round(tot * (M.share[sec] || 0));
+  }
+  return out;
+}
+// یک ردیف KV فارسی با درصد سقف
+function qKvLine(em, label, v, lim) {
+  const pp = quotaPct(v, lim);
+  return `• ${em} ${label}: ` + faNum(Number(v || 0).toLocaleString("en-US")) + (lim ? " / " + faNum(Number(lim).toLocaleString("en-US")) : "") + (pp === null ? "" : ` (${faNum(pp)}٪)`) + " — " + quotaBar(pp);
 }
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
