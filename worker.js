@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.54";
+const BOT_VERSION = "1.8.55";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.55": [
+    "🔒 قفل دومرحله‌ای تنظیمات هشدار: همه ورودی‌های recurrent/مسیر/ربات/لینک فقط ادمین اصلی",
+  ],
   "1.8.54": [
     "🔕 دکمه سایلنت من: هشدارهای معمول به ادمین اصلی نمی‌آید (بقیه می‌گیرند)",
   ],
@@ -10180,6 +10183,10 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 
   if (type === "pg_recur") {
     await kv.delete(`pend:${chatId}`);
+    if (Number(chatId) !== Number((env && env.ADMIN_ID) || ADMIN_ID)) {
+      await send("⛔ فقط ادمین اصلی.");
+      return;
+    }
     const n = Number(String(txt).trim());
     if (!Number.isInteger(n) || n < 60 || n > 86400) {
       await send("❌ عدد معتبر نیست (۶۰ تا ۸۶۴۰۰ ثانیه).");
@@ -10223,6 +10230,10 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 
   if (type === "pg_dashpath") {
     await kv.delete(`pend:${chatId}`);
+    if (Number(chatId) !== Number((env && env.ADMIN_ID) || ADMIN_ID)) {
+      await send("⛔ فقط ادمین اصلی.");
+      return;
+    }
     const cfg = await getPgHookCfg(kv);
     if (!cfg.panels[pending.pid]) cfg.panels[pending.pid] = {};
     if (String(txt).trim() === "-") {
@@ -10244,6 +10255,10 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 
   if (type === "pg_renewbot") {
     await kv.delete(`pend:${chatId}`);
+    if (Number(chatId) !== Number((env && env.ADMIN_ID) || ADMIN_ID)) {
+      await send("⛔ فقط ادمین اصلی.");
+      return;
+    }
     const cfg = await getPgHookCfg(kv);
     if (!cfg.panels[pending.pid]) cfg.panels[pending.pid] = {};
     if (String(txt).trim() === "-") {
@@ -10264,6 +10279,10 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 
   if (type === "pg_link") {
     await kv.delete(`pend:${chatId}`);
+    if (Number(chatId) !== Number((env && env.ADMIN_ID) || ADMIN_ID)) {
+      await send("⛔ فقط ادمین اصلی.");
+      return;
+    }
     const cfg = await getPgHookCfg(kv);
     if (!cfg.owner_map[pending.pid]) cfg.owner_map[pending.pid] = {};
     if (String(txt).trim() === "-") {
