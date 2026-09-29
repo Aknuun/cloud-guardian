@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.36";
+const BOT_VERSION = "1.8.37";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.37": [
+    "🔔 پیام هشدار کامل‌تر شد: ساعت مانده، تاریخ انقضا، وضعیت کاربر، حجم مانده (درصد هم هست)",
+  ],
   "1.8.36": [
     "🔔 ضدتکراری در همان بچ: هر کاربر در هر موج فقط یک پیام (اولی می‌ماند)",
   ],
@@ -7874,7 +7877,18 @@ function pgParseOne(p) {
     if (used !== null && lim !== null && lim > 0) usage = (used / lim) * 100;
   }
   const ev = str(p.action || p.event || p.type || p.kind).toLowerCase();
-  return { username, owner, ownerTg, days, usage, daysExplicit, usageExplicit, ev };
+  const expRaw = u.expire != null ? u.expire : u.expire_date != null ? u.expire_date : p.expire;
+  let expireTs = null;
+  if (typeof expRaw === "number" && Number.isFinite(expRaw) && expRaw > 0) {
+    expireTs = expRaw > 1e12 ? expRaw : expRaw > 1e9 ? expRaw * 1000 : null;
+  } else if (typeof expRaw === "string" && expRaw) {
+    const t = Date.parse(expRaw);
+    if (Number.isFinite(t)) expireTs = t;
+  }
+  const usedTraffic = pgNum(u.used_traffic != null ? u.used_traffic : p.used_traffic);
+  const dataLimit = pgNum(u.data_limit != null ? u.data_limit : p.data_limit);
+  const status = str(u.status || p.status || "");
+  return { username, owner, ownerTg, days, usage, daysExplicit, usageExplicit, ev, expireTs, usedTraffic, dataLimit, status };
 }
 function pgParseEvents(payload) {
   const arr = Array.isArray(payload) ? payload : [payload];
@@ -7907,12 +7921,34 @@ function pgSafePreview(payload) {
     return JSON.stringify(clean).slice(0, 800);
   } catch (e) { return "(unparseable)"; }
 }
+const PG_STATUS_FA = { active: ["🟢", "فعال"], expired: ["🔴", "منقضی"], limited: ["🟠", "محدود"], on_hold: ["⏸", "تعلیق"], disabled: ["⛔", "غیرفعال"] };
+function pgFmtGb(v) {
+  const n = Number(v) / 1073741824;
+  if (!Number.isFinite(n)) return null;
+  return String(Number(n.toFixed(1))) + " گیگ";
+}
 async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
   const lines = [(test ? "🧪 تستی — " : "") + head + " — " + (panel.name || panel.id), ""];
   lines.push("👤 کاربر: " + code(a.username || "؟"));
-  if (a.kind === "usage") lines.push(`📈 مصرف: ${a.value}٪`);
-  else lines.push(`⏳ روزهای مانده: ${a.value}`);
+  if (a.kind === "usage") {
+    lines.push(`📈 مصرف: ${a.value}٪`);
+  } else {
+    const hrs = a.expireTs && a.expireTs > Date.now() ? Math.floor((a.expireTs - Date.now()) / 3600000) : Math.max(0, Math.floor(Number(a.value) * 24));
+    lines.push(`⏳ ساعت مانده: ${hrs}`);
+  }
+  if (a.expireTs) {
+    try { lines.push("📅 انقضا: " + fmtJalali(a.expireTs)); } catch (e) {}
+  }
+  if (a.status) {
+    const sm = PG_STATUS_FA[String(a.status).toLowerCase()] || ["▪️", String(a.status)];
+    lines.push(`${sm[0]} وضعیت: ${escHtml(sm[1])}`);
+  }
+  if (a.dataLimit && a.dataLimit > 0 && a.usedTraffic !== null && a.usedTraffic !== undefined) {
+    const left = pgFmtGb(Math.max(0, a.dataLimit - a.usedTraffic));
+    const tot = pgFmtGb(a.dataLimit);
+    if (left) lines.push(`📦 حجم مانده: ${left}` + (tot ? ` (از ${tot})` : ""));
+  }
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
   // باز کردن allmarzbot با متن آماده = یوزرنیم همان مشتری
@@ -7981,7 +8017,7 @@ async function handlePgHook(token, payload, env, botToken) {
           const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
           const rk = panel.id + ":" + ev.username + ":days";
           if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
-            jobs.push({ kind: "days", value: dv, key });
+            jobs.push({ kind: "days", value: dv, key, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
             markKeys.push(key);
             seenRun.add(rk);
           }
@@ -7994,7 +8030,7 @@ async function handlePgHook(token, payload, env, botToken) {
           const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
           const rk = panel.id + ":" + ev.username + ":usage";
           if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
-            jobs.push({ kind: "usage", value: uv, key });
+            jobs.push({ kind: "usage", value: uv, key, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
             markKeys.push(key);
             seenRun.add(rk);
           }
