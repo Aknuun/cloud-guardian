@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.73";
+const BOT_VERSION = "1.8.74";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.74": [
+    "📊 صفحه سهمیه: عددهای فارسی + جدول مصرف روزانه به تفکیک کرون و تخمین تعامل ربات",
+  ],
   "1.8.73": [
     "🔑 آپدیت خودکار با ریپوی private: پشتیبانی از توکن read-only گیت‌هاب (KV «github_token»)",
   ],
@@ -1333,6 +1336,7 @@ export default {
     if (cron === "0 9 * * *") {
       ctx.waitUntil(runSslMonitor(env).catch((e) => console.error("SSLM", String(e))));
       ctx.waitUntil(runDomExpiryMonitor(env).catch((e) => console.error("DOMEXP", String(e))));
+      ctx.waitUntil(qRun(env.BOT_KV, ["ssl", "domexp"]).catch(() => {}));
     } else if (cron === "*/10 * * * *") {
       // همهٔ کارهای دوره‌ای در یک بلوک؛ زمان‌بندی‌شان در یک کلید (cron_state) ذخیره می‌شود
       ctx.waitUntil(
@@ -1384,6 +1388,9 @@ export default {
           jobs.push(ensureBotCommands(env, botToken, ckv).catch(() => {}));
           await Promise.allSettled(jobs);
           if (Object.keys(patch).length) await saveCronState(ckv, { ...cs, ...patch });
+          const ran10 = [...Object.keys(patch), "node10", "tgsec", "secsweep"];
+          if (patch.hubwatch) ran10.push("relaywatch");
+          await qRun(ckv, ran10);
         })()
       );
     } else {
@@ -3148,16 +3155,43 @@ function quotaPct(used, limit) {
 function quotaBar(pct) {
   if (pct === null) return "";
   const filled = Math.max(0, Math.min(10, Math.round(pct / 10)));
-  return "▮".repeat(filled) + "▯".repeat(10 - filled) + " " + pct + "٪";
+  return "▮".repeat(filled) + "▯".repeat(10 - filled) + " " + faNum(pct) + "٪";
+}
+// عدد فارسی کامل (ارقام + ممیز + جداکننده هزارگان) برای نمایش درست راست‌به‌چپ
+function faNum(s) {
+  return faD(String(s)).replace(/\./g, "٫").replace(/,/g, "٬");
 }
 
 function fmtBytes(n) {
   const b = Number(n) || 0;
-  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + " GB";
-  if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
-  if (b >= 1024) return (b / 1024).toFixed(1) + " KB";
-  return b + " B";
+  const fa = (x) => faNum(x);
+  if (b >= 1073741824) return fa((b / 1073741824).toFixed(2)) + " GB";
+  if (b >= 1048576) return fa((b / 1048576).toFixed(1)) + " MB";
+  if (b >= 1024) return fa((b / 1024).toFixed(1)) + " KB";
+  return fa(b) + " B";
 }
+// حسابداری مصرف روزانه به تفکیک کار — فقط ۱ write اضافه در هر تیک/اجرای واقعی
+function qTodayKey() {
+  return "qstat:" + new Date().toISOString().slice(0, 10);
+}
+async function qRun(kv, jobs) {
+  try {
+    if (!kv || !jobs || !jobs.length) return;
+    const k = qTodayKey();
+    let b = null;
+    try { b = await kv.get(k, "json"); } catch (e) {}
+    if (!b || typeof b !== "object" || !b.runs) b = { runs: {} };
+    for (const j of jobs) b.runs[j] = (Number(b.runs[j]) || 0) + 1;
+    await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+  } catch (e) {}
+}
+const Q_JOB_FA = {
+  hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
+  node10: "پول نود (۱۰دقیقه‌ای)", nodeadd: "ثبت خودکار نود", selfup: "آپدیت خودکار",
+  ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
+  qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
+  rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه",
+};
 
 // ساخت متن هشدارهای عبور از سهمیه (درخواست ورکر + KV)
 function quotaAlertsList(cfg, count, kvOps, storage) {
@@ -3531,12 +3565,30 @@ async function renderQuotaMenu(edit, kv, env) {
     }
     if (storage) {
       const sp = quotaPct(storage.bytes, KV_STORAGE_LIMIT);
-      lines.push("• حجم: " + fmtBytes(storage.bytes) + " / ۱ گیگ — " + quotaBar(sp) + " · " + storage.keys + " کلید");
+      lines.push("• حجم: " + fmtBytes(storage.bytes) + " / ۱ گیگ — " + quotaBar(sp) + " · " + faNum(storage.keys) + " کلید");
     }
   } else {
     lines.push("• نامشخص (آنالیتیکس در دسترس نیست)");
   }
 
+  lines.push("", "📊 مصرف امروز به تفکیک (تعداد اجرا):");
+  let qb = null;
+  try { qb = kv ? await kv.get(qTodayKey(), "json") : null; } catch (e) {}
+  const runs = (qb && qb.runs) || {};
+  const order = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+  let anyRun = false;
+  for (const j of order) {
+    const n = Number(runs[j]) || 0;
+    if (!n) continue;
+    anyRun = true;
+    lines.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} بار`);
+  }
+  if (!anyRun) lines.push("• هنوز اجرایی ثبت نشده (از فردا پر می‌شود).");
+  if (count !== null) {
+    const est = Math.max(0, count - 1873);
+    lines.push(`• 🤖 پیام‌ها و دکمه‌های تلگرام (تخمین): ${faNum(est.toLocaleString("en-US"))}`);
+  }
+  lines.push("ℹ️ تعداد اجراها دقیق است؛ سهمیه KV به تفکیک کرون را API کلادفلر نمی‌دهد.");
   lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
   lines.push(
@@ -20869,6 +20921,7 @@ async function runReminders(env) {
   const now = Date.now();
   const due = list.filter((r) => r && !r.notifiedAt && Number(r.at) <= now);
   if (!due.length) return;
+  await qRun(kv, ["rem"]);
   // علامت‌گذاری به‌عنوان اطلاع‌داده‌شده (برای دکمهٔ «یادآوری مجدد» نگه می‌داریم)
   for (const r of due) r.notifiedAt = now;
   await saveReminders(kv, list);
@@ -20975,6 +21028,7 @@ async function runHostFilter(env, opts = {}) {
     cfg.last_attempt = new Date().toISOString();
     await saveHostFilterCfg(kv, cfg);
   }
+  await qRun(kv, ["hf"]);
 
   const accounts = await getAccounts(kv, env);
   const panels = await getPanels(kv);
