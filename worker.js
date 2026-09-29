@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.41";
+const BOT_VERSION = "1.8.42";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.42": [
+    "🛣 قالب لینک تمدید برای هر پنل جدا قابل تنظیم شد (پیش‌فرض مسیر فعلی)",
+  ],
   "1.8.41": [
     "🔔 دو دکمه تمدید کنار هم (سبز/آبی) با لینک هش‌روت پنل؛ حذف حجم مانده؛ متن مصرف‌شده؛ ساعت بدون پسوند",
   ],
@@ -7784,6 +7787,7 @@ async function renderNodeMonitor(monitors, idx, edit, kv) {
 
 // ===================== هشدار انقضا/حجم پاسارگارد (pghook) =====================
 // پنل در تنظیمات webhook خودش به /pghook/<secret> خبر می‌دهد (days_left/usage_percent).
+const PG_RENEW_DEFAULT = "{base}/dashboard/#/users?search={user}";
 async function getPgHookCfg(kv) {
   let c = null;
   try { c = await kv.get("pghook_cfg", "json"); } catch (e) {}
@@ -7977,7 +7981,10 @@ async function pgSendAlert(botToken, to, panel, a, test) {
     const row = [{ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(un), style: "success" }];
     const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
     if (pbase) {
-      row.push({ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/#/users?search=" + encodeURIComponent(un), style: "primary" });
+      // قالب لینک هر پنل جدا قابل تنظیم است (پیش‌فرض همین پایین)؛ اگر پنلی مسیر دیگری داشت مشتری خودش عوض می‌کند
+      const tpl = a.renewtpl || PG_RENEW_DEFAULT;
+      const url = tpl.split("{base}").join(pbase).split("{user}").join(encodeURIComponent(un));
+      row.push({ text: "🖥 تمدید با پنل", url, style: "primary" });
     }
     kb.push(row);
   }
@@ -8085,7 +8092,7 @@ async function handlePgHook(token, payload, env, botToken) {
       }
       for (const j of jobs) {
         for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner }, false);
+          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner, renewtpl: ((cfg.panels || {})[panel.id] || {}).renewtpl || null }, false);
         }
       }
       if (!to.size) {
@@ -8161,7 +8168,11 @@ async function renderPgPanel(edit, kv, env, pid) {
       kb.push([{ text: "🔗 لینک «" + String(u).substring(0, 18) + "»" + (om2[u] ? " (" + om2[u] + ")" : ""), callback_data: `pglink:${panel.id}:${u}` }]);
     }
   }
+  lines.push("");
+  lines.push("🛣 قالب لینک «تمدید با پنل» (اگر مسیر داشبورد این پنل فرق دارد، عوضش کن):");
+  lines.push(code((((cfg.panels || {})[panel.id] || {}).renewtpl) || PG_RENEW_DEFAULT));
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
+  kb.push([{ text: "🛣 قالب لینک تمدید", callback_data: `pgrenew:${panel.id}` }]);
   kb.push([{ text: "🔄 توکن جدید", callback_data: `pgregen:${panel.id}` }]);
   kb.push(...back);
   await edit(lines.join("\n"), kb);
@@ -9879,6 +9890,25 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     qc.limit = n;
     await saveQuotaCfg(kv, qc);
     await send("✅ سقف روزانه به " + n.toLocaleString("en-US") + " تغییر کرد.", [[{ text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }]]);
+    return;
+  }
+
+  if (type === "pg_renewtpl") {
+    await kv.delete(`pend:${chatId}`);
+    const cfg = await getPgHookCfg(kv);
+    if (!cfg.panels[pending.pid]) cfg.panels[pending.pid] = {};
+    if (String(txt).trim() === "-") {
+      delete cfg.panels[pending.pid].renewtpl;
+    } else {
+      const v = String(txt).trim().slice(0, 300);
+      if (!v.includes("{user}")) {
+        await send("❌ قالب باید {user} داشته باشد (وگرنه دکمه بی‌فایده است).");
+        return;
+      }
+      cfg.panels[pending.pid].renewtpl = v;
+    }
+    await savePgHookCfg(kv, cfg);
+    await send("✅ ذخیره شد.", [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -14649,8 +14679,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const panels = await getPanels(kv);
       const panel = panels.find((x) => String(x.id) === String(pid));
       if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 هشدارها", callback_data: "pghook" }]]);
-      await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: 1, owner: "-" }, true);
+      {
+        const cfgT = await getPgHookCfg(kv);
+        await pgSendAlert(botToken, chatId, panel, { username: "test-user", kind: "days", value: 1, owner: "-", renewtpl: ((cfgT.panels || {})[panel.id] || {}).renewtpl || null }, true);
+      }
       await renderPgPanel(edit, kv, env, pid);
+    } else if (data.startsWith("pgrenew:")) {
+      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
+      const pid = data.slice(8);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_renewtpl", pid }), { expirationTtl: 600 });
+      await edit(
+        "🛣 قالب کامل لینک دکمه «تمدید با پنل» را بفرست.\n\nمتغیرها:\n• {base} = آدرس پنل\n• {user} = یوزرنیم همان مشتری\n\nپیش‌فرض:\n" + PG_RENEW_DEFAULT + "\n\nبرای برگشت به پیش‌فرض، یک خط «-» بفرست.",
+        [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
+      );
     } else if (data.startsWith("pglink:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       const rest = data.slice(7).split(":");
