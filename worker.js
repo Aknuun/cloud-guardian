@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.40";
+const BOT_VERSION = "1.8.41";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.41": [
+    "🔔 دو دکمه تمدید کنار هم (سبز/آبی) با لینک هش‌روت پنل؛ حذف حجم مانده؛ متن مصرف‌شده؛ ساعت بدون پسوند",
+  ],
   "1.8.40": [
     "🔔 سقف enrich از پنل: حداکثر ۱۰ کاربر در هر موج",
   ],
@@ -7948,17 +7951,12 @@ function pgSafePreview(payload) {
   } catch (e) { return "(unparseable)"; }
 }
 const PG_STATUS_FA = { active: ["🟢", "فعال"], expired: ["🔴", "منقضی"], limited: ["🟠", "محدود"], on_hold: ["⏸", "تعلیق"], disabled: ["⛔", "غیرفعال"] };
-function pgFmtGb(v) {
-  const n = Number(v) / 1073741824;
-  if (!Number.isFinite(n)) return null;
-  return String(Number(n.toFixed(1))) + " گیگ";
-}
 async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
   const lines = [(test ? "🧪 تستی — " : "") + head, "🖥 پنل: " + code(panel.name || panel.id), ""];
   lines.push("👤 کاربر: " + code(a.username || "؟"));
   if (a.kind === "usage") {
-    lines.push(`📈 مصرف: ${a.value}٪`);
+    lines.push(`📈 حجم مصرف شده: ${a.value}٪`);
   } else {
     const hrs = a.expireTs && a.expireTs > Date.now() ? Math.floor((a.expireTs - Date.now()) / 3600000) : Math.max(0, Math.floor(Number(a.value) * 24));
     lines.push(`⏳ ساعت مانده: ${hrs}`);
@@ -7970,22 +7968,18 @@ async function pgSendAlert(botToken, to, panel, a, test) {
     const sm = PG_STATUS_FA[String(a.status).toLowerCase()] || ["▪️", String(a.status)];
     lines.push(`${sm[0]} وضعیت: ${escHtml(sm[1])}`);
   }
-  if (a.dataLimit && a.dataLimit > 0 && a.usedTraffic !== null && a.usedTraffic !== undefined) {
-    const left = pgFmtGb(Math.max(0, a.dataLimit - a.usedTraffic));
-    const tot = pgFmtGb(a.dataLimit);
-    if (left) lines.push(`📦 حجم مانده: ${left}` + (tot ? ` (از ${tot})` : ""));
-  }
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
-  try { lines.push("⏱ " + fmtJalali(Date.now()) + " به وقت ایران"); } catch (e) {}
-  // تمدید با ربات (allmarzbot با متن آماده) + تمدید با پنل (صفحه یوزرها با جست‌وجوی همان یوزر)
+  try { lines.push("⏱ " + fmtJalali(Date.now())); } catch (e) {}
+  // تمدید با ربات (سبز) + تمدید با پنل (آبی) کنار هم؛ لینک پنل هش‌روت با جست‌وجوی همان یوزر
   const kb = [];
   if (a.username) {
     const un = String(a.username).slice(0, 200);
-    kb.push([{ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(un) }]);
+    const row = [{ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(un), style: "success" }];
     const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
     if (pbase) {
-      kb.push([{ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/users?search=" + encodeURIComponent(un) }]);
+      row.push({ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/#/users?search=" + encodeURIComponent(un), style: "primary" });
     }
+    kb.push(row);
   }
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
@@ -8032,7 +8026,7 @@ async function handlePgHook(token, payload, env, botToken) {
     };
     let anyJob = false;
     const seenRun = new Set();
-    const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || e.usedTraffic == null || e.dataLimit == null || !e.status));
+    const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || !e.status));
     let ptoken = null;
     if (needEnrich) {
       try { ptoken = await panelLogin(panel); } catch (e) {}
@@ -8041,14 +8035,12 @@ async function handlePgHook(token, payload, env, botToken) {
     let enrichLeft = 10;
     for (const ev of events) {
       if (!ev.username) continue;
-      if (ptoken && enrichLeft > 0 && (ev.expireTs == null || ev.usedTraffic == null || ev.dataLimit == null || !ev.status)) {
+      if (ptoken && enrichLeft > 0 && (ev.expireTs == null || !ev.status)) {
         enrichLeft--;
         try {
           const pu = await panelGetUser(panel, ptoken, ev.username);
           if (pu) {
             if (ev.expireTs == null) ev.expireTs = pgExpireTs(pu.expire != null ? pu.expire : pu.expire_date);
-            if (ev.usedTraffic == null) ev.usedTraffic = pgNum(pu.used_traffic);
-            if (ev.dataLimit == null) ev.dataLimit = pgNum(pu.data_limit);
             if (!ev.status) ev.status = String(pu.status || "");
           }
         } catch (e) {}
