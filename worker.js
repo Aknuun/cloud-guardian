@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.59";
+const BOT_VERSION = "1.8.60";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,9 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
-  "1.8.59": [
-    "🛟 دکمه استاندارد زاپاس در تنظیمات لود بالانسر (مثل صفحه رکورد)",
-    "🖥 حذف مانیتور خودکار سرورها؛ دکمه سرورها شد «سرورها و مانیتورینگ» + خانه مرتب‌تر",
+  "1.8.60": [
+    "🖥 مانیتور خودکار سرورها برگشت (فقط دکمه خانه حذف است؛ از داخل «سرورها و مانیتورینگ» باز می‌شود)",
+    "🏠 خانه موضوعی شد: رکوردها و دیتاسنتر ۳ستونه، بقیه ۲ستونه/تمام‌عرض، رنگ ساده",
+    "🛟 دکمه استاندارد زاپاس در تنظیمات لود بالانسر",
   ],
   "1.8.58": [
     "🌐 گروه جدید «مانیتور دامنه و سهمیه»: SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر زیر یک دکمه",
@@ -1310,6 +1311,10 @@ export default {
             patch.um = now;
             jobs.push(runUsageMonitor(env, { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
           }
+          if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
+            patch.srv = now;
+            jobs.push(runSrvMonitor(env, botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
+          }
           if (!cs.node || now - cs.node >= NODEADD_MIN_MS) {
             patch.node = now;
             // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
@@ -1733,37 +1738,47 @@ const SEARCH_PROMPT_TEXT =
 // هر دکمه: text = متن روی دکمه، callback_data = شناسهٔ عملیاتی که در هندلر callback_query خوانده می‌شود.
 function mainMenuKeyboard() {
   return [
-    // اکشن اصلی (سبز) + کلودفلر
-    [{ text: "➕ افزودن رکورد", callback_data: "addrec", style: "success" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
-    // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) کنار هم در یک ردیف — سبز
+    // رکوردها (۳ستونه): افزودن + کلودفلر + جست‌وجو (آبی)
+    [
+      { text: "➕ افزودن رکورد", callback_data: "addrec" },
+      { text: "☁️ کلودفلر", callback_data: "zones" },
+      { text: "🔍 جست و جو", callback_data: "search", style: "primary" },
+    ],
+    // دیتاسنتر (۳ستونه، سبز)
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
       { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
-    // سرورها و مانیتورینگ | جست‌وجو (آبی)
-    [{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }, { text: "🔍 جست و جو", callback_data: "search", style: "primary" }],
-    // همهٔ فیچرها این‌جا (بالای تنظیمات) — ردیف‌های مشترک monsKeyboard بدون ردیف خانه؛ صفحهٔ جدا حذف شد
+    // سرورها و مانیتورینگ (تمام‌عرض)
+    [{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }],
+    // فیچرها — ردیف‌های مشترک monsKeyboard بدون ردیف خانه
     ...monsKeyboard().slice(0, -1),
-    // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
+    // تنظیمات و راهنما — خاکستری
     [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
   ];
 }
 
-// ردیف‌های مشترک فیچرها — داخل خانه استفاده می‌شود (صفحهٔ جداگانه ندارد)
+// ردیف‌های مشترک فیچرها — داخل خانه استفاده می‌شود (صفحهٔ جداگانه ندارد؛ مانیتور سرورها فقط از داخل «سرورها» باز می‌شود)
 function monsKeyboard() {
   return [
-    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "success" }],
+    // پنل پاسارگارد (تمام‌عرض، آبی)
+    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "primary" }],
+    // خودکارسازی پاسارگارد (۲ستونه)
     [
-      { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf", style: "success" },
-      { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd", style: "success" },
+      { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
+      { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" },
     ],
+    // هشدارها (۲ستونه)
     [
-      { text: "🔔 هشدار انقضا و حجم", callback_data: "pghook", style: "success" },
-      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um", style: "success" },
+      { text: "🔔 هشدار انقضا و حجم", callback_data: "pghook" },
+      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" },
     ],
+    // دامنه و سهمیه (تمام‌عرض)
     [{ text: "🌐 مانیتور دامنه و سهمیه", callback_data: "dommon" }],
+    // ابزارها (۲ستونه)
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "⚖️ لود بالانسر IP", callback_data: "lb" }],
+    // ایمیل (تمام‌عرض)
     [{ text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
@@ -1857,7 +1872,7 @@ const HELP_GUIDE = {
     "• ➕ افزودن سرور: آی‌پی/هاست (+پورت) → رمز یا کلید SSH (نام پیش‌فرض = هاست، کاربر root)\n" +
     "• 🔑 رمزهای ذخیره‌شده: چند رمز را ذخیره کن تا هنگام افزودن سرور با یک دکمه انتخاب شوند\n" +
     "• 📥 نصب خودکار نود پاسارگارد: اسکریپت رسمی pg-node.sh با خروجی زنده اجرا می‌شود\n" +
-    "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپتایم/پهنای باند هر سرور\n" +
+    "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپتایم/پهنای باند هر سرور + هشدار خودکار قابل‌تنظیم\n" +
     "• 🔄 ریبوت · ⏱ آپدیت و آپگرید · ℹ️ مشخصات سیستم · 💽 فضای دیسک\n\n" +
     "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.\n" +
     "⚠️ اگر رله راه‌اندازی نشده باشد، ربات خودش پیام نصب رله را نشان می‌دهد.",
@@ -2198,7 +2213,7 @@ async function getAdmins(kv, env) {
 }
 
 // زمان‌بندی کرون‌های دوره‌ای در یک کلید واحد (کاهش شدید تعداد نوشتن‌های KV)
-// فیلدها: um (مانیتور مصرف) · node (ثبت نود) · selfup (آپدیت خودکار)
+// فیلدها: um (مانیتور مصرف) · srv (مانیتور سرور) · node (ثبت نود) · selfup (آپدیت خودکار)
 async function getCronState(kv) {
   if (!kv) return {};
   try {
@@ -3334,6 +3349,7 @@ async function quotaGuard(env, botToken, adminId) {
       "برای اینکه به ۹۰٪ نرسی:",
       "• ⏸ توقف موقت کرون از همین پیام یا منوی سهمیه",
       "• 🔥 فاصله هشدار مانیتور مصرف (بد مصرف‌ها) را بیشتر کن",
+      "• 🖥 فاصله بررسی مانیتور سرورها را بیشتر کن",
       "• تعویض خودکار هاست، تله‌متری و گزارش‌های دوره‌ای هم write مصرف می‌کنند"
     );
   }
@@ -5935,6 +5951,8 @@ const SRV_RELAY_HINT =
   "🛠 یا نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
   code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
   "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
+const SRV_DEFAULTS = { cpuPct: 90, memPct: 90, diskPct: 90, enabled: true, cooldownMin: 60 };
+const SRV_MON_MIN_MS = 60 * 60000; // پیش‌فرض ۶۰ دقیقه — کاهش مصرف KV
 const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
 
 // کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
@@ -6428,6 +6446,15 @@ async function srvPrepServer(kv, env, edit, idx, s) {
   return { ready, pwNote };
 }
 
+async function getSrvMonCfg(kv) {
+  const c = (await kvGetCached(kv, "srv_mon_cfg", "json")) || {};
+  return { ...SRV_DEFAULTS, ...c };
+}
+
+async function saveSrvMonCfg(kv, c) {
+  await kvPutCached(kv, "srv_mon_cfg", JSON.stringify(c));
+}
+
 function srvListBtn(list) {
   return list.map((s, i) => [{ text: `🖧 ${s.name}`, callback_data: `srvopen:${i}`, style: "plain" }]);
 }
@@ -6521,7 +6548,10 @@ async function renderServersHome(edit, kv, env) {
   ]);
   kb.push([{ text: "📥 وارد کردن از دیتاسنترها", callback_data: "srvimport" }]);
   if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
-  kb.push([{ text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" }]);
+  kb.push([
+    { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
+    { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
+  ]);
   if (list.length) kb.push([{ text: "📤 خروجی Termius (CSV)", callback_data: "srvtermius" }]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
@@ -6541,7 +6571,7 @@ async function renderSrvDetail(edit, kv, env, idx) {
   ].filter(Boolean);
   const kb = [
     [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${idx}` }],
-    [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }],
+    [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
     [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}`, style: "danger" }],
@@ -6576,6 +6606,115 @@ function srvStatsText(s, st) {
     for (const c of st.pg.slice(0, 8)) lines.push("  • " + escHtml(c.replace(/\|/g, " — ")));
   }
   return lines.filter(Boolean).join("\n");
+}
+
+async function renderSrvMonCfg(edit, kv) {
+  const cfg = await getSrvMonCfg(kv);
+  const lines = [
+    "📊 مانیتور سرورها",
+    "",
+    `وضعیت: ${cfg.enabled ? "▶️ فعال" : "⏸ متوقف"}`,
+    "",
+    "هشدار خودکار وقتی:",
+    `• CPU بیش از ${cfg.cpuPct}% برود`,
+    `• RAM بیش از ${cfg.memPct}% برود`,
+    `• دیسک بیش از ${cfg.diskPct}% پر شود`,
+    `⏱ حداقل فاصلهٔ تکرار هشدار: ${cfg.cooldownMin} دقیقه`,
+    "",
+    "برای تغییر هر آستانه، روی آن بزنید.",
+  ];
+  const kb = [
+    [{ text: cfg.enabled ? "⏸ توقف هشدار" : "▶️ فعال‌سازی", callback_data: "srvmontg" }],
+    [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
+    [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
+    [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
+  ];
+  await edit(lines.join("\n"), kb);
+}
+
+// اجرای مانیتور سرورها (از کرون */10 + دکمهٔ دستی)
+async function runSrvMonitor(env, botToken, manual, opts) {
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const skipGuard = !!(opts && opts.skipGuard);
+  const cfg = await getSrvMonCfg(kv);
+  if (!cfg.enabled && !manual) return;
+  const list = await getServersList(kv);
+  if (!list.length) return;
+  if (!manual && !skipGuard) {
+    const last = Number((await kv.get("srv_mon_last")) || 0);
+    if (last && Date.now() - last < SRV_MON_MIN_MS) return;
+    await kv.put("srv_mon_last", String(Date.now()));
+  }
+  const admins = await getAdmins(kv, env);
+  const alerts = [];
+  const srvRows = [];
+  srvRows.push([
+    { text: "\u{1F310} IP", callback_data: "noop", style: "plain" },
+    { text: "\u2699\uFE0F CPU", callback_data: "noop", style: "plain" },
+    { text: "\u{1F9E0} RAM", callback_data: "noop", style: "plain" },
+  ]);
+  let relayFixed = false;
+  let relayErr = false;
+  for (let si = 0; si < list.length; si++) {
+    const s = list[si];
+    let st = await srvRelayStats(kv, env, s);
+    if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) {
+      relayFixed = true;
+      st = await srvRelayStats(kv, env, s);
+    }
+    if (/^(no_relay|relay_)/.test(String((st && st.error) || ""))) relayErr = true;
+    const shortIp = String(s.host || s.name || "").slice(0, 16);
+    if (st.error) {
+      alerts.push(`🔴 ${code(s.name)} — خطای اتصال SSH (${code(String(st.error))})`);
+      srvRows.push([
+        { text: `\u{1F534} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: "\u2014", callback_data: "noop", style: "plain" },
+        { text: "\u2014", callback_data: "noop", style: "plain" },
+      ]);
+      continue;
+    }
+    const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
+    const diskPct = parseInt(String(st.disk.pct), 10) || 0;
+    const cpuPct = st.cpu.pct || 0;
+    const issues = [];
+    if (cpuPct >= cfg.cpuPct) issues.push(`CPU ${cpuPct}%`);
+    if (memPct >= cfg.memPct) issues.push(`RAM ${memPct}%`);
+    if (diskPct >= cfg.diskPct) issues.push(`دیسک ${diskPct}%`);
+    if (issues.length) {
+      srvRows.push([
+        { text: `\u{1F7E1} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
+        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
+      ]);
+      // گارد cooldown: برای هر سرور فقط یک هشدار در بازهٔ تعیین‌شده
+      const coolKey = `srv_cool:${s.id || s.host}`;
+      const lastAlert = Number((await kv.get(coolKey)) || 0);
+      if (manual || !lastAlert || Date.now() - lastAlert > cfg.cooldownMin * 60000) {
+        await kv.put(coolKey, String(Date.now()), { expirationTtl: Math.max(3600, cfg.cooldownMin * 120) });
+        alerts.push(`⚠️ ${code(s.name)} — ${issues.join(" · ")}`);
+      }
+    } else {
+      srvRows.push([
+        { text: `\u{1F7E2} ${shortIp}`, callback_data: `srvopen:${si}` },
+        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
+        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
+      ]);
+    }
+  }
+  if (!alerts.length && !manual) return;
+  let msg = "📊 گزارش مانیتور سرورها\n\n";
+  if (alerts.length) msg += alerts.join("\n") + "\n";
+  if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
+  if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
+  const kb = srvRows;
+  kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
+  if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  for (const a of admins) {
+    try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
+  }
 }
 
 // نصب خودکار نود پاسارگارد — خروجی زنده با ویرایش پیام
@@ -10548,6 +10687,24 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  if (type === "srv_monh") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(parseFaNums(txt));
+    const cfg = await getSrvMonCfg(kv);
+    const lims = { cpu: [1, 100], mem: [1, 100], disk: [1, 100], cool: [5, 1440] };
+    const lim = lims[pending.field];
+    if (!lim || !Number.isFinite(n) || n < lim[0] || n > lim[1]) {
+      return send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "⚙️ مانیتور سرورها", callback_data: "srvmon" }]]);
+    }
+    if (pending.field === "cpu") cfg.cpuPct = n;
+    else if (pending.field === "mem") cfg.memPct = n;
+    else if (pending.field === "disk") cfg.diskPct = n;
+    else cfg.cooldownMin = n;
+    await saveSrvMonCfg(kv, cfg);
+    await send("✅ ذخیره شد.", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
+    return;
+  }
+
   if (type === "lb_add") {
     await kv.delete(`pend:${chatId}`);
     let session = null;
@@ -14440,7 +14597,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!st || st.error) {
         const txt = srvStatsText(s, st);
         await edit(txt, [
-          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }],
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
           [{ text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault" }, { text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
@@ -14465,7 +14622,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             { text: `🗄 ${st.disk.used}/${st.disk.total}`, callback_data: "noop", style: "plain" },
             { text: `⏱ ${upD}r ${upH}h`, callback_data: "noop", style: "plain" },
           ],
-          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }],
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
@@ -14550,6 +14707,21 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       };
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_edit", srv: i, field }), { expirationTtl: 900 });
       await edit(prompts[field] || "مقدار جدید را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `srvopen:${i}` }]]);
+    } else if (data === "srvmon") {
+      await renderSrvMonCfg(edit, kv);
+    } else if (data === "srvmontg") {
+      const cfg = await getSrvMonCfg(kv);
+      cfg.enabled = !cfg.enabled;
+      await saveSrvMonCfg(kv, cfg);
+      await renderSrvMonCfg(edit, kv);
+    } else if (data.startsWith("srvmonh:")) {
+      const field = data.slice(8);
+      const labels = { cpu: "CPU (درصد)", mem: "RAM (درصد)", disk: "دیسک (درصد)", cool: "فاصلهٔ تکرار هشدار (دقیقه)" };
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_monh", field }), { expirationTtl: 900 });
+      await edit(`⚙️ ${labels[field] || "مقدار"} جدید را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "srvmon" }]]);
+    } else if (data === "srvmonrun") {
+      await edit("⏳ در حال بررسی همهٔ سرورها…", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
+      await runSrvMonitor(env, botToken, true);
     } else if (data === "um") {
       // نمایش صفحهٔ تنظیمات مانیتور مصرف با مقادیر فعلی
       const cfg = await getUmCfg(kv);
