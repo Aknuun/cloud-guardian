@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.55";
+const BOT_VERSION = "1.8.56";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.56": [
+    "🔔 حذف هشدار recurrent کم از صفحه پنل (تصمیم با کاربر، دکمه‌اش هست)",
+  ],
   "1.8.55": [
     "🔒 قفل دومرحله‌ای تنظیمات هشدار: همه ورودی‌های recurrent/مسیر/ربات/لینک فقط ادمین اصلی",
   ],
@@ -8382,9 +8385,7 @@ async function renderPgPanel(edit, kv, env, pid) {
       (hookInfo.recurrent != null ? " · هر " + hookInfo.recurrent + "ث" : "") +
       " · آدرس ما " + (okUrl ? "✅" : "❌ نیست")
     );
-    if (hookInfo.recurrent != null && hookInfo.recurrent < 600) {
-      lines.push("⚠️ recurrent پنل خیلی کم است (" + hookInfo.recurrent + "ث) — اسپم می‌شود؛ ببر روی ۳۶۰۰.");
-    }
+
   }
   const kb = [];
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
