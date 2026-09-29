@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.52";
+const BOT_VERSION = "1.8.53";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.53": [
+    "⏱ دکمه recurrent در صفحه هر پنل (نمایش فعلی + پیشنهاد + تغییر)",
+  ],
   "1.8.52": [
     "🏠 همه دکمه‌های فیچرها آمدند تو صفحه اصلی (بالای تنظیمات)؛ دکمه فیچرها حذف شد",
   ],
@@ -8376,6 +8379,7 @@ async function renderPgPanel(edit, kv, env, pid) {
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
   kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🤖 ربات داخلی", callback_data: `pgrenewbot:${panel.id}` }]);
   kb.push([{ text: "🔄 توکن جدید", callback_data: `pgregen:${panel.id}` }]);
+  kb.push([{ text: "⏱ recurrent" + (hookInfo && hookInfo.recurrent != null ? ": " + hookInfo.recurrent + "ث" : ""), callback_data: `pgrecur:${panel.id}` }]);
   kb.push(...back);
   await edit(lines.join("\n"), kb);
 }
@@ -10163,6 +10167,49 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         pgRenewBotKb(rb)
       );
     }
+    return;
+  }
+
+  if (type === "pg_recur") {
+    await kv.delete(`pend:${chatId}`);
+    const n = Number(String(txt).trim());
+    if (!Number.isInteger(n) || n < 60 || n > 86400) {
+      await send("❌ عدد معتبر نیست (۶۰ تا ۸۶۴۰۰ ثانیه).");
+      return;
+    }
+    const panels = await getPanels(kv);
+    const panel = panels.find((x) => String(x.id) === String(pending.pid));
+    if (!panel) {
+      await send("❌ پنل پیدا نشد.");
+      return;
+    }
+    let tok = null;
+    try { tok = await panelLogin(panel); } catch (e) {}
+    if (!tok) {
+      await send("❌ ورود به پنل ناموفق.");
+      return;
+    }
+    const st = await panelGetSettings(panel, tok);
+    if (!st || !st.webhook) {
+      await send("❌ خواندن تنظیمات پنل نشد.");
+      return;
+    }
+    st.webhook.recurrent = n;
+    let ok = false;
+    try {
+      const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/settings`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify(st),
+        signal: withTimeout(25000),
+      });
+      ok = res.ok;
+    } catch (e) {}
+    if (!ok) {
+      await send("❌ ذخیره در پنل نشد.");
+      return;
+    }
+    await send(`✅ recurrent شد ${n} ثانیه.`, [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -15021,6 +15068,23 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "pgselfcancel") {
       try { await kv.delete(`pend:${chatId}`); } catch (e) {}
       await edit("باشه. هر وقت خواستی /start بزن.", []);
+    } else if (data.startsWith("pgrecur:")) {
+      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
+      const pid = data.slice(8);
+      const panels = await getPanels(kv);
+      const panel = panels.find((x) => String(x.id) === String(pid));
+      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 هشدارها", callback_data: "pghook" }]]);
+      let cur = null;
+      try {
+        const tk = await panelLogin(panel);
+        const st = tk ? await panelGetSettings(panel, tk) : null;
+        cur = st && st.webhook ? st.webhook.recurrent : null;
+      } catch (e) {}
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_recur", pid }), { expirationTtl: 600 });
+      await edit(
+        "⏱ هر چند ثانیه پنل کاربرها را برای هشدار ارزیابی کند؟\n\nفعلی: " + (cur != null ? cur + " ثانیه" : "؟") + "\nپیشنهاد: 3600 (ساعتی) — هر کی خواست می‌تونه عوضش کنه.\n\nعدد بین ۶۰ تا ۸۶۴۰۰ بفرست.",
+        [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
+      );
     } else if (data.startsWith("pgdash:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       const pid = data.slice(7);
