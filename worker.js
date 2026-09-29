@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.74";
+const BOT_VERSION = "1.8.75";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.75": [
+    "📊 منوی سهمیه ۴ دکمه‌ای شد: کرون‌جاب‌ها + دکمه‌ها + هشدارها + نودها، با پیش‌بینی ۲۴ ساعته",
+  ],
   "1.8.74": [
     "📊 صفحه سهمیه: عددهای فارسی + جدول مصرف روزانه به تفکیک کرون و تخمین تعامل ربات",
   ],
@@ -1119,7 +1122,8 @@ export default {
           ]]
         : [];
       try {
-        await sendMessage(botToken, adminId, lines.join("\n"), kb);
+        await qAlert(kv, "quota");
+     await sendMessage(botToken, adminId, lines.join("\n"), kb);
       } catch (e) { logE("CONTACT", e); }
       return ok();
     }
@@ -3185,6 +3189,31 @@ async function qRun(kv, jobs) {
     await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
   } catch (e) {}
 }
+// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی؛ هر کدام ۱ write)
+async function qAlert(kv, cat) {
+  try {
+    if (!kv || !cat) return;
+    const k = "qal:" + new Date().toISOString().slice(0, 10);
+    let b = null;
+    try { b = await kv.get(k, "json"); } catch (e) {}
+    if (!b || typeof b !== "object" || !b.cats) b = { cats: {} };
+    b.cats[cat] = (Number(b.cats[cat]) || 0) + 1;
+    await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+  } catch (e) {}
+}
+const Q_ALERT_FA = {
+  pghook: "هشدار انقضا/حجم", um: "بدمصرف", srvmon: "مانیتور سرور",
+  rem: "یادآور", relay: "رله", quota: "سهمیه", ssl: "گواهی SSL", domexp: "انقضای دامنه",
+};
+// پیش‌بینی پایان روز (UTC؛ مثل روز آنالیتیکس)
+function qProj(cur) {
+  try {
+    const day = new Date(); day.setUTCHours(0, 0, 0, 0);
+    const el = (Date.now() - day.getTime()) / 3600000;
+    if (!(el >= 0.5)) return null;
+    return Math.round(Number(cur) * 24 / el);
+  } catch (e) { return null; }
+}
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
   node10: "پول نود (۱۰دقیقه‌ای)", nodeadd: "ثبت خودکار نود", selfup: "آپدیت خودکار",
@@ -3438,6 +3467,7 @@ async function quotaGuard(env, botToken, adminId) {
       } catch (e) {}
       await kv.delete(QUOTA_PAUSE_KEY).catch(() => {});
       try {
+        await qAlert(kv, "quota");
         await sendMessage(botToken, adminId, "✅ سهمیهٔ روزانهٔ کلادفلر ریست شد و ربات دوباره روشن شد.", [[{ text: "🚀 استارت", callback_data: "menu" }]]);
       } catch (e) {}
     }
@@ -3598,6 +3628,8 @@ async function renderQuotaMenu(edit, kv, env) {
   lines.push("🤖 وضعیت ربات: " + (paused ? "متوقف (منتظر ریست)" : "فعال"));
   if (paused && paused.reset_at) lines.push("⏳ روشن‌شدن خودکار: " + ndFmtTs(paused.reset_at));
   const kb = [];
+  kb.push([{ text: "📊 کرون‌جاب‌ها", callback_data: "qcrons" }, { text: "🔘 دکمه‌ها", callback_data: "qbtns" }]);
+  kb.push([{ text: "🔔 هشدارها", callback_data: "qalerts" }, { text: "📡 نودها", callback_data: "qnodes" }]);
   kb.push([{ text: cfg.autoStop ? "🔓 خاموش‌کردن استاپ خودکار" : "🔒 روشن‌کردن استاپ خودکار", callback_data: "qtgauto" }]);
   kb.push([{ text: "🔢 تغییر سقف روزانه", callback_data: "qsetlimit" }]);
   if (cfg.cronPausedUntil && Date.now() < cfg.cronPausedUntil) {
@@ -5551,6 +5583,7 @@ async function runSslMonitor(env) {
     if (!r || r.ok !== true) continue;
     const th = Number(m.threshold) || 5;
     if (r.expired || r.days_remaining <= th) {
+      await qAlert(kv, "ssl");
       const msg =
         `${r.expired ? "⛔ گواهی SSL منقضی شده است!" : "⚠️ گواهی SSL رو به انقضا است!"}\n\n` +
         `🌐 ${code(r.host)}\n` +
@@ -6002,6 +6035,7 @@ async function runDomExpiryMonitor(env) {
   alerts.sort((a, b) => a.daysLeft - b.daysLeft);
   let msg = "🗓 هشدار انقضای دامنه\n\n";
   for (const { it, daysLeft } of alerts) {
+    await qAlert(kv, "domexp");
     const st = daysLeft < 0 ? "⛔ منقضی شده!" : daysLeft === 0 ? "⛔ امروز منقضی می‌شود!" : `⚠️ ${daysLeft} روز مانده`;
     msg += `${st}\n🌐 ${it.domain}\n🗓 انقضا: ${fmtJalali(it.expiry).split(" - ")[0]}\n\n`;
   }
@@ -6242,6 +6276,7 @@ async function runRelayWatch(env) {
       const lastN = Number((st[key] || {}).notified) || 0;
       if (!lastN || now - lastN >= RELAY_ALERT_COOLDOWN_MS) {
         st[key].notified = now; dirty = true;
+        await qAlert(kv, "relay");
         const msg = `🔴 قطع ارتباط رله\n\n${label}\n${code(c.url)}\n❌ ${code(err)}\n\nSSH، آمار سرور و بررسی چک‌هاست مختل می‌شود.`;
         for (const a of admins) {
           try { await sendMessage(botToken, a, msg, [[{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]); } catch (e) {}
@@ -6249,6 +6284,7 @@ async function runRelayWatch(env) {
       }
     } else if (prev.down) {
       delete st[key]; dirty = true;
+      await qAlert(kv, "relay");
       const msg = `🟢 رله وصل شد\n\n${label}\n${code(c.url)}`;
       for (const a of admins) {
         try { await sendMessage(botToken, a, msg, [[{ text: "🏠 خانه", callback_data: "menu" }]]); } catch (e) {}
@@ -6933,7 +6969,7 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   for (const a of admins) {
-    try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
+    try { await qAlert(kv, "srvmon"); await sendMessage(botToken, a, msg, kb); } catch (e) {}
   }
 }
 
@@ -7490,6 +7526,7 @@ async function runUsageMonitor(env, opts) {
         alerts.sort((a, b) => b.gb - a.gb);
         const shown = alerts.slice(0, 30);
         const lines = [`🚨 مصرف بالا (احتمال پخش لینک)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
+        await qAlert(kv, "um");
         for (const a of shown) {
           lines.push(`▪️ ${code(a.username)} — ${a.gb.toFixed(1)} GB (${a.label})`);
           lines.push(`   ادمین: ${escHtml(a.owner)} • ${a.flat ? "مصرف پیوسته 🔁" : "مصرف جهشی ⚡"}`);
@@ -7540,6 +7577,7 @@ async function runUsageMonitor(env, opts) {
       const arr = [...byUser.values()].sort((a, b) => b.gb - a.gb);
       const shown = arr.slice(0, UM_REPORT_TOP);
       const lines = [`📊 گزارش پرمصرف‌های اخطارشده (۲۴ ساعت اخیر)`, `🕐 ${ndFmtTs(new Date(now).toISOString())}`, ""];
+      await qAlert(kv, "um");
       let i = 1;
       for (const t of shown) {
         lines.push(`${i++}. ${code(t.username)} — ${t.gb.toFixed(1)} GB (${t.label})`);
@@ -8502,6 +8540,7 @@ async function handlePgHook(token, payload, env, botToken) {
       if (ev.ownerTg && Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 && admins.includes(ev.ownerTg) && (await pgStarted(kv, ev.ownerTg))) {
         to.add(ev.ownerTg);
       }
+      await qAlert(kv, "pghook");
       for (const j of jobs) {
         for (const id of to) {
           await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
@@ -12266,7 +12305,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
     } catch (e) {}
   };
-  const NAV_REC_EQ = new Set(["menu", "dommon", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook"]);
+  const NAV_REC_EQ = new Set(["menu", "dommon", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook", "qcrons", "qbtns", "qalerts", "qnodes"]);
   const NAV_REC_PRE = ["hg:", "zf:", "hzacc:", "hzs:", "hzsi:", "hzm:", "hzss:", "hzp:", "hzn:", "lns:", "lnsi:", "lnm:", "arvreg:", "fmailbox:", "sr:", "qn:", "qnb:", "e:", "rback:", "p:", "zsearch:", "zset:", "addz:", "arz:", "bulkz:", "selmode:", "selback:", "seldone:", "lbsr:", "lbsm:", "lbss:", "srvopen:", "srvstats:", "srvnodemenu:", "srvnodecheck:", "pndef:"];
   const navRecOk = (d) => NAV_REC_EQ.has(d) || NAV_REC_PRE.some((p) => d.startsWith(p));
   const edit = async (text, kb) => {
@@ -14501,6 +14540,83 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`📩 همگام‌سازی انجام شد: ${on} دامنه صندوق ربات + ${fwd} دامنه فوروارد.`, [[{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
+    } else if (data === "qcrons") {
+      // مصرف کرون‌جاب‌ها: تیک‌ها + اجراها + پیش‌بینی ۲۴ ساعته
+      const acc0 = await getQuotaAcct(kv, env);
+      let count0 = null;
+      try { if (acc0) count0 = await fetchRequestsToday(acc0.tok, acc0.aid); } catch (e) {}
+      let qb0 = null;
+      try { qb0 = await kv.get(qTodayKey(), "json"); } catch (e) {}
+      const runs0 = (qb0 && qb0.runs) || {};
+      const L = ["☁️ مصرف کرون‌جاب‌ها — امروز", ""];
+      L.push("🕐 تیک روزانه (ثابت): هر دقیقه ۱۷۲۸ · هر ۱۰ دقیقه ۱۴۴ · روزانه ۱");
+      L.push("");
+      const order0 = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+      let any0 = false;
+      for (const j of order0) {
+        const n = Number(runs0[j]) || 0;
+        if (!n) continue;
+        any0 = true;
+        L.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} بار`);
+      }
+      if (!any0) L.push("• هنوز اجرایی ثبت نشده (از فردا پر می‌شود).");
+      if (count0 !== null) {
+        const pr = qProj(count0);
+        const lim0 = await getQuotaCfg(kv, env).catch(() => null);
+        const limN = lim0 ? Number(lim0.limit) || 0 : 0;
+        let pl = "🔮 پیش‌بینی پایان روز: " + (pr === null ? "؟ (هنوز اول روز است)" : faNum(pr.toLocaleString("en-US")) + " درخواست");
+        if (pr !== null && limN) {
+          const pp = quotaPct(pr, limN);
+          if (pp !== null) pl += ` (${faNum(pp)}٪ سقف)`;
+        }
+        L.push("", pl);
+      }
+      await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data === "qbtns") {
+      // مصرف دکمه‌ها/تعامل تلگرام (تخمین)
+      const acc1 = await getQuotaAcct(kv, env);
+      let count1 = null;
+      try { if (acc1) count1 = await fetchRequestsToday(acc1.tok, acc1.aid); } catch (e) {}
+      const L = ["🔘 مصرف دکمه‌ها و پیام‌ها — امروز", ""];
+      if (count1 === null) {
+        L.push("• نامشخص (آنالیتیکس در دسترس نیست)");
+      } else {
+        const est = Math.max(0, count1 - 1873);
+        const pr = qProj(est);
+        L.push(`• 🤖 تعامل تلگرام (تخمین): ${faNum(est.toLocaleString("en-US"))}`);
+        L.push(`• 🔮 پیش‌بینی پایان روز: ${faNum(pr === null ? "؟" : pr.toLocaleString("en-US"))}`);
+      }
+      L.push("", "ℹ️ هر پیام/دکمه ≈ ۱ درخواست. شمارش دقیق پیام، write دوبرابر می‌خواهد؛ پس تخمین است (کل منهای تیک کرون‌ها).");
+      await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data === "qalerts") {
+      // مصرف هشدارها: شمارش واقعی ارسال‌ها
+      let qa = null;
+      try { qa = await kv.get("qal:" + new Date().toISOString().slice(0, 10), "json"); } catch (e) {}
+      const cats = (qa && qa.cats) || {};
+      const L = ["🔔 مصرف هشدارها — امروز (ارسال واقعی)", ""];
+      let tot = 0;
+      for (const c of Object.keys(Q_ALERT_FA)) {
+        const n = Number(cats[c]) || 0;
+        if (!n) continue;
+        tot += n;
+        L.push(`• ${Q_ALERT_FA[c]}: ${faNum(n.toLocaleString("en-US"))}`);
+      }
+      if (!tot) L.push("• امروز هشداری ارسال نشده ✅");
+      else L.push("", `جمع: ${faNum(tot.toLocaleString("en-US"))}`);
+      await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data === "qnodes") {
+      // مصرف نودها
+      let mons = [];
+      let pns = [];
+      try { mons = (await getNodeMonitors(kv)) || []; } catch (e) {}
+      try { pns = (await getPanels(kv)) || []; } catch (e) {}
+      const on = mons.filter((m) => m.enabled !== false);
+      const L = ["📡 مصرف نودها — امروز", ""];
+      L.push(`• 🖥 پنل‌ها: ${faNum(pns.length)} · مانیتور نود: ${faNum(on.length)} از ${faNum(mons.length)}`);
+      L.push("• 🕐 نظرسنجی: هر ۱۰ دقیقه کامل + هر دقیقه سبک (با نگه‌دارنده داخلی)");
+      L.push(`• 📞 سقف اسمی فراخوانی پنل در روز: ${faNum((on.length * 1584).toLocaleString("en-US"))} (واقعی کمتر؛ هر مانیتور فاصله خودش را دارد)`);
+      L.push("", "ℹ️ هزینه سمت کلادفلر همین تیک‌هاست (در صفحه کرون‌جاب‌ها)؛ این صفحه بار روی پنل‌هایت را نشان می‌دهد.");
+      await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "quota") {
       await renderQuotaMenu(edit, kv, env);
     } else if (data === "qtgauto") {
@@ -20927,6 +21043,7 @@ async function runReminders(env) {
   await saveReminders(kv, list);
   const admins = await getAdmins(kv, env);
   for (const r of due) {
+    await qAlert(kv, "rem");
     const targets = new Set([...admins, r.by]);
     let msg = r.kind === "expiry" ? "⏰ یادآور انقضای سرور\n\n" : "⏰ یادآور\n\n";
     if (r.target && r.target.label) msg += `🎯 ${remPlain(r.target.label)}\n`;
