@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.47";
+const BOT_VERSION = "1.8.48";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.48": [
+    "🔔 صفحه وبهوک پنل خلوت شد (فقط آدرس و سکرت)؛ بخش لینک ادمین‌ها حذف شد؛ رنگ دکمه‌ها طبق استاندارد",
+  ],
   "1.8.47": [
     "🔔 ربات داخلی هر پنل جدا شد (به‌جای قالب لینک) + چیدمان منوی فیچرها با دکمه‌های سبز پاسارگارد",
   ],
@@ -1721,7 +1724,7 @@ function monsKeyboard() {
   return [
     [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "success" }],
     [
-      { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
+      { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf", style: "success" },
       { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd", style: "success" },
     ],
     [
@@ -1736,7 +1739,7 @@ function monsKeyboard() {
     ],
     [
       { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
-      { text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail", style: "success" },
+      { text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" },
     ],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
@@ -8262,7 +8265,7 @@ async function renderPgPanel(edit, kv, env, pid) {
   const back = [[{ text: "🔙 هشدارها", callback_data: "pghook" }, { text: "🏠 خانه", callback_data: "menu" }]];
   if (!panel) return edit("❌ پنل پیدا نشد.", back);
   if (!cfg.panels[panel.id] || !cfg.panels[panel.id].token) {
-    cfg.panels[panel.id] = { token: makeToken() + makeToken() };
+    cfg.panels[panel.id] = { ...(cfg.panels[panel.id] || {}), token: makeToken() + makeToken() };
     await savePgHookCfg(kv, cfg);
   }
   const tok = cfg.panels[panel.id].token;
@@ -8270,42 +8273,14 @@ async function renderPgPanel(edit, kv, env, pid) {
   try { base = await selfUrlBase(env, kv); } catch (e) {}
   const url = (base ? base.replace(/\/+$/, "") : "<worker-url>") + "/pghook/" + tok;
   const lines = ["🔔 وبهوک پنل: " + (panel.name || panel.id), ""];
-  lines.push("📨 آدرس وبهوک (در پنل بگذار):");
+  lines.push("📨 آدرس وبهوک:");
   lines.push(code(url));
   lines.push("");
-  lines.push("⚙️ تنظیم در پنل (Settings ← webhook):");
-  lines.push(code(JSON.stringify({ enable: true, webhooks: [{ url, secret: tok }], days_left: cfg.days, usage_percent: cfg.usage, recurrent: 3600 }, null, 1).slice(0, 900)));
+  lines.push("🔑 سکرت:");
+  lines.push(code(tok));
   lines.push("");
-  lines.push("👮 لینک ادمین پنل → ادمین ربات (فقط آیدیِ ثبت‌شده که استارت زده پیام می‌گیرد):");
-  const om = cfg.owner_map[panel.id] || {};
-  await pgAutoLink(kv, env, panel);
-  const cfg2 = await getPgHookCfg(kv);
-  const om2 = cfg2.owner_map[panel.id] || {};
-  let token = null;
-  try { token = await panelLogin(panel); } catch (e) {}
-  let punames = null;
-  if (token) punames = await panelAdminList(panel, token);
-  const kb = [];
-  if (!punames) {
-    lines.push("⚠️ لیست ادمین‌های پنل خوانده نشد (لاگین ناموفق)؛ بعداً دوباره بیا.");
-  } else if (!punames.length) {
-    lines.push("📭 ادمینی در پنل نیست.");
-  } else {
-    for (const a of punames.slice(0, 20)) {
-      const u = a.u;
-      const linked = om2[u] ? " ✅ " + om2[u] + (a.tg && Number(om2[u]) === a.tg ? " (خودکار)" : "") : (a.tg ? " (در انتظار استارت)" : " (telegram_id در پنل خالی است)");
-      lines.push("• " + u + linked);
-      kb.push([{ text: "🔗 لینک «" + String(u).substring(0, 18) + "»" + (om2[u] ? " (" + om2[u] + ")" : ""), callback_data: `pglink:${panel.id}:${u}` }]);
-    }
-  }
-  lines.push("");
-  lines.push("🛣 مسیر داشبورد این پنل: " + code(pgDashOf(cfg, panel.id)));
-  lines.push("🤖 ربات داخلی این پنل: " + (pgPanelBot(cfg, panel.id) ? "@" + pgPanelBot(cfg, panel.id) : "تعریف نشده"));
-  kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
-  kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🤖 ربات داخلی", callback_data: `pgrenewbot:${panel.id}` }]);
-  kb.push([{ text: "🔄 توکن جدید", callback_data: `pgregen:${panel.id}` }]);
-  kb.push(...back);
-  await edit(lines.join("\n"), kb);
+  lines.push("آدرس بالا را در قسمت url و سکرت زیر را در قسمت secret تنظیمات webhook پنل کپی کن (days_left و usage_percent هم همان‌جاست).");
+  await edit(lines.join("\n"), back);
 }
 async function handleNodeEvent(token, payload, env, botToken) {
   const kv = env.BOT_KV;
