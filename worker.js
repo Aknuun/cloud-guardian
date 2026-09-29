@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.44";
+const BOT_VERSION = "1.8.45";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.45": [
+    "🔔 سکوت ۴۵ دقیقه‌ای هر کاربر برای هر نوع هشدار (موج‌های پشت‌سرهم یکی می‌شوند)",
+  ],
   "1.8.44": [
     "🔔 متن ساعت مانده شد «انقضا در: X ساعت دیگر»",
   ],
@@ -8091,6 +8094,17 @@ async function handlePgHook(token, payload, env, botToken) {
     const pgMark = async (key) => {
       try { await kv.put("pgs:" + key, String(nowMs), { expirationTtl: 7 * 86400 }); } catch (e) {}
     };
+    // سکوت ۴۵ دقیقه‌ای هر کاربر برای هر نوع هشدار (مستقل از مقدار): موج‌های پشت‌سرهم یکی می‌شوند.
+    // روی skip تمدید نمی‌شود تا پنل پرحرف نتواند برای همیشه ساکت نگه دارد.
+    const pgQuiet = async (panelId, username, kind) => {
+      try {
+        const v = await kv.get(`pgl:${panelId}:${username}:${kind}`, "text");
+        return v !== null && v !== undefined && nowMs - Number(v) < 45 * 60000;
+      } catch (e) { return false; }
+    };
+    const pgQuietMark = async (panelId, username, kind) => {
+      try { await kv.put(`pgl:${panelId}:${username}:${kind}`, String(nowMs), { expirationTtl: 2 * 86400 }); } catch (e) {}
+    };
     let anyJob = false;
     const seenRun = new Set();
     const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || !e.status));
@@ -8117,7 +8131,7 @@ async function handlePgHook(token, payload, env, botToken) {
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
       // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
-      if (ev.days !== null && ev.days !== undefined) {
+      if (ev.days !== null && ev.days !== undefined && !(await pgQuiet(panel.id, ev.username, "days"))) {
         const dv = Math.floor(ev.days * 10) / 10;
         const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
         if (ok) {
@@ -8130,7 +8144,7 @@ async function handlePgHook(token, payload, env, botToken) {
           }
         }
       }
-      if (ev.usage !== null && ev.usage !== undefined) {
+      if (ev.usage !== null && ev.usage !== undefined && !(await pgQuiet(panel.id, ev.username, "usage"))) {
         const uv = Math.floor(ev.usage * 10) / 10;
         const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
         if (ok) {
@@ -8161,6 +8175,18 @@ async function handlePgHook(token, payload, env, botToken) {
     }
     if (anyJob) {
       for (const k of markKeys) await pgMark(k);
+      try {
+        const doneKinds = new Set();
+        for (const k of markKeys) {
+          const parts = String(k).split(":");
+          const kind = parts[parts.length - 2] === "d" ? "days" : parts[parts.length - 2] === "u" ? "usage" : null;
+          const user = parts.slice(1, -2).join(":");
+          if (kind && user && !doneKinds.has(kind + "|" + user)) {
+            doneKinds.add(kind + "|" + user);
+            await pgQuietMark(parts[0], user, kind);
+          }
+        }
+      } catch (e) {}
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
