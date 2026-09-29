@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.48";
+const BOT_VERSION = "1.8.49";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.49": [
+    "🔔 دکمه‌های تنظیمات پنل برگشتند (تست/مسیر/ربات/توکن) + ردیف‌ها شدند «تنظیم <نام>»",
+  ],
   "1.8.48": [
     "🔔 صفحه وبهوک پنل خلوت شد (فقط آدرس و سکرت)؛ بخش لینک ادمین‌ها حذف شد؛ رنگ دکمه‌ها طبق استاندارد",
   ],
@@ -8253,7 +8256,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
 
   for (const p of panels) {
     const reg = !!cfg.panels[p.id];
-    kb.push([{ text: (reg ? "✅ " : "⬜ ") + String(p.name || p.id).substring(0, 28), callback_data: `pgpanel:${p.id}` }]);
+    kb.push([{ text: (reg ? "✅ " : "⬜ ") + "⚙️ تنظیم " + String(p.name || p.id).substring(0, 22), callback_data: `pgpanel:${p.id}` }]);
   }
   kb.push([{ text: "🔙 فیچرها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
@@ -8280,7 +8283,15 @@ async function renderPgPanel(edit, kv, env, pid) {
   lines.push(code(tok));
   lines.push("");
   lines.push("آدرس بالا را در قسمت url و سکرت زیر را در قسمت secret تنظیمات webhook پنل کپی کن (days_left و usage_percent هم همان‌جاست).");
-  await edit(lines.join("\n"), back);
+  lines.push("");
+  lines.push("🛣 مسیر داشبورد: " + code(pgDashOf(cfg, panel.id)));
+  lines.push("🤖 ربات داخلی: " + (pgPanelBot(cfg, panel.id) ? "@" + pgPanelBot(cfg, panel.id) : "تعریف نشده"));
+  const kb = [];
+  kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
+  kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🤖 ربات داخلی", callback_data: `pgrenewbot:${panel.id}` }]);
+  kb.push([{ text: "🔄 توکن جدید", callback_data: `pgregen:${panel.id}` }]);
+  kb.push(...back);
+  await edit(lines.join("\n"), kb);
 }
 async function handleNodeEvent(token, payload, env, botToken) {
   const kv = env.BOT_KV;
