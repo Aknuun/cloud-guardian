@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.32";
+const BOT_VERSION = "1.8.33";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.33": [
+    "🔔 پیام‌گیر بودن از ادمین بودن جدا شد: هر آیدی لینک‌شده (حتی غیرادمین) هشدار می‌گیرد؛ لینک خودکار از پنل",
+  ],
   "1.8.32": [
     "🔗 لینک خودکار ادمین از telegram_id داخل خود پنل (بدون لو دادن آیدی) + نمایش خودکار/دستی",
   ],
@@ -1439,34 +1442,34 @@ async function processUpdate(payload, env, botToken, adminId) {
       await ensureBotCommands(env, botToken, kv);
       try {
         const a = await getAdmins(kv, env);
-        if (a.includes(chatId)) await kv.put(`pgstart:${chatId}`, "1", { expirationTtl: 180 * 86400 });
-        // خوش‌آمد لینک‌شده‌ها: فقط ادمین فرعی که به ادمین پنلی لینک است (نه ادمین اصلی) — فقط وقتی هشدارها فعال‌اند
-        // و فقط وقتی ترکیب لینک‌ها عوض شده باشد (نه هر استارت) تا اسپم نشود
-        if (cmd === "/start" && chatId !== adminId && a.includes(chatId)) {
-          const panels = await getPanels(kv);
+        const panels = await getPanels(kv);
+        for (const pn of panels) {
+          try { await pgAutoLink(kv, env, pn); } catch (e) {}
+        }
+        const pgc = await getPgHookCfg(kv);
+        const linkedNames = [];
+        if (pgc.enabled) {
           for (const pn of panels) {
-            try { await pgAutoLink(kv, env, pn); } catch (e) {}
+            const om = (pgc.owner_map || {})[pn.id] || {};
+            for (const un of Object.keys(om)) {
+              if (Number(om[un]) === chatId) linkedNames.push(`«${un}» (${pn.name || pn.id})`);
+            }
           }
-          const pgc = await getPgHookCfg(kv);
-          if (pgc.enabled) {
-            const links = [];
-            for (const pn of panels) {
-              const om = (pgc.owner_map || {})[pn.id] || {};
-              for (const un of Object.keys(om)) {
-                if (Number(om[un]) === chatId) links.push(`«${un}» (${pn.name || pn.id})`);
-              }
-            }
-            if (links.length) {
-              let prev = null;
-              try { prev = await kv.get(`pgstartmsg:${chatId}`, "text"); } catch (e) {}
-              const cur = links.slice().sort().join("|");
-              if (prev !== cur) {
-                try { await kv.put(`pgstartmsg:${chatId}`, cur, { expirationTtl: 180 * 86400 }); } catch (e) {}
-                await send(
-                  `👋 سلام! شما به‌عنوان ${links.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.`
-                );
-              }
-            }
+        }
+        // پیام‌گیر بودن ≠ ادمین بودن: لینک‌شده (ادمین یا نه) مارک می‌خورد تا هشدار بگیرد؛ دسترسی به منوها دست نمی‌خورد
+        if (a.includes(chatId) || linkedNames.length) {
+          try { await kv.put(`pgstart:${chatId}`, "1", { expirationTtl: 180 * 86400 }); } catch (e) {}
+        }
+        // خوش‌آمد: هر لینک‌شده‌ای غیر از ادمین اصلی، وقتی هشدارها فعال‌اند و ترکیب لینک‌ها عوض شده باشد
+        if (cmd === "/start" && chatId !== adminId && linkedNames.length && pgc.enabled) {
+          let prev = null;
+          try { prev = await kv.get(`pgstartmsg:${chatId}`, "text"); } catch (e) {}
+          const cur = linkedNames.slice().sort().join("|");
+          if (prev !== cur) {
+            try { await kv.put(`pgstartmsg:${chatId}`, cur, { expirationTtl: 180 * 86400 }); } catch (e) {}
+            await send(
+              `👋 سلام! شما به‌عنوان ${linkedNames.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.`
+            );
           }
         }
       } catch (e) {}
@@ -7759,7 +7762,6 @@ async function panelAdminList(p, token) {
 async function pgAutoLink(kv, env, panel) {
   try {
     const cfg = await getPgHookCfg(kv);
-    const admins = await getAdmins(kv, env);
     let token = null;
     try { token = await panelLogin(panel); } catch (e) {}
     if (!token) return cfg;
@@ -7768,7 +7770,7 @@ async function pgAutoLink(kv, env, panel) {
     if (!cfg.owner_map[panel.id]) cfg.owner_map[panel.id] = {};
     let dirty = false;
     for (const a of list) {
-      if (a.tg && Number.isInteger(a.tg) && a.tg > 0 && admins.includes(a.tg) && !cfg.owner_map[panel.id][a.u]) {
+      if (a.tg && Number.isInteger(a.tg) && a.tg > 0 && !cfg.owner_map[panel.id][a.u]) {
         cfg.owner_map[panel.id][a.u] = a.tg;
         dirty = true;
       }
@@ -7781,13 +7783,13 @@ async function pgStarted(kv, id) {
   try { return !!(await kv.get(`pgstart:${id}`, "text")); } catch (e) { return false; }
 }
 async function pgRecipients(kv, env, adminId, panelId, owner) {
-  const admins = await getAdmins(kv, env);
+  // گیرنده بودن ≠ ادمین بودن: هر آیدی لینک‌شده که استارت زده باشد پیام می‌گیرد (دسترسی به منوها همچنان فقط ادمین‌ها)
   const out = new Set();
   if (await pgStarted(kv, adminId)) out.add(adminId);
   if (owner) {
     const cfg = await getPgHookCfg(kv);
     const chat = Number(((cfg.owner_map || {})[panelId] || {})[owner]);
-    if (Number.isInteger(chat) && chat > 0 && admins.includes(chat) && (await pgStarted(kv, chat))) out.add(chat);
+    if (Number.isInteger(chat) && chat > 0 && (await pgStarted(kv, chat))) out.add(chat);
   }
   return [...out];
 }
@@ -8025,7 +8027,7 @@ async function renderPgPanel(edit, kv, env, pid) {
   } else {
     for (const a of punames.slice(0, 20)) {
       const u = a.u;
-      const linked = om2[u] ? " ✅ " + om2[u] + (a.tg && Number(om2[u]) === a.tg ? " (خودکار)" : "") : (a.tg ? " (آیدی در پنل: " + a.tg + " — در ربات ثبت نیست)" : "");
+      const linked = om2[u] ? " ✅ " + om2[u] + (a.tg && Number(om2[u]) === a.tg ? " (خودکار)" : "") : (a.tg ? " (در انتظار استارت)" : " (telegram_id در پنل خالی است)");
       lines.push("• " + u + linked);
       kb.push([{ text: "🔗 لینک «" + String(u).substring(0, 18) + "»" + (om2[u] ? " (" + om2[u] + ")" : ""), callback_data: `pglink:${panel.id}:${u}` }]);
     }
@@ -9759,9 +9761,8 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       delete cfg.owner_map[pending.pid][pending.uname];
     } else {
       const id = Number(String(txt).trim());
-      const admins = await getAdmins(kv, env);
-      if (!Number.isInteger(id) || id <= 0 || !admins.includes(id)) {
-        await send("❌ این آیدی در لیست ادمین‌های ربات ثبت نشده. اول از «👥 مدیریت ادمین» اضافه‌اش کن.");
+      if (!Number.isInteger(id) || id <= 0) {
+        await send("❌ شناسه عددی معتبر نیست.");
         return;
       }
       cfg.owner_map[pending.pid][pending.uname] = id;
@@ -14533,7 +14534,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_link", pid, uname }), { expirationTtl: 600 });
       await edit(
-        `🔗 لینک ادمین پنل «${uname}» به کدام آیدی عددی ربات؟\n\nآیدی باید از قبل در «👥 مدیریت ادمین» ثبت شده باشد.\nآیدی‌های ثبت‌شده: ${(admins.join("، ") || "—")}\nاستارت‌زده‌ها: ${(started.join("، ") || "هیچ‌کدام — اول باید ربات را استارت بزنند")}\n\nعدد را بفرست؛ برای حذف لینک «-» بفرست.`,
+        `🔗 لینک ادمین پنل «${uname}» به کدام آیدی عددی تلگرام؟\n\nلازم نیست ادمین ربات باشد؛ فقط باید ربات را استارت زده باشد تا پیام بگیرد.\nآیدی‌های ثبت‌شده ربات: ${(admins.join("، ") || "—")}\nاستارت‌زده‌ها: ${(started.join("، ") || "هیچ‌کدام — اول باید ربات را استارت بزنند")}\n\nعدد را بفرست؛ برای حذف لینک «-» بفرست.`,
         [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
       );
     } else if (data === "hftg") {
