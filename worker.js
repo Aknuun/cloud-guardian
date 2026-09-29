@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.72";
+const BOT_VERSION = "1.8.73";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.73": [
+    "🔑 آپدیت خودکار با ریپوی private: پشتیبانی از توکن read-only گیت‌هاب (KV «github_token»)",
+  ],
   "1.8.72": [
     "🔴 واچ‌داگ رله: هشدار قطعی + وصل مجدد (ساعتی، سوار تیک موجود، بدون سهمیه اضافه)",
   ],
@@ -2605,8 +2608,19 @@ function selfLatestTag(names) {
 // ---- نسخه‌ها (منوی تنظیمات): لیست کش‌شده + پین + دیپلوی مشترک ----
 // ۲۰ ریلیز پایدار آخر (کش یک‌ساعته در KV تا سهمیهٔ گیت‌هاب مصرف نشود).
 // هدر مشترک گیت‌هاب (بدون User-Agent بعضی پاسخ‌ها 403 می‌شوند).
-function ghApiHeaders(extra) {
-  return Object.assign({ Accept: "application/vnd.github+json", "User-Agent": "cloud-guardian-worker" }, extra || {});
+function ghApiHeaders(extra, token) {
+  const h = Object.assign({ Accept: "application/vnd.github+json", "User-Agent": "cloud-guardian-worker" }, extra || {});
+  if (token) h.Authorization = "Bearer " + token;
+  return h;
+}
+// توکن read-only گیت‌هاب (ریپو private است): اول بایندینگ، بعد KV «github_token» — در KV می‌ماند تا self-deploy پاکش نکند
+async function ghToken(kv, env) {
+  try { if (env && env.GITHUB_TOKEN && String(env.GITHUB_TOKEN).trim()) return String(env.GITHUB_TOKEN).trim(); } catch (e) {}
+  try {
+    const t = kv ? await kvGetCached(kv, "github_token", "text", 60000) : null;
+    if (t && String(t).trim()) return String(t).trim();
+  } catch (e) {}
+  return "";
 }
 
 async function selfCachedReleases(kv) {
@@ -2626,7 +2640,7 @@ async function selfCachedReleases(kv) {
   for (let attempt = 0; attempt < 2 && !items.length; attempt++) {
     try {
       const r = await fetch(SELF_RELEASES_URL, {
-        headers: ghApiHeaders(),
+        headers: ghApiHeaders(null, await ghToken(kv, null)),
         signal: AbortSignal.timeout(30000),
       });
       status = r.status;
@@ -2642,7 +2656,7 @@ async function selfCachedReleases(kv) {
     if (!items.length) break;
     try {
       const t = await fetch(SELF_TAGS_URL, {
-        headers: ghApiHeaders(),
+        headers: ghApiHeaders(null, await ghToken(kv, null)),
         signal: AbortSignal.timeout(30000),
       });
       if (t.ok) {
@@ -2688,10 +2702,13 @@ async function selfDeployTag(env, botToken, adminId, o) {
   if (!tok) return { ok: false, reason: "no-token" };
   if (selfVerGreater(BOT_VERSION, tag) && !allowDowngrade && !moved) return { ok: false, reason: "not-newer", version: tag };
   try {
+    const ghTok = await ghToken(kv, env);
+    const codeHeaders = { Accept: "application/vnd.github.raw", "User-Agent": "cloud-guardian-worker" };
+    if (ghTok) codeHeaders.Authorization = "Bearer " + ghTok;
     const res = await fetch(
       `https://api.github.com/repos/${SELF_UPDATE_REPO}/contents/worker.js?ref=${encodeURIComponent(tag)}`,
       {
-        headers: { Accept: "application/vnd.github.raw", "User-Agent": "cloud-guardian-worker" },
+        headers: codeHeaders,
         signal: AbortSignal.timeout(30000),
       }
     );
@@ -2876,7 +2893,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     if (!tok) return;
 
     // تریگر آپدیت: تگ نسخهٔ جدید یا ریلیز جدید (هر کدام جدیدتر باشد)
-    // با ETag/304 سهمیهٔ ۶۰تایی ساعتی گیت‌هاب (بدون احراز هویت، مشترک بین ورکرها) مصرف نمی‌شود
+    // با ETag/304 و توکن read-only (ریپو private است) سهمیه مصرف نمی‌شود
     let tagEtag = null;
     try {
       tagEtag = await kv.get("selfup_etag_tags", "text");
@@ -2884,7 +2901,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
     const tHeaders = { Accept: "application/vnd.github+json" };
     if (tagEtag) tHeaders["If-None-Match"] = tagEtag;
     const tRes = await fetch(SELF_TAGS_URL, {
-      headers: ghApiHeaders(tHeaders),
+      headers: ghApiHeaders(tHeaders, await ghToken(kv, env)),
       signal: AbortSignal.timeout(30000),
     });
     if (tRes.status === 304) {
@@ -2920,7 +2937,7 @@ async function maybeSelfUpdate(env, botToken, adminId, opts) {
       const rHeaders = { Accept: "application/vnd.github+json" };
       if (relEtag) rHeaders["If-None-Match"] = relEtag;
       const rRes = await fetch(SELF_RELEASES_URL, {
-        headers: ghApiHeaders(rHeaders),
+        headers: ghApiHeaders(rHeaders, await ghToken(kv, env)),
         signal: AbortSignal.timeout(30000),
       });
       if (rRes.ok) {
@@ -12352,7 +12369,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ در حال بررسی آخرین نسخه…");
       let vTagNames = [];
       try {
-        const tRes = await fetch(SELF_TAGS_URL, { headers: ghApiHeaders(), signal: AbortSignal.timeout(30000) });
+        const tRes = await fetch(SELF_TAGS_URL, { headers: ghApiHeaders(null, await ghToken(kv, env)), signal: AbortSignal.timeout(30000) });
         if (tRes.ok) {
           const tj = await tRes.json();
           if (Array.isArray(tj)) vTagNames = tj.map((t) => t && t.name).filter(Boolean);
