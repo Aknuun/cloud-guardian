@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.67";
+const BOT_VERSION = "1.8.68";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.68": [
+    "🔐 لایسنس امکانات پاسارگارد (ماهانه ۲ دلار): گیت ورود + کرون‌ها + وبهوک، فعال‌سازی با /license",
+  ],
   "1.8.67": [
     "ℹ️ راهنما به‌روز شد: ۹ راهنمای فیچرهای جدید + اصلاح متن‌های قدیمی و دکمه‌های برگشت",
   ],
@@ -1633,6 +1636,26 @@ async function processUpdate(payload, env, botToken, adminId) {
       await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/myid") {
       await send(`🆔 شناسه تلگرام شما: ${chatId}`);
+    } else if (cmd === "/license" || cmd.startsWith("/license ")) {
+      // لایسنس پاسارگارد (فقط ادمین اصلی): /license = وضعیت · /license KEY = فعال‌سازی
+      if (chatId !== adminId) return;
+      const key = String(text).replace(/^\/license\s*/i, "").trim();
+      if (!key) {
+        let msg = "";
+        try {
+          const lic = await getPgLicense(kv, env);
+          msg = lic.ok ? `✅ لایسنس فعال است تا ${fmtJalali(lic.exp).split(" - ")[0]}` : pgLicenseUpsellText();
+        } catch (e) { msg = pgLicenseUpsellText(); }
+        await send(msg, (await getPgLicense(kv, env).catch(() => ({ ok: false }))).ok ? [[{ text: "🏠 خانه", callback_data: "menu" }]] : pgLicenseUpsellKb());
+        return;
+      }
+      const v = pgLicenseCheck(key);
+      if (!v.ok) {
+        await send("❌ کی معتبر نیست یا منقضی شده. از فروشنده کی جدید بگیر.");
+        return;
+      }
+      try { await kv.put("pg_license", JSON.stringify({ key, exp: v.exp }), { expirationTtl: 400 * 86400 }); } catch (e) {}
+      await send(`✅ لایسنس فعال شد تا ${fmtJalali(v.exp).split(" - ")[0]}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (cmd === "/promoset" || cmd === "/promoreset") {
       const admins = await getAdmins(kv, env);
       if (!admins.includes(chatId)) return send("⛔ فقط مدیر.");
@@ -1821,6 +1844,7 @@ function monsKeyboard() {
 const BOT_COMMANDS = [
   { command: "menu", description: "🏠 خانه" },
   { command: "myid", description: "🆔 شناسهٔ من" },
+  { command: "license", description: "🔐 لایسنس پاسارگارد" },
   { command: "zones", description: "☁️ کلودفلر — دامنه‌ها" },
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
@@ -1924,7 +1948,7 @@ const HELP_GUIDE = {
   pghook:
     "🔔 هشدار انقضا و حجم\n\n" +
     "وبهوک پاسارگارد؛ آستانهٔ روز و حجم در خود پنل تنظیم می‌شود و ربات فقط فوروارد می‌کند (هر کاربر یک‌بار + سکوت ۴۵ دقیقه‌ای ضداسپم).\n" +
-    "لینک ادمین‌ها: خودکار، دستی یا خودثبت‌نامی با یوزر/پسورد. پیام تستی و «سایلنت من» از همان صفحه.",
+    "لینک ادمین‌ها: خودکار، دستی یا خودثبت‌نامی با یوزر/پسورد. پیام تستی و «سایلنت من» از همان صفحه.\nبرای استفاده، لایسنس ماهانه لازم است (/license).",
   um:
     "🔥 گزارش بدمصرف پاسارگارد\n\n" +
     "اسنپ‌شات ساعتی مصرف کاربران؛ اگر مصرف از آستانه بگذرد هشدار می‌آید + گزارش روزانه.\n" +
@@ -7279,6 +7303,10 @@ async function runUsageMonitor(env, opts) {
   const adminId = Number(env.ADMIN_ID || ADMIN_ID);
   const cfg = await getUmCfg(kv);
   if (!cfg.enabled) return;
+  try {
+    const licU = await getPgLicense(kv, env);
+    if (!licU.ok) return;
+  } catch (e) { return; }
   const panels = await getPanels(kv);
   if (!panels.length) return;
 
@@ -7624,6 +7652,10 @@ async function runNodePoll(env, opts) {
     const panels = await getPanels(kv);
     const monitors = await getNodeMonitors(kv);
     if (!panels.length || !monitors.length) return;
+    try {
+      const licN = await getPgLicense(kv, env);
+      if (!licN.ok) return;
+    } catch (e) { return; }
     const admins = await getAdmins(kv, env);
     const now = new Date().toISOString();
     // کش توکن در همان اجرا: اگر چند مانیتور روی یک پنل باشند، لاگین تکرار نمی‌شود
@@ -7946,6 +7978,61 @@ function pgDashOf(cfg, panelId) {
     if (d && typeof d === "string" && d.startsWith("/")) return d.replace(/\/+$/, "") || "/dashboard";
   } catch (e) {}
   return "/dashboard";
+}
+// ---------- لایسنس امکانات پاسارگارد (فاز ۱: اعتبارسنجی محلی) ----------
+// تماس خرید — اگر فرق دارد فقط همین را عوض کن:
+const LICENSE_CONTACT = "Aknuun";
+// seed امضای کی‌ها — محرمانه نگه دار (ریپو باید private شود)؛ فاز ۲: چک آنلاین با هاب
+const LICENSE_SEED = "cg-pg-seed-7x2k9";
+function cyrb53(str, seed) {
+  let h1 = 0xdeadbeef ^ (seed || 0), h2 = 0x41c6ce57 ^ (seed || 0);
+  for (let i = 0, ch; i < str.length; i++) {
+    ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+}
+// فرمت کی: PG-<expMs>-<rand>-<chk8> — ساخت با اسکریپت فروشنده
+function pgLicenseCheck(key) {
+  try {
+    const m = String(key || "").trim().match(/^PG-(\d+)-([A-Za-z0-9]{4,12})-([0-9a-f]{8})$/);
+    if (!m) return { ok: false };
+    const exp = Number(m[1]);
+    if (!Number.isFinite(exp) || exp <= Date.now()) return { ok: false };
+    const chk = cyrb53(exp + "." + m[2] + "." + LICENSE_SEED, 0).slice(0, 8);
+    if (chk !== m[3].toLowerCase()) return { ok: false };
+    return { ok: true, exp };
+  } catch (e) { return { ok: false }; }
+}
+async function getPgLicense(kv, env) {
+  try {
+    if (env && env.LICENSE_KEY) {
+      const v = pgLicenseCheck(env.LICENSE_KEY);
+      if (v.ok) return v;
+    }
+    const cur = kv ? await kv.get("pg_license", "json") : null;
+    if (cur && Number(cur.exp) > Date.now()) return { ok: true, exp: Number(cur.exp), key: cur.key || "" };
+  } catch (e) {}
+  return { ok: false };
+}
+function pgLicenseUpsellText() {
+  return "🔐 امکانات پاسارگارد نیاز به لایسنس دارد\n\n💰 اشتراک ماهانه: ۲ دلار\nبرای تهیهٔ لایسنس به فروشنده پیام بده:";
+}
+function pgLicenseUpsellKb() {
+  return [[{ text: "💳 خرید لایسنس", url: "https://t.me/" + LICENSE_CONTACT }]];
+}
+async function pgLicenseUpsell(edit) {
+  await edit(pgLicenseUpsellText(), pgLicenseUpsellKb());
+}
+// کال‌بک‌های فیچر پاسارگارد (خودثبت‌نامی همیشه باز است)
+function pgFeatureCb(d) {
+  if (!d) return false;
+  if (d === "pgselfcancel" || d.startsWith("pgself:")) return false;
+  if (d === "pndef" || d === "hf" || d === "nd" || d === "pghook" || d === "um") return true;
+  return d.startsWith("pndef:") || d.startsWith("pnl") || d.startsWith("hf") || d.startsWith("nd") || d.startsWith("pg") || d.startsWith("um:");
 }
 async function getPgHookCfg(kv) {
   let c = null;
@@ -8274,6 +8361,10 @@ async function handlePgHook(token, payload, env, botToken) {
     const panels = await getPanels(kv);
     const panel = panels.find((x) => (cfg.panels[x.id] || {}).token === token);
     if (!panel) return;
+    try {
+      const licH = await getPgLicense(kv, env);
+      if (!licH.ok) return;
+    } catch (e) { return; }
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
     const admins = await getAdmins(kv, env);
     const events = pgParseEvents(payload);
@@ -12238,6 +12329,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!cmd) return edit("⏳ عملیات قبلی منقضی شد. دوباره تلاش کن.");
       await processUpdate({ message: { chat: { id: chatId }, text: cmd } }, env, botToken, adminId);
       return;
+    }
+    if (pgFeatureCb(data)) {
+      // گیت لایسنس پاسارگارد (سطح نصب؛ شامل ادمین اصلی)
+      const lic0 = await getPgLicense(kv, env);
+      if (!lic0.ok) return pgLicenseUpsell(edit);
     }
     if (data === "menu") {
       // menu: بازگشت به منوی اصلی و پاک کردن وضعیت‌های موقت (qa/pend)
@@ -20941,6 +21037,10 @@ async function runReminders(env) {
 async function runHostFilter(env, opts = {}) {
   const kv = env.BOT_KV;
   if (!kv) return { error: "no_kv" };
+  try {
+    const licH = await getPgLicense(kv, env);
+    if (!licH.ok) return { skipped: "no_license" };
+  } catch (e) { return { skipped: "no_license" }; }
   const botToken = env.BOT_TOKEN || BOT_TOKEN;
   const cfg = await getHostFilterCfg(kv);
   cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
