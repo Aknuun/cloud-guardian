@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.72";
+const BOT_VERSION = "1.8.73";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -828,7 +828,7 @@ const CREATOR_CONTACT_KEY = "cg-creator-9f3a7c1b2e64d8a0";
 // 📊 تله‌متری و پیام همگانی — هاب = ربات اصلی سازنده.
 // نصب‌های مشتری روزی یک پینگ ناشناس (آیدی تصادفی + نسخه، بدون هیچ دیتای شخصی)
 // به هاب می‌فرستند؛ آمار فقط در تنظیمات همین ربات اصلی دیده می‌شود.
-const HUB_BASE = "https://cloud-guardian.yaram169.workers.dev";
+const HUB_BASE = "https://cloud-guardian.plytonet.workers.dev";
 const HUB_TELEMETRY_URL = HUB_BASE + "/telemetry";
 const HUB_ANNOUNCE_URL = HUB_BASE + "/announcements";
 const MAKER_BOT_USERNAME = "CloudGardianBot";
