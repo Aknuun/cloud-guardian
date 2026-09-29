@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.56";
+const BOT_VERSION = "1.8.57";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.57": [
+    "🏠 حذف کامل صفحه فیچرها: همه برگشت‌ها به خانه، حذف /mons از دکمه menu تلگرام",
+  ],
   "1.8.56": [
     "🔔 حذف هشدار recurrent کم از صفحه پنل (تصمیم با کاربر، دکمه‌اش هست)",
   ],
@@ -1635,7 +1638,8 @@ async function processUpdate(payload, env, botToken, adminId) {
         await send("➕ روی دامنه‌ای که می‌خواهید رکورد بسازید کلیک کنید:", kb);
       }
     } else if (cmd === "/mons") {
-      await send("✨ فیچرهای جدید\n\nیک بخش را انتخاب کنید:", monsKeyboard());
+      // فیچرها داخل خانه‌اند؛ این دستور هم خانه را نشان می‌دهد
+      await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/providers") {
       await send("🏢 دیتاسنترها\n\nیک ارائه‌دهنده را انتخاب کنید:", [
         [
@@ -1736,14 +1740,14 @@ function mainMenuKeyboard() {
     ],
     // srv: بخش سرورها (SSH/نود/مانیتور) | search: جست‌وجوی سراسری (قرمز) — در یک ردیف
     [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🔍 جست و جو", callback_data: "search", style: "primary" }],
-    // همهٔ فیچرها این‌جا (بالای تنظیمات) — منبع واحد monsKeyboard بدون ردیف خانه؛ دکمهٔ فیچرها حذف شد
+    // همهٔ فیچرها این‌جا (بالای تنظیمات) — ردیف‌های مشترک monsKeyboard بدون ردیف خانه؛ صفحهٔ جدا حذف شد
     ...monsKeyboard().slice(0, -1),
     // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
     [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
   ];
 }
 
-// کیبورد مشترک منوی فیچرهای جدید (دکمهٔ mons و دستور /mons) — یک‌جا و هماهنگ نگه داشته می‌شود
+// ردیف‌های مشترک فیچرها — داخل خانه استفاده می‌شود (صفحهٔ جداگانه ندارد)
 function monsKeyboard() {
   return [
     [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "success" }],
@@ -1777,7 +1781,6 @@ const BOT_COMMANDS = [
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
   { command: "search", description: "🔍 جست‌وجو" },
-  { command: "mons", description: "✨ فیچرهای جدید" },
   { command: "providers", description: "🏢 دیتاسنترها" },
   { command: "srv", description: "🖥 سرورها" },
   { command: "help", description: "ℹ️ راهنما" },
@@ -1849,14 +1852,6 @@ const HELP_GUIDE = {
     "آی‌پی/ساب‌های پرتکرارت را این‌جا ذخیره کن تا بعداً سریع پیدا و جای‌گذاری کنی.\n" +
     "ورود: صفحهٔ «☁️ کلودفلر» → دکمهٔ سبز «⭐ ساب‌های منتخب» (کنار «همه اکانت‌ها»).\n" +
     "افزودن: داخل رکوردهای یک دامنه → «🗂 گروهی» → انتخاب → «⭐ افزودن به منتخب‌ها».",
-  mons:
-    "✨ فیچرهای جدید\n\n" +
-    "• 🧭 تعویض خودکار ساب فیلتر: دامنه‌های هاست‌های پاسارگارد را دوره‌ای از داخل ایران بررسی می‌کند؛ اگر فیلتر شده بود دامنهٔ شماره‌دار جدید می‌سازد و خودکار جایگزین می‌کند.\n" +
-    "• 📡 مانیتور نود پاسارگارد: هشدار قطع/وصل شدن نودهای پنل (به‌صورت رویدادی/وبهوک) + همگام‌سازی دستی.\n" +
-    "• 🔐 مانیتور SSL: هشدار نزدیک‌شدن به انقضای گواهی دامنه‌های تحت نظارت.\n" +
-    "• 🗓 مانیتور انقضای دامنه: استعلام دامنه‌های .ir از whois.nic.ir و بقیه از RDAP؛ همهٔ دامنه‌های اکانت‌ها را یک‌جا اضافه کن و باقی‌مانده (سال/ماه/روز) را ببین.\n" +
-    "• 🔥 گزارش بد مصرف: وقتی مصرف یک سرور در یک ساعت خیلی بالا برود (احتمال پخش لینک)، هشدار و گزارش گرفته می‌شود.\n" +
-    "• ✉️ ایمیل سازمانی: دریافت ایمیل‌های دامنه‌هایت در ربات — هر دامنه را با یک دکمه وصل کن و متن ایمیل‌ها را در تلگرام ببین.",
   ssl:
     "🔐 مانیتور SSL\n\n" +
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
@@ -1951,12 +1946,8 @@ function helpKeyboard() {
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
     [{ text: "🌐 راهنمای رله", callback_data: "hg:relay" }],
 
-    // ✨ فیچرهای جدید
-    sec("— ✨ فیچرهای جدید —"),
-    [
-      { text: "✨ فیچرهای جدید", callback_data: "hg:mons" },
-      { text: "🔐 مانیتور SSL", callback_data: "hg:ssl" },
-    ],
+    // 🔐 مانیتور SSL
+    [{ text: "🔐 مانیتور SSL", callback_data: "hg:ssl" }],
 
     // ⚙️ مدیریت و راهنما
     sec("— ⚙️ مدیریت و راهنما —"),
@@ -3438,7 +3429,7 @@ async function renderQuotaMenu(edit, kv, env) {
     { text: "🔓 روشن‌کردن ربات", callback_data: "qresume" },
     { text: "🔄 بررسی مجدد", callback_data: "quota" },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -4808,7 +4799,7 @@ const LB_PAGE = 18;
 async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
   if (!all.length) {
-    return edit("⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    return edit("⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const flt = filter === undefined ? "all" : String(filter);
   const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
@@ -4841,11 +4832,11 @@ async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   if (pages > 1) {
     const nav = [];
     nav.push(page > 0 ? { text: "⬅️", callback_data: `lbzf:${flt}:${page - 1}` } : EMPTY_BTN);
-    nav.push({ text: "🔙 بازگشت", callback_data: "mons" });
+    nav.push({ text: "🏠 خانه", callback_data: "menu" });
     nav.push(page < pages - 1 ? { text: "➡️", callback_data: `lbzf:${flt}:${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+    kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   }
   const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `⚖️ لود بالانسر IP — ${label}`;
@@ -5723,7 +5714,7 @@ async function renderDomExpiryHome(kv, edit, page) {
   // domexp: استعلام دوبارهٔ همهٔ دامنه‌ها | domexpkey: تنظیمات کلید API انقضا
   kb.push([{ text: "🔄 استعلام دوبارهٔ همه", callback_data: "domexp" }]);
   kb.push([{ text: cfg.key ? "🔑 کلید API (ثبت‌شده ✅)" : "🔑 ثبت کلید API", callback_data: "domexpkey" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -6624,7 +6615,7 @@ async function renderSrvMonCfg(edit, kv) {
     [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
     [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
     [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
-    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(lines.join("\n"), kb);
 }
@@ -7369,8 +7360,8 @@ function umCfgKeyboard(cfg) {
       { text: `🧮 حداقل اسنپ‌شات: ${cfg.minGb}GB`, callback_data: "um:min" },
       { text: cfg.report ? "📊 گزارش: روشن" : "📊 گزارش: خاموش", callback_data: "um:report" },
     ],
-    // mons: بازگشت به منوی فیچرهای جدید | menu: بازگشت به منوی اصلی
-    [{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
+    // بازگشت به منوی اصلی
+    [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
 
@@ -7624,7 +7615,7 @@ async function panelDefineView(kv, back) {
         { text: "🗑 حذف پنل", callback_data: "pnld" },
         { text: "✏️ ویرایش پنل", callback_data: "pnle" },
       ],
-      [{ text: "🔙 بازگشت", callback_data: back || "mons" }, { text: "🏠 خانه", callback_data: "menu" }],
+      [{ text: "🔙 بازگشت", callback_data: back || "menu" }, { text: "🏠 خانه", callback_data: "menu" }],
     ],
   };
 }
@@ -7722,8 +7713,8 @@ async function renderNodeHome(edit, kv) {
     // nda: ساخت مانیتور نود برای پنلی که هنوز مانیتور ندارد
     outKb.push([{ text: "➕ ساخت مانیتور نود", callback_data: "nda" }]);
   }
-  // mons: بازگشت به صفحهٔ فیچرهای جدید | menu: منوی اصلی | ndhelp: راهنما
-  outKb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  // menu: منوی اصلی | ndhelp: راهنما
+  outKb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), outKb);
 }
 
@@ -8335,7 +8326,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
     const reg = !!cfg.panels[p.id];
     kb.push([{ text: (reg ? "✅ " : "⬜ ") + "⚙️ تنظیم " + String(p.name || p.id).substring(0, 22), callback_data: `pgpanel:${p.id}` }]);
   }
-  kb.push([{ text: "🔙 فیچرها", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 async function renderPgPanel(edit, kv, env, pid) {
@@ -9213,7 +9204,7 @@ async function renderFmailHome(edit, kv, accounts, env) {
   kb.push([{ text: "➕ افزودن ایمیل (وصل دامنه جدید)", callback_data: "fmailadd", style: "success" }]);
   kb.push([
     { text: "🔄 همگام‌سازی", callback_data: "fmailsync" },
-    { text: "🔙 بازگشت", callback_data: "mons" },
+    { text: "🏠 خانه", callback_data: "menu" },
   ]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
@@ -9404,7 +9395,7 @@ const TRAF_PAGE = 18;
 async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
   if (!all.length) {
-    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
   }
   const flt = filter === undefined ? "all" : String(filter);
   const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
@@ -9437,11 +9428,11 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   if (pages > 1) {
     const nav = [];
     nav.push(page > 0 ? { text: "⬅️", callback_data: `trazf:${flt}:${page - 1}` } : EMPTY_BTN);
-    nav.push({ text: "🔙 بازگشت", callback_data: "mons" });
+    nav.push({ text: "🏠 خانه", callback_data: "menu" });
     nav.push(page < pages - 1 ? { text: "➡️", callback_data: `trazf:${flt}:${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+    kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   }
   const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `📊 ترافیک ساب‌ها — ${label}`;
@@ -12053,7 +12044,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
     } catch (e) {}
   };
-  const NAV_REC_EQ = new Set(["menu", "mons", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook"]);
+  const NAV_REC_EQ = new Set(["menu", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook"]);
   const NAV_REC_PRE = ["hg:", "zf:", "hzacc:", "hzs:", "hzsi:", "hzm:", "hzss:", "hzp:", "hzn:", "lns:", "lnsi:", "lnm:", "arvreg:", "fmailbox:", "sr:", "qn:", "qnb:", "e:", "rback:", "p:", "zsearch:", "zset:", "addz:", "arz:", "bulkz:", "selmode:", "selback:", "seldone:", "lbsr:", "lbsm:", "lbss:", "srvopen:", "srvstats:", "srvnodemenu:", "srvnodecheck:", "pndef:"];
   const navRecOk = (d) => NAV_REC_EQ.has(d) || NAV_REC_PRE.some((p) => d.startsWith(p));
   const edit = async (text, kb) => {
@@ -12363,7 +12354,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // hqi: راهنمای «جای‌گذاری سریع»
       await edit(HELP_GUIDE.hqi, helpGuideKb("hqi"));
     } else if (data.startsWith("hg:")) {
-      // hg:<key>: نمایش راهنمای همان بخش (cf/prov/mons/arvan/...)
+      // hg:<key>: نمایش راهنمای همان بخش (cf/prov/arvan/...)
       const hk = data.slice(3);
       if (hk === "relay") {
         // راهنمای رله = صفحهٔ خانهٔ رله (وضعیت + مدیریت)؛ بازگشت به راهنما
@@ -13966,7 +13957,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("🌐 آدرس پنل پاسارگارد را بفرستید (مثلاً mypanel.com یا https://panel.mypanel.com — ساب‌دامنه هم لازم نیست):", [[{ text: "🔙 انصراف", callback_data: "pndef" }]]);
     } else if (data === "pndef" || data.startsWith("pndef:")) {
       // پنل پاسارگارد: ثبت/ویرایش/حذف پنل در یک منوی جدا (برگشت به همان‌جایی که از آن آمدی)
-      const pback = data.startsWith("pndef:") && data.slice(6) === "nd" ? "nd" : "mons";
+      const pback = data.startsWith("pndef:") && data.slice(6) === "nd" ? "nd" : "menu";
       const v = await panelDefineView(kv, pback);
       await edit(v.text, v.kb);
     } else if (data === "pnle") {
@@ -14045,14 +14036,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`✅ پنل «${escHtml(p.name)}» حذف شد.`);
       await renderNodeHome(edit, kv);
     } else if (data === "mons") {
-      // منوی فیچرهای جدید؛ انتخاب هر دکمه کاربر را به بخش مربوطه می‌برد:
-      // hf = مانیتور فیلترشدن ساب‌دامین هاست‌های پاسارگارد
-      // nd = مانیتور نود پاسارگارد (هشدار قطع/وصل)
-      // srvmon = مانیتور سرورها (CPU/RAM/دیسک از طریق رلهٔ SSH)
-      // sslm = مانیتور انقضای گواهی SSL
-      // rem = یادآورها
-      // um = مانیتور مصرف پاسارگارد (کشف کاربران پرمصرف)
-      await edit("✨ فیچرهای جدید\n\nیک بخش را انتخاب کنید:", monsKeyboard());
+      // صفحهٔ فیچرها حذف شد (همهٔ فیچرها داخل خانه‌اند) — دکمه‌های قدیمی کش‌شده به خانه می‌روند
+      await kv.delete(`qa:${chatId}`);
+      await kv.delete(`pend:${chatId}`);
+      await edit(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (data === "fmail") {
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "fmailadd") {
@@ -15447,7 +15434,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         // sslm: بررسی مجدد وضعیت گواهی همهٔ دامنه‌ها | sslmd: انتخاب دامنه برای حذف از نظارت
         kb.push([{ text: "🔄 بررسی دوباره", callback_data: "sslm" }, { text: "🗑 حذف دامنه", callback_data: "sslmd" }]);
       }
-      kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+      kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
       await edit(text, kb);
     } else if (data === "sslma") {
       // درخواست نام دامنه از کاربر و ذخیره در pending
@@ -16207,7 +16194,7 @@ async function renderRemindersHome(kv, edit) {
   kb.push([{ text: "➕ یادآور جدید", callback_data: "remnew" }]);
   if (list.length) kb.push([{ text: "🗑 حذف یادآور", callback_data: "remdel" }]);
   kb.push([{ text: `⚙️ تنظیمات یادآور (${cfg.leadHours} ساعت قبل)`, callback_data: "remset" }]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -21464,8 +21451,8 @@ async function renderHostFilterHome(edit, kv, env) {
   // تنظیمات جداگانهٔ هر سرویس: hfsetch (چک‌هاست) | hfsetgp (گلوبال‌پینگ) — hfbk: مدیریت بکاپ
   kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }, { text: "⚙️ تنظیمات گلوبال‌پینگ", callback_data: "hfsetgp" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
-  // mons: بازگشت به صفحهٔ مانیتورها
-  kb.push([{ text: "🔙 بازگشت", callback_data: "mons" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  // بازگشت به منوی اصلی
+  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
