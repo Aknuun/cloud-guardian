@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.43";
+const BOT_VERSION = "1.8.44";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.44": [
+    "🔔 متن ساعت مانده شد «انقضا در: X ساعت دیگر»",
+  ],
   "1.8.43": [
     "🔐 خودثبت‌نامی ادمین پنل: یوزر/پسورد → تایید → ست خودکار telegram_id با sudo → خوش‌آمد (پسورد هیچ‌جا ذخیره نمی‌شود)",
   ],
@@ -8020,7 +8023,7 @@ async function pgSendAlert(botToken, to, panel, a, test) {
     lines.push(`📈 حجم مصرف شده: ${a.value}٪`);
   } else {
     const hrs = a.expireTs && a.expireTs > Date.now() ? Math.floor((a.expireTs - Date.now()) / 3600000) : Math.max(0, Math.floor(Number(a.value) * 24));
-    lines.push(`⏳ ساعت مانده: ${hrs}`);
+    lines.push(`⏳ انقضا در: ${hrs} ساعت دیگر`);
   }
   if (a.expireTs) {
     try { lines.push("📅 انقضا: " + fmtJalali(a.expireTs)); } catch (e) {}
