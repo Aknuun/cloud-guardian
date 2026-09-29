@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.38";
+const BOT_VERSION = "1.8.39";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.39": [
+    "🔔 دو دکمه تمدید در هشدار: با ربات (allmarzbot) و با پنل (صفحه یوزرها با جست‌وجوی همان یوزر)",
+  ],
   "1.8.38": [
     "🔔 اسم پنل قابل کپی، تاریخ شمسی، تکمیل خودکار اطلاعات کاربر از پنل (حجم مانده به گیگ)",
   ],
@@ -7971,13 +7974,16 @@ async function pgSendAlert(botToken, to, panel, a, test) {
   }
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
   try { lines.push("⏱ " + fmtJalali(Date.now()) + " به وقت ایران"); } catch (e) {}
-  // باز کردن allmarzbot با متن آماده = یوزرنیم همان مشتری
-  const kb = a.username
-    ? [[{
-      text: "📤 ارسال یوزر به allmarzbot",
-      url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(String(a.username).slice(0, 200)),
-    }]]
-    : [];
+  // تمدید با ربات (allmarzbot با متن آماده) + تمدید با پنل (صفحه یوزرها با جست‌وجوی همان یوزر)
+  const kb = [];
+  if (a.username) {
+    const un = String(a.username).slice(0, 200);
+    kb.push([{ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=allmarzbot&text=" + encodeURIComponent(un) }]);
+    const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
+    if (pbase) {
+      kb.push([{ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/users?search=" + encodeURIComponent(un) }]);
+    }
+  }
   try {
     await sendMessage(botToken, to, lines.join("\n"), kb);
     return true;
