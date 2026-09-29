@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.70";
+const BOT_VERSION = "1.8.71";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.71": [
+    "🌐 حذف کامل گلوبال‌پینگ (کد + دکمه‌ها)؛ تشخیص خارج با نودهای خارجی چک‌هاست",
+  ],
   "1.8.70": [
     "🌐 چک‌هاست شد سرویس پیش‌فرض بررسی (گلوبال‌پینگ می‌ماند برای failover خودکار)",
   ],
@@ -1921,7 +1924,7 @@ const HELP_GUIDE = {
     "در صفحهٔ هر پنل: وضعیت سلامت وبهوک، مسیر داشبورد و ربات تمدید (برای دکمهٔ تمدید داخل هشدارها).",
   hf:
     "🧭 تعویض خودکار ساب فیلتر\n\n" +
-    "دامنه‌های هاست‌های پنل دوره‌ای از داخل ایران بررسی می‌شوند (چک‌هاست/گلوبال‌پینگ)؛ اگر فیلتر بود، دامنهٔ شماره‌دار ساخته و خودکار جایگزین می‌شود.\n" +
+    "دامنه‌های هاست‌های پنل دوره‌ای از داخل ایران بررسی می‌شوند با نودهای چک‌هاست در ایران بررسی می‌شوند؛ اگر فیلتر بود، دامنهٔ شماره‌دار ساخته و خودکار جایگزین می‌شود.\n" +
     "استثنا (تکی/گروهی/کل پنل)، تاریخچهٔ تعویض‌ها و تنظیم شهرها و فاصلهٔ بررسی از همان صفحه.",
   nd:
     "📡 مانیتور نود پاسارگارد\n\n" +
@@ -10153,21 +10156,12 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
-  if (type === "hf_gptoken") {
-    await kv.delete(`pend:${chatId}`);
-    const cfg = await getHostFilterCfg(kv);
-    cfg.gpToken = txt === "-" ? "" : txt;
-    await saveHostFilterCfg(kv, cfg);
-    await send(cfg.gpToken ? "✅ توکن Globalping ذخیره شد." : "🗑 توکن Globalping حذف شد.", [[{ text: "⚙️ تنظیمات", callback_data: "hfset" }]]);
-    return;
-  }
-
   if (type === "hf_set") {
     await kv.delete(`pend:${chatId}`);
     const key = pending.key;
     const cfg = await getHostFilterCfg(kv);
     const n = Number(txt);
-    const limits = { interval: [1, 1440], cities: [1, cfg.citiesSel.length], maxok: [0, 3], probes: [1, 50], minfail: [1, 50], batch: [1, 30], maxchanges: [1, 20], backupkeep: [1, 10], recheck: [0, 3], recheckmin: [1, 60] };
+    const limits = { interval: [1, 1440], cities: [1, cfg.citiesSel.length], maxok: [0, 3], batch: [1, 30], maxchanges: [1, 20], backupkeep: [1, 10], recheck: [0, 3], recheckmin: [1, 60] };
     const lim = limits[key];
     if (!lim || !Number.isInteger(n) || n < lim[0] || n > lim[1]) {
       await send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }]]);
@@ -10176,8 +10170,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     if (key === "interval") cfg.intervalMin = n;
     else if (key === "cities") cfg.cities = Math.min(n, cfg.citiesSel.length);
     else if (key === "maxok") cfg.maxOk = n;
-    else if (key === "probes") cfg.probes = n;
-    else if (key === "minfail") cfg.minFail = n;
     else if (key === "batch") cfg.batch = n;
     else if (key === "maxchanges") cfg.maxChanges = n;
     else if (key === "backupkeep") cfg.backupKeep = n;
@@ -10189,7 +10181,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       savedMsg +=
         "\n\n⚠️ هرچه این بازه کوتاه‌تر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود. اگر ممکن است زمان بزرگ‌تری انتخاب کن" +
         (n < 30 ? " (مثلاً ۳۰ دقیقه یا بیشتر)." : ".");
-    } else if (key === "probes" || key === "batch" || key === "minfail" || key === "maxchanges" || key === "recheck") {
+    } else if (key === "batch" || key === "maxchanges" || key === "recheck") {
       savedMsg +=
         "\n\n⚠️ افزایش این مقدار، تعداد درخواست‌های هر اجرا را بیشتر می‌کند و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود.";
     }
@@ -15263,7 +15255,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
         } catch (e) {}
       }
-      const hfMins = hfEstimateMin(hfN, cfg.provider);
+      const hfMins = hfEstimateMin(hfN);
       cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
       await saveHostFilterCfg(kv, cfg);
       await edit("🔄 تعویض شروع شد؛ ران کامل تا کمتر از یک دقیقه دیگر آغاز می‌شود و نتیجه برایتان ارسال خواهد شد.", [
@@ -15302,7 +15294,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         try {
           for (const f of ["address", "sni", "host"]) for (const v of fHost[f] || []) if (isDomainLike(v)) fN++;
         } catch (e) {}
-        const fMins = hfEstimateMin(Math.max(fN, 1), fCfg.provider);
+        const fMins = hfEstimateMin(Math.max(fN, 1));
         fCfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (fMins + 3) * 60000, reported: false };
       }
       await saveHostFilterCfg(kv, fCfg);
@@ -15388,7 +15380,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
         } catch (e) {}
       }
-      const hfMins = hfEstimateMin(hfN, cfg.provider);
+      const hfMins = hfEstimateMin(hfN);
       cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
       await saveHostFilterCfg(kv, cfg);
       const hfScope = hfN ? " (" + hfN + " دامنه، حدود " + hfMins + " دقیقه)" : "";
@@ -15440,31 +15432,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "hfsetch") {
       await renderHostFilterSettingsCh(edit, kv);
     } else if (data === "hfsetgp") {
-      await renderHostFilterSettingsGp(edit, kv);
-    } else if (data.startsWith("hfprov:")) {
-      const p = data.slice(7);
-      if (p === "checkhost" || p === "globalping") {
-        const cfg = await getHostFilterCfg(kv);
-        cfg.provider = p;
-        await saveHostFilterCfg(kv, cfg);
-      }
-      await renderHostFilterHome(edit, kv, env);
-    } else if (data === "hfsetprov") {
-      const cfg = await getHostFilterCfg(kv);
-      cfg.provider = cfg.provider === "checkhost" ? "globalping" : "checkhost";
-      await saveHostFilterCfg(kv, cfg);
-      await renderHostFilterHome(edit, kv, env);
+      // سازگاری با دکمه‌های قدیمی: تنظیمات گلوبال‌پینگ حذف شد
+      await renderHostFilterSettingsCh(edit, kv, await getHostFilterCfg(kv));
     } else if (data === "hfreal") {
       const cfg = await getHostFilterCfg(kv);
       cfg.realityRotate = !cfg.realityRotate;
       await saveHostFilterCfg(kv, cfg);
       await renderHostFilterSettings(edit, kv);
-    } else if (data === "hfsettoken") {
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hf_gptoken" }), { expirationTtl: 600 });
-      await edit(
-        "🔑 توکن رایگان Globalping را همین‌جا بفرست.\n\nگرفتن توکن (۲ دقیقه):\n۱) وارد dash.globalping.io شو (ثبت‌نام با گیت‌هاب/گوگل)\n۲) بخش API Tokens ← Create new token\n۳) توکن را کپی و همین‌جا بفرست\n\nبدون توکن، سهمیه خیلی کم است و بررسی کند/ناقص می‌شود. برای حذف توکن، یک خط «-» بفرست.",
-        [[{ text: "🔙 انصراف", callback_data: "hfsetgp" }]]
-      );
     } else if (data === "hfcities") {
       await renderHostFilterCities(edit, kv);
     } else if (data.startsWith("hfcityt:")) {
@@ -15488,8 +15462,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         interval: "⏱ فاصلهٔ اجرا را به دقیقه بفرستید (۱ تا ۱۴۴۰):\n\n⚠️ هرچه این بازه کوتاه‌تر باشد، درخواست‌های ربات به کلادفلر بیشتر می‌شود و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود. اگر ممکن است زمان بزرگ‌تری انتخاب کن (مثلاً ۳۰ دقیقه یا بیشتر).",
         cities: "🎯 حداقل تعداد شهرهای فیلتر برای تعویض را بفرستید (۱ تا " + (await getHostFilterCfg(kv)).citiesSel.length + "):",
         maxok: "📶 حداکثر پینگ موفق مجاز هر پروب/نود را بفرستید (۰ تا ۳؛ ۰ یعنی فقط ۰ از ۴):",
-        probes: "📡 حداکثر تعداد پروب‌های ایرانی Globalping را بفرستید (۱ تا ۵۰؛ ۵۰ = همه، پروب جدید خودکار اضافه می‌شود):\n\n⚠️ افزایش این مقدار، تعداد درخواست‌های هر اجرا را بیشتر می‌کند و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود.",
-        minfail: "🎯 حداقل تعداد پروب فیلتر برای تعویض را بفرستید (۱ تا ۵۰):",
         batch: "📦 تعداد دامنه‌های هر اجرا را بفرستید (۱ تا ۳۰):\n\n⚠️ افزایش این مقدار، تعداد درخواست‌های هر اجرا را بیشتر می‌کند و ممکن است باعث محدود شدن (Rate Limit) از سمت کلادفلر شود.",
         maxchanges: "🔁 حداکثر تعویض در هر اجرا را بفرستید (۱ تا ۲۰):",
         backupkeep: "💾 تعداد بکاپ‌های نگه‌داشته را بفرستید (۱ تا ۱۰):",
@@ -20182,9 +20154,15 @@ const HOSTFILTER_DEFAULT_CITIES = 2;
 const HOSTFILTER_DEFAULT_BATCH = 60;
 const HOSTFILTER_MAX_LOG = 40;
 // کشورهای خارجی برای تشخیص خاموش/فیلتر بودن آی‌پی (پیش از تعویض دامنه)
-const HOSTFILTER_FOREIGN_COUNTRIES = ["DE", "NL"];
 // شهرهای خارجی موجود در رلهٔ check-host (آلمان + هلند)
 const HOSTFILTER_FOREIGN_CITIES = ["Frankfurt", "Nuremberg", "Amsterdam", "Meppel"];
+// نودهای خارجی چک‌هاست (de2 نزدیک فرانکفورت است) — جایگزین گلوبال‌پینگ برای تشخیص خاموش/فیلتر
+const FOREIGN_CHECK_NODES = [
+  { id: "de2.node.check-host.net", city: "Frankfurt" },
+  { id: "de1.node.check-host.net", city: "Nuremberg" },
+  { id: "nl1.node.check-host.net", city: "Amsterdam" },
+  { id: "nl2.node.check-host.net", city: "Meppel" },
+];
 // حداقل «عدم پینگ» از آلمان/هلند که یعنی مشکل از خود آی‌پی است (نه دامنه)
 const HOSTFILTER_IP_DOWN_FAILS = 4;
 const HOSTFILTER_DEFAULT_RECHECK = 1;
@@ -20216,17 +20194,13 @@ async function getHostFilterCfg(kv) {
   if (!sel.length) sel = IR_CITIES.slice();
   return {
     enabled: cfg.enabled !== false,
-    provider: cfg.provider === "globalping" ? "globalping" : "checkhost",
     intervalMin: Math.max(1, Number(cfg.intervalMin) || 25),
     iv25: cfg.iv25 === true,
     cities: Math.min(Math.max(1, Number(cfg.cities) || HOSTFILTER_DEFAULT_CITIES), sel.length),
     citiesSel: sel,
     maxOk: Number.isInteger(cfg.maxOk) ? Math.max(0, Math.min(3, cfg.maxOk)) : 0,
-    probes: Math.max(1, Math.min(50, Number(cfg.probes) || 50)),
-    minFail: Math.max(1, Math.min(50, Number(cfg.minFail) || 2)),
     recheckCount: Number.isInteger(cfg.recheckCount) ? Math.max(0, Math.min(3, cfg.recheckCount)) : HOSTFILTER_DEFAULT_RECHECK,
     recheckMin: Math.max(1, Math.min(60, Number(cfg.recheckMin) || HOSTFILTER_DEFAULT_RECHECK_MIN)),
-    gpToken: cfg.gpToken || "",
     exceptions: Array.isArray(cfg.exceptions) ? cfg.exceptions : [],
     batch: Math.max(1, Math.min(30, Number(cfg.batch) || HOSTFILTER_DEFAULT_BATCH)),
     maxChanges: Math.max(1, Math.min(20, Number(cfg.maxChanges) || 8)),
@@ -20238,7 +20212,6 @@ async function getHostFilterCfg(kv) {
     last_summary: cfg.last_summary || null,
     checkhost_down: cfg.checkhost_down || null,
     manual_request: cfg.manual_request || null,
-    failover: cfg.failover || null,
     manual_watch: cfg.manual_watch || null,
   };
 }
@@ -20289,7 +20262,7 @@ function pingAttempts(raw) {
 
 async function checkHostPing(target, citySel, env, kv) {
   const cities = Array.isArray(citySel) && citySel.length ? citySel : IR_CITIES;
-  const nodes = IR_CHECK_NODES.filter((n) => cities.includes(n.city));
+  const nodes = IR_CHECK_NODES.concat(FOREIGN_CHECK_NODES).filter((n) => cities.includes(n.city));
   if (!nodes.length) return { error: "no_city" };
 
   // ردیف اول: رلهٔ ثبت‌شده (پروکسی /http) — check-host درخواست‌های IP کلادفلر را ۴۰۳ می‌کند
@@ -20422,79 +20395,6 @@ async function checkHostPing(target, citySel, env, kv) {
   return { error: "no_result" };
 }
 
-async function globalpingPingLoc(target, locations, cfg, limit) {
-  const lim = Math.max(1, Math.min(50, limit || (cfg && cfg.probes) || 50));
-  const locs = Array.isArray(locations) && locations.length ? locations : [{ country: "IR" }];
-  const headers = { "content-type": "application/json", "user-agent": "dns-telegram-bot" };
-  if (cfg && cfg.gpToken) headers.Authorization = `Bearer ${cfg.gpToken}`;
-  let res;
-  try {
-    res = await fetch("https://api.globalping.io/v1/measurements", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ type: "ping", target, locations: locs, limit: lim, measurementOptions: { packets: 4 } }),
-      signal: withTimeout(20000),
-    });
-  } catch (e) {
-    return { error: "gp_fetch" };
-  }
-  if (!res.ok) return { error: `gp_http_${res.status}` };
-  let data;
-  try {
-    data = await res.json();
-  } catch (e) {
-    return { error: "gp_json" };
-  }
-  const id = data && data.id;
-  if (!id) return { error: "gp_api" };
-  for (let attempt = 0; attempt < 6; attempt++) {
-    await sleep(attempt === 0 ? 2500 : 2000);
-    let rr;
-    try {
-      rr = await fetch(`https://api.globalping.io/v1/measurements/${id}`, {
-        headers: cfg && cfg.gpToken ? { "user-agent": "dns-telegram-bot", Authorization: `Bearer ${cfg.gpToken}` } : { "user-agent": "dns-telegram-bot" },
-        signal: withTimeout(15000),
-      });
-    } catch (e) {
-      continue;
-    }
-    if (!rr.ok) continue;
-    let jj;
-    try {
-      jj = await rr.json();
-    } catch (e) {
-      continue;
-    }
-    if (!jj || jj.status !== "finished") continue;
-    const nodes = {};
-    let idx = 0;
-    for (const r of jj.results || []) {
-      const p = r.probe || {};
-      const res = r.result || {};
-      const st = res.stats || {};
-      const total = Number(st.total) || 0;
-      const rcv = Number(st.rcv) || 0;
-      const failed = res.status !== "finished" || total === 0;
-      nodes[`${p.country || "IR"}|${p.city || "IR"}|${p.asn || "?"}|${idx++}`] = {
-        city: p.city || p.country || "IR",
-        country: p.country || "IR",
-        network: p.network || "?",
-        asn: p.asn || "?",
-        ok: failed ? 0 : rcv,
-        total: total || 1,
-        failed,
-      };
-    }
-    if (!Object.keys(nodes).length) return { error: "gp_no_result" };
-    return { nodes };
-  }
-  return { error: "gp_timeout" };
-}
-
-async function globalpingPing(target, cfg) {
-  return globalpingPingLoc(target, [{ country: "IR" }], cfg, cfg && cfg.probes);
-}
-
 // آمار «عدم پینگ» از یک نتیجه (مجموع بسته‌های ازدست‌رفته)
 function pingFailStats(ping) {
   let fail = 0;
@@ -20516,33 +20416,18 @@ function pingHasResponse(ping) {
   return false;
 }
 
-// بررسی آی‌پی از آلمان/هلند (تشخیص خاموش بودن سرور/آی‌پی)
-// اول از رلهٔ check-host (سریع‌تر و پایدارتر)، در صورت خطا از Globalping.
+// بررسی آی‌پی از آلمان/هلند با نودهای خارجی چک‌هاست (تشخیص خاموش بودن سرور/آی‌پی)
 async function foreignPing(target, cfg, env, kv) {
-  const relay = env && env.HF_RELAY_URL;
-  if (relay && cfg && hfEff(cfg) === "checkhost") {
-    const r = await checkHostPing(target, HOSTFILTER_FOREIGN_CITIES, env, kv);
-    if (!r.error) return r;
-  }
-  const locations = HOSTFILTER_FOREIGN_COUNTRIES.map((c) => ({ country: c }));
-  return globalpingPingLoc(target, locations, cfg, 2);
+  return checkHostPing(target, HOSTFILTER_FOREIGN_CITIES, env, kv);
 }
 
 // بررسی یک لوکیشن خارجی برای اسکن همهٔ ساب‌ها (ایران‌اکسس)
 async function foreignPingOne(target, cfg, env, kv) {
-  const relay = env && env.HF_RELAY_URL;
-  if (relay && cfg && hfEff(cfg) === "checkhost") {
-    const r = await checkHostPing(target, [HOSTFILTER_FOREIGN_CITIES[0]], env, kv);
-    if (!r.error) return r;
-  }
-  return globalpingPingLoc(target, [{ country: "DE" }], cfg, 1);
+  return checkHostPing(target, [HOSTFILTER_FOREIGN_CITIES[0]], env, kv);
 }
 
 
-// Effective provider for this run (silent failover target; cfg.provider stays the user's setting).
-function hfEff(cfg) {
-  return (cfg && cfg.effProvider) || (cfg && cfg.provider);
-}
+
 
 // Manual-run progress marker (manual runs only — zero quota impact on scheduled runs).
 async function hfProg(kv, manual, stage, detail) {
@@ -20550,9 +20435,9 @@ async function hfProg(kv, manual, stage, detail) {
   try { await kv.put("hf_progress", JSON.stringify({ stage, detail: String(detail || "").slice(0, 120), ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
 }
 
-// Estimate full-check minutes from domain count (parallel batches: ~3s/domain checkhost, ~5s/domain globalping + ~45s overhead).
-function hfEstimateMin(n, provider) {
-  const per = provider === "checkhost" ? 3 : 5;
+// Estimate full-check minutes from domain count (parallel batches: ~3s/domain + ~45s overhead).
+function hfEstimateMin(n) {
+  const per = 3;
   return Math.max(1, Math.ceil((45 + Math.max(0, Number(n) || 0) * per) / 60));
 }
 
@@ -20618,13 +20503,11 @@ async function hfDiagDomain(dv, cfg, env, kv) {
 }
 
 async function pingTarget(target, cfg, env, kv) {
-  if (hfEff(cfg) === "checkhost") return checkHostPing(target, cfg.citiesSel, env, kv);
-  return globalpingPing(target, cfg);
+  return checkHostPing(target, cfg.citiesSel, env, kv);
 }
 
 function hostFilterPingBlocked(ping, cfg) {
   if (!ping || ping.error || !ping.nodes) return null;
-  const isCheckHost = hfEff(cfg) === "checkhost";
   const sel = cfg && Array.isArray(cfg.citiesSel) && cfg.citiesSel.length ? cfg.citiesSel : IR_CITIES;
   const maxOk = cfg && Number.isInteger(cfg.maxOk) ? cfg.maxOk : 0;
   const byCity = {};
@@ -20632,7 +20515,7 @@ function hostFilterPingBlocked(ping, cfg) {
   let totalProbes = 0;
   for (const nid of Object.keys(ping.nodes)) {
     const n = ping.nodes[nid];
-    if (isCheckHost && !sel.includes(n.city)) continue;
+    if (!sel.includes(n.city)) continue;
     totalProbes++;
     const bad = n.ok <= maxOk;
     if (bad) blockedProbes++;
@@ -20649,8 +20532,7 @@ function hostFilterPingBlocked(ping, cfg) {
 
 function hostFilterIsBlocked(info, cfg) {
   if (!info) return false;
-  if (hfEff(cfg) === "checkhost") return info.blockedCities >= cfg.cities;
-  return info.blockedProbes >= cfg.minFail;
+  return info.blockedCities >= cfg.cities;
 }
 
 function zoneForName(zones, name) {
@@ -20949,7 +20831,6 @@ async function runHostFilter(env, opts = {}) {
   if (!kv) return { error: "no_kv" };
   const botToken = env.BOT_TOKEN || BOT_TOKEN;
   const cfg = await getHostFilterCfg(kv);
-  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
   // مهاجرت یک‌باره: فاصلهٔ پیش‌فرض قدیمی (۱۱ دقیقه) به ۲۵ دقیقه تغییر کند
   if (!cfg.iv25) {
     if (Number(cfg.intervalMin) === 11) cfg.intervalMin = 25;
@@ -20990,8 +20871,7 @@ async function runHostFilter(env, opts = {}) {
             : prog.stage === "swap" ? "تعویض دامنه‌ها در پنل‌ها (" + String(prog.detail || "") + ")"
             : "نامشخص";
           let why = "";
-          if (cfg.failover) why = "سرویس اصلی (" + (cfg.failover.from === "checkhost" ? "چک‌هاست" : "گلوبال‌پینگ") + ") خوابیده و بررسی با سرویس جایگزین ادامه دارد.";
-          else if (cfg.checkhost_down) why = "سرویس بررسی (چک‌هاست) در دسترس نیست.";
+          if (cfg.checkhost_down) why = "سرویس بررسی (چک‌هاست) در دسترس نیست.";
           const txt = "⏳ بررسی کامل هنوز تمام نشده.\n📍 مرحله: " + stageFa + (why ? "\n📝 " + why : "") + "\n\nخودکار ادامه می‌دهد؛ همین که تمام شود نتیجه می‌آید.";
           try { await sendMessage(botToken, mw.by, txt); } catch (e) {}
           mw.reported = true;
@@ -21037,24 +20917,12 @@ async function runHostFilter(env, opts = {}) {
   }
   const zones = await getAllZones(accounts, kv);
 
-  // Control probe: if the primary checker is down, silently fail over to the other service for this run.
-  // No outage/recovery messages — runs just continue on the fallback until the primary is back.
-  cfg.effProvider = cfg.provider;
-  if (cfg.provider === "checkhost") {
-    let control = null;
-    try {
-      control = await checkHostPing("www.google.com", IR_CITIES, env, kv);
-    } catch (e) {
-      control = { error: "control_throw" };
-    }
-    if (control.error) {
-      cfg.effProvider = "globalping";
-      cfg.failover = { from: "checkhost", ts: new Date().toISOString(), reason: String(control.error).slice(0, 120) };
-      cfg.checkhost_down = { ts: new Date().toISOString(), reason: control.error };
-    } else {
-      cfg.checkhost_down = null;
-      if (cfg.failover) cfg.failover = null;
-    }
+  // Control probe: وضعیت سرویس بررسی (خرابی در همان پیام «نتیجه نداد» دیده می‌شود)
+  try {
+    const control = await checkHostPing("www.google.com", IR_CITIES, env, kv);
+    cfg.checkhost_down = control.error ? { ts: new Date().toISOString(), reason: control.error } : null;
+  } catch (e) {
+    cfg.checkhost_down = { ts: new Date().toISOString(), reason: "control_throw" };
   }
 
   // Gather enabled hosts and their domain values.
@@ -21136,8 +21004,7 @@ async function runHostFilter(env, opts = {}) {
   }
 
   // Rotating batch (bounded by worker subrequests / API rate limits; over cycles all domains get checked).
-  const effBatch = cfg.gpToken ? 60 : cfg.batch;
-  const batch = Math.max(1, Math.min(60, opts.batchOverride || effBatch));
+  const batch = Math.max(1, Math.min(60, opts.batchOverride || cfg.batch));
   const start = cfg.cursor % uniq.length;
   const take = manual ? uniq.length : Math.min(batch, uniq.length);
   const slice = [];
@@ -21162,28 +21029,12 @@ async function runHostFilter(env, opts = {}) {
   let br = await runBatch();
   Object.assign(results, br.out);
   anyCheck = br.any;
-  // Silent failover: if the primary yielded nothing, retry the whole batch once on the other service.
-  if (!anyCheck && cfg.effProvider === cfg.provider) {
-    const other = cfg.provider === "checkhost" ? "globalping" : "checkhost";
-    let relayOk = true;
-    if (other === "checkhost") {
-      try { relayOk = !!(await getRelayBase(kv, env)) || !!(env && env.HF_RELAY_URL); } catch (e) { relayOk = false; }
-    }
-    if (relayOk) {
-      cfg.effProvider = other;
-      cfg.failover = { from: cfg.provider, ts: new Date().toISOString(), reason: "batch_no_results" };
-      br = await runBatch();
-      Object.assign(results, br.out);
-      anyCheck = br.any;
-    }
-  }
-  if (anyCheck && cfg.effProvider === cfg.provider && cfg.failover) cfg.failover = null;
   if (!anyCheck) {
     cfg.checkhost_down = { ts: new Date().toISOString(), reason: "no_results" };
     cfg.last_run = new Date().toISOString();
     cfg.last_summary = "سرویس بررسی نتیجه نداد؛ هیچ تغییری انجام نشد.";
     await saveHostFilterCfg(kv, cfg);
-    await report("⚠️ بررسی انجام نشد: سرویس بررسی (Globalping/check-host) نتیجه نداد.");
+    await report("⚠️ بررسی انجام نشد: سرویس بررسی (چک‌هاست) نتیجه نداد.");
     return { checkhost_down: true, cfg };
   }
 
@@ -21530,17 +21381,10 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("💡 برای بررسی سریع‌تر: هاست‌هایی که نیاز به تعویض ندارند را از «📋 لیست هاست‌ها» با «🚫 استثنا» از چرخه خارج کن؛ هرچه هاست کمتر، ران زودتر تمام می‌شود.");
   lines.push("");
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
-  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host (پیش‌فرض)" : "Globalping") + (cfg.failover ? " (⏳ موقتاً با " + (cfg.provider === "checkhost" ? "گلوبال‌پینگ" : "چک‌هاست") + ")" : ""));
+  lines.push("🔌 سرویس بررسی: check-host");
   lines.push("⏱ فاصلهٔ اجرا: هر " + cfg.intervalMin + " دقیقه");
-  if (cfg.provider === "checkhost") {
-    lines.push("🌆 شهرها: " + cfg.citiesSel.join("، "));
-    lines.push("🎯 آستانه: " + cfg.cities + " شهر از " + cfg.citiesSel.length + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
-  } else {
-    lines.push("🎯 آستانه: " + cfg.minFail + " پروب ایرانی از " + cfg.probes + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
-  }
-  if (cfg.provider !== "checkhost" && !((env && env.GLOBALPING_TOKEN) || cfg.gpToken)) {
-    lines.push("🔑 توکن Globalping ثبت نشده؛ بدون توکن سهمیه خیلی کم است و بررسی کند/ناقص می‌شود — از «⚙️ تنظیمات گلوبال‌پینگ ← 🔑 توکن Globalping» راهنمای ۲دقیقه‌ای گرفتن توکن رایگان را ببین.");
-  }
+  lines.push("🌆 شهرها: " + cfg.citiesSel.join("، "));
+  lines.push("🎯 آستانه: " + cfg.cities + " شهر از " + cfg.citiesSel.length + " (پینگ موفق ≤ " + cfg.maxOk + " از ۴)");
   lines.push("📦 تعداد هر اجرا: " + cfg.batch + " · 🔁 حداکثر تعویض: " + cfg.maxChanges);
   lines.push("🔁 بررسی مجدد: " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار، هر " + cfg.recheckMin + " دقیقه" : "غیرفعال (تعویض فوری)"));
   lines.push("🌍 بررسی آی‌پی از آلمان/هلند قبل از تعویض: فعال");
@@ -21552,21 +21396,13 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("🔁 هاست‌های تعویض‌شده: " + count);
   lines.push("");
   lines.push("روش: دامنه‌های هاست‌ها هر " + cfg.intervalMin + " دقیقه از داخل ایران بررسی می‌شوند؛ در صورت فیلتر " + (cfg.recheckCount > 0 ? cfg.recheckCount + " بار (هر " + cfg.recheckMin + " دقیقه) بررسی مجدد می‌شود و سپس " : "بلافاصله ") + "یک دامنهٔ شماره‌دار جدید ساخته و در همان هاست جایگزین می‌شود. پیش از تعویض، آی‌پی از آلمان/هلند چک می‌شود تا سرور خاموش یا آی‌پی فیلتر/ایران‌اکسس اشتباه تعویض نشود. در کانفیگ‌های REALITY فقط آدرس تعویض می‌شود و SNI هرگز دست نمی‌خورد (یک هشدار). Fastly: " + (cfg.realityRotate ? "مثل بقیه تعویض می‌شود." : "فقط هشدار می‌گیرد."));
-  const isCh = cfg.provider === "checkhost";
   const kb = [];
   // hftg: روشن/خاموش کردن کل مانیتور تعویض خودکار هاست
   kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hftg" }]);
   kb.push([{ text: "⚡ فورس بررسی کامل", callback_data: "hfforceall" }]);
-  // hfprov: انتخاب سرویس بررسی — با زدن روی هر کدام، همان فعال می‌شود (دکمه وسط هم جابه‌جا می‌کند)
-  kb.push([
-    { text: (isCh ? "✅ " : "") + "🌐 چک‌هاست", callback_data: "hfprov:checkhost" },
-    { text: "▶️ انتخاب ◀️", callback_data: "hfsetprov" },
-    { text: (!isCh ? "✅ " : "") + "📡 گلوبال‌پینگ", callback_data: "hfprov:globalping" },
-  ]);
   // hfhist: تاریخچهٔ تعویض‌ها | hflist: لیست هاست‌ها + استثنا و بررسی تک‌تک (جای بررسی فوری حذف‌شده)
   kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
-  // تنظیمات جداگانهٔ هر سرویس: hfsetch (چک‌هاست) | hfsetgp (گلوبال‌پینگ) — hfbk: مدیریت بکاپ
-  kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }, { text: "⚙️ تنظیمات گلوبال‌پینگ", callback_data: "hfsetgp" }]);
+  kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
   // بازگشت به منوی اصلی
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
@@ -21574,14 +21410,12 @@ async function renderHostFilterHome(edit, kv, env) {
 }
 
 async function renderHostFilterSettings(edit, kv) {
-  // سازگاری: hfset قدیمی به تنظیمات همان سرویس فعال می‌رود
   const cfg = await getHostFilterCfg(kv);
-  if (cfg.provider === "checkhost") return renderHostFilterSettingsCh(edit, kv, cfg);
-  return renderHostFilterSettingsGp(edit, kv, cfg);
+  return renderHostFilterSettingsCh(edit, kv, cfg);
 }
 
 function hfCommonSettingsKb(cfg) {
-  // تنظیمات مشترک هر دو سرویس
+  // تنظیمات مشترک
   return [
     // batch: تعداد بررسی در هر اجرا | maxchanges: حداکثر تعداد تعویض در هر اجرا
     [{ text: "📦 تعداد هر اجرا", callback_data: "hfsetedit:batch" }, { text: "🔁 حداکثر تعویض", callback_data: "hfsetedit:maxchanges" }],
@@ -21615,33 +21449,6 @@ async function renderHostFilterSettingsCh(edit, kv, cfg0) {
   // hfcities: انتخاب شهرهای ایرانی بررسی‌شده | cities: حداقل تعداد شهر فیلتر برای تعویض | maxok: حداکثر پینگ موفق مجاز
   kb.push([{ text: "🌆 انتخاب شهرها", callback_data: "hfcities" }]);
   kb.push([{ text: "🎯 حداقل شهر", callback_data: "hfsetedit:cities" }, { text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
-  kb.push(...hfCommonSettingsKb(cfg));
-  kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
-}
-
-async function renderHostFilterSettingsGp(edit, kv, cfg0) {
-  const cfg = cfg0 || (await getHostFilterCfg(kv));
-  const lines = ["⚙️ تنظیمات گلوبال‌پینگ", ""];
-  lines.push("⚠️ هرچه فاصلهٔ اجرا کوتاه‌تر یا تعداد پروب/هر اجرا بیشتر باشد، درخواست‌های بیشتری به کلادفلر فرستاده می‌شود و ممکن است باعث محدود شدن (Rate Limit) شود.");
-  lines.push("");
-  lines.push("• ⏱ فاصلهٔ اجرا: " + cfg.intervalMin + " دقیقه");
-  lines.push("• 📡 تعداد پروب ایرانی: " + cfg.probes);
-  lines.push("• 🎯 حداقل پروب فیلتر: " + cfg.minFail);
-  lines.push("• 📶 حداکثر پینگ موفق مجاز: " + cfg.maxOk + " از ۴");
-  lines.push("• 🔁 تعداد بررسی مجدد: " + cfg.recheckCount + " (۰ = تعویض فوری)");
-  lines.push("• ⏱ فاصلهٔ بررسی مجدد: هر " + cfg.recheckMin + " دقیقه");
-  lines.push("• 📦 تعداد بررسی در هر اجرا: " + cfg.batch);
-  lines.push("• 🔁 حداکثر تعویض در هر اجرا: " + cfg.maxChanges);
-  lines.push("• 💾 تعداد بکاپ‌های نگه‌داشته: " + cfg.backupKeep);
-  lines.push("• 🔑 توکن Globalping: " + (cfg.gpToken ? "ثبت شده ✅" : "ثبت نشده — دکمهٔ «🔑 توکن Globalping» راهنمای ۲دقیقه‌ای گرفتن توکن رایگان را نشان می‌دهد"));
-  const kb = [];
-  kb.push([{ text: "⏱ فاصلهٔ اجرا", callback_data: "hfsetedit:interval" }]);
-  // probes: تعداد پروب ایرانی | minfail: حداقل پروب فیلتر | maxok: حداکثر پینگ موفق
-  kb.push([{ text: "📡 تعداد پروب", callback_data: "hfsetedit:probes" }, { text: "🎯 حداقل پروب فیلتر", callback_data: "hfsetedit:minfail" }]);
-  kb.push([{ text: "📶 حداکثر پینگ موفق", callback_data: "hfsetedit:maxok" }]);
-  // hfsettoken: ثبت/حذف توکن Globalping
-  kb.push([{ text: "🔑 توکن Globalping", callback_data: "hfsettoken" }]);
   kb.push(...hfCommonSettingsKb(cfg));
   kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
@@ -21718,7 +21525,6 @@ async function renderHostFilterHosts(edit, kv, env) {
 async function hfHostCheck(kv, env, panelId, hostId) {
   const back = [[{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }]];
   const cfg = await getHostFilterCfg(kv);
-  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
   const panels = await getPanels(kv);
   const panel = panels.find((p) => p.id === panelId);
   if (!panel) return { text: "❌ پنل پیدا نشد.", kb: back };
@@ -21758,8 +21564,7 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     const info = hostFilterPingBlocked(ping, cfg);
     const blocked = hostFilterIsBlocked(info, cfg);
     if (blocked) anyBlocked = true;
-    if (cfg.provider === "checkhost") lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedCities}/${cfg.citiesSel.length} شهر بلاک`);
-    else lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedProbes}/${info.totalProbes} پروب بلاک`);
+    lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedCities}/${cfg.citiesSel.length} شهر بلاک`);
     for (const nid of Object.keys(ping.nodes)) {
       const n = ping.nodes[nid];
       const who = n.network ? `${n.network}${n.asn ? "/" + n.asn : ""}${n.city ? " - " + n.city : ""}` : `${nid}${n.city ? " - " + n.city : ""}`;
@@ -21786,7 +21591,6 @@ async function hfHostCheck(kv, env, panelId, hostId) {
 const HOSTFILTER_FOREIGN_SCAN_CAP = 25;
 async function hfForeignScan(kv, env) {
   const cfg = await getHostFilterCfg(kv);
-  cfg.gpToken = (env && env.GLOBALPING_TOKEN) || cfg.gpToken || "";
   const panels = await getPanels(kv);
   const seen = new Set();
   const targets = [];
