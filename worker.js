@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.78";
+const BOT_VERSION = "1.8.79";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.79": [
+    "🔧 ویرایش رکورد با آیدی کهنه خودکار بازیابی می‌شود (نام/نوع)؛ پیام 81044 اصلاح شد",
+  ],
   "1.8.78": [
     "🐞 رفع خطای qSectionModel گم‌شده در صفحات سهمیه",
   ],
@@ -4343,7 +4346,7 @@ const CF_ERR_FA = {
   9017: "ساخت رکورد ناموفق بود؛ احتمالاً این نام از قبل وجود دارد، یا برای این نوع رکورد معتبر نیست.",
   9106: "هدف مسیر Proxy نامعتبر است.",
   81008: "این رکورد دیگر وجود ندارد (شاید قبلاً حذف شده و بافر کش قدیمی است؛ دوباره تلاش کنید).",
-  81044: "توکن به مجوز DNS کافی دسترسی ندارد.",
+  81044: "رکورد وجود ندارد — بین باز کردن صفحه و ثبت، حذف یا جابه‌جا شده؛ از لیست تازه بازش کن.",
   81057: "توکن به مجوز لازم دسترسی ندارد.",
 };
 
@@ -4591,6 +4594,28 @@ function favShortName(f) {
 
 function favTypeShort(f) {
   return f.type === "CNAME" ? "cname" : String(f.type || "").toLowerCase();
+}
+
+// بازیابی آیدی کهنه رکورد با نام/نوع (پس از تعویض LB، حذف‌و‌ساخت مجدد، ویرایش از جای دیگر)
+async function recoverRecordId(kv, accounts, pending) {
+  try {
+    if (!pending || !pending.rec_name || !pending.zone_id) return null;
+    const acc = accounts[pending.acc];
+    if (!acc) return null;
+    try { await invalidateCache(kv, pending.zone_id); } catch (e) {}
+    const zone = await getZoneById(pending.zone_id, pending.acc, accounts);
+    if (!zone) return null;
+    const records = await getRecords(zone, accounts, kv);
+    if (!Array.isArray(records)) return null;
+    const same = records.filter((r) => r && r.name === pending.rec_name);
+    if (!same.length) return null;
+    let pick = null;
+    if (pending.rec_type) pick = same.find((r) => r.type === pending.rec_type) || null;
+    if (!pick && same.length === 1) pick = same[0];
+    if (!pick) return null;
+    pending.record_id = pick.id;
+    return pick;
+  } catch (e) { return null; }
 }
 
 async function getRecordById(acc, zoneId, recordId, accounts) {
@@ -11149,7 +11174,16 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       }
     }
     await kv.delete(`pend:${chatId}`);
-    const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    let prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    if (!prev && pending.rec_name) prev = await recoverRecordId(kv, accounts, pending);
+    if (!prev) {
+      const back = pending.backCb || "zones";
+      const t = "❌ رکورد دیگر روی کلادفلر نیست (بین باز کردن صفحه و ثبت، حذف یا جابه‌جا شده).\n\nاز لیست تازه بازش کن.";
+      const kb = [[{ text: "📋 لیست رکوردها", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]];
+      if (pending.msgId) await editMessage(botToken, chatId, pending.msgId, t, kb);
+      else await send(t, kb);
+      return;
+    }
     const body = {};
     if (type === "edit_ttl") body.ttl = Number(txt) || 1;
     else {
@@ -11270,7 +11304,16 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   }
 
   if (type === "change_type") {
-    const prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    let prev = await getRecordById(pending.acc, pending.zone_id, pending.record_id, accounts);
+    if (!prev && pending.rec_name) prev = await recoverRecordId(kv, accounts, pending);
+    if (!prev) {
+      const back = pending.backCb || "zones";
+      const t = "❌ رکورد دیگر روی کلادفلر نیست (بین باز کردن صفحه و ثبت، حذف یا جابه‌جا شده).\n\nاز لیست تازه بازش کن.";
+      const kb = [[{ text: "📋 لیست رکوردها", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]];
+      if (pending.msgId) await editMessage(botToken, chatId, pending.msgId, t, kb);
+      else await send(t, kb);
+      return;
+    }
     const ctHint = valueIssueHint(txt, pending.new_type);
     if (ctHint) {
       await valueErrorReply(pending, chatId, botToken, ctHint);
@@ -13895,9 +13938,15 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const field = "edit_value";
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
+      const rec0 = await getRecordById(session.acc, session.zone_id, recordId, accounts);
+      if (!rec0) {
+        return edit("❌ رکورد دیگر روی کلادفلر نیست (حذف یا جابه‌جا شده). از لیست تازه بازش کن.", [
+          [{ text: "📋 لیست رکوردها", callback_data: `p:${token}:${Number(session.page) || 0}` }, { text: "🏠 خانه", callback_data: "menu" }],
+        ]);
+      }
       await kv.put(
         `pend:${chatId}`,
-        JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
+        JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, rec_name: rec0.name, rec_type: rec0.type, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
         { expirationTtl: 600 }
       );
       await edit("✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):", [[{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }]]);
