@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.39";
+const BOT_VERSION = "1.8.40";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.40": [
+    "🔔 سقف enrich از پنل: حداکثر ۱۰ کاربر در هر موج",
+  ],
   "1.8.39": [
     "🔔 دو دکمه تمدید در هشدار: با ربات (allmarzbot) و با پنل (صفحه یوزرها با جست‌وجوی همان یوزر)",
   ],
@@ -8034,9 +8037,12 @@ async function handlePgHook(token, payload, env, botToken) {
     if (needEnrich) {
       try { ptoken = await panelLogin(panel); } catch (e) {}
     }
+    // سقف enrich: حداکثر ۱۰ کاربر در هر موج (نه سقف کلادفلر می‌خورد، نه پنل را شلوغ می‌کند؛ بقیه با همان دیتای ایونت)
+    let enrichLeft = 10;
     for (const ev of events) {
       if (!ev.username) continue;
-      if (ptoken && (ev.expireTs == null || ev.usedTraffic == null || ev.dataLimit == null || !ev.status)) {
+      if (ptoken && enrichLeft > 0 && (ev.expireTs == null || ev.usedTraffic == null || ev.dataLimit == null || !ev.status)) {
+        enrichLeft--;
         try {
           const pu = await panelGetUser(panel, ptoken, ev.username);
           if (pu) {
