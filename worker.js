@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.79";
+const BOT_VERSION = "1.8.80";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.80": [
+    "🚀 دکمه «آپدیت همه» در آمار نصب‌ها + نوع رکورد با حرف بزرگ در لیست (sub-A)",
+  ],
   "1.8.79": [
     "🔧 ویرایش رکورد با آیدی کهنه خودکار بازیابی می‌شود (نام/نوع)؛ پیام 81044 اصلاح شد",
   ],
@@ -2172,7 +2175,7 @@ function hubMemberLabel(v) {
   return `👤 ${who} · v${ver}${over ? " · ⚠️سهمیه" : ""}`;
 }
 
-async function renderHubStats(edit, kv, page) {
+async function getHubItems(kv) {
   let keys = [];
   try {
     const l = await kv.list({ prefix: "tm:", limit: 1000 });
@@ -2186,6 +2189,17 @@ async function renderHubStats(edit, kv, page) {
     } catch (e) {}
   }
   items.sort((a, b) => Number((b.v && b.v.ts) || 0) - Number((a.v && a.v.ts) || 0));
+  return items;
+}
+// نصب‌های قدیمی‌تر از نسخه فعلی
+function hubOutdated(items) {
+  return (items || []).filter((it) => {
+    const v = String((it.v && it.v.v) || "");
+    return selfVerParts(v) && selfVerGreater(BOT_VERSION, v);
+  });
+}
+async function renderHubStats(edit, kv, page) {
+  const items = await getHubItems(kv);
   const byVer = {};
   for (const it of items) {
     const ver = (it.v && it.v.v) || "؟";
@@ -2212,6 +2226,7 @@ async function renderHubStats(edit, kv, page) {
       kb.push([{ text: hubMemberLabel(it.v).slice(0, 60), callback_data: `hubuser:${it.iid}` }]);
     }
   }
+  if (items.length) kb.push([{ text: "🚀 آپدیت همه به نسخه آخر", callback_data: "hubupdateall", style: "success" }]);
   if (pages > 1) {
     const nav = [];
     nav.push(pg > 0 ? { text: "⬅️", callback_data: `hubstatsp:${pg - 1}` } : EMPTY_BTN);
@@ -2524,6 +2539,20 @@ async function runAnnFetch(env, botToken) {
     let changed = false;
     for (const it of items.slice(0, 10)) {
       const id = String((it && it.id) || "").slice(0, 60);
+      if (it && it.type === "update" && it.tag && !seen.includes(id)) {
+        // دستور آپدیت همگانی: بی‌صدا اجرا می‌شود (نصب‌های قدیمی که type را نمی‌فهمند، چون text خالی است ردش می‌کنند)
+        let done = false;
+        try {
+          if (it.until && now > Date.parse(it.until)) done = true;
+          else if (!selfVerGreater(String(it.tag), BOT_VERSION)) done = true;
+          else {
+            const ur = await maybeSelfUpdate(env, botToken, Number(env.ADMIN_ID) || 0, { skipGuard: true });
+            if (ur && ur.ok) done = true;
+          }
+        } catch (e) {}
+        if (done) { seen.push(id); changed = true; }
+        continue;
+      }
       const msg = String((it && it.text) || "").slice(0, 3000);
       if (!id || !msg || seen.includes(id)) continue;
       if (it.until) {
@@ -4296,7 +4325,7 @@ async function getServersPicker(kv, force) {
 function recordLabel(r, zoneName) {
   let name = r.name;
   if (zoneName && name.endsWith("." + zoneName)) name = name.slice(0, -(zoneName.length + 1));
-  const typeLabel = r.type === "CNAME" ? "cname" : String(r.type || "").toLowerCase();
+  const typeLabel = String(r.type || "A").toUpperCase();
   return `${name}-${typeLabel}`;
 }
 
@@ -12593,6 +12622,26 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("hubstatsp:")) {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       await renderHubStats(edit, kv, Number(data.split(":")[1]) || 0);
+    } else if (data === "hubupdateall") {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      const items = await getHubItems(kv);
+      const out = hubOutdated(items);
+      if (!out.length) return edit(`✅ همه نصب‌ها به‌روزند (v${BOT_VERSION}).`, [[{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      await edit(`🚀 آپدیت همه\n\n${out.length} نصب از ${items.length} قدیمی‌اند. همه به v${BOT_VERSION} آپدیت شوند؟\n\nبا تیک ساعتی خودشان آپدیت می‌شوند (نصب باید توکن گیت‌هاب در KV داشته باشد).`, [
+        [{ text: "✅ بله، آپدیت همه", callback_data: "hubupdateallgo", style: "success" }],
+        [{ text: "⬅️ انصراف", callback_data: "hubstats" }],
+      ]);
+    } else if (data === "hubupdateallgo") {
+      if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+      let arr = [];
+      try { arr = (await kv.get("hub_ann", "json")) || []; } catch (e) {}
+      if (!Array.isArray(arr)) arr = [];
+      arr = arr.filter((a) => a && a.type !== "update");
+      arr.unshift({ id: "upd-" + BOT_VERSION + "-" + Date.now().toString(36), type: "update", tag: BOT_VERSION, text: "", until: new Date(Date.now() + 72 * 3600000).toISOString().slice(0, 10) });
+      try { await kv.put("hub_ann", JSON.stringify(arr.slice(0, 10)), { expirationTtl: 90 * 86400 }); } catch (e) {}
+      await edit(`✅ دستور آپدیت به v${BOT_VERSION} ثبت شد.\n\nنصب‌ها با تیک ساعتی خودشان آپدیت می‌شوند. نصبی که توکن گیت‌هاب ندارد جا می‌ماند.`, [
+        [{ text: "📊 آمار نصب‌ها", callback_data: "hubstats" }, { text: "🏠 خانه", callback_data: "menu" }],
+      ]);
     } else if (data.startsWith("hubuser:")) {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
       const iid = data.slice(8, 72);
