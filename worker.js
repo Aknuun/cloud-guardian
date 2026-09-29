@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.49";
+const BOT_VERSION = "1.8.50";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.50": [
+    "🤖 ربات داخلی خودکار از خود پنل خوانده می‌شود + وضعیت سلامت وبهوک پنل در صفحه (آستانه‌ها، recurrent، تطبیق آدرس)",
+  ],
   "1.8.49": [
     "🔔 دکمه‌های تنظیمات پنل برگشتند (تست/مسیر/ربات/توکن) + ردیف‌ها شدند «تنظیم <نام>»",
   ],
@@ -7861,6 +7864,57 @@ async function panelLoginAs(url, username, password, timeoutMs) {
     return data.access_token;
   } catch (e) { return null; }
 }
+async function panelGetSettings(p, token) {
+  try {
+    const res = await fetch(`${p.url.replace(/\/+$/, "")}/api/settings`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: withTimeout(25000),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d && typeof d === "object" ? d : null;
+  } catch (e) { return null; }
+}
+async function pgTgUsername(botToken) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, { signal: withTimeout(15000) });
+    const d = await res.json();
+    const u = d && d.result && d.result.username;
+    return u ? String(u) : null;
+  } catch (e) { return null; }
+}
+// ربات داخلی همان پنل (از تنظیمات telegram خودش) — فقط خانه خالی را پر می‌کند؛ دستی بالاتر است
+async function pgAutoRenewBot(kv, cfg, panel, token) {
+  try {
+    const cur = ((cfg.panels || {})[panel.id] || {}).renewbot;
+    const st = await panelGetSettings(panel, token);
+    if (!st) return { bot: cur || "", hook: null };
+    const ptok = st.telegram && st.telegram.enable && st.telegram.token;
+    let bot = cur || "";
+    if (ptok && (!cur || ((cfg.panels[panel.id] || {}).renewbotAuto && true))) {
+      const un = await pgTgUsername(ptok);
+      if (un && un !== cur) {
+        if (!cfg.panels[panel.id]) cfg.panels[panel.id] = {};
+        cfg.panels[panel.id].renewbot = un;
+        cfg.panels[panel.id].renewbotAuto = true;
+        try { await savePgHookCfg(kv, cfg); } catch (e) {}
+        bot = un;
+      }
+    }
+    let hook = null;
+    try {
+      const w = st.webhook || {};
+      hook = {
+        enable: w.enable === true,
+        days: Array.isArray(w.days_left) ? w.days_left : null,
+        usage: Array.isArray(w.usage_percent) ? w.usage_percent : null,
+        recurrent: w.recurrent != null ? Number(w.recurrent) : null,
+        urls: Array.isArray(w.webhooks) ? w.webhooks.map((x) => String((x && x.url) || "")) : [],
+      };
+    } catch (e) {}
+    return { bot, hook };
+  } catch (e) { return { bot: "", hook: null }; }
+}
 async function panelGetAdmin(panel, sudoTok, username) {
   try {
     const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/admins?username=${encodeURIComponent(username)}`, {
@@ -8241,7 +8295,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   if (!seenIntro) {
     lines.push("👋 راهنمای شروع (فقط همین یک‌بار می‌بینی):");
     lines.push("۱️⃣ تو صفحه هر پنل، آدرس وبهوک را کپی کن و در تنظیمات webhook همان پنل بگذار (days_left و usage_percent هم همان‌جاست).");
-    lines.push("۲️⃣ برای دکمه «🔄 تمدید با ربات»، تو صفحه هر پنل با «🤖 ربات داخلی» ربات همان پنل را معرفی کن؛ تا آن موقع فقط دکمه «تمدید با پنل» می‌آید.");
+    lines.push("۲️⃣ ربات داخلی (دکمه تمدید با ربات) معمولاً خودکار از خود پنل خوانده می‌شود؛ اگر نشد تو صفحه هر پنل دستی بده.");
     lines.push("۳️⃣ هر ادمین پنل که telegram_id داشته باشد (یا با /start و یوزر/پسورد وصل شود) هشدار کاربرهایش را می‌گیرد.");
     lines.push("");
     try { await kv.put("pghook_seen", "1"); } catch (e) {}
@@ -8275,6 +8329,15 @@ async function renderPgPanel(edit, kv, env, pid) {
   let base = "";
   try { base = await selfUrlBase(env, kv); } catch (e) {}
   const url = (base ? base.replace(/\/+$/, "") : "<worker-url>") + "/pghook/" + tok;
+  let hookInfo = null;
+  try {
+    let ptk = null;
+    try { ptk = await panelLogin(panel); } catch (e) {}
+    if (ptk) {
+      const ar = await pgAutoRenewBot(kv, cfg, panel, ptk);
+      hookInfo = ar.hook;
+    }
+  } catch (e) {}
   const lines = ["🔔 وبهوک پنل: " + (panel.name || panel.id), ""];
   lines.push("📨 آدرس وبهوک:");
   lines.push(code(url));
@@ -8285,7 +8348,24 @@ async function renderPgPanel(edit, kv, env, pid) {
   lines.push("آدرس بالا را در قسمت url و سکرت زیر را در قسمت secret تنظیمات webhook پنل کپی کن (days_left و usage_percent هم همان‌جاست).");
   lines.push("");
   lines.push("🛣 مسیر داشبورد: " + code(pgDashOf(cfg, panel.id)));
-  lines.push("🤖 ربات داخلی: " + (pgPanelBot(cfg, panel.id) ? "@" + pgPanelBot(cfg, panel.id) : "تعریف نشده"));
+  {
+    const b = pgPanelBot(cfg, panel.id);
+    const isAuto = b && ((cfg.panels[panel.id] || {}).renewbotAuto === true);
+    lines.push("🤖 ربات داخلی: " + (b ? "@" + b + (isAuto ? " (خودکار)" : "") : "تعریف نشده"));
+  }
+  if (hookInfo) {
+    const okUrl = hookInfo.urls.some((u) => u && url && u.replace(/\/+$/, "") === url.replace(/\/+$/, ""));
+    lines.push(
+      "📡 پنل: وبهوک " + (hookInfo.enable ? "روشن" : "❌ خاموش") +
+      (hookInfo.days ? " · روز " + hookInfo.days.join("،") : "") +
+      (hookInfo.usage ? " · حجم " + hookInfo.usage.join("،") : "") +
+      (hookInfo.recurrent != null ? " · هر " + hookInfo.recurrent + "ث" : "") +
+      " · آدرس ما " + (okUrl ? "✅" : "❌ نیست")
+    );
+    if (hookInfo.recurrent != null && hookInfo.recurrent < 600) {
+      lines.push("⚠️ recurrent پنل خیلی کم است (" + hookInfo.recurrent + "ث) — اسپم می‌شود؛ ببر روی ۳۶۰۰.");
+    }
+  }
   const kb = [];
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
   kb.push([{ text: "🛣 مسیر داشبورد", callback_data: `pgdash:${panel.id}` }, { text: "🤖 ربات داخلی", callback_data: `pgrenewbot:${panel.id}` }]);
@@ -10113,6 +10193,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         return;
       }
       cfg.panels[pending.pid].renewbot = v;
+      cfg.panels[pending.pid].renewbotAuto = false;
     }
     await savePgHookCfg(kv, cfg);
     await send("✅ ذخیره شد.", [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
