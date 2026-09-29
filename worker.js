@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.42";
+const BOT_VERSION = "1.8.43";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.43": [
+    "🔐 خودثبت‌نامی ادمین پنل: یوزر/پسورد → تایید → ست خودکار telegram_id با sudo → خوش‌آمد (پسورد هیچ‌جا ذخیره نمی‌شود)",
+  ],
   "1.8.42": [
     "🛣 قالب لینک تمدید برای هر پنل جدا قابل تنظیم شد (پیش‌فرض مسیر فعلی)",
   ],
@@ -1515,6 +1518,15 @@ async function processUpdate(payload, env, botToken, adminId) {
         if (a.includes(chatId) || linkedNames.length) {
           try { await kv.put(`pgstart:${chatId}`, "1", { expirationTtl: 180 * 86400 }); } catch (e) {}
         }
+        // خودثبت‌نامی: لینک‌نشده‌ها (غیر از ادمین اصلی) پنل را انتخاب می‌کنند تا یوزر/پسورد بدهند
+        if (cmd === "/start" && chatId !== adminId && !linkedNames.length) {
+          if (panels.length) {
+            await send(
+              "🔐 برای فعال‌سازی هشدارهای پنل، اول پنلت را انتخاب کن. بعد یوزرنیم و پسورد پنلت را می‌پرسم (فقط برای تایید یک‌بار، ذخیره نمی‌شود و پیامت پاک می‌شود):",
+              [...panels.map((pn) => [{ text: "🖥 " + String(pn.name || pn.id).substring(0, 28), callback_data: `pgself:${pn.id}` }])]
+            );
+          }
+        }
         // خوش‌آمد: هر لینک‌شده‌ای غیر از ادمین اصلی، وقتی هشدارها فعال‌اند و ترکیب لینک‌ها عوض شده باشد
         if (cmd === "/start" && chatId !== adminId && linkedNames.length && pgc.enabled) {
           let prev = null;
@@ -1523,7 +1535,8 @@ async function processUpdate(payload, env, botToken, adminId) {
           if (prev !== cur) {
             try { await kv.put(`pgstartmsg:${chatId}`, cur, { expirationTtl: 180 * 86400 }); } catch (e) {}
             await send(
-              `👋 سلام! شما به‌عنوان ${linkedNames.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.`
+              `👋 سلام! شما به‌عنوان ${linkedNames.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.\n\n📦 پیام‌های اتمام حجم را هم در ربات allmarz می‌گیری — اون را هم استارت بزن:`,
+              [[{ text: "🤖 استارت allmarz", url: "https://t.me/allmarzbot" }]]
             );
           }
         }
@@ -7803,6 +7816,50 @@ async function getPgHookCfg(kv) {
 async function savePgHookCfg(kv, cfg) {
   try { await kv.put("pghook_cfg", JSON.stringify(cfg)); } catch (e) {}
 }
+async function panelLoginAs(url, username, password, timeoutMs) {
+  try {
+    const res = await fetch(`${String(url).replace(/\/+$/, "")}/api/admin/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ username, password }),
+      signal: AbortSignal.timeout(timeoutMs || 20000),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.access_token) return null;
+    return data.access_token;
+  } catch (e) { return null; }
+}
+async function panelGetAdmin(panel, sudoTok, username) {
+  try {
+    const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/admins?username=${encodeURIComponent(username)}`, {
+      headers: { Authorization: `Bearer ${sudoTok}` },
+      signal: withTimeout(20000),
+    });
+    const d = await res.json();
+    const arr = Array.isArray(d) ? d : Array.isArray(d && d.admins) ? d.admins : [];
+    return arr.find((x) => String((x && x.username) || "") === String(username)) || null;
+  } catch (e) { return null; }
+}
+async function panelSetAdminTg(panel, sudoTok, username, tgId) {
+  try {
+    const cur = await panelGetAdmin(panel, sudoTok, username);
+    if (!cur) return { error: "not_found" };
+    const body = { ...cur, telegram_id: tgId };
+    const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/admin/${encodeURIComponent(username)}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${sudoTok}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: withTimeout(25000),
+    });
+    let d = {};
+    try { d = await res.json(); } catch (e) {}
+    if (!res.ok) {
+      const det = typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail || d).slice(0, 160);
+      return { error: det || ("HTTP " + res.status) };
+    }
+    return { ok: true };
+  } catch (e) { return { error: String((e && e.message) || e).slice(0, 120) }; }
+}
 async function panelAdminList(p, token) {
   // [{u: username, tg: telegram_id|null}] — آیدی عددی از خود پنل می‌آید، لازم نیست کسی لو بده
   try {
@@ -9909,6 +9966,72 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     }
     await savePgHookCfg(kv, cfg);
     await send("✅ ذخیره شد.", [[{ text: "🔙 پنل", callback_data: `pgpanel:${pending.pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (type === "pg_self_user") {
+    await kv.delete(`pend:${chatId}`);
+    const u = String(txt).trim();
+    if (!u || /\s/.test(u)) {
+      await send("❌ یوزرنیم معتبر نیست. دوباره /start بزن.");
+      return;
+    }
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_self_pass", pid: pending.pid, username: u }), { expirationTtl: 600 });
+    await send("🔑 حالا پسورد پنل را بفرست (فقط برای تایید یک‌بار؛ ذخیره نمی‌شود و پیامت پاک می‌شود):", [
+      [{ text: "🔙 انصراف", callback_data: "pgselfcancel" }],
+    ]);
+    return;
+  }
+
+  if (type === "pg_self_pass") {
+    await kv.delete(`pend:${chatId}`);
+    let tries = 0;
+    try { tries = Number((await kv.get(`pgselftry:${chatId}`, "text")) || 0); } catch (e) {}
+    if (tries >= 3) {
+      await send("⛔ تلاش زیاد؛ یک ساعت دیگر دوباره /start بزن.");
+      return;
+    }
+    const panels = await getPanels(kv);
+    const panel = panels.find((x) => String(x.id) === String(pending.pid));
+    if (!panel) {
+      await send("❌ پنل پیدا نشد. دوباره /start بزن.");
+      return;
+    }
+    const utok = await panelLoginAs(panel.url, pending.username, String(txt));
+    if (!utok) {
+      try { await kv.put(`pgselftry:${chatId}`, String(tries + 1), { expirationTtl: 3600 }); } catch (e) {}
+      await send("❌ یوزرنیم یا پسورد اشتباه است. دوباره /start بزن و از اول بیا.");
+      return;
+    }
+    let sudoTok = null;
+    try { sudoTok = await panelLogin(panel); } catch (e) {}
+    if (!sudoTok) {
+      await send("❌ خطای داخلی (لاگین sudo). به ادمین اصلی بگو.");
+      return;
+    }
+    const wr = await panelSetAdminTg(panel, sudoTok, pending.username, chatId);
+    if (wr.error) {
+      if (/already assigned/i.test(wr.error)) {
+        await send("⚠️ این آیدی عددی قبلاً به ادمین دیگری وصل است. با ادمین اصلی صحبت کن.");
+      } else {
+        await send("❌ ثبت آیدی در پنل نشد. به ادمین اصلی بگو.");
+      }
+      try { logE("PGSELF_PUT", pending.username + " :: " + String(wr.error).slice(0, 120)); } catch (e) {}
+      return;
+    }
+    try { await kv.delete(`pgselftry:${chatId}`); } catch (e) {}
+    try {
+      const cfg = await getPgHookCfg(kv);
+      if (!cfg.owner_map[panel.id]) cfg.owner_map[panel.id] = {};
+      cfg.owner_map[panel.id][pending.username] = chatId;
+      await savePgHookCfg(kv, cfg);
+      await kv.put(`pgstart:${chatId}`, "1", { expirationTtl: 180 * 86400 });
+      await kv.put(`pgstartmsg:${chatId}`, `«${pending.username}» (${panel.name || panel.id})`, { expirationTtl: 180 * 86400 });
+    } catch (e) {}
+    await send(
+      `✅ وصل شدی «${pending.username}»! از این به بعد گزارش انقضا و حجم کاربرهات همین‌جا برات میاد.\n\n📦 پیام‌های اتمام حجم را هم در ربات allmarz می‌گیری — اون را هم استارت بزن:`,
+      [[{ text: "🤖 استارت allmarz", url: "https://t.me/allmarzbot" }]]
+    );
     return;
   }
 
@@ -14692,6 +14815,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         "🛣 قالب کامل لینک دکمه «تمدید با پنل» را بفرست.\n\nمتغیرها:\n• {base} = آدرس پنل\n• {user} = یوزرنیم همان مشتری\n\nپیش‌فرض:\n" + PG_RENEW_DEFAULT + "\n\nبرای برگشت به پیش‌فرض، یک خط «-» بفرست.",
         [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
       );
+    } else if (data.startsWith("pgself:")) {
+      const pid = data.slice(7);
+      const panels = await getPanels(kv);
+      const panel = panels.find((x) => String(x.id) === String(pid));
+      if (!panel) return edit("❌ پنل پیدا نشد.", []);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "pg_self_user", pid }), { expirationTtl: 600 });
+      await edit("👤 یوزرنیم پنلت (" + escHtml(panel.name || pid) + ") را بفرست:", [[{ text: "🔙 انصراف", callback_data: "pgselfcancel" }]]);
+    } else if (data === "pgselfcancel") {
+      try { await kv.delete(`pend:${chatId}`); } catch (e) {}
+      await edit("باشه. هر وقت خواستی /start بزن.", []);
     } else if (data.startsWith("pglink:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       const rest = data.slice(7).split(":");
