@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.62";
+const BOT_VERSION = "1.8.63";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.63": [
+    "🏠 خونه ساده‌تر: جست‌وجو/افزودن/پنل بی‌رنگ؛ ایمیل شد «ایمیل دامنه» بین یادآور و لودبالانسر؛ خاکستری‌ها + تنظیمات سبز",
+  ],
   "1.8.62": [
     "🏠 «سرورها و مانیتورینگ» رفت کنار «مانیتور دامنه و ترافیک‌ها» (ردیف ۲ستونه مانیتورینگ)",
   ],
@@ -1744,11 +1747,11 @@ const SEARCH_PROMPT_TEXT =
 // هر دکمه: text = متن روی دکمه، callback_data = شناسهٔ عملیاتی که در هندلر callback_query خوانده می‌شود.
 function mainMenuKeyboard() {
   return [
-    // رکوردها (۳ستونه): افزودن + کلودفلر + جست‌وجو (آبی)
+    // رکوردها (۳ستونه): افزودن + کلودفلر + جست‌وجو
     [
       { text: "➕ افزودن رکورد", callback_data: "addrec" },
       { text: "☁️ کلودفلر", callback_data: "zones" },
-      { text: "🔍 جست و جو", callback_data: "search", style: "primary" },
+      { text: "🔍 جست و جو", callback_data: "search" },
     ],
     // دیتاسنتر (۳ستونه، سبز)
     [
@@ -1758,16 +1761,16 @@ function mainMenuKeyboard() {
     ],
     // فیچرها — ردیف‌های مشترک monsKeyboard بدون ردیف خانه
     ...monsKeyboard().slice(0, -1),
-    // تنظیمات و راهنما — خاکستری
-    [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
+    // تنظیمات و راهنما — سبز
+    [{ text: "⚙️ تنظیمات و راهنما و ...", callback_data: "settings", style: "success" }],
   ];
 }
 
 // ردیف‌های مشترک فیچرها — داخل خانه استفاده می‌شود (صفحهٔ جداگانه ندارد؛ مانیتور سرورها فقط از داخل «سرورها» باز می‌شود)
 function monsKeyboard() {
   return [
-    // پنل پاسارگارد (تمام‌عرض، آبی)
-    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "primary" }],
+    // پنل پاسارگارد (تمام‌عرض)
+    [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef" }],
     // خودکارسازی پاسارگارد (۲ستونه)
     [
       { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
@@ -1780,13 +1783,16 @@ function monsKeyboard() {
     ],
     // مانیتورینگ (۲ستونه): سرورها + دامنه و ترافیک‌ها
     [
-      { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" },
-      { text: "🌐 مانیتور دامنه و ترافیک‌ها", callback_data: "dommon" },
+      { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv", style: "plain" },
+      { text: "🌐 مانیتور دامنه و ترافیک‌ها", callback_data: "dommon", style: "plain" },
     ],
     // ابزارها (۲ستونه)
-    [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "⚖️ لود بالانسر IP", callback_data: "lb" }],
+    [
+      { text: "⏰ یادآورها", callback_data: "rem", style: "plain" },
+      { text: "✉️ ایمیل دامنه", callback_data: "fmail", style: "plain" },
+      { text: "⚖️ لود بالانسر IP", callback_data: "lb", style: "plain" },
+    ],
     // ایمیل (تمام‌عرض)
-    [{ text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -1969,7 +1975,7 @@ function helpKeyboard() {
 
     // ⚙️ مدیریت و راهنما
     sec("— ⚙️ مدیریت و راهنما —"),
-    [{ text: "⚙️ تنظیمات و راهنما", callback_data: "settings", style: "plain" }],
+    [{ text: "⚙️ تنظیمات و راهنما و ...", callback_data: "settings", style: "plain" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -1977,7 +1983,7 @@ function helpKeyboard() {
 // صفحهٔ «⚙️ تنظیمات و راهنما» — دسته‌بندی: مدیریت (رله/ادمین) + راهنمای بخش‌ها
 function settingsHomeText() {
   return (
-    "⚙️ تنظیمات و راهنما\n\n" +
+    "⚙️ تنظیمات و راهنما و ...\n\n" +
     "🧩 مدیریت\n" +
     "• 🌐 تنظیم رله — وضعیت و مدیریت رلهٔ SSH (شخصی / رایگان / خودکار)\n" +
     "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n" +
