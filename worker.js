@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.37";
+const BOT_VERSION = "1.8.38";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.38": [
+    "🔔 اسم پنل قابل کپی، تاریخ شمسی، تکمیل خودکار اطلاعات کاربر از پنل (حجم مانده به گیگ)",
+  ],
   "1.8.37": [
     "🔔 پیام هشدار کامل‌تر شد: ساعت مانده، تاریخ انقضا، وضعیت کاربر، حجم مانده (درصد هم هست)",
   ],
@@ -7843,6 +7846,29 @@ function pgNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
+function pgExpireTs(raw) {
+  const v = raw;
+  if (v === null || v === undefined || v === "" || v === 0) return null;
+  if (typeof v === "number" && Number.isFinite(v)) {
+    return v > 1e12 ? v : v > 1e9 ? v * 1000 : null;
+  }
+  if (typeof v === "string" && v) {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+async function panelGetUser(p, token, username) {
+  try {
+    const res = await fetch(`${p.url.replace(/\/+$/, "")}/api/user/${encodeURIComponent(username)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: withTimeout(20000),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d && typeof d === "object" ? d : null;
+  } catch (e) { return null; }
+}
 function pgExpireDays(v) {
   // timestamp (sec/ms) یا رشته تاریخ → روزهای مانده
   if (v === null || v === undefined || v === "" || v === 0) return null;
@@ -7878,13 +7904,7 @@ function pgParseOne(p) {
   }
   const ev = str(p.action || p.event || p.type || p.kind).toLowerCase();
   const expRaw = u.expire != null ? u.expire : u.expire_date != null ? u.expire_date : p.expire;
-  let expireTs = null;
-  if (typeof expRaw === "number" && Number.isFinite(expRaw) && expRaw > 0) {
-    expireTs = expRaw > 1e12 ? expRaw : expRaw > 1e9 ? expRaw * 1000 : null;
-  } else if (typeof expRaw === "string" && expRaw) {
-    const t = Date.parse(expRaw);
-    if (Number.isFinite(t)) expireTs = t;
-  }
+  const expireTs = pgExpireTs(expRaw);
   const usedTraffic = pgNum(u.used_traffic != null ? u.used_traffic : p.used_traffic);
   const dataLimit = pgNum(u.data_limit != null ? u.data_limit : p.data_limit);
   const status = str(u.status || p.status || "");
@@ -7929,7 +7949,7 @@ function pgFmtGb(v) {
 }
 async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
-  const lines = [(test ? "🧪 تستی — " : "") + head + " — " + (panel.name || panel.id), ""];
+  const lines = [(test ? "🧪 تستی — " : "") + head, "🖥 پنل: " + code(panel.name || panel.id), ""];
   lines.push("👤 کاربر: " + code(a.username || "؟"));
   if (a.kind === "usage") {
     lines.push(`📈 مصرف: ${a.value}٪`);
@@ -7950,7 +7970,7 @@ async function pgSendAlert(botToken, to, panel, a, test) {
     if (left) lines.push(`📦 حجم مانده: ${left}` + (tot ? ` (از ${tot})` : ""));
   }
   if (a.owner) lines.push("👮 ادمین پنل: " + escHtml(a.owner));
-  lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
+  try { lines.push("⏱ " + fmtJalali(Date.now()) + " به وقت ایران"); } catch (e) {}
   // باز کردن allmarzbot با متن آماده = یوزرنیم همان مشتری
   const kb = a.username
     ? [[{
@@ -8003,8 +8023,24 @@ async function handlePgHook(token, payload, env, botToken) {
     };
     let anyJob = false;
     const seenRun = new Set();
+    const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || e.usedTraffic == null || e.dataLimit == null || !e.status));
+    let ptoken = null;
+    if (needEnrich) {
+      try { ptoken = await panelLogin(panel); } catch (e) {}
+    }
     for (const ev of events) {
       if (!ev.username) continue;
+      if (ptoken && (ev.expireTs == null || ev.usedTraffic == null || ev.dataLimit == null || !ev.status)) {
+        try {
+          const pu = await panelGetUser(panel, ptoken, ev.username);
+          if (pu) {
+            if (ev.expireTs == null) ev.expireTs = pgExpireTs(pu.expire != null ? pu.expire : pu.expire_date);
+            if (ev.usedTraffic == null) ev.usedTraffic = pgNum(pu.used_traffic);
+            if (ev.dataLimit == null) ev.dataLimit = pgNum(pu.data_limit);
+            if (!ev.status) ev.status = String(pu.status || "");
+          }
+        } catch (e) {}
+      }
       const jobs = [];
       const markKeys = [];
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
