@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.69";
+const BOT_VERSION = "1.8.70";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.70": [
+    "🌐 چک‌هاست شد سرویس پیش‌فرض بررسی (گلوبال‌پینگ می‌ماند برای failover خودکار)",
+  ],
   "1.8.69": [
     "🔓 حذف کامل لایسنس پاسارگارد",
   ],
@@ -20213,7 +20216,7 @@ async function getHostFilterCfg(kv) {
   if (!sel.length) sel = IR_CITIES.slice();
   return {
     enabled: cfg.enabled !== false,
-    provider: cfg.provider === "checkhost" ? "checkhost" : "globalping",
+    provider: cfg.provider === "globalping" ? "globalping" : "checkhost",
     intervalMin: Math.max(1, Number(cfg.intervalMin) || 25),
     iv25: cfg.iv25 === true,
     cities: Math.min(Math.max(1, Number(cfg.cities) || HOSTFILTER_DEFAULT_CITIES), sel.length),
@@ -21527,7 +21530,7 @@ async function renderHostFilterHome(edit, kv, env) {
   lines.push("💡 برای بررسی سریع‌تر: هاست‌هایی که نیاز به تعویض ندارند را از «📋 لیست هاست‌ها» با «🚫 استثنا» از چرخه خارج کن؛ هرچه هاست کمتر، ران زودتر تمام می‌شود.");
   lines.push("");
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
-  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host" : "Globalping (پیش‌فرض)") + (cfg.failover ? " (⏳ موقتاً با " + (cfg.provider === "checkhost" ? "گلوبال‌پینگ" : "چک‌هاست") + ")" : ""));
+  lines.push("🔌 سرویس بررسی: " + (cfg.provider === "checkhost" ? "check-host (پیش‌فرض)" : "Globalping") + (cfg.failover ? " (⏳ موقتاً با " + (cfg.provider === "checkhost" ? "گلوبال‌پینگ" : "چک‌هاست") + ")" : ""));
   lines.push("⏱ فاصلهٔ اجرا: هر " + cfg.intervalMin + " دقیقه");
   if (cfg.provider === "checkhost") {
     lines.push("🌆 شهرها: " + cfg.citiesSel.join("، "));
