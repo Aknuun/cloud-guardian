@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.31";
+const BOT_VERSION = "1.8.32";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.32": [
+    "🔗 لینک خودکار ادمین از telegram_id داخل خود پنل (بدون لو دادن آیدی) + نمایش خودکار/دستی",
+  ],
   "1.8.31": [
     "👋 پیام خوش‌آمد ادمین لینک‌شده در استارت (فقط وقتی لینک داشته باشد و هشدارها فعال باشند)",
   ],
@@ -1440,9 +1443,12 @@ async function processUpdate(payload, env, botToken, adminId) {
         // خوش‌آمد لینک‌شده‌ها: فقط ادمین فرعی که به ادمین پنلی لینک است (نه ادمین اصلی) — فقط وقتی هشدارها فعال‌اند
         // و فقط وقتی ترکیب لینک‌ها عوض شده باشد (نه هر استارت) تا اسپم نشود
         if (cmd === "/start" && chatId !== adminId && a.includes(chatId)) {
+          const panels = await getPanels(kv);
+          for (const pn of panels) {
+            try { await pgAutoLink(kv, env, pn); } catch (e) {}
+          }
           const pgc = await getPgHookCfg(kv);
           if (pgc.enabled) {
-            const panels = await getPanels(kv);
             const links = [];
             for (const pn of panels) {
               const om = (pgc.owner_map || {})[pn.id] || {};
@@ -7735,6 +7741,7 @@ async function savePgHookCfg(kv, cfg) {
   try { await kv.put("pghook_cfg", JSON.stringify(cfg)); } catch (e) {}
 }
 async function panelAdminList(p, token) {
+  // [{u: username, tg: telegram_id|null}] — آیدی عددی از خود پنل می‌آید، لازم نیست کسی لو بده
   try {
     const res = await fetch(`${p.url.replace(/\/+$/, "")}/api/admins`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -7742,7 +7749,32 @@ async function panelAdminList(p, token) {
     });
     const d = await res.json();
     const arr = Array.isArray(d) ? d : Array.isArray(d && d.admins) ? d.admins : [];
-    return arr.map((x) => String((x && x.username) || "")).filter(Boolean);
+    return arr
+      .map((x) => ({ u: String((x && x.username) || ""), tg: Number((x && x.telegram_id) || 0) || null }))
+      .filter((x) => x.u);
+  } catch (e) { return null; }
+}
+// لینک خودکار: خانه‌های خالی جدول با telegram_id داخل خود پنل پر می‌شود (فقط آیدیِ از قبل ثبت‌شده در ربات).
+// لینک دستی هرگز بازنویسی نمی‌شود.
+async function pgAutoLink(kv, env, panel) {
+  try {
+    const cfg = await getPgHookCfg(kv);
+    const admins = await getAdmins(kv, env);
+    let token = null;
+    try { token = await panelLogin(panel); } catch (e) {}
+    if (!token) return cfg;
+    const list = await panelAdminList(panel, token);
+    if (!list) return cfg;
+    if (!cfg.owner_map[panel.id]) cfg.owner_map[panel.id] = {};
+    let dirty = false;
+    for (const a of list) {
+      if (a.tg && Number.isInteger(a.tg) && a.tg > 0 && admins.includes(a.tg) && !cfg.owner_map[panel.id][a.u]) {
+        cfg.owner_map[panel.id][a.u] = a.tg;
+        dirty = true;
+      }
+    }
+    if (dirty) await savePgHookCfg(kv, cfg);
+    return cfg;
   } catch (e) { return null; }
 }
 async function pgStarted(kv, id) {
@@ -7978,6 +8010,9 @@ async function renderPgPanel(edit, kv, env, pid) {
   lines.push("");
   lines.push("👮 لینک ادمین پنل → ادمین ربات (فقط آیدیِ ثبت‌شده که استارت زده پیام می‌گیرد):");
   const om = cfg.owner_map[panel.id] || {};
+  await pgAutoLink(kv, env, panel);
+  const cfg2 = await getPgHookCfg(kv);
+  const om2 = cfg2.owner_map[panel.id] || {};
   let token = null;
   try { token = await panelLogin(panel); } catch (e) {}
   let punames = null;
@@ -7988,10 +8023,11 @@ async function renderPgPanel(edit, kv, env, pid) {
   } else if (!punames.length) {
     lines.push("📭 ادمینی در پنل نیست.");
   } else {
-    for (const u of punames.slice(0, 20)) {
-      const linked = om[u] ? " ✅ " + om[u] : "";
+    for (const a of punames.slice(0, 20)) {
+      const u = a.u;
+      const linked = om2[u] ? " ✅ " + om2[u] + (a.tg && Number(om2[u]) === a.tg ? " (خودکار)" : "") : (a.tg ? " (آیدی در پنل: " + a.tg + " — در ربات ثبت نیست)" : "");
       lines.push("• " + u + linked);
-      kb.push([{ text: "🔗 لینک «" + String(u).substring(0, 18) + "»" + (om[u] ? " (" + om[u] + ")" : ""), callback_data: `pglink:${panel.id}:${u}` }]);
+      kb.push([{ text: "🔗 لینک «" + String(u).substring(0, 18) + "»" + (om2[u] ? " (" + om2[u] + ")" : ""), callback_data: `pglink:${panel.id}:${u}` }]);
     }
   }
   kb.push([{ text: "🧪 پیام تستی", callback_data: `pgtest:${panel.id}` }]);
