@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.63";
+const BOT_VERSION = "1.8.64";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.64": [
+    "🔐 تعمیر خودثبت‌نامی: دکمه انتخاب پنل و جواب یوزر/پسورد برای غیرادمین‌ها از دیوار رد می‌شود",
+  ],
   "1.8.63": [
     "🏠 خونه ساده‌تر: جست‌وجو/افزودن/پنل بی‌رنگ؛ ایمیل شد «ایمیل دامنه» بین یادآور و لودبالانسر؛ خاکستری‌ها + تنظیمات سبز",
   ],
@@ -1464,7 +1467,15 @@ async function processUpdate(payload, env, botToken, adminId) {
     const admins = await getAdmins(kv, env);
     // دیوار: غیرادمین‌ها فقط /start (برای خوش‌آمد لینک‌شده‌ها)؛ بقیه متن‌ها مثل قبل ساکت رد می‌شوند
     const msgText0 = String((payload.message.text || "").split(" ")[0] || "").split("@")[0];
-    if (!admins.includes(chatId) && msgText0 !== "/start") return;
+    if (!admins.includes(chatId) && msgText0 !== "/start") {
+      // خودثبت‌نامی: فقط جواب یوزر/پسوردِ کسی که وسط ثبت‌نام است (بقیه مثل قبل ساکت رد می‌شوند)
+      let pgSelfPend = false;
+      try {
+        const p0 = kv ? await kv.get(`pend:${chatId}`, "json") : null;
+        if (p0 && (p0.type === "pg_self_user" || p0.type === "pg_self_pass")) pgSelfPend = true;
+      } catch (e) {}
+      if (!pgSelfPend) return;
+    }
     if (chatId === adminId) await cacheAdminUname(kv, adminId, payload.message.from);
 
     const send = async (msg, kb) => {
@@ -12109,7 +12120,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const hzAccounts = await getHzAccounts(kv);
   const arvanAccounts = await getArvanAccounts(kv);
   const admins = await getAdmins(kv, env);
-  if (!admins.includes(chatId)) return;
+  // خودثبت‌نامی پاسارگارد: غیرادمین فقط دکمه انتخاب پنل/انصراف (بقیه کال‌بک‌ها مثل قبل ساکت رد می‌شوند)
+  const pgSelfOpen = data === "pgselfcancel" || data.startsWith("pgself:");
+  if (!admins.includes(chatId) && !pgSelfOpen) return;
 
   const isMain = chatId === adminId;
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
