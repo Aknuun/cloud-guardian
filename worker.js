@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.57";
+const BOT_VERSION = "1.8.58";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.58": [
+    "🌐 گروه جدید «مانیتور دامنه و سهمیه»: SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر زیر یک دکمه",
+  ],
   "1.8.57": [
     "🏠 حذف کامل صفحه فیچرها: همه برگشت‌ها به خانه، حذف /mons از دکمه menu تلگرام",
   ],
@@ -1759,12 +1762,8 @@ function monsKeyboard() {
       { text: "🔔 هشدار انقضا و حجم", callback_data: "pghook", style: "success" },
       { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um", style: "success" },
     ],
-    [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
-    [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
-    [
-      { text: "📊 ترافیک ساب‌ها", callback_data: "traf" },
-      { text: "⚖️ لود بالانسر IP", callback_data: "lb" },
-    ],
+    [{ text: "🌐 مانیتور دامنه و سهمیه", callback_data: "dommon" }],
+    [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "⚖️ لود بالانسر IP", callback_data: "lb" }],
     [
       { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
       { text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" },
@@ -12044,7 +12043,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
     } catch (e) {}
   };
-  const NAV_REC_EQ = new Set(["menu", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook"]);
+  const NAV_REC_EQ = new Set(["menu", "dommon", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook"]);
   const NAV_REC_PRE = ["hg:", "zf:", "hzacc:", "hzs:", "hzsi:", "hzm:", "hzss:", "hzp:", "hzn:", "lns:", "lnsi:", "lnm:", "arvreg:", "fmailbox:", "sr:", "qn:", "qnb:", "e:", "rback:", "p:", "zsearch:", "zset:", "addz:", "arz:", "bulkz:", "selmode:", "selback:", "seldone:", "lbsr:", "lbsm:", "lbss:", "srvopen:", "srvstats:", "srvnodemenu:", "srvnodecheck:", "pndef:"];
   const navRecOk = (d) => NAV_REC_EQ.has(d) || NAV_REC_PRE.some((p) => d.startsWith(p));
   const edit = async (text, kb) => {
@@ -14035,6 +14034,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       for (const mo of removed) await kv.delete(`ndst:${mo.id}`);
       await edit(`✅ پنل «${escHtml(p.name)}» حذف شد.`);
       await renderNodeHome(edit, kv);
+    } else if (data === "dommon") {
+      // گروه «مانیتور دامنه و سهمیه»: گواهی SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر
+      await edit("🌐 مانیتور دامنه و سهمیه\n\nیک بخش را انتخاب کنید:", [
+        [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
+        [{ text: "📊 ترافیک ساب‌ها", callback_data: "traf" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
+      ]);
     } else if (data === "mons") {
       // صفحهٔ فیچرها حذف شد (همهٔ فیچرها داخل خانه‌اند) — دکمه‌های قدیمی کش‌شده به خانه می‌روند
       await kv.delete(`qa:${chatId}`);
