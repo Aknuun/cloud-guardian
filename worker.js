@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.60";
+const BOT_VERSION = "1.8.61";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.61": [
+    "🌐 تغییر نام گروه به «مانیتور دامنه و ترافیک‌ها» + برگشت هر ۴ صفحه به گروه (نه خانه)",
+  ],
   "1.8.60": [
     "🖥 مانیتور خودکار سرورها برگشت (فقط دکمه خانه حذف است؛ از داخل «سرورها و مانیتورینگ» باز می‌شود)",
     "🏠 خانه موضوعی شد: رکوردها و دیتاسنتر ۳ستونه، بقیه ۲ستونه/تمام‌عرض، رنگ ساده",
@@ -1775,7 +1778,7 @@ function monsKeyboard() {
       { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" },
     ],
     // دامنه و سهمیه (تمام‌عرض)
-    [{ text: "🌐 مانیتور دامنه و سهمیه", callback_data: "dommon" }],
+    [{ text: "🌐 مانیتور دامنه و ترافیک‌ها", callback_data: "dommon" }],
     // ابزارها (۲ستونه)
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "⚖️ لود بالانسر IP", callback_data: "lb" }],
     // ایمیل (تمام‌عرض)
@@ -3440,7 +3443,7 @@ async function renderQuotaMenu(edit, kv, env) {
     { text: "🔓 روشن‌کردن ربات", callback_data: "qresume" },
     { text: "🔄 بررسی مجدد", callback_data: "quota" },
   ]);
-  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "dommon" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 
@@ -5727,7 +5730,7 @@ async function renderDomExpiryHome(kv, edit, page) {
   // domexp: استعلام دوبارهٔ همهٔ دامنه‌ها | domexpkey: تنظیمات کلید API انقضا
   kb.push([{ text: "🔄 استعلام دوبارهٔ همه", callback_data: "domexp" }]);
   kb.push([{ text: cfg.key ? "🔑 کلید API (ثبت‌شده ✅)" : "🔑 ثبت کلید API", callback_data: "domexpkey" }]);
-  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "dommon" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -9408,7 +9411,7 @@ const TRAF_PAGE = 18;
 async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
   if (!all.length) {
-    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    return edit("📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.", [[[{ text: "🔙 بازگشت", callback_data: "dommon" }, { text: "🏠 خانه", callback_data: "menu" }]]]);
   }
   const flt = filter === undefined ? "all" : String(filter);
   const zones = flt === "all" ? all : all.filter((z) => z._acc === Number(flt));
@@ -9441,11 +9444,11 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   if (pages > 1) {
     const nav = [];
     nav.push(page > 0 ? { text: "⬅️", callback_data: `trazf:${flt}:${page - 1}` } : EMPTY_BTN);
-    nav.push({ text: "🏠 خانه", callback_data: "menu" });
+    nav.push({ text: "🔙 بازگشت", callback_data: "dommon" });
     nav.push(page < pages - 1 ? { text: "➡️", callback_data: `trazf:${flt}:${page + 1}` } : EMPTY_BTN);
     kb.push(nav);
   } else {
-    kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: "dommon" }, { text: "🏠 خانه", callback_data: "menu" }]);
   }
   const label = flt === "all" ? "همه" : (accounts[Number(flt)] ? accounts[Number(flt)].name : "؟");
   let title = `📊 ترافیک ساب‌ها — ${label}`;
@@ -9456,9 +9459,9 @@ async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
 
 async function renderTrafficZoneAll(edit, kv, accounts, acc, zoneId, page, env) {
   const zone = await getZoneById(zoneId, acc, accounts);
-  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `traf` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const tok = accounts[acc] && accounts[acc].token;
-  if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `trac:${acc}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  if (!tok) return edit("❌ اکانت پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: `traf` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const t = await fetchTrafficCounts(tok, zoneId);
   if (t.needPerm || t.error) {
     const lines = [
@@ -14049,8 +14052,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`✅ پنل «${escHtml(p.name)}» حذف شد.`);
       await renderNodeHome(edit, kv);
     } else if (data === "dommon") {
-      // گروه «مانیتور دامنه و سهمیه»: گواهی SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر
-      await edit("🌐 مانیتور دامنه و سهمیه\n\nیک بخش را انتخاب کنید:", [
+      // گروه «مانیتور دامنه و ترافیک‌ها»: گواهی SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر
+      await edit("🌐 مانیتور دامنه و ترافیک‌ها\n\nیک بخش را انتخاب کنید:", [
         [{ text: "🔐 مانیتور SSL", callback_data: "sslm" }, { text: "🗓 مانیتور انقضای دامنه", callback_data: "domexp" }],
         [{ text: "📊 ترافیک ساب‌ها", callback_data: "traf" }, { text: "☁️ سهمیهٔ کلادفلر", callback_data: "quota" }],
         [{ text: "🏠 خانه", callback_data: "menu" }],
@@ -15454,7 +15457,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         // sslm: بررسی مجدد وضعیت گواهی همهٔ دامنه‌ها | sslmd: انتخاب دامنه برای حذف از نظارت
         kb.push([{ text: "🔄 بررسی دوباره", callback_data: "sslm" }, { text: "🗑 حذف دامنه", callback_data: "sslmd" }]);
       }
-      kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
+      kb.push([{ text: "🔙 بازگشت", callback_data: "dommon" }, { text: "🏠 خانه", callback_data: "menu" }]);
       await edit(text, kb);
     } else if (data === "sslma") {
       // درخواست نام دامنه از کاربر و ذخیره در pending
