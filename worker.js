@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.82";
+const BOT_VERSION = "1.8.81";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,9 +34,6 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
-  "1.8.82": [
-    "📊 دیدن آمار نصب‌ها در ربات دوم با /hubkey و /hubstats (هاب: endpoint محافظت‌شده)",
-  ],
   "1.8.81": [
     "🔧 بعد از تبدیل A↔CNAME صفحه رکورد تازه (نه خطای 81044) باز می‌شود",
   ],
@@ -1285,25 +1282,6 @@ export default {
       });
     }
 
-    // آمار نصب‌ها برای ربات دوم مالک (با کلید اشتراک؛ فقط خواندن)
-    if (request.method === "GET" && url.pathname === "/hub-stats") {
-      let key = "";
-      try { key = (kv && (await kv.get("hub_stats_key", "text"))) || ""; } catch (e) {}
-      const given = url.searchParams.get("key") || "";
-      if (!kv || !key || given !== key) {
-        return new Response("⛔", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
-      }
-      const items = await getHubItems(kv);
-      const out = items.slice(0, 200).map((it) => ({
-        iid: it.iid,
-        admin: String((it.v && it.v.admin) || "").slice(0, 40),
-        v: String((it.v && it.v.v) || "?").slice(0, 12),
-        ts: Number((it.v && it.v.ts) || 0),
-        bot: String((it.v && it.v.bot) || "").slice(0, 64),
-      }));
-      return new Response(JSON.stringify(out), { headers: { "content-type": "application/json; charset=utf-8" } });
-    }
-
     // لینک‌های بدون وب‌هوک: روشن‌کردن فوری ربات و خاموش‌کردن موقت کرون‌جاب‌ها
     if (request.method === "GET" && (url.pathname === "/qresume" || url.pathname === "/qcron")) {
       const token = await getQuotaToken(kv);
@@ -1701,65 +1679,6 @@ async function processUpdate(payload, env, botToken, adminId) {
       await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/myid") {
       await send(`🆔 شناسه تلگرام شما: ${chatId}`);
-    } else if (cmd === "/hubkey" || cmd.startsWith("/hubkey ")) {
-      // هاب: ساخت/نمایش کلید اشتراک آمار | ربات دوم: ثبت کلید (فقط ادمین‌ها)
-      if (await isHubWorker(env, botToken, kv)) {
-        const arg = String(text).replace(/^\/hubkey\s*/i, "").trim();
-        let key = "";
-        try { key = (await kv.get("hub_stats_key", "text")) || ""; } catch (e) {}
-        if (arg.toLowerCase() === "new" || !key) {
-          key = (makeToken() || "k") + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-          key = String(key).replace(/[^A-Za-z0-9]/g, "").slice(0, 48);
-          try { await kv.put("hub_stats_key", key); } catch (e) {}
-          await send(`🔑 کلید اشتراک جدید ساخته شد:\n${code(key)}\n\nاین کلید را در ربات دوم با این دستور ثبت کن:\n/hubkey KEY\n\nبعد با /hubstats آمار را همان‌جا ببین.`);
-        } else {
-          await send(`🔑 کلید اشتراک فعلی:\n${code(key)}\n\nثبت در ربات دوم: /hubkey KEY · ساخت جدید: /hubkey new`);
-        }
-      } else {
-        if (!admins.includes(chatId)) return;
-        const arg = String(text).replace(/^\/hubkey\s*/i, "").trim();
-        if (!arg) {
-          let has = "";
-          try { has = (await kv.get("hub_stats_key_client", "text")) || ""; } catch (e) {}
-          await send(has ? "✅ کلید اشتراک ثبت شده. دیدن آمار: /hubstats" : "📊 آمار نصب‌ها فقط در ربات اصلی است.\n\nبرای دیدن در این ربات: در ربات اصلی /hubkey را بزن و کلید را اینجا ثبت کن:\n/hubkey KEY");
-        } else if (arg.length >= 8) {
-          try { await kv.put("hub_stats_key_client", arg.slice(0, 100)); } catch (e) {}
-          await send("✅ کلید ثبت شد. دیدن آمار: /hubstats");
-        } else {
-          await send("❌ کلید کوتاه است.");
-        }
-      }
-    } else if (cmd === "/hubstats") {
-      if (!admins.includes(chatId)) return;
-      if (await isHubWorker(env, botToken, kv)) {
-        await renderHubStats(async (t, kb) => await send(t, kb), kv, 0);
-      } else {
-        let ck = "";
-        try { ck = (await kv.get("hub_stats_key_client", "text")) || ""; } catch (e) {}
-        if (!ck) {
-          await send("📊 آمار نصب‌ها فقط در ربات اصلی است.\n\nبرای دیدن در این ربات: در ربات اصلی /hubkey را بزن و کلید را اینجا ثبت کن:\n/hubkey KEY");
-        } else {
-          let arr = null;
-          try {
-            const ru = await fetch(String(HUB_BASE).replace(/\/+$/, "") + "/hub-stats?key=" + encodeURIComponent(ck), { signal: withTimeout(20000) });
-            if (ru.status === 403) arr = "badkey";
-            else if (ru.ok) arr = await ru.json();
-          } catch (e) {}
-          if (arr === "badkey") {
-            await send("❌ کلید اشتراک نامعتبر است. در ربات اصلی /hubkey را بزن و دوباره ثبت کن.");
-          } else if (!Array.isArray(arr)) {
-            await send("❌ هاب جواب نداد (شاید هنوز به نسخه جدید آپدیت نشده). کمی بعد دوباره /hubstats بزن.");
-          } else {
-            const byVer = {};
-            for (const it of arr) byVer[it.v || "؟"] = (byVer[it.v || "؟"] || 0) + 1;
-            const L = ["📊 آمار نصب‌ها (از هاب 🔗)", "", `🟢 نصب فعال: ${arr.length}`, ""];
-            for (const [v, n] of Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10)) L.push(`• v${v}: ${n}`);
-            L.push("", "👤 اعضا:");
-            for (const it of arr.slice(0, 30)) L.push(`• ${it.admin || "؟"} — v${it.v || "؟"} — ${faAgo(it.ts)}`);
-            await send(L.join("\n").slice(0, 3500));
-          }
-        }
-      }
     } else if (cmd === "/promoset" || cmd === "/promoreset") {
       const admins = await getAdmins(kv, env);
       if (!admins.includes(chatId)) return send("⛔ فقط مدیر.");
@@ -1948,7 +1867,6 @@ function monsKeyboard() {
 const BOT_COMMANDS = [
   { command: "menu", description: "🏠 خانه" },
   { command: "myid", description: "🆔 شناسهٔ من" },
-  { command: "hubstats", description: "📊 آمار نصب‌ها" },
   { command: "zones", description: "☁️ کلودفلر — دامنه‌ها" },
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
@@ -2295,7 +2213,6 @@ async function renderHubStats(edit, kv, page) {
   const lines = ["📊 آمار نصب‌ها", "", `🟢 نصب فعال (۴۵ روز اخیر): ${items.length}`, ""];
   const vers = Object.entries(byVer).sort((a, b) => b[1] - a[1]).slice(0, 10);
   for (const [v, n] of vers) lines.push(`• v${v}: ${n}`);
-  lines.push("", "🔑 اشتراک با ربات دوم: /hubkey");
   lines.push("", "👤 اعضا (برای جزئیات روی هر کدام بزن):");
   const slice = items.slice(pg * HUBSTATS_PAGE, pg * HUBSTATS_PAGE + HUBSTATS_PAGE);
   if (!slice.length) lines.push("📭 هنوز پینگی ثبت نشده (نصب‌ها هر ساعت خبر می‌دهند).");
