@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.80";
+const BOT_VERSION = "1.8.81";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.81": [
+    "🔧 بعد از تبدیل A↔CNAME صفحه رکورد تازه (نه خطای 81044) باز می‌شود",
+  ],
   "1.8.80": [
     "🚀 دکمه «آپدیت همه» در آمار نصب‌ها + نوع رکورد با حرف بزرگ در لیست (sub-A)",
   ],
@@ -11239,6 +11242,28 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
           const newData = await newRes.json();
           if (newData.success) {
             await invalidateCache(kv, pending.zone_id);
+            const newId = newData.result && newData.result.id;
+            if (newId) {
+              // آیدی تازه را همه‌جا بنشان تا redraw بعدی با آیدی حذف‌شده نرود
+              const oldId = pending.record_id;
+              pending.record_id = newId;
+              pending.rec_type = "CNAME";
+              if (pending.srToken) {
+                try {
+                  const sr = await kv.get(`sr:${pending.srToken}`, "json");
+                  if (sr && Array.isArray(sr.results)) {
+                    for (const it of sr.results) {
+                      if (it.record && it.record.id === oldId) {
+                        it.record = { ...it.record, id: newId, type: "CNAME", content: newData.result.content, ttl: newData.result.ttl, proxied: newData.result.proxied };
+                      }
+                    }
+                    await kv.put(`sr:${pending.srToken}`, JSON.stringify(sr), { expirationTtl: 3600 });
+                  }
+                } catch (e) {}
+              } else if (pending.msgId && pending.token) {
+                try { await kv.put(`dd:${chatId}:${pending.msgId}`, JSON.stringify({ token: pending.token, recordId: newId, backCb: pending.backCb || "zones" }), { expirationTtl: 86400 }); } catch (e) {}
+              }
+            }
             if (pending.msgId) {
               await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, []);
               await sleep(2000);
@@ -11272,6 +11297,28 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
           const newData = await newRes.json();
           if (newData.success) {
             await invalidateCache(kv, pending.zone_id);
+            const newId = newData.result && newData.result.id;
+            if (newId) {
+              // آیدی تازه را همه‌جا بنشان تا redraw بعدی با آیدی حذف‌شده نرود
+              const oldId = pending.record_id;
+              pending.record_id = newId;
+              pending.rec_type = "A";
+              if (pending.srToken) {
+                try {
+                  const sr = await kv.get(`sr:${pending.srToken}`, "json");
+                  if (sr && Array.isArray(sr.results)) {
+                    for (const it of sr.results) {
+                      if (it.record && it.record.id === oldId) {
+                        it.record = { ...it.record, id: newId, type: "A", content: newData.result.content, ttl: newData.result.ttl, proxied: newData.result.proxied };
+                      }
+                    }
+                    await kv.put(`sr:${pending.srToken}`, JSON.stringify(sr), { expirationTtl: 3600 });
+                  }
+                } catch (e) {}
+              } else if (pending.msgId && pending.token) {
+                try { await kv.put(`dd:${chatId}:${pending.msgId}`, JSON.stringify({ token: pending.token, recordId: newId, backCb: pending.backCb || "zones" }), { expirationTtl: 86400 }); } catch (e) {}
+              }
+            }
             if (pending.msgId) {
               await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, []);
               await sleep(2000);
