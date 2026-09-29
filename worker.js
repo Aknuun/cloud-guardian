@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.33";
+const BOT_VERSION = "1.8.34";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.34": [
+    "🔔 تطبیق گیرنده فقط با آیدی عددی (یوزرنیم لازم نیست) — هم در استارت هم در ایونت",
+  ],
   "1.8.33": [
     "🔔 پیام‌گیر بودن از ادمین بودن جدا شد: هر آیدی لینک‌شده (حتی غیرادمین) هشدار می‌گیرد؛ لینک خودکار از پنل",
   ],
@@ -1449,10 +1452,36 @@ async function processUpdate(payload, env, botToken, adminId) {
         const pgc = await getPgHookCfg(kv);
         const linkedNames = [];
         if (pgc.enabled) {
+          // اول تطبیق مستقیم با آیدی عددی (یوزرنیم لازم نیست)، بعد جدول لینک
+          const liveTg = [];
           for (const pn of panels) {
-            const om = (pgc.owner_map || {})[pn.id] || {};
-            for (const un of Object.keys(om)) {
-              if (Number(om[un]) === chatId) linkedNames.push(`«${un}» (${pn.name || pn.id})`);
+            let tk = null;
+            try { tk = await panelLogin(pn); } catch (e) {}
+            const la = tk ? await panelAdminList(pn, tk) : null;
+            if (la) {
+              for (const a of la) {
+                if (a.tg && Number(a.tg) === chatId) {
+                  liveTg.push(`«${a.u || "?"}» (${pn.name || pn.id})`);
+                  try {
+                    if (!pgc.owner_map[pn.id]) pgc.owner_map[pn.id] = {};
+                    if (!pgc.owner_map[pn.id][a.u]) {
+                      pgc.owner_map[pn.id][a.u] = chatId;
+                      await savePgHookCfg(kv, pgc);
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          }
+          if (liveTg.length) {
+            for (const x of liveTg) if (!linkedNames.includes(x)) linkedNames.push(x);
+          } else {
+            const om0 = pgc.owner_map || {};
+            for (const pn of panels) {
+              const om = om0[pn.id] || {};
+              for (const un of Object.keys(om)) {
+                if (Number(om[un]) === chatId) linkedNames.push(`«${un}» (${pn.name || pn.id})`);
+              }
             }
           }
         }
@@ -7782,10 +7811,11 @@ async function pgAutoLink(kv, env, panel) {
 async function pgStarted(kv, id) {
   try { return !!(await kv.get(`pgstart:${id}`, "text")); } catch (e) { return false; }
 }
-async function pgRecipients(kv, env, adminId, panelId, owner) {
-  // گیرنده بودن ≠ ادمین بودن: هر آیدی لینک‌شده که استارت زده باشد پیام می‌گیرد (دسترسی به منوها همچنان فقط ادمین‌ها)
+async function pgRecipients(kv, env, adminId, panelId, owner, ownerTg) {
+  // گیرنده بودن ≠ ادمین بودن. تطبیق اول با آیدی عددی خود ایونت (یوزرنیم لازم نیست) بعد جدول لینک.
   const out = new Set();
   if (await pgStarted(kv, adminId)) out.add(adminId);
+  if (ownerTg && Number.isInteger(ownerTg) && ownerTg > 0 && (await pgStarted(kv, ownerTg))) out.add(ownerTg);
   if (owner) {
     const cfg = await getPgHookCfg(kv);
     const chat = Number(((cfg.owner_map || {})[panelId] || {})[owner]);
@@ -7950,7 +7980,7 @@ async function handlePgHook(token, payload, env, botToken) {
       if (!jobs.length) continue;
       anyJob = true;
       // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
-      const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner));
+      const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner, ev.ownerTg));
       if (ev.ownerTg && Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 && admins.includes(ev.ownerTg) && (await pgStarted(kv, ev.ownerTg))) {
         to.add(ev.ownerTg);
       }
