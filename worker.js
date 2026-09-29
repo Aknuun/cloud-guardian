@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.58";
+const BOT_VERSION = "1.8.59";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.59": [
+    "🛟 دکمه استاندارد زاپاس در تنظیمات لود بالانسر (مثل صفحه رکورد)",
+    "🖥 حذف مانیتور خودکار سرورها؛ دکمه سرورها شد «سرورها و مانیتورینگ» + خانه مرتب‌تر",
+  ],
   "1.8.58": [
     "🌐 گروه جدید «مانیتور دامنه و سهمیه»: SSL + انقضای دامنه + ترافیک ساب‌ها + سهمیه کلادفلر زیر یک دکمه",
   ],
@@ -1306,10 +1310,6 @@ export default {
             patch.um = now;
             jobs.push(runUsageMonitor(env, { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
           }
-          if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
-            patch.srv = now;
-            jobs.push(runSrvMonitor(env, botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
-          }
           if (!cs.node || now - cs.node >= NODEADD_MIN_MS) {
             patch.node = now;
             // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
@@ -1733,16 +1733,16 @@ const SEARCH_PROMPT_TEXT =
 // هر دکمه: text = متن روی دکمه، callback_data = شناسهٔ عملیاتی که در هندلر callback_query خوانده می‌شود.
 function mainMenuKeyboard() {
   return [
-    // addrec: شروع ویزارد افزودن رکورد | zones: لیست دامنه‌های کلودفلر (به‌تفکیک اکانت)
-    [{ text: "➕ افزودن رکورد", callback_data: "addrec" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
+    // اکشن اصلی (سبز) + کلودفلر
+    [{ text: "➕ افزودن رکورد", callback_data: "addrec", style: "success" }, { text: "☁️ کلودفلر", callback_data: "zones" }],
     // hz/ln/arv: ارائه‌دهنده‌های دیتاسنتر (هتزنر | لینود | آروان) کنار هم در یک ردیف — سبز
     [
       { text: "🇩🇪 هتزنر", callback_data: "hz", style: "success" },
       { text: "🟢 لینود", callback_data: "ln", style: "success" },
       { text: "🇮🇷 آروان", callback_data: "arvan", style: "success" },
     ],
-    // srv: بخش سرورها (SSH/نود/مانیتور) | search: جست‌وجوی سراسری (قرمز) — در یک ردیف
-    [{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🔍 جست و جو", callback_data: "search", style: "primary" }],
+    // سرورها و مانیتورینگ | جست‌وجو (آبی)
+    [{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }, { text: "🔍 جست و جو", callback_data: "search", style: "primary" }],
     // همهٔ فیچرها این‌جا (بالای تنظیمات) — ردیف‌های مشترک monsKeyboard بدون ردیف خانه؛ صفحهٔ جدا حذف شد
     ...monsKeyboard().slice(0, -1),
     // settings: تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها) — خاکستری
@@ -1764,10 +1764,7 @@ function monsKeyboard() {
     ],
     [{ text: "🌐 مانیتور دامنه و سهمیه", callback_data: "dommon" }],
     [{ text: "⏰ یادآورها", callback_data: "rem" }, { text: "⚖️ لود بالانسر IP", callback_data: "lb" }],
-    [
-      { text: "🖥 مانیتور سرورها", callback_data: "srvmon" },
-      { text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" },
-    ],
+    [{ text: "✉️ ساخت ایمیل دامنه", callback_data: "fmail" }],
     [{ text: "🏠 خانه", callback_data: "menu" }],
   ];
 }
@@ -1781,7 +1778,7 @@ const BOT_COMMANDS = [
   { command: "newrecord", description: "➕ افزودن رکورد" },
   { command: "search", description: "🔍 جست‌وجو" },
   { command: "providers", description: "🏢 دیتاسنترها" },
-  { command: "srv", description: "🖥 سرورها" },
+  { command: "srv", description: "🖥 سرورها و مانیتورینگ" },
   { command: "help", description: "ℹ️ راهنما" },
   { command: "admins", description: "👥 مدیریت ادمین" },
 ];
@@ -1855,12 +1852,12 @@ const HELP_GUIDE = {
     "🔐 مانیتور SSL\n\n" +
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
   srv:
-    "🖥 سرورها (SSH، نود، مانیتور)\n\n" +
+    "🖥 سرورها و مانیتورینگ (SSH، نود، آمار زنده)\n\n" +
     "مدیریت سرورهای لینوکسی از طریق SSH — همهٔ اتصال‌ها از «رلهٔ واحد» عبور می‌کنند:\n\n" +
     "• ➕ افزودن سرور: آی‌پی/هاست (+پورت) → رمز یا کلید SSH (نام پیش‌فرض = هاست، کاربر root)\n" +
     "• 🔑 رمزهای ذخیره‌شده: چند رمز را ذخیره کن تا هنگام افزودن سرور با یک دکمه انتخاب شوند\n" +
     "• 📥 نصب خودکار نود پاسارگارد: اسکریپت رسمی pg-node.sh با خروجی زنده اجرا می‌شود\n" +
-    "• 📊 مانیتور سرور: CPU/RAM/دیسک/آپتایم/پهنای باند + هشدار خودکار وقتی از آستانه بگذرد\n" +
+    "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپتایم/پهنای باند هر سرور\n" +
     "• 🔄 ریبوت · ⏱ آپدیت و آپگرید · ℹ️ مشخصات سیستم · 💽 فضای دیسک\n\n" +
     "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.\n" +
     "⚠️ اگر رله راه‌اندازی نشده باشد، ربات خودش پیام نصب رله را نشان می‌دهد.",
@@ -1939,7 +1936,7 @@ function helpKeyboard() {
     // 🖥 سرور، رله و دیتاسنتر
     sec("— 🖥 سرور، رله و دیتاسنتر —"),
     [
-      { text: "🖥 سرورها (SSH، نود)", callback_data: "hg:srv" },
+      { text: "🖥 سرورها و مانیتورینگ", callback_data: "hg:srv" },
       { text: "🏢 دیتاسنترها", callback_data: "hg:prov" },
     ],
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
@@ -2201,7 +2198,7 @@ async function getAdmins(kv, env) {
 }
 
 // زمان‌بندی کرون‌های دوره‌ای در یک کلید واحد (کاهش شدید تعداد نوشتن‌های KV)
-// فیلدها: um (مانیتور مصرف) · srv (مانیتور سرور) · node (ثبت نود) · selfup (آپدیت خودکار)
+// فیلدها: um (مانیتور مصرف) · node (ثبت نود) · selfup (آپدیت خودکار)
 async function getCronState(kv) {
   if (!kv) return {};
   try {
@@ -3337,7 +3334,6 @@ async function quotaGuard(env, botToken, adminId) {
       "برای اینکه به ۹۰٪ نرسی:",
       "• ⏸ توقف موقت کرون از همین پیام یا منوی سهمیه",
       "• 🔥 فاصله هشدار مانیتور مصرف (بد مصرف‌ها) را بیشتر کن",
-      "• 🖥 فاصله بررسی مانیتور سرورها را بیشتر کن",
       "• تعویض خودکار هاست، تله‌متری و گزارش‌های دوره‌ای هم write مصرف می‌کنند"
     );
   }
@@ -4686,7 +4682,7 @@ async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
     entries.forEach((e, i) => {
       lines.push(`${i + 1}) ${e.on ? "🟢" : "🔴"} ${code(e.content)} — وزن ${e.weight}${e.on ? "" : " (غیرفعال)"}`);
     });
-    lines.push("", "وزن و فعال/غیرفعال هر آی‌پی را از دکمه‌های زیر تغییر بده. (زاپاس دکمهٔ جدا دارد.)");
+    lines.push("", "وزن و فعال/غیرفعال هر آی‌پی را از دکمه‌های زیر تغییر بده؛ زاپاس را از دکمهٔ 🛟 زیر.");
   }
   const kb = entries.map((e, i) => {
     const row = [
@@ -4702,6 +4698,8 @@ async function renderLbSettings(kv, accounts, edit, chatId, gid, env) {
       { text: "⚪️ Proxy همه خاموش", callback_data: `lbp:${gid}:off` },
     ]);
   }
+  // مدل استاندارد دکمه زاپاس (مثل صفحه رکورد): ورود به خانه زاپاس همین گروه
+  kb.push([{ text: "🛟 آیپی زاپاس", callback_data: `lbsh:${gid}`, style: "success" }]);
   const backCb = ctx.backCb || `rback:${ctx.token}`;
   const backLabel = ctx.backCb ? "🔙 بازگشت" : "🔙 بازگشت";
   kb.push([{ text: backLabel, callback_data: backCb }]);
@@ -5937,8 +5935,6 @@ const SRV_RELAY_HINT =
   "🛠 یا نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
   code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
   "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
-const SRV_DEFAULTS = { cpuPct: 90, memPct: 90, diskPct: 90, enabled: true, cooldownMin: 60 };
-const SRV_MON_MIN_MS = 60 * 60000; // پیش‌فرض ۶۰ دقیقه — کاهش مصرف KV
 const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
 
 // کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
@@ -6380,7 +6376,7 @@ async function srvProvisionNewServer(kv, env, edit, info, backCb, chatId) {
   const back = backCb || `srvopen:${idx}`;
   if (chatId !== undefined) await srvSetBack(kv, chatId, idx, back);
   const lines = [
-    "🎉 سرور ساخته و به «🖥 سرورها» اضافه شد.",
+    "🎉 سرور ساخته و به «🖥 سرورها و مانیتورینگ» اضافه شد.",
     `🌐 ${code(info.host)} (root)`,
     `🔐 رمز فعلی: ${code(info.password)}`,
     "",
@@ -6394,7 +6390,7 @@ async function srvProvisionNewServer(kv, env, edit, info, backCb, chatId) {
     ],
     [
       { text: "❌ بعداً", callback_data: back },
-      { text: "🖥 سرورها", callback_data: "srv" },
+      { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" },
     ],
   ];
   await edit(lines.join("\n"), kb);
@@ -6430,15 +6426,6 @@ async function srvPrepServer(kv, env, edit, idx, s) {
     pwNote = "\nℹ️ رمز ذخیره‌شده‌ای نداری؛ همان رمز فعلی نگه داشته شد.";
   }
   return { ready, pwNote };
-}
-
-async function getSrvMonCfg(kv) {
-  const c = (await kvGetCached(kv, "srv_mon_cfg", "json")) || {};
-  return { ...SRV_DEFAULTS, ...c };
-}
-
-async function saveSrvMonCfg(kv, c) {
-  await kvPutCached(kv, "srv_mon_cfg", JSON.stringify(c));
 }
 
 function srvListBtn(list) {
@@ -6519,7 +6506,7 @@ function buildTermiusCsv(list) {
 async function renderServersHome(edit, kv, env) {
   const list = await getServersList(kv);
   const lines = [
-    "🖥 سرورها",
+    "🖥 سرورها و مانیتورینگ",
     "",
     "مدیریت سرورهای لینوکسی از طریق SSH:\n• نصب خودکار نود پاسارگارد\n• نصب نود با هستهٔ ویرایشی (xray سفارشی)\n• مانیتور CPU / RAM / دیسک / پهنای باند\n\n",
   ];
@@ -6534,10 +6521,7 @@ async function renderServersHome(edit, kv, env) {
   ]);
   kb.push([{ text: "📥 وارد کردن از دیتاسنترها", callback_data: "srvimport" }]);
   if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
-  kb.push([
-    { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
-    { text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" },
-  ]);
+  kb.push([{ text: "🔑 رمزهای ذخیره‌شده", callback_data: "srvpw" }]);
   if (list.length) kb.push([{ text: "📤 خروجی Termius (CSV)", callback_data: "srvtermius" }]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
@@ -6546,7 +6530,7 @@ async function renderServersHome(edit, kv, env) {
 async function renderSrvDetail(edit, kv, env, idx) {
   const list = await getServersList(kv);
   const s = list[idx];
-  if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+  if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
   const lines = [
     `🖧 ${escHtml(s.name)}`,
     `🌐 ${code(s.host + ":" + (s.port || 22))}  (${escHtml(s.user || "root")})`,
@@ -6557,7 +6541,7 @@ async function renderSrvDetail(edit, kv, env, idx) {
   ].filter(Boolean);
   const kb = [
     [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${idx}` }],
-    [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+    [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }],
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
     [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}`, style: "danger" }],
@@ -6592,115 +6576,6 @@ function srvStatsText(s, st) {
     for (const c of st.pg.slice(0, 8)) lines.push("  • " + escHtml(c.replace(/\|/g, " — ")));
   }
   return lines.filter(Boolean).join("\n");
-}
-
-async function renderSrvMonCfg(edit, kv) {
-  const cfg = await getSrvMonCfg(kv);
-  const lines = [
-    "📊 مانیتور سرورها",
-    "",
-    `وضعیت: ${cfg.enabled ? "▶️ فعال" : "⏸ متوقف"}`,
-    "",
-    "هشدار خودکار وقتی:",
-    `• CPU بیش از ${cfg.cpuPct}% برود`,
-    `• RAM بیش از ${cfg.memPct}% برود`,
-    `• دیسک بیش از ${cfg.diskPct}% پر شود`,
-    `⏱ حداقل فاصلهٔ تکرار هشدار: ${cfg.cooldownMin} دقیقه`,
-    "",
-    "برای تغییر هر آستانه، روی آن بزنید.",
-  ];
-  const kb = [
-    [{ text: cfg.enabled ? "⏸ توقف هشدار" : "▶️ فعال‌سازی", callback_data: "srvmontg" }],
-    [{ text: `⚙️ CPU: ${cfg.cpuPct}%`, callback_data: "srvmonh:cpu" }, { text: `🧠 RAM: ${cfg.memPct}%`, callback_data: "srvmonh:mem" }],
-    [{ text: `🗄 دیسک: ${cfg.diskPct}%`, callback_data: "srvmonh:disk" }, { text: `⏱ تکرار: ${cfg.cooldownMin}د`, callback_data: "srvmonh:cool" }],
-    [{ text: "📊 بررسی الان", callback_data: "srvmonrun" }],
-    [{ text: "🏠 خانه", callback_data: "menu" }],
-  ];
-  await edit(lines.join("\n"), kb);
-}
-
-// اجرای مانیتور سرورها (از کرون */10 + دکمهٔ دستی)
-async function runSrvMonitor(env, botToken, manual, opts) {
-  const kv = env.BOT_KV;
-  if (!kv) return;
-  const skipGuard = !!(opts && opts.skipGuard);
-  const cfg = await getSrvMonCfg(kv);
-  if (!cfg.enabled && !manual) return;
-  const list = await getServersList(kv);
-  if (!list.length) return;
-  if (!manual && !skipGuard) {
-    const last = Number((await kv.get("srv_mon_last")) || 0);
-    if (last && Date.now() - last < SRV_MON_MIN_MS) return;
-    await kv.put("srv_mon_last", String(Date.now()));
-  }
-  const admins = await getAdmins(kv, env);
-  const alerts = [];
-  const srvRows = [];
-  srvRows.push([
-    { text: "\u{1F310} IP", callback_data: "noop", style: "plain" },
-    { text: "\u2699\uFE0F CPU", callback_data: "noop", style: "plain" },
-    { text: "\u{1F9E0} RAM", callback_data: "noop", style: "plain" },
-  ]);
-  let relayFixed = false;
-  let relayErr = false;
-  for (let si = 0; si < list.length; si++) {
-    const s = list[si];
-    let st = await srvRelayStats(kv, env, s);
-    if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) {
-      relayFixed = true;
-      st = await srvRelayStats(kv, env, s);
-    }
-    if (/^(no_relay|relay_)/.test(String((st && st.error) || ""))) relayErr = true;
-    const shortIp = String(s.host || s.name || "").slice(0, 16);
-    if (st.error) {
-      alerts.push(`🔴 ${code(s.name)} — خطای اتصال SSH (${code(String(st.error))})`);
-      srvRows.push([
-        { text: `\u{1F534} ${shortIp}`, callback_data: `srvopen:${si}` },
-        { text: "\u2014", callback_data: "noop", style: "plain" },
-        { text: "\u2014", callback_data: "noop", style: "plain" },
-      ]);
-      continue;
-    }
-    const memPct = st.mem.totalMb ? Math.round((st.mem.usedMb / st.mem.totalMb) * 100) : 0;
-    const diskPct = parseInt(String(st.disk.pct), 10) || 0;
-    const cpuPct = st.cpu.pct || 0;
-    const issues = [];
-    if (cpuPct >= cfg.cpuPct) issues.push(`CPU ${cpuPct}%`);
-    if (memPct >= cfg.memPct) issues.push(`RAM ${memPct}%`);
-    if (diskPct >= cfg.diskPct) issues.push(`دیسک ${diskPct}%`);
-    if (issues.length) {
-      srvRows.push([
-        { text: `\u{1F7E1} ${shortIp}`, callback_data: `srvopen:${si}` },
-        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
-        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
-      ]);
-      // گارد cooldown: برای هر سرور فقط یک هشدار در بازهٔ تعیین‌شده
-      const coolKey = `srv_cool:${s.id || s.host}`;
-      const lastAlert = Number((await kv.get(coolKey)) || 0);
-      if (manual || !lastAlert || Date.now() - lastAlert > cfg.cooldownMin * 60000) {
-        await kv.put(coolKey, String(Date.now()), { expirationTtl: Math.max(3600, cfg.cooldownMin * 120) });
-        alerts.push(`⚠️ ${code(s.name)} — ${issues.join(" · ")}`);
-      }
-    } else {
-      srvRows.push([
-        { text: `\u{1F7E2} ${shortIp}`, callback_data: `srvopen:${si}` },
-        { text: `${cpuPct}%`, callback_data: "noop", style: "plain" },
-        { text: `${memPct}%`, callback_data: "noop", style: "plain" },
-      ]);
-    }
-  }
-  if (!alerts.length && !manual) return;
-  let msg = "📊 گزارش مانیتور سرورها\n\n";
-  if (alerts.length) msg += alerts.join("\n") + "\n";
-  if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
-  if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
-  const kb = srvRows;
-  kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
-  if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
-  kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
-  for (const a of admins) {
-    try { await sendMessage(botToken, a, msg, kb); } catch (e) {}
-  }
 }
 
 // نصب خودکار نود پاسارگارد — خروجی زنده با ویرایش پیام
@@ -10492,7 +10367,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 🌐 ${code(item.host + ":" + item.port)} (${item.user})
 🔐 ${authLabel}` +
         (item.auth === "agent" ? "\n\n⚠️ حالت agent فقط وقتی کار می‌کند که روی رله برای کاربر root کلید/agent تنظیم شده باشد." : ""),
-        [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
+        [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
       );
       return;
     }
@@ -10512,7 +10387,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const lines = [`✅ ${r.added} سرور از ${r.total} مورد اضافه شد.`];
     if (r.addedHosts.length) lines.push("", "🖧 افزوده‌شده:", ...r.addedHosts.map((h) => "• " + code(h)));
     if (r.skipped.length) lines.push("", `ℹ️ ${r.skipped.length} مورد تکراری بود و رد شد.`);
-    await send(lines.join("\n"), [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    await send(lines.join("\n"), [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
     return;
   }
 
@@ -10551,7 +10426,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     await send(
       `✅ ${added} سرور وارد شد.${skipped ? ` (${skipped} تکراری رد شد)` : ""}` +
         (pw ? "" : "\n\n⚠️ چون رمز ندادی، برای هر سرور از «✏️ ویرایش» احراز هویت را تنظیم کن."),
-      [[{ text: "🖥 سرورها", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
+      [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
     );
     return;
   }
@@ -10633,7 +10508,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     list.push(pw);
     await saveSrvPasswords(kv, list);
     return send(`✅ رمز ذخیره شد (${list.length} رمز).`, [
-      [{ text: "🔑 رمزهای ذخیرهشده", callback_data: "srvpw" }, { text: "🖥 سرورها", callback_data: "srv" }],
+      [{ text: "🔑 رمزهای ذخیرهشده", callback_data: "srvpw" }, { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }],
     ]);
   }
 
@@ -10670,24 +10545,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     }
     await saveServersList(kv, list);
     await send("✅ ذخیره شد.", [[{ text: "🔙 بازگشت", callback_data: `srvopen:${pending.srv}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
-    return;
-  }
-
-  if (type === "srv_monh") {
-    await kv.delete(`pend:${chatId}`);
-    const n = Number(parseFaNums(txt));
-    const cfg = await getSrvMonCfg(kv);
-    const lims = { cpu: [1, 100], mem: [1, 100], disk: [1, 100], cool: [5, 1440] };
-    const lim = lims[pending.field];
-    if (!lim || !Number.isFinite(n) || n < lim[0] || n > lim[1]) {
-      return send("❌ مقدار نامعتبر است (بازه: " + (lim ? lim[0] + " تا " + lim[1] : "?") + ").", [[{ text: "⚙️ مانیتور سرورها", callback_data: "srvmon" }]]);
-    }
-    if (pending.field === "cpu") cfg.cpuPct = n;
-    else if (pending.field === "mem") cfg.memPct = n;
-    else if (pending.field === "disk") cfg.diskPct = n;
-    else cfg.cooldownMin = n;
-    await saveSrvMonCfg(kv, cfg);
-    await send("✅ ذخیره شد.", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
     return;
   }
 
@@ -14359,7 +14216,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "srvtermius") {
       // خروجی CSV سرورها با قالب ایمپورت Termius
       const list = await getServersList(kv);
-      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!list.length) return edit("📭 سروری ثبت نشده.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       const csv = buildTermiusCsv(list);
       let fileOk = false;
       try {
@@ -14409,16 +14266,16 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(10));
       const pending = await kv.get(`pend:${chatId}`, "json");
       if (!pending || pending.type !== "srv_add" || pending.step !== "auth") {
-        return edit("⏳ این دکمه منقضی شده؛ دوباره «افزودن سرور» را بزن.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+        return edit("⏳ این دکمه منقضی شده؛ دوباره «افزودن سرور» را بزن.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       }
       const pws = await getSrvPasswords(kv);
       const password = pws[i];
-      if (!password) return edit("❌ رمز پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!password) return edit("❌ رمز پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await kv.delete(`pend:${chatId}`);
       const { item, authLabel } = await srvCompleteAdd(kv, pending.d, password);
       await edit(
         `✅ سرور «${escHtml(item.name)}» اضافه شد.\n🌐 ${code(item.host + ":" + item.port)} (${item.user})\n🔐 ${authLabel}`,
-        [[{ text: "🖥 سرورها", callback_data: "srv" }, { text: "🔙 بازگشت", callback_data: "menu" }]]
+        [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }, { text: "🔙 بازگشت", callback_data: "menu" }]]
       );
     } else if (data === "srvdel") {
       const list = await getServersList(kv);
@@ -14451,7 +14308,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list.find((x) => x.id === id);
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       await saveServersList(kv, list.filter((x) => x.id !== id));
-      await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
     } else if (data.startsWith("srvopen:")) {
       await renderSrvDetail(edit, kv, env, Number(data.slice(8)));
     } else if (data.startsWith("srvnodemenu:")) {
@@ -14459,7 +14316,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(12));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await srvGetBack(kv, chatId, i, ""))) await srvSetBack(kv, chatId, i, `srvopen:${i}`);
       await edit(`📥 نصب نود روی «${escHtml(s.name)}»\n\nیک روش را انتخاب کن:`, [
         [{ text: "📥 نصب خودکار پاسارگارد", callback_data: `srvnode:${i}` }],
@@ -14473,7 +14330,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(13));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال بررسی وضعیت نود روی سرور…");
       const chk = await srvRelayExec(kv, env,
@@ -14506,7 +14363,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit(`⚠️ نصب خودکار نود پاسارگارد روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت رسمی PasarGuard اجرا می‌شود (چند دقیقه طول می‌کشد).`, [
         [{ text: "✅ شروع نصب", callback_data: `srvnodego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
@@ -14522,7 +14379,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(12));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit(`🧩 نصب نود با «هستهٔ ویرایشی» روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت pg-node به‌همراه هستهٔ xray-amd64 سفارشی نصب می‌شود (چند دقیقه طول می‌کشد).`, [
         [{ text: "✅ شروع نصب", callback_data: `srvnodecorego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
@@ -14541,7 +14398,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const mode = parts[2] || "none";
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       const srvBack = await srvGetBack(kv, chatId, i, `srvopen:${i}`);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       const prep = await srvPrepServer(kv, env, edit, i, s);
@@ -14559,14 +14416,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         return srvInstallNodeCoreLive(kv, chatId, botToken, env, { ...s2, _idx: i });
       }
       await edit(`✅ سرور آماده است.${prep.pwNote}`, [
-        [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${i}` }, { text: "🖥 سرورها", callback_data: "srv" }],
+        [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${i}` }, { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }],
       ]);
     } else if (data.startsWith("srvpaneladd:")) {
       // افزودن نودِ از قبل نصب‌شده روی سرور به پنل (بدون نصب دوباره)
       const i = Number(data.slice(12));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال خواندن اطلاعات نود از سرور…");
       const rr = await srvFinishNodeInstall(kv, env, { ...s, _idx: i }, `🖧 افزودن نود سرور «${escHtml(s.name)}» به پنل`);
@@ -14575,7 +14432,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(9));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
       await edit("⏳ در حال جمع‌آوری آمار…");
       let st = await srvRelayStats(kv, env, s);
@@ -14583,7 +14440,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!st || st.error) {
         const txt = srvStatsText(s, st);
         await edit(txt, [
-          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }],
           [{ text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault" }, { text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
@@ -14608,7 +14465,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             { text: `🗄 ${st.disk.used}/${st.disk.total}`, callback_data: "noop", style: "plain" },
             { text: `⏱ ${upD}r ${upH}h`, callback_data: "noop", style: "plain" },
           ],
-          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
+          [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
@@ -14616,7 +14473,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(10));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit(`⚠️ سرور «${escHtml(s.name)}» ریبوت شود؟`, [
         [{ text: "✅ بله", callback_data: `srvrebootgo:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
       ]);
@@ -14627,12 +14484,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!s) return edit("❌ سرور پیدا نشد.");
       await edit("⏳ در حال ریبوت…");
       const r = await srvRelayExec(kv, env, s, "sudo reboot || reboot", 15000);
-      await edit(r.error ? `❌ خطا: ${r.error}` : `✅ دستور ریبوت ارسال شد.`, [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      await edit(r.error ? `❌ خطا: ${r.error}` : `✅ دستور ریبوت ارسال شد.`, [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
     } else if (data.startsWith("srvupd:")) {
       const i = Number(data.slice(7));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit(`⚠️ آپدیت و آپگرید روی «${escHtml(s.name)}» اجرا شود؟`, [
         [{ text: "✅ بله", callback_data: `srvupdgo:${i}` }, { text: "❌ انصراف", callback_data: `srvopen:${i}` }],
       ]);
@@ -14654,7 +14511,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit("⏳ در حال خواندن مشخصات…");
       const r = await srvRelayExec(kv, env, s, "uname -a; echo ---; lsb_release -a 2>/dev/null || cat /etc/os-release | head -3; echo ---; systemd-detect-virt 2>/dev/null; echo ---; ip -4 addr show | grep inet | grep -v 127.0.0.1", 30000);
       const out = String(r.out || "—").trim();
@@ -14663,7 +14520,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit("⏳ در حال خواندن دیسک…");
       const r = await srvRelayExec(kv, env, s, "df -h; echo ---; lsblk", 30000);
       const out = String(r.out || "—").trim();
@@ -14672,7 +14529,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(data.slice(8));
       const list = await getServersList(kv);
       const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       const kb = [
         [{ text: "✏️ نام", callback_data: `srvedith:${i}:name` }, { text: `🌐 هاست/پورت`, callback_data: `srvedith:${i}:host` }],
         [{ text: "👤 کاربر", callback_data: `srvedith:${i}:user` }, { text: "🔐 رمز/کلید", callback_data: `srvedith:${i}:auth` }],
@@ -14693,21 +14550,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       };
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_edit", srv: i, field }), { expirationTtl: 900 });
       await edit(prompts[field] || "مقدار جدید را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `srvopen:${i}` }]]);
-    } else if (data === "srvmon") {
-      await renderSrvMonCfg(edit, kv);
-    } else if (data === "srvmontg") {
-      const cfg = await getSrvMonCfg(kv);
-      cfg.enabled = !cfg.enabled;
-      await saveSrvMonCfg(kv, cfg);
-      await renderSrvMonCfg(edit, kv);
-    } else if (data.startsWith("srvmonh:")) {
-      const field = data.slice(8);
-      const labels = { cpu: "CPU (درصد)", mem: "RAM (درصد)", disk: "دیسک (درصد)", cool: "فاصلهٔ تکرار هشدار (دقیقه)" };
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_monh", field }), { expirationTtl: 900 });
-      await edit(`⚙️ ${labels[field] || "مقدار"} جدید را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "srvmon" }]]);
-    } else if (data === "srvmonrun") {
-      await edit("⏳ در حال بررسی همهٔ سرورها…", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
-      await runSrvMonitor(env, botToken, true);
     } else if (data === "um") {
       // نمایش صفحهٔ تنظیمات مانیتور مصرف با مقادیر فعلی
       const cfg = await getUmCfg(kv);
@@ -14853,7 +14695,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const tok = ci >= 0 ? rest.slice(0, ci) : rest;
       const panelId = ci >= 0 ? rest.slice(ci + 1) : "";
       const rec = await kv.get(`ndadd:${tok}`, "json");
-      if (!rec || !rec.info) return edit("⏳ اطلاعات نود منقضی شد؛ دوباره نود را نصب کن.", [[{ text: "🖥 سرورها", callback_data: "srv" }]]);
+      if (!rec || !rec.info) return edit("⏳ اطلاعات نود منقضی شد؛ دوباره نود را نصب کن.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       const panels = await getPanels(kv);
       const panel = panelId ? panels.find((p) => p.id === panelId) : panels[0];
       if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
