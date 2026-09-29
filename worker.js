@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.76";
+const BOT_VERSION = "1.8.77";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.77": [
+    "📊 سهم هر دکمه سهمیه جدا شد: مدل تسهیمی فقط با خوانش، بدون حتی یک write اضافه",
+  ],
   "1.8.76": [
     "📊 هر ۴ زیرصفحه سهمیه دو نمودار کامل گرفتند (مصرف فعلی + پیش‌بینی پایان روز)",
   ],
@@ -3216,59 +3219,6 @@ function qProj(cur) {
     if (!(el >= 0.5)) return null;
     return Math.round(Number(cur) * 24 / el);
   } catch (e) { return null; }
-}
-// دو نمودار کامل سهمیه (فعلی + پیش‌بینی پایان روز) برای زیرصفحه‌های سهمیه
-async function qQuotaCharts(kv, env, acc) {
-  let count = null, kvOps = null;
-  try {
-    if (acc) {
-      count = await fetchRequestsToday(acc.tok, acc.aid);
-      kvOps = await fetchKvUsageToday(acc.tok, acc.aid);
-    }
-  } catch (e) {}
-  let limN = 0;
-  try { const c = await getQuotaCfg(kv, env); limN = c ? Number(c.limit) || 0 : 0; } catch (e) {}
-  const L = ["📊 مصرف فعلی:"];
-  if (count === null && !kvOps) {
-    L.push("• نامشخص (آنالیتیکس در دسترس نیست)");
-    return L;
-  }
-  if (count !== null) {
-    L.push("• 🚦 درخواست‌ها: " + faNum(count.toLocaleString("en-US")) + (limN ? " / " + faNum(limN.toLocaleString("en-US")) : "") + " — " + quotaBar(quotaPct(count, limN)));
-  }
-  if (kvOps) {
-    const em = { read: "📖", write: "✍️", delete: "🗑", list: "📋" };
-    for (const k of ["read", "write", "delete", "list"]) {
-      const lim = KV_LIMITS_DAILY[k];
-      L.push(`• ${em[k]} ${KV_ACTION_LABEL[k]}: ` + faNum(Number(kvOps[k] || 0).toLocaleString("en-US")) + " / " + faNum(Number(lim).toLocaleString("en-US")) + " — " + quotaBar(quotaPct(kvOps[k], lim)));
-    }
-  }
-  L.push("", "🔮 پیش‌بینی پایان روز:");
-  const early = qProj(1) === null;
-  if (early) {
-    L.push("• هنوز اول روز است — از ساعتی بعد دقیق می‌شود.");
-    return L;
-  }
-  if (count !== null) {
-    const pr = qProj(count);
-    let pl = "• 🚦 درخواست‌ها: " + faNum(pr.toLocaleString("en-US"));
-    if (limN) {
-      const pp = quotaPct(pr, limN);
-      pl += ` (${pp === null ? "؟" : faNum(pp) + "٪ سقف"})`;
-    }
-    pl += " — " + quotaBar(quotaPct(pr, limN));
-    L.push(pl);
-  }
-  if (kvOps) {
-    const em = { read: "📖", write: "✍️", delete: "🗑", list: "📋" };
-    for (const k of ["read", "write", "delete", "list"]) {
-      const lim = KV_LIMITS_DAILY[k];
-      const pr = qProj(kvOps[k]);
-      const pp = quotaPct(pr, lim);
-      L.push(`• ${em[k]} ${KV_ACTION_LABEL[k]}: ` + faNum(pr.toLocaleString("en-US")) + ` (${pp === null ? "؟" : faNum(pp) + "٪ سقف"})` + " — " + quotaBar(pp));
-    }
-  }
-  return L;
 }
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
@@ -14597,52 +14547,55 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await sleep(800);
       await renderFmailHome(edit, kv, accounts, env);
     } else if (data === "qcrons") {
-      // مصرف کرون‌جاب‌ها: نمودارها + تیک‌ها + اجراها
+      // سهم کرون‌جاب‌ها: تیک‌های قطعی + تسهیم KV
       const acc0 = await getQuotaAcct(kv, env);
-      let qb0 = null;
-      try { qb0 = await kv.get(qTodayKey(), "json"); } catch (e) {}
-      const runs0 = (qb0 && qb0.runs) || {};
+      const M0 = await qSectionModel(kv, env, acc0);
       const L = ["☁️ مصرف کرون‌جاب‌ها — امروز", ""];
-      for (const cl of await qQuotaCharts(kv, env, acc0)) L.push(cl);
-      L.push("", "🕐 تیک روزانه (ثابت): هر دقیقه ۱۷۲۸ · هر ۱۰ دقیقه ۱۴۴ · روزانه ۱");
+      L.push(`🕐 تیک‌های امروز: هر دقیقه ${faNum(M0.ticks.min)} · هر ۱۰ دقیقه ${faNum(M0.ticks.ten)} · روزانه ${faNum(M0.ticks.day)}`);
+      L.push(`📨 سهم درخواست‌ها: ${faNum(M0.invCron.toLocaleString("en-US"))} (کل روز: ۱۸۷۳)`);
+      const kvc0 = qKvShare(M0, "cron");
+      const em0 = { read: "📖", write: "✍️", delete: "🗑", list: "📋" };
+      for (const k of ["read", "write", "delete", "list"]) {
+        L.push(qKvLine(em0[k], KV_ACTION_LABEL[k] + " (تخمین)", kvc0[k], KV_LIMITS_DAILY[k]));
+      }
+      L.push(`🔮 پیش‌بینی درخواست تا پایان روز: ${faNum((1873).toLocaleString("en-US"))} (قطعی)`);
       L.push("");
       const order0 = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
       let any0 = false;
       for (const j of order0) {
-        const n = Number(runs0[j]) || 0;
+        const n = Number((M0.runs[j])) || 0;
         if (!n) continue;
         any0 = true;
         L.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} بار`);
       }
       if (!any0) L.push("• هنوز اجرایی ثبت نشده (از فردا پر می‌شود).");
+      L.push("ℹ️ تیک‌ها قطعی‌اند؛ KV تسهیم تخمینی بر اساس فعالیت است.");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qbtns") {
-      // مصرف دکمه‌ها/تعامل تلگرام (تخمین)
+      // سهم تعامل تلگرام: کل منهای تیک‌های قطعی
       const acc1 = await getQuotaAcct(kv, env);
-      let count1 = null;
-      try { if (acc1) count1 = await fetchRequestsToday(acc1.tok, acc1.aid); } catch (e) {}
+      const M1 = await qSectionModel(kv, env, acc1);
       const L = ["🔘 مصرف دکمه‌ها و پیام‌ها — امروز", ""];
-      for (const cl of await qQuotaCharts(kv, env, acc1)) L.push(cl);
-      L.push("");
-      if (count1 === null) {
+      if (M1.invWeb === null) {
         L.push("• نامشخص (آنالیتیکس در دسترس نیست)");
       } else {
-        const est = Math.max(0, count1 - 1873);
-        const pr = qProj(est);
-        L.push(`• 🤖 تعامل تلگرام (تخمین): ${faNum(est.toLocaleString("en-US"))}`);
-        L.push(`• 🔮 پیش‌بینی تعامل تا پایان روز: ${pr === null ? "؟" : faNum(pr.toLocaleString("en-US"))}`);
+        L.push(`• 🤖 تعامل تلگرام (تخمین): ${faNum(M1.invWeb.toLocaleString("en-US"))} درخواست`);
+        const prw = qProj(M1.invWeb);
+        L.push(`• 🔮 پیش‌بینی تا پایان روز: ${prw === null ? "؟" : faNum(prw.toLocaleString("en-US"))}`);
       }
-      L.push("", "ℹ️ هر پیام/دکمه ≈ ۱ درخواست. شمارش دقیق پیام، write دوبرابر می‌خواهد؛ پس تخمین است (کل منهای تیک کرون‌ها).");
+      const kvw1 = qKvShare(M1, "web");
+      const emw = { read: "📖", write: "✍️", delete: "🗑", list: "📋" };
+      for (const k of ["read", "write", "delete", "list"]) {
+        L.push(qKvLine(emw[k], KV_ACTION_LABEL[k] + " (تخمین)", kvw1[k], KV_LIMITS_DAILY[k]));
+      }
+      L.push("", "ℹ️ هر پیام/دکمه ≈ ۱ درخواست (کل منهای تیک قطعی کرون‌ها). شمارش دقیق پیام write دوبرابر می‌خواهد.");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qalerts") {
-      // مصرف هشدارها: شمارش واقعی ارسال‌ها
-      let qa = null;
-      try { qa = await kv.get("qal:" + new Date().toISOString().slice(0, 10), "json"); } catch (e) {}
-      const cats = (qa && qa.cats) || {};
-      const L = ["🔔 مصرف هشدارها — امروز (ارسال واقعی)", ""];
+      // سهم هشدارها: شمارش واقعی ارسال‌ها + تسهیم KV
       const accA = await getQuotaAcct(kv, env);
-      for (const cl of await qQuotaCharts(kv, env, accA)) L.push(cl);
-      L.push("");
+      const MA = await qSectionModel(kv, env, accA);
+      const cats = MA.alerts || {};
+      const L = ["🔔 مصرف هشدارها — امروز (ارسال واقعی)", ""];
       let tot = 0;
       for (const c of Object.keys(Q_ALERT_FA)) {
         const n = Number(cats[c]) || 0;
@@ -14651,7 +14604,15 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         L.push(`• ${Q_ALERT_FA[c]}: ${faNum(n.toLocaleString("en-US"))}`);
       }
       if (!tot) L.push("• امروز هشداری ارسال نشده ✅");
-      else L.push("", `جمع: ${faNum(tot.toLocaleString("en-US"))}`);
+      else {
+        L.push("", `جمع ارسال: ${faNum(tot.toLocaleString("en-US"))}`);
+        const kva = qKvShare(MA, "alert");
+        const ema = { read: "📖", write: "✍️", delete: "🗑", list: "📋" };
+        for (const k of ["read", "write", "delete", "list"]) {
+          L.push(qKvLine(ema[k], KV_ACTION_LABEL[k] + " (تخمین)", kva[k], KV_LIMITS_DAILY[k]));
+        }
+        L.push("ℹ️ هشدارها داخل تیک‌های موجود ارسال می‌شوند؛ invocation جدا ندارند.");
+      }
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qnodes") {
       // مصرف نودها
@@ -14661,9 +14622,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       try { pns = (await getPanels(kv)) || []; } catch (e) {}
       const on = mons.filter((m) => m.enabled !== false);
       const L = ["📡 مصرف نودها — امروز", ""];
-      const accN = await getQuotaAcct(kv, env);
-      for (const cl of await qQuotaCharts(kv, env, accN)) L.push(cl);
-      L.push("");
       L.push(`• 🖥 پنل‌ها: ${faNum(pns.length)} · مانیتور نود: ${faNum(on.length)} از ${faNum(mons.length)}`);
       L.push("• 🕐 نظرسنجی: هر ۱۰ دقیقه کامل + هر دقیقه سبک (با نگه‌دارنده داخلی)");
       L.push(`• 📞 سقف اسمی فراخوانی پنل در روز: ${faNum((on.length * 1584).toLocaleString("en-US"))} (واقعی کمتر؛ هر مانیتور فاصله خودش را دارد)`);
