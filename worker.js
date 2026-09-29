@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.29";
+const BOT_VERSION = "1.8.30";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.30": [
+    "📉 رژیم write: کلیدهای perm فقط وقتی واقعاً عوض شده باشند ذخیره می‌شوند (خواندن ارزان به‌جای نوشتن)",
+  ],
   "1.8.29": [
     "🔔 latch هشدارها تک‌کلیده با انقضای خودکار شد (write کمتر، بدون race، بدون prune)",
   ],
@@ -1369,8 +1372,11 @@ async function processUpdate(payload, env, botToken, adminId) {
       if (isPerm) {
         msg = msg.split(PERM_MARK).join("");
         try {
-          await kv.put(`pretrytxt:${chatId}`, text, { expirationTtl: 900 });
-        } catch (e) {}
+          const oldT = await kv.get(`pretrytxt:${chatId}`, "text").catch(() => null);
+          if (oldT !== text) await kv.put(`pretrytxt:${chatId}`, text, { expirationTtl: 900 });
+        } catch (e) {
+          try { await kv.put(`pretrytxt:${chatId}`, text, { expirationTtl: 900 }); } catch (x) {}
+        }
         const rows = kb ? kb.slice() : [];
         rows.push([
           { text: "🔄 بررسی مجدد", callback_data: "permretrytxt" },
@@ -11388,10 +11394,22 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     const rows = kb ? kb.slice() : [];
     const row = [];
     if (data) {
+      // رژیم write: اول بخوان، فقط اگر فرق داشت بنویس (خواندن ۱۰۰ برابر ارزان‌تر از نوشتن است)
+      const pb = parentCb(data);
       try {
-        await kv.put(`pretry:${chatId}`, data, { expirationTtl: 900 });
-        await kv.put(`pback:${chatId}`, parentCb(data), { expirationTtl: 900 });
-      } catch (e) {}
+        const old = await kv.get(`pretry:${chatId}`, "text").catch(() => null);
+        if (old === null || old === undefined) throw 0;
+        const jobs = [];
+        if (old !== data) jobs.push(kv.put(`pretry:${chatId}`, data, { expirationTtl: 900 }));
+        const oldB = await kv.get(`pback:${chatId}`, "text").catch(() => null);
+        if (oldB !== pb) jobs.push(kv.put(`pback:${chatId}`, pb, { expirationTtl: 900 }));
+        if (jobs.length) await Promise.all(jobs);
+      } catch (e) {
+        try {
+          await kv.put(`pretry:${chatId}`, data, { expirationTtl: 900 });
+          await kv.put(`pback:${chatId}`, pb, { expirationTtl: 900 });
+        } catch (x) {}
+      }
       row.push({ text: "🔄 بررسی مجدد", callback_data: "permretry" });
     }
     row.push({ text: "🔙 بازگشت", callback_data: "permback" });
