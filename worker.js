@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.30";
+const BOT_VERSION = "1.8.31";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.31": [
+    "👋 پیام خوش‌آمد ادمین لینک‌شده در استارت (فقط وقتی لینک داشته باشد و هشدارها فعال باشند)",
+  ],
   "1.8.30": [
     "📉 رژیم write: کلیدهای perm فقط وقتی واقعاً عوض شده باشند ذخیره می‌شوند (خواندن ارزان به‌جای نوشتن)",
   ],
@@ -1434,6 +1437,32 @@ async function processUpdate(payload, env, botToken, adminId) {
       try {
         const a = await getAdmins(kv, env);
         if (a.includes(chatId)) await kv.put(`pgstart:${chatId}`, "1", { expirationTtl: 180 * 86400 });
+        // خوش‌آمد لینک‌شده‌ها: فقط ادمین فرعی که به ادمین پنلی لینک است (نه ادمین اصلی) — فقط وقتی هشدارها فعال‌اند
+        // و فقط وقتی ترکیب لینک‌ها عوض شده باشد (نه هر استارت) تا اسپم نشود
+        if (cmd === "/start" && chatId !== adminId && a.includes(chatId)) {
+          const pgc = await getPgHookCfg(kv);
+          if (pgc.enabled) {
+            const panels = await getPanels(kv);
+            const links = [];
+            for (const pn of panels) {
+              const om = (pgc.owner_map || {})[pn.id] || {};
+              for (const un of Object.keys(om)) {
+                if (Number(om[un]) === chatId) links.push(`«${un}» (${pn.name || pn.id})`);
+              }
+            }
+            if (links.length) {
+              let prev = null;
+              try { prev = await kv.get(`pgstartmsg:${chatId}`, "text"); } catch (e) {}
+              const cur = links.slice().sort().join("|");
+              if (prev !== cur) {
+                try { await kv.put(`pgstartmsg:${chatId}`, cur, { expirationTtl: 180 * 86400 }); } catch (e) {}
+                await send(
+                  `👋 سلام! شما به‌عنوان ${links.join("، ")} لینک شدی.\n\n🔔 هر وقت یکی از کاربرهات به آستانه انقضا یا حجم برسه، گزارشش همین‌جا برات میاد — فقط منتظر باش، کاری لازم نیست بکنی.`
+                );
+              }
+            }
+          }
+        }
       } catch (e) {}
       await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/myid") {
