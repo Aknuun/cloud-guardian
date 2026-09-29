@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.35";
+const BOT_VERSION = "1.8.36";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.36": [
+    "🔔 ضدتکراری در همان بچ: هر کاربر در هر موج فقط یک پیام (اولی می‌ماند)",
+  ],
   "1.8.35": [
     "🚪 استارت برای لینک‌شده‌های غیرادمین باز شد (فقط خوش‌آمد؛ منو همچنان فقط ادمین‌ها)",
   ],
@@ -7963,6 +7966,7 @@ async function handlePgHook(token, payload, env, botToken) {
       try { await kv.put("pgs:" + key, String(nowMs), { expirationTtl: 7 * 86400 }); } catch (e) {}
     };
     let anyJob = false;
+    const seenRun = new Set();
     for (const ev of events) {
       if (!ev.username) continue;
       const jobs = [];
@@ -7975,7 +7979,12 @@ async function handlePgHook(token, payload, env, botToken) {
         const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
         if (ok) {
           const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
-          if (!(await pgSeen(key))) { jobs.push({ kind: "days", value: dv, key }); markKeys.push(key); }
+          const rk = panel.id + ":" + ev.username + ":days";
+          if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
+            jobs.push({ kind: "days", value: dv, key });
+            markKeys.push(key);
+            seenRun.add(rk);
+          }
         }
       }
       if (ev.usage !== null && ev.usage !== undefined) {
@@ -7983,7 +7992,12 @@ async function handlePgHook(token, payload, env, botToken) {
         const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
         if (ok) {
           const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
-          if (!(await pgSeen(key))) { jobs.push({ kind: "usage", value: uv, key }); markKeys.push(key); }
+          const rk = panel.id + ":" + ev.username + ":usage";
+          if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
+            jobs.push({ kind: "usage", value: uv, key });
+            markKeys.push(key);
+            seenRun.add(rk);
+          }
         }
       }
       if (!jobs.length) continue;
