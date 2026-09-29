@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.53";
+const BOT_VERSION = "1.8.54";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.54": [
+    "🔕 دکمه سایلنت من: هشدارهای معمول به ادمین اصلی نمی‌آید (بقیه می‌گیرند)",
+  ],
   "1.8.53": [
     "⏱ دکمه recurrent در صفحه هر پنل (نمایش فعلی + پیشنهاد + تغییر)",
   ],
@@ -7855,6 +7858,7 @@ async function getPgHookCfg(kv) {
     usage: Array.isArray(c.usage) && c.usage.length ? c.usage.map(Number).filter((x) => Number.isFinite(x) && x > 0 && x <= 100).slice(0, 10) : [90, 100],
     panels: c.panels && typeof c.panels === "object" ? c.panels : {},
     owner_map: c.owner_map && typeof c.owner_map === "object" ? c.owner_map : {},
+    silent_me: c.silent_me === true,
   };
 }
 async function savePgHookCfg(kv, cfg) {
@@ -7997,7 +8001,8 @@ async function pgStarted(kv, id) {
 async function pgRecipients(kv, env, adminId, panelId, owner, ownerTg) {
   // گیرنده بودن ≠ ادمین بودن. تطبیق اول با آیدی عددی خود ایونت (یوزرنیم لازم نیست) بعد جدول لینک.
   const out = new Set();
-  if (await pgStarted(kv, adminId)) out.add(adminId);
+  const cfg0 = await getPgHookCfg(kv);
+  if ((await pgStarted(kv, adminId)) && !cfg0.silent_me) out.add(adminId);
   if (ownerTg && Number.isInteger(ownerTg) && ownerTg > 0 && (await pgStarted(kv, ownerTg))) out.add(ownerTg);
   if (owner) {
     const cfg = await getPgHookCfg(kv);
@@ -8315,7 +8320,10 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر لینک‌شده‌ای (ادمین یا نه) فقط کاربرهای خودش را می‌گیرد (باید استارت زده باشد).");
   const kb = [];
-  kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "pgtoggle" }]);
+  kb.push([
+    { text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "pgtoggle" },
+    { text: cfg.silent_me ? "🔕 سایلنت من: روشن" : "🔔 سایلنت من: خاموش", callback_data: "pgsilent" },
+  ]);
 
   for (const p of panels) {
     const reg = !!cfg.panels[p.id];
@@ -15030,6 +15038,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         "🤖 آیدی ربات داخلی همین پنل را بفرست (بدون @، مثلاً `allmarzbot`).\n\nهمین ربات در دکمه «🔄 تمدید با ربات» هشدارهای همین پنل استفاده می‌شود.\n\nبرای حذف (فقط دکمه پنل بماند) یک خط «-» بفرست.",
         [[{ text: "🔙 انصراف", callback_data: `pgpanel:${pid}` }]]
       );
+    } else if (data === "pgsilent") {
+      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
+      const cfg = await getPgHookCfg(kv);
+      cfg.silent_me = !cfg.silent_me;
+      await savePgHookCfg(kv, cfg);
+      await renderPgHookHome(edit, kv, env, adminId);
     } else if (data === "pgtoggle") {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       const cfg = await getPgHookCfg(kv);
