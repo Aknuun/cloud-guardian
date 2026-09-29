@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.50";
+const BOT_VERSION = "1.8.51";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.51": [
+    "☁️ جابه‌جایی دکمه‌ها: افزودن رکورد در صفحه کلودفلر، افزودن دامنه جدید در بخش اکانت‌ها",
+  ],
   "1.8.50": [
     "🤖 ربات داخلی خودکار از خود پنل خوانده می‌شود + وضعیت سلامت وبهوک پنل در صفحه (آستانه‌ها، recurrent، تطبیق آدرس)",
   ],
@@ -8519,9 +8522,9 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
     keyboard.push(row);
   }
 
-  // addzone: ساخت دامنهٔ جدید در کلودفلر | accounts: مدیریت اکانت‌ها (افزودن/حذف)
+  // addrec: ساخت رکورد جدید | accounts: مدیریت اکانت‌ها (افزودن/حذف/دامنه جدید)
   keyboard.push([
-    { text: "➕ افزودن دامنه جدید", callback_data: "addzone" },
+    { text: "➕ افزودن رکورد", callback_data: "addrec" },
     { text: "👤 اکانت‌ها", callback_data: "accounts" },
   ]);
 
@@ -9524,11 +9527,12 @@ async function showAccounts(accounts, send) {
   } else {
     text += "👤 کلودفلر: هیچ اکانتی ثبت نشده\n\n";
   }
-  // accadd: افزودن اکانت کلودفلر | accdel: حذف اکانت | menu: منوی اصلی
+  // accadd: افزودن اکانت کلودفلر | accdel: حذف اکانت | addzone: ساخت دامنهٔ جدید | menu: منوی اصلی
   keyboard.push([{ text: "➕ افزودن اکانت کلودفلر", callback_data: "accadd" }]);
   if (accounts.length > 0) {
     keyboard.push([{ text: "🗑 حذف اکانت", callback_data: "accdel" }]);
   }
+  keyboard.push([{ text: "➕ افزودن دامنه جدید", callback_data: "addzone" }]);
   keyboard.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   await send(text, keyboard);
 }
