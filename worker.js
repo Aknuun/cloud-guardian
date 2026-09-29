@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.34";
+const BOT_VERSION = "1.8.35";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.35": [
+    "🚪 استارت برای لینک‌شده‌های غیرادمین باز شد (فقط خوش‌آمد؛ منو همچنان فقط ادمین‌ها)",
+  ],
   "1.8.34": [
     "🔔 تطبیق گیرنده فقط با آیدی عددی (یوزرنیم لازم نیست) — هم در استارت هم در ایونت",
   ],
@@ -1376,7 +1379,9 @@ async function processUpdate(payload, env, botToken, adminId) {
     const chatId = payload.message.chat.id;
     textChatId = chatId;
     const admins = await getAdmins(kv, env);
-    if (!admins.includes(chatId)) return;
+    // دیوار: غیرادمین‌ها فقط /start (برای خوش‌آمد لینک‌شده‌ها)؛ بقیه متن‌ها مثل قبل ساکت رد می‌شوند
+    const msgText0 = String((payload.message.text || "").split(" ")[0] || "").split("@")[0];
+    if (!admins.includes(chatId) && msgText0 !== "/start") return;
     if (chatId === adminId) await cacheAdminUname(kv, adminId, payload.message.from);
 
     const send = async (msg, kb) => {
@@ -1502,6 +1507,10 @@ async function processUpdate(payload, env, botToken, adminId) {
           }
         }
       } catch (e) {}
+      try {
+        const a2 = await getAdmins(kv, env);
+        if (!a2.includes(chatId)) return;
+      } catch (e) { return; }
       await send(await mainMenuTextFull(kv, env), mainMenuKeyboard());
     } else if (cmd === "/myid") {
       await send(`🆔 شناسه تلگرام شما: ${chatId}`);
