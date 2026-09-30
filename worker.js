@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.85";
+const BOT_VERSION = "1.8.86";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.86": [
+    "🖥️ لیست سرورهای هتزنر: آی‌پی هر سرور در دکمه‌ای جدا سمت راست نامش (لمس = صفحه سرور)",
+  ],
   "1.8.85": [
     "➕ ساخت رکورد: TXT/MX/NS هم اضافه شد (برای MX اولویت پرسیده می‌شود)؛ تغییر نوع همان ۳ تای قبلی ماند",
     "✏️ موقع تغییر مقدار، ساب و مقدار فعلی هم نشان داده می‌شود",
@@ -18207,8 +18210,14 @@ async function showHzServers(hzAccounts, i, page, edit) {
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
   const slice = servers.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
-  // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور
-  const kb = grid2(slice.map((s) => ({ text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" })));
+  // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور — هر ردیف: دکمه آی‌پی (راست) + دکمه نام سرور
+  const kb = slice.map((s) => {
+    const ip = (s.public_net && s.public_net.ipv4 && s.public_net.ipv4.ip) || "—";
+    return [
+      { text: `🌐 ${ip}`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" },
+      { text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" },
+    ];
+  });
   const nav = [];
   nav.push(page > 0 ? { text: "◀️", callback_data: `hzs:${i}:${page - 1}` } : EMPTY_BTN);
   nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
