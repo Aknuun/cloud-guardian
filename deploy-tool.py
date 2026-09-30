@@ -209,6 +209,34 @@ def _kv_is_routing(err):
     return ("7003" in (err or "")) or ("7000" in (err or ""))
 
 
+def find_kv_by_title(tok, acc, title):
+    try:
+        st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces?per_page=100", None, "application/json")
+        res, err = json_ok(st, out)
+        if err:
+            return None
+        for n in res or []:
+            if n.get("title") == title:
+                return n.get("id")
+    except Exception:
+        pass
+    return None
+
+
+def find_kv_by_title(tok, acc, title):
+    try:
+        st, out = req(tok, "GET", f"{API}/accounts/{acc}/storage/kv/namespaces?per_page=100", None, "application/json")
+        res, err = json_ok(st, out)
+        if err:
+            return None
+        for n in res or []:
+            if n.get("title") == title:
+                return n.get("id")
+    except Exception:
+        pass
+    return None
+
+
 def find_existing_kv_id(tok, acc):
     try:
         st, out = req(tok, "GET", f"{API}/accounts/{acc}/workers/scripts")
@@ -250,6 +278,22 @@ def ensure_kv(cfg, tok):
     body = json.dumps({"title": f"{cfg['worker']}-kv"}).encode("utf-8")
     st, out = req(tok, "POST", f"{API}/accounts/{cfg['account_id']}/storage/kv/namespaces", body, "application/json")
     res, err = json_ok(st, out)
+    if err and "10014" in err:
+        found = find_kv_by_title(tok, cfg["account_id"], f"{cfg['worker']}-kv")
+        if found:
+            cfg["kv_namespace_id"] = found
+            with open(CFG, "w") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            print("[*] " + T("kv_reuse", found))
+            return found, None
+    if err and "10014" in err:
+        found = find_kv_by_title(tok, cfg["account_id"], f"{cfg['worker']}-kv")
+        if found:
+            cfg["kv_namespace_id"] = found
+            with open(CFG, "w") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            print("[*] " + T("kv_reuse", found))
+            return found, None
     if err and _kv_is_routing(err):
         found = find_existing_kv_id(tok, cfg["account_id"])
         if found:
