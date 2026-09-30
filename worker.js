@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.81";
+const BOT_VERSION = "1.8.82";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.82": [
+    "🗑 حذف کامل نصب نود با ربات (دکمه‌ها، نصب عادی/هسته ویرایشی، افزودن به پنل، بررسی وضعیت، کرون ثبت خودکار)",
+  ],
   "1.8.81": [
     "🔧 بعد از تبدیل A↔CNAME صفحه رکورد تازه (نه خطای 81044) باز می‌شود",
   ],
@@ -1377,11 +1380,6 @@ export default {
             patch.srv = now;
             jobs.push(runSrvMonitor(env, botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
           }
-          if (!cs.node || now - cs.node >= NODEADD_MIN_MS) {
-            patch.node = now;
-            // ثبت خودکار نودهای نصب‌شده در پنل (اگر اجرای ورکر وسط نصب قطع شده باشد)
-            jobs.push(runNodeAddPending(env, { skipGuard: true }).catch((e) => console.error("NODEADD", String(e))));
-          }
           if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS + selfupJitter(env)) {
             patch.selfup = now;
             jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
@@ -1946,11 +1944,11 @@ const HELP_GUIDE = {
     "🔐 مانیتور SSL\n\n" +
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
   srv:
-    "🖥 سرورها و مانیتورینگ (SSH، نود، آمار زنده)\n\n" +
+    "🖥 سرورها و مانیتورینگ (SSH و آمار زنده)\n\n" +
     "مدیریت سرورهای لینوکسی از طریق SSH — همهٔ اتصال‌ها از «رلهٔ واحد» عبور می‌کنند:\n\n" +
     "• ➕ افزودن سرور: آی‌پی/هاست (+پورت) → رمز یا کلید SSH (نام پیش‌فرض = هاست، کاربر root)\n" +
     "• 🔑 رمزهای ذخیره‌شده: چند رمز را ذخیره کن تا هنگام افزودن سرور با یک دکمه انتخاب شوند\n" +
-    "• 📥 نصب خودکار نود پاسارگارد: اسکریپت رسمی pg-node.sh با خروجی زنده اجرا می‌شود\n" +
+
     "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپتایم/پهنای باند هر سرور + هشدار خودکار قابل‌تنظیم\n" +
     "• 🔄 ریبوت · ⏱ آپدیت و آپگرید · ℹ️ مشخصات سیستم · 💽 فضای دیسک\n\n" +
     "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.\n" +
@@ -1991,7 +1989,7 @@ const HELP_GUIDE = {
   relay:
     "🌐 رلهٔ SSH\n\n" +
     "🔎 رله چیست؟\n" +
-    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس همهٔ اتصال‌های SSH (سرورها، نصب نود، مانیتور سرورها، چک‌هاست و API آروان) از روی یک «رله» روی یک VPS عبور می‌کنند.\n\n" +
+    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس همهٔ اتصال‌های SSH (سرورها، مانیتور سرورها، چک‌هاست و API آروان) از روی یک «رله» روی یک VPS عبور می‌کنند.\n\n" +
     "🧩 حالت‌ها\n" +
     "• 🔀 خودکار (پیش‌فرض): اگر رلهٔ شخصی داشته باشی از آن، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.\n" +
     "• 🌐 پیش‌فرض رایگان: فقط رلهٔ رایگان (بدون نصب).\n" +
@@ -3313,7 +3311,7 @@ function qKvLine(em, label, v, lim) {
 }
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
-  node10: "پول نود (۱۰دقیقه‌ای)", nodeadd: "ثبت خودکار نود", selfup: "آپدیت خودکار",
+  node10: "پول نود (۱۰دقیقه‌ای)", selfup: "آپدیت خودکار",
   ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
   rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه",
@@ -6247,7 +6245,6 @@ const UM_REPORT_MS = 24 * 3600000;
 const UM_REPORT_TOP = 10;
 // حداقل فاصلهٔ اجرای مانیتور مصرف (کرون */10 است؛ با این مقدار عملاً هر ~۶۰ دقیقه اجرا می‌شود — کاهش مصرف KV)
 const UM_MIN_INTERVAL_MS = 60 * 60000;
-const NODEADD_MIN_MS = 30 * 60000;
 const SELFUP_MIN_MS = 24 * 3600000; // روزی یک‌بار — چک خودکار آپدیت
 // jitter قطعی هر ورکر (۰ تا ۵ دقیقه از هش اسم ورکر): چک‌های همه ربات‌ها روی هم نمی‌افتد
 function selfupJitter(env) {
@@ -6483,7 +6480,7 @@ async function renderRelayHome(render, kv, env, back) {
     "🌐 رلهٔ SSH",
     "",
     "🔎 چرا لازم است؟",
-    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس اتصال‌های SSH (سرورها، نصب نود، مانیتور سرورها، چک‌هاست و API آروان) از رله عبور می‌کنند.",
+    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس اتصال‌های SSH (سرورها، مانیتور سرورها، چک‌هاست و API آروان) از رله عبور می‌کنند.",
     "",
     "🧩 وضعیت فعلی",
     "• حالت: " + modeFa,
@@ -6749,7 +6746,7 @@ function hzCloudInitRootPw(pw) {
 }
 
 // بعد از ساخت سرور در دیتاسنتر: افزودن خودکار به «سرورها»، انتظار برای بالا آمدن سرور،
-// تنظیم رمز پیش‌فرض (رمز ۱) و پرسیدن نصب نود.
+// تنظیم رمز پیش‌فرض (رمز ۱).
 async function srvProvisionNewServer(kv, env, edit, info, backCb, chatId) {
   const list = await getServersList(kv);
   const item = {
@@ -6773,16 +6770,9 @@ async function srvProvisionNewServer(kv, env, edit, info, backCb, chatId) {
     `🌐 ${code(info.host)} (root)`,
     `🔐 رمز فعلی: ${code(info.password)}`,
     "",
-    "📥 نود پاسارگارد روی این سرور نصب شود؟",
-    "«رمز ۱» روی سرور تنظیم می‌شود، سپس نصب انجام می‌گیرد.",
   ];
   const kb = [
     [
-      { text: "📥 نصب خودکار نود", callback_data: `srvprovision:${idx}:auto` },
-      { text: "🧩 نصب با هستهٔ ویرایشی", callback_data: `srvprovision:${idx}:core` },
-    ],
-    [
-      { text: "❌ بعداً", callback_data: back },
       { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" },
     ],
   ];
@@ -6910,7 +6900,7 @@ async function renderServersHome(edit, kv, env) {
   const lines = [
     "🖥 سرورها و مانیتورینگ",
     "",
-    "مدیریت سرورهای لینوکسی از طریق SSH:\n• نصب خودکار نود پاسارگارد\n• نصب نود با هستهٔ ویرایشی (xray سفارشی)\n• مانیتور CPU / RAM / دیسک / پهنای باند\n\n",
+    "مدیریت سرورهای لینوکسی از طریق SSH:\n• مانیتور CPU / RAM / دیسک / پهنای باند\n\n",
   ];
   if (list.length) lines.push(`🖧 سرورهای ثبت‌شده (${list.length}): روی هرکدام بزنید:`);
   const kb = [];
@@ -6945,7 +6935,6 @@ async function renderSrvDetail(edit, kv, env, idx) {
     "یک عملیات را انتخاب کنید:",
   ].filter(Boolean);
   const kb = [
-    [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${idx}` }],
     [{ text: "📊 مانیتور سرور", callback_data: `srvstats:${idx}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
@@ -7089,392 +7078,6 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   for (const a of admins) {
     try { await qAlert(kv, "srvmon"); await sendMessage(botToken, a, msg, kb); } catch (e) {}
-  }
-}
-
-// نصب خودکار نود پاسارگارد — خروجی زنده با ویرایش پیام
-async function srvInstallNodeLive(kv, chatId, botToken, env, s) {
-  const { url: base, token: relayToken } = await getSrvRelayCfg(kv, env);
-  if (!base) {
-    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-    return;
-  }
-  const sent = await sendMessage(botToken, chatId, "📥 شروع نصب نود پاسارگارد…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت نصب…");
-  const msgId = sent && sent.result ? sent.result.message_id : null;
-  try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
-  try { await env.BOT_KV.put("nodeadd_any", "1", { expirationTtl: 3600 }); } catch (e) {}
-  const CMD = 'sudo bash -c "$(curl -sL https://github.com/PasarGuard/scripts/raw/main/pg-node.sh)" @ install -y';
-  try {
-    const res = await fetch(base + "/install-node", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-SRV-Token": relayToken || "" },
-      body: JSON.stringify({ host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined }),
-      signal: AbortSignal.timeout(500000),
-    });
-    if (!res.ok || !res.body) {
-      const errTxt = `❌ خطا در اتصال به رله (${res.status})`;
-      if (msgId) await editMessage(botToken, chatId, msgId, errTxt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
-      return;
-    }
-    // خواندن استریم NDJSON و به‌روزرسانی پیام با آخرین خروجی
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    let tail = "";
-    let lastEdit = 0;
-    const editEvery = 4000;
-    let done = null;
-    while (true) {
-      const { value, done: rd } = await reader.read();
-      if (rd) break;
-      buf += dec.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, idx).trim();
-        buf = buf.slice(idx + 1);
-        if (!line) continue;
-        try {
-          const ev = JSON.parse(line);
-          if (ev.t === "out" && ev.d) tail = (tail + ev.d).slice(-3500);
-          else if (ev.t === "done") done = ev;
-        } catch (e) {}
-      }
-      if (msgId && Date.now() - lastEdit > editEvery && !done) {
-        lastEdit = Date.now();
-        const txt = "📥 نصب نود پاسارگارد…\n\n📄 آخرین خروجی:\n" + code(tail.slice(-1200));
-        try { await editMessage(botToken, chatId, msgId, txt.substring(0, 4000)); } catch (e) {}
-      }
-    }
-    const ok = done && done.ok;
-    const finalTail = (done && done.tail ? done.tail : tail).slice(-1800);
-    let txt =
-      (ok ? "✅ نصب نود پاسارگارد کامل شد." : "⚠️ نصب تمام شد (کد خروج: " + (done ? done.code : "?") + ").") +
-      "\n\n📄 انتهای خروجی:\n" + code(finalTail);
-    let addKb = [];
-    if (ok) {
-      const add = await srvFinishNodeInstall(env.BOT_KV, env, s, txt);
-      txt = add.txt;
-      addKb = add.addKb;
-    }
-    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [...addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, `srvopen:${s._idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
-  } catch (e) {
-    const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
-    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, s._idx, "srv") }, { text: "🏠 خانه", callback_data: "menu" }]]);
-  }
-}
-
-// 🧩 نصب نود با هستهٔ ویرایشی (pg-node + هستهٔ xray-amd64 سفارشی)
-// روی سرور به‌صورت پس‌زمینه اجرا می‌شود و ربات هر چند ثانیه خروجی را می‌خواند؛
-// این‌طور محدودیت ~۸ دقیقه‌ای رلهٔ SSH دور زده می‌شود.
-const CORE_INSTALL_URL = "https://raw.githubusercontent.com/Aknuun/pg-node-deploy/main/bootstrap.sh";
-async function srvInstallNodeCoreLive(kv, chatId, botToken, env, s) {
-  const { url: base } = await getSrvRelayCfg(kv, env);
-  if (!base) {
-    await sendMessage(botToken, chatId, SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, "srv") }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-    return;
-  }
-  const sent = await sendMessage(botToken, chatId, "🧩 شروع نصب نود با هستهٔ ویرایشی…\n\n⏳ در حال اتصال به سرور و اجرای اسکریپت…");
-  const msgId = sent && sent.result ? sent.result.message_id : null;
-  const idx = s._idx;
-  try {
-    // قبل از اجرای اسکریپت: تنظیم DNS و تایم‌اوت apt تا apt-get update روی سرور گیر نکند
-    const prepScript =
-      "#!/bin/bash\n" +
-      "chattr -i /etc/resolv.conf 2>/dev/null || true\n" +
-      "printf 'nameserver 94.140.14.15\\nnameserver 1.1.1.1\\noptions edns0 trust-ad\\n' > /etc/resolv.conf 2>/dev/null || true\n" +
-      "printf 'Acquire::http::Timeout \"15\";\\nAcquire::https::Timeout \"15\";\\nAcquire::Retries \"2\";\\nAcquire::ForceIPv4 \"true\";\\nAcquire::Languages \"none\";\\n' > /etc/apt/apt.conf.d/99cg-timeouts 2>/dev/null || true\n" +
-      // نصب قبلی/نیمه‌کاره ممکن است کانتینر pg-node را روی پورت‌ها نگه دارد و نصب جدید را خراب کند
-      "docker rm -f node pg-node 2>/dev/null || true\n" +
-      "docker ps -aq --filter 'name=node' 2>/dev/null | xargs -r docker rm -f 2>/dev/null || true\n" +
-      "systemctl stop pg-node 2>/dev/null || true\n" +
-      "sleep 1\n";
-    const prepB64 = b64Encode(prepScript);
-    const inner =
-      "echo " + prepB64 + " | base64 -d | bash; " +
-      "curl -fsSL " + CORE_INSTALL_URL + " -o /tmp/pg-node-bootstrap.sh && bash /tmp/pg-node-bootstrap.sh; echo PG_EXIT=$?";
-    const launch =
-      "rm -f /tmp/pg-node-install.log /tmp/pg-node-bootstrap.sh; " +
-      "( command -v setsid >/dev/null 2>&1 && setsid -f bash -c '" + inner + "' || nohup bash -c '" + inner + "' ) " +
-      ">/tmp/pg-node-install.log 2>&1 </dev/null & echo STARTED";
-    const start = await srvRelayExec(kv, env, s, launch, 30000);
-    if (start.error) {
-      const txt = "❌ خطا در شروع نصب: " + start.error;
-      if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
-      return;
-    }
-    const startedAt = Date.now();
-    // ثبت در صف «افزودن خودکار به پنل» تا حتی اگر اجرای ورکر قطع شد، کرون آن را اضافه کند
-  try { await env.BOT_KV.put(`nodeadd:${s.id || s.host}`, JSON.stringify({ host: s.host, ts: Date.now() }), { expirationTtl: 3600 }); } catch (e) {}
-  try { await env.BOT_KV.put("nodeadd_any", "1", { expirationTtl: 3600 }); } catch (e) {}
-    if (msgId) {
-      try { await editMessage(botToken, chatId, msgId, `🧩 نصب نود با هستهٔ ویرایشی…\n\n⏳ اسکریپت آغاز شد؛ در حال خواندن خروجی…\n(سرور: ${escHtml(s.name)})`); } catch (e) {}
-    }
-    let lastEdit = 0;
-    let tail = "";
-    let exitCode = null;
-    let lastChangeAt = Date.now();
-    let prevTail = "";
-    const deadline = Date.now() + 20 * 60000;
-    while (Date.now() < deadline) {
-      await sleep(6000);
-      const poll = await srvRelayExec(kv, env, s, "tail -c 1800 /tmp/pg-node-install.log 2>/dev/null; echo; grep -o 'PG_EXIT=[0-9]*' /tmp/pg-node-install.log 2>/dev/null | tail -n1", 25000);
-      if (poll.error) continue;
-      tail = String(poll.out || "");
-      const m = tail.match(/PG_EXIT=(\d+)/);
-      if (m) { exitCode = Number(m[1]); break; }
-      if (tail !== prevTail) { prevTail = tail; lastChangeAt = Date.now(); }
-      if (msgId && Date.now() - lastEdit > 6000) {
-        lastEdit = Date.now();
-        const stalled = Date.now() - lastChangeAt > 90000;
-        const elapsed = Math.round((Date.now() - startedAt) / 1000);
-        const shown = tail.slice(-1100).trim() || "(هنوز خروجی‌ای ثبت نشده…)";
-        const txt = `🧩 نصب نود با هستهٔ ویرایشی…\n\n📄 آخرین خروجی (${elapsed} ثانیه):\n` + code(shown) +
-          (stalled ? "\n\n⚠️ بیش از ۹۰ ثانیه بدون تغییر؛ ممکن است نصب کند/متوقف باشد. تا پایان مهلت منتظر می‌مانم…" : "");
-        try { await editMessage(botToken, chatId, msgId, txt.substring(0, 4000)); } catch (e) {}
-      }
-    }
-    // خواندن خلاصهٔ نهایی (Certificate + API Key + IP) که اسکریپت روی سرور ذخیره کرده
-    let info = "";
-    const got = await srvRelayExec(kv, env, s, "cat /root/pg-node-info.txt 2>/dev/null || sudo -n cat /root/pg-node-info.txt 2>/dev/null || true", 20000);
-    if (got && !got.error && got.out) info = String(got.out);
-    const head = exitCode === 0
-      ? "✅ نصب نود با هستهٔ ویرایشی کامل شد."
-      : (exitCode === null
-        ? "⏱ زمان پایش تمام شد؛ نصب ممکن است هنوز در حال اجرا باشد."
-        : "⚠️ نصب تمام شد (کد خروج: " + exitCode + ").");
-    let body = info
-      ? "📋 خلاصهٔ نصب:\n" + code(info.slice(0, 3300))
-      : "📄 انتهای خروجی:\n" + code(tail.slice(-1500));
-    let txt = head + "\n\n" + body;
-    let addKb = [];
-    // اگر نصب موفق بود یا خروجیِ خلاصه روی سرور موجود بود (حتی وقتی پایش timeout خورد)،
-    // نود را خودکار به پنل اضافه کن. در غیر این صورت دکمهٔ افزودن دستی بگذار.
-    const infoLooksDone = /PasarGuard node installed|INSTALL DONE|API Key\s*:/i.test(info);
-    if (exitCode === 0 || (exitCode === null && infoLooksDone)) {
-      const add = await srvFinishNodeInstall(env.BOT_KV, env, s, txt);
-      txt = add.txt;
-      addKb = add.addKb;
-    }
-    if (!addKb.length) {
-      addKb = [[{ text: "➕ افزودن نود نصب‌شده به پنل", callback_data: `srvpaneladd:${idx}` }]];
-    }
-    if (msgId) await editMessage(botToken, chatId, msgId, txt.substring(0, 4000), [
-      ...addKb,
-      [{ text: "📊 مانیتور", callback_data: `srvstats:${idx}` }],
-      [{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }],
-    ]);
-  } catch (e) {
-    const txt = "❌ خطا در نصب: " + String(e && e.message ? e.message : e).substring(0, 300);
-    if (msgId) await editMessage(botToken, chatId, msgId, txt, [[{ text: "🔙 بازگشت", callback_data: await srvGetBack(env.BOT_KV, chatId, idx, `srvopen:${idx}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
-  }
-}
-
-// ===================== افزودن خودکار نود به پنل پاسارگارد =====================
-// بعد از نصب نود روی سرور (هر دو روش نصب)، آیپی/پورت سرویس/API Key و Certificate
-// از روی سرور خوانده میشود و نود با نام = آیپی در پنل ثبت میگردد.
-const SRV_NODE_INFO_CMD = `
-ENV_FILE=/opt/pg-node/.env; CERT_FILE=/var/lib/pg-node/certs/ssl_cert.pem
-IP=$(curl -4 -s --fail --max-time 5 ifconfig.io 2>/dev/null || curl -6 -s --fail --max-time 5 ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
-PORT=$(grep -E '^[[:space:]]*SERVICE_PORT[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -dc '0-9')
-APIKEY=$(grep -E '^[[:space:]]*API_KEY[[:space:]]*=' "$ENV_FILE" 2>/dev/null | head -n1 | cut -d= -f2- | tr -d ' "')
-echo "PGIP=$IP"
-echo "PGPORT=$PORT"
-echo "PGAPIKEY=$APIKEY"
-echo "PGBEGIN"
-( sudo -n cat "$CERT_FILE" 2>/dev/null || cat "$CERT_FILE" 2>/dev/null )
-echo "PGEND"
-`.trim();
-
-function srvParseNodeInfo(out) {
-  const g = (re) => { const m = String(out || "").match(re); return m ? m[1].trim() : ""; };
-  const ip = g(/^PGIP=(.*)$/m);
-  const port = g(/^PGPORT=(.*)$/m);
-  const apiKey = g(/^PGAPIKEY=(.*)$/m);
-  const cm = String(out || "").match(/PGBEGIN\s*\r?\n([\s\S]*?)\r?\nPGEND/);
-  const cert = cm ? cm[1].trim() : "";
-  if (!ip || !port || !apiKey || !cert) return { error: "اطلاعات نود روی سرور پیدا نشد (نصب کامل نشده؟)" };
-  return { ip, port: Number(port) || port, apiKey, cert };
-}
-
-async function srvReadNodeInfo(kv, env, s) {
-  const r = await srvRelayExec(kv, env, s, SRV_NODE_INFO_CMD, 45000);
-  if (!r || r.error) return { error: (r && r.error) || "relay" };
-  return srvParseNodeInfo(r.out);
-}
-
-// شناسهٔ اولین Core Config پنل (برای ساخت نود لازم است)
-async function pgPanelFirstCoreId(panel, token) {
-  try {
-    const res = await fetch(`${panel.url.replace(/\/+$/, "")}/api/cores`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: withTimeout(15000),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const arr = Array.isArray(data) ? data : (data && (data.cores || data.configs)) || [];
-      if (arr.length && arr[0] && arr[0].id != null) return Number(arr[0].id);
-    }
-  } catch (e) {}
-  return 1;
-}
-
-// ثبت نود در پنل پاسارگارد: نام = آیپی، آدرس = آیپی، پورت = پورت سرویس، server_ca = Certificate
-async function pgPanelAddNode(panel, info) {
-  try {
-    const token = await panelLogin(panel);
-    if (!token) return { error: "ورود به پنل ناموفق بود؛ نام‌کاربری/رمز را بررسی کنید." };
-    const base = panel.url.replace(/\/+$/, "");
-    const coreId = await pgPanelFirstCoreId(panel, token);
-    const payload = {
-      name: info.ip,
-      address: info.ip,
-      port: Number(info.port) || 62050,
-      usage_coefficient: 1,
-      connection_type: "grpc",
-      keep_alive: 60,
-      core_config_id: coreId,
-      server_ca: info.cert,
-      api_key: info.apiKey,
-    };
-    const post = async (body) => {
-      const res = await fetch(`${base}/api/node`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: withTimeout(20000),
-      });
-      let data = null;
-      try { data = await res.json(); } catch (e) {}
-      return { res, data };
-    };
-    let { res, data } = await post(payload);
-    // سازگاری با نسخه‌های قدیمی‌تر پنل (پاسارگارد قدیمی/مرزبان) که به‌جای server_ca فیلد certificate را می‌گیرند
-    if (!res.ok && (res.status === 422 || JSON.stringify(data || {}).includes("server_ca"))) {
-      const alt = { ...payload, certificate: payload.server_ca };
-      delete alt.server_ca;
-      ({ res, data } = await post(alt));
-    }
-    if (!res.ok) {
-      const detail = data && (data.detail || data.message);
-      const msg = Array.isArray(detail)
-        ? detail.map((d) => (d && d.msg) || JSON.stringify(d)).join("؛ ")
-        : (detail || `HTTP ${res.status}`);
-      return { error: `خطای پنل (${res.status}): ${msg}` };
-    }
-    return { node: data };
-  } catch (e) {
-    return { error: String(e && e.message ? e.message : e) };
-  }
-}
-
-// بعد از نصب موفق: خواندن اطلاعات نود و افزودن آن به پنل
-// خروجی: { txt, addKb } که addKb ردیف‌دکمه‌های افزودن/تلاش دوباره است.
-async function srvFinishNodeInstall(kv, env, s, baseTxt) {
-  const info = await srvReadNodeInfo(kv, env, s);
-  if (info.error) {
-    return { txt: baseTxt + `\n\nℹ️ افزودن خودکار به پنل انجام نشد: ${escHtml(info.error)}`, addKb: [] };
-  }
-  const panels = await getPanels(kv);
-  if (!panels.length) {
-    return { txt: baseTxt + "\n\nℹ️ برای افزودن خودکار نود به پنل، ابتدا از «📡 مانیتور نود پاسارگارد» یک پنل ثبت کن.", addKb: [] };
-  }
-  const tok = makeToken() + makeToken();
-  await kv.put(`ndadd:${tok}`, JSON.stringify({ info, srvIdx: s._idx, srvName: s.name }), { expirationTtl: 3600 });
-  const head = `\n\n🖧 نود: ${code(info.ip)} · پورت: ${code(String(info.port))}`;
-  if (panels.length === 1) {
-    const r = await pgPanelAddNode(panels[0], info);
-    if (r.error) {
-      return {
-        txt: baseTxt + head + `\n⚠️ افزودن به پنل «${escHtml(panels[0].name)}» انجام نشد: ${escHtml(r.error)}`,
-        addKb: [[{ text: "➕ افزودن به پنل", callback_data: `ndadd:${tok}:${panels[0].id}` }]],
-      };
-    }
-    return { txt: baseTxt + head + `\n✅ نود با نام و آدرس ${code(info.ip)} به پنل «${escHtml(panels[0].name)}» اضافه شد.`, addKb: [] };
-  }
-  return {
-    txt: baseTxt + head + "\n➕ پنل مقصد را برای ثبت این نود انتخاب کن:",
-    addKb: panels.map((p) => [{ text: `➕ افزودن به «${p.name}»`, callback_data: `ndadd:${tok}:${p.id}` }]),
-  };
-}
-
-// ===== ثبت خودکار نود در پنل (کرون هر دقیقه) =====
-// اگر نصب طول بکشد و اجرای ورکر قطع شود، این تابع پس از آماده‌شدن نود، آن را به پنل اضافه می‌کند.
-async function pgPanelHasNode(p, token, ip) {
-  try {
-    const base = p.url.replace(/\/+$/, "");
-    const res = await fetch(`${base}/api/nodes`, { headers: { Authorization: `Bearer ${token}` }, signal: withTimeout(15000) });
-    if (!res.ok) return false;
-    const data = await res.json();
-    const arr = Array.isArray(data) ? data : (data.nodes || data.items || []);
-    return arr.some((n) => n && (n.address === ip || n.name === ip));
-  } catch (e) {
-    return false;
-  }
-}
-
-async function runNodeAddPending(env, opts) {
-  const kv = env.BOT_KV;
-  if (!kv || !(await getRelayBase(kv, env))) return;
-  // فقط وقتی نودی «در انتظار» هست جست‌وجو کن (فلگ nodeadd_any هنگام نصب ست می‌شود)
-  let any = null;
-  try {
-    any = await kv.get("nodeadd_any");
-  } catch (e) {}
-  if (!any) return;
-  // گارد بازهٔ ۳۰ دقیقه‌ای (کلید گارد بیرون از پیشوند nodeadd: است تا در list حذف نشود)
-  const skipGuard = !!(opts && opts.skipGuard);
-  const now = Date.now();
-  if (!skipGuard) {
-    const lastScan = Number((await kv.get("nodeadd_last")) || 0);
-    if (lastScan && now - lastScan < NODEADD_MIN_MS) return;
-    try {
-      await kv.put("nodeadd_last", String(now), { expirationTtl: 1900 });
-    } catch (e) {}
-  }
-  let keys = [];
-  try {
-    const r = await kv.list({ prefix: "nodeadd:", limit: 10 });
-    keys = (r.keys || []).map((k) => k.name);
-  } catch (e) {
-    return;
-  }
-  if (!keys.length) {
-    try {
-      await kv.delete("nodeadd_any");
-    } catch (e) {}
-    return;
-  }
-  const panels = await getPanels(kv);
-  if (!panels.length) return;
-  const srvList = await getServersList(kv);
-  for (const key of keys) {
-    const rec = await kv.get(key, "json");
-    if (!rec || !rec.host) { await kv.delete(key); continue; }
-    const s = srvList.find((x) => x.host === rec.host);
-    if (!s) { await kv.delete(key); continue; }
-    const info = await srvReadNodeInfo(kv, env, s);
-    if (info.error) continue; // هنوز آماده نیست
-    const tokens = [];
-    let exists = false;
-    for (const p of panels) {
-      const token = await panelLogin(p);
-      tokens.push(token);
-      if (token && (await pgPanelHasNode(p, token, info.ip))) exists = true;
-    }
-    if (!exists) {
-      for (let pi = 0; pi < panels.length; pi++) {
-        if (!tokens[pi]) continue;
-        const r = await pgPanelAddNode(panels[pi], info);
-        if (!r.error) break;
-      }
-      try {
-        const admins = await getAdmins(kv, env);
-        for (const a of admins) {
-          await sendMessage(env.BOT_TOKEN || BOT_TOKEN, a, `✅ نود «${info.ip}» (پورت ${info.port}) به‌صورت خودکار به پنل اضافه/به‌روزرسانی شد.`);
-        }
-      } catch (e) {}
-    }
-    await kv.delete(key);
   }
 }
 
@@ -12487,7 +12090,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } catch (e) {}
   };
   const NAV_REC_EQ = new Set(["menu", "dommon", "zones", "accounts", "settings", "help", "srv", "um", "rem", "sslm", "fmail", "quota", "bulk_main", "traf", "nd", "lb", "hz", "ln", "arvan", "favs", "pndef", "pnle", "pnld", "pghook", "qcrons", "qbtns", "qalerts", "qnodes"]);
-  const NAV_REC_PRE = ["hg:", "zf:", "hzacc:", "hzs:", "hzsi:", "hzm:", "hzss:", "hzp:", "hzn:", "lns:", "lnsi:", "lnm:", "arvreg:", "fmailbox:", "sr:", "qn:", "qnb:", "e:", "rback:", "p:", "zsearch:", "zset:", "addz:", "arz:", "bulkz:", "selmode:", "selback:", "seldone:", "lbsr:", "lbsm:", "lbss:", "srvopen:", "srvstats:", "srvnodemenu:", "srvnodecheck:", "pndef:"];
+  const NAV_REC_PRE = ["hg:", "zf:", "hzacc:", "hzs:", "hzsi:", "hzm:", "hzss:", "hzp:", "hzn:", "lns:", "lnsi:", "lnm:", "arvreg:", "fmailbox:", "sr:", "qn:", "qnb:", "e:", "rback:", "p:", "zsearch:", "zset:", "addz:", "arz:", "bulkz:", "selmode:", "selback:", "seldone:", "lbsr:", "lbsm:", "lbss:", "srvopen:", "srvstats:", "pndef:"];
   const navRecOk = (d) => NAV_REC_EQ.has(d) || NAV_REC_PRE.some((p) => d.startsWith(p));
   const edit = async (text, kb) => {
     const r = await applyPerm(text, kb);
@@ -12533,7 +12136,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
 
   // 👆 قفل دابل‌تپ ۵ ثانیه‌ای: فقط اجراکننده‌های تغییردهنده (بقیه آزاد تا بار هر ضربه کم بماند)
-  const TAP_LOCK_PRE = ["dy:", "bulkdely:", "sdy:", "srvdelxok:", "srvpwdely:", "pnlxx:", "arvdelok:", "zmaildely:", "ztrafdely:", "trazdely:", "daccy:", "hzok:", "lnok:", "srvrebootgo:", "srvupdgo:", "srvnodego:", "srvnodecorego:", "srvprovision:", "ndadd:", "qresume", "qcron:", "srvdely:", "ipbulkok:", "ztrafdel:", "zmaildel:", "trazdel:", "bulkdne:", "pnlx:", "accdel", "srvnodecheck:", "srvpaneladd:"];
+  const TAP_LOCK_PRE = ["dy:", "bulkdely:", "sdy:", "srvdelxok:", "srvpwdely:", "pnlxx:", "arvdelok:", "zmaildely:", "ztrafdely:", "trazdely:", "daccy:", "hzok:", "lnok:", "srvrebootgo:", "srvupdgo:", "srvprovision:", "qresume", "qcron:", "srvdely:", "ipbulkok:", "ztrafdel:", "zmaildel:", "trazdel:", "bulkdne:", "pnlx:", "accdel"];
   if (TAP_LOCK_PRE.some((p) => data === p || data.startsWith(p))) {
     try {
       const lk = `taplck:${chatId}:${data}`;
@@ -15006,88 +14609,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`✅ سرور «${escHtml(s.name)}» حذف شد.`, [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
     } else if (data.startsWith("srvopen:")) {
       await renderSrvDetail(edit, kv, env, Number(data.slice(8)));
-    } else if (data.startsWith("srvnodemenu:")) {
-      // زیرمنوی «نصب نود»: نصب عادی، نصب با هستهٔ ویرایشی و افزودن نود نصب‌شده به پنل
-      const i = Number(data.slice(12));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await srvGetBack(kv, chatId, i, ""))) await srvSetBack(kv, chatId, i, `srvopen:${i}`);
-      await edit(`📥 نصب نود روی «${escHtml(s.name)}»\n\nیک روش را انتخاب کن:`, [
-        [{ text: "📥 نصب خودکار پاسارگارد", callback_data: `srvnode:${i}` }],
-        [{ text: "🧩 نصب با هستهٔ ویرایشی", callback_data: `srvnodecore:${i}` }],
-        [{ text: "➕ افزودن نود نصب‌شده به پنل", callback_data: `srvpaneladd:${i}` }],
-        [{ text: "🔎 بررسی وضعیت نصب", callback_data: `srvnodecheck:${i}` }],
-        [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
-      ]);
-    } else if (data.startsWith("srvnodecheck:")) {
-      // بررسی وضعیت نصب نود از روی سرور (لاگ نصب، فایل اطلاعات، کانتینر/سرویس)
-      const i = Number(data.slice(13));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-      await edit("⏳ در حال بررسی وضعیت نود روی سرور…");
-      const chk = await srvRelayExec(kv, env,
-        s,
-        "echo ===LOG===; tail -c 1200 /tmp/pg-node-install.log 2>/dev/null; echo; grep -o 'PG_EXIT=[0-9]*' /tmp/pg-node-install.log 2>/dev/null | tail -n1; " +
-        "echo ===INFO===; ls -la /root/pg-node-info.txt 2>/dev/null || echo no-info; " +
-        "echo ===RUN===; (docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null || true); (systemctl is-active pg-node 2>/dev/null || true)",
-        30000);
-      if (chk.error) return edit("❌ خطا در بررسی: " + chk.error + "\n\nاگر رله/سرور موقتاً در دسترس نبود، دوباره تلاش کن.", [[{ text: "🔄 تلاش دوباره", callback_data: `srvnodecheck:${i}` }, { text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
-      const raw = String(chk.out || "");
-      const logPart = (raw.split("===INFO===")[0] || "").replace("===LOG===", "").trim();
-      const infoPart = (raw.split("===INFO===")[1] || "").split("===RUN===")[0].trim();
-      const runPart = (raw.split("===RUN===")[1] || "").trim();
-      const done = /PG_EXIT=0/.test(logPart);
-      const hasInfo = /pg-node-info\.txt/.test(infoPart);
-      const running = /(^|\n)node .*Up|active/i.test(runPart);
-      const statusLine = done && running ? "✅ نصب کامل و نود در حال اجراست."
-        : done ? "ℹ️ نصب تمام شده (PG_EXIT=0) ولی سرویس/کانتینر در حال اجرا دیده نشد."
-        : /PG_EXIT=/.test(logPart) ? "⚠️ نصب با خطا تمام شده: " + (logPart.match(/PG_EXIT=\d+/) || [""])[0]
-        : "⏳ هنوز PG_EXIT ثبت نشده؛ ممکن است نصب در حال اجرا باشد.";
-      const txt = `🔎 وضعیت نود «${escHtml(s.name)}»\n\n${statusLine}\n\n` +
-        (running ? `🐳 اجرا: ${code(runPart.slice(0, 300))}\n\n` : "") +
-        `📄 انتهای لاگ:\n${code(logPart.slice(-1200) || "(خالی)")}` +
-        (hasInfo ? "\n\n📋 فایل اطلاعات نود موجود است؛ می‌توانی آن را به پنل اضافه کنی." : "");
-      const kb = [];
-      if (hasInfo) kb.push([{ text: "➕ افزودن نود به پنل", callback_data: `srvpaneladd:${i}` }]);
-      kb.push([{ text: "🔙 بازگشت", callback_data: `srvnodemenu:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]);
-      await edit(txt.substring(0, 4000), kb);
-    } else if (data.startsWith("srvnode:")) {
-      const i = Number(data.slice(8));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-      await edit(`⚠️ نصب خودکار نود پاسارگارد روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت رسمی PasarGuard اجرا می‌شود (چند دقیقه طول می‌کشد).`, [
-        [{ text: "✅ شروع نصب", callback_data: `srvnodego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
-      ]);
-    } else if (data.startsWith("srvnodego:")) {
-      const i = Number(data.slice(10));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.");
-      await edit("⏳ در حال شروع…");
-      await srvInstallNodeLive(kv, chatId, botToken, env, { ...s, _idx: i });
-    } else if (data.startsWith("srvnodecore:")) {
-      const i = Number(data.slice(12));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-      await edit(`🧩 نصب نود با «هستهٔ ویرایشی» روی «${escHtml(s.name)}» شروع شود؟\n\nاسکریپت pg-node به‌همراه هستهٔ xray-amd64 سفارشی نصب می‌شود (چند دقیقه طول می‌کشد).`, [
-        [{ text: "✅ شروع نصب", callback_data: `srvnodecorego:${i}` }, { text: "❌ انصراف", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }],
-      ]);
-    } else if (data.startsWith("srvnodecorego:")) {
-      const i = Number(data.slice(14));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.");
-      await edit("⏳ در حال شروع…");
-      await srvInstallNodeCoreLive(kv, chatId, botToken, env, { ...s, _idx: i });
     } else if (data.startsWith("srvprovision:")) {
-      // تأیید کاربر برای سرور تازه‌ساخته‌شده: تست اتصال، تنظیم رمز ۱ و سپس نصب نود
+      // تأیید کاربر برای سرور تازه‌ساخته‌شده: تست اتصال و تنظیم رمز ۱
       const parts = data.split(":");
       const i = Number(parts[1]);
       const mode = parts[2] || "none";
@@ -15103,26 +14626,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           [{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
-      const l2 = await getServersList(kv);
-      const s2 = l2[i] || s;
-      if (mode === "auto" || mode === "core") {
-        await edit(`✅ سرور آماده شد.${prep.pwNote}\n\n⏳ شروع نصب نود…`);
-        if (mode === "auto") return srvInstallNodeLive(kv, chatId, botToken, env, { ...s2, _idx: i });
-        return srvInstallNodeCoreLive(kv, chatId, botToken, env, { ...s2, _idx: i });
-      }
       await edit(`✅ سرور آماده است.${prep.pwNote}`, [
-        [{ text: "📥 نصب نود", callback_data: `srvnodemenu:${i}` }, { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }],
+        [{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }],
       ]);
-    } else if (data.startsWith("srvpaneladd:")) {
-      // افزودن نودِ از قبل نصب‌شده روی سرور به پنل (بدون نصب دوباره)
-      const i = Number(data.slice(12));
-      const list = await getServersList(kv);
-      const s = list[i];
-      if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
-      await edit("⏳ در حال خواندن اطلاعات نود از سرور…");
-      const rr = await srvFinishNodeInstall(kv, env, { ...s, _idx: i }, `🖧 افزودن نود سرور «${escHtml(s.name)}» به پنل`);
-      await edit(rr.txt, [...rr.addKb, [{ text: "🔙 بازگشت", callback_data: await srvGetBack(kv, chatId, i, `srvopen:${i}`) }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvstats:")) {
       const i = Number(data.slice(9));
       const list = await getServersList(kv);
@@ -15398,33 +14904,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await saveNodeMonitors(kv, monitors);
       if (rm[0]) await kv.delete(`ndst:${rm[0].id}`);
       await edit(`✅ مانیتور نود «${escHtml(m.name)}» حذف شد.`, [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
-    } else if (data.startsWith("ndadd:")) {
-      // افزودن نود نصب‌شده به پنل انتخابی (نام = آیپی). توکن = اطلاعات نود در KV.
-      const rest = data.slice(6);
-      const ci = rest.indexOf(":");
-      const tok = ci >= 0 ? rest.slice(0, ci) : rest;
-      const panelId = ci >= 0 ? rest.slice(ci + 1) : "";
-      const rec = await kv.get(`ndadd:${tok}`, "json");
-      if (!rec || !rec.info) return edit("⏳ اطلاعات نود منقضی شد؛ دوباره نود را نصب کن.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      const panels = await getPanels(kv);
-      const panel = panelId ? panels.find((p) => p.id === panelId) : panels[0];
-      if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "📡 مانیتور نود", callback_data: "nd" }]]);
-      const idx = rec.srvIdx;
-      const backKb = idx != null ? [[{ text: "🔙 بازگشت", callback_data: `srvopen:${idx}` }, { text: "🏠 خانه", callback_data: "menu" }]] : [[{ text: "📡 مانیتور نود", callback_data: "nd" }]];
-      await edit(`⏳ در حال افزودن نود «${escHtml(rec.info.ip)}» به پنل «${escHtml(panel.name)}»…`);
-      const r = await pgPanelAddNode(panel, rec.info);
-      if (r.error) {
-        return edit(`⚠️ افزودن نود انجام نشد:\n${escHtml(r.error)}`, [
-          [{ text: "🔁 تلاش دوباره", callback_data: `ndadd:${tok}:${panel.id}` }],
-          ...backKb,
-        ]);
-      }
-      await kv.delete(`ndadd:${tok}`);
-      await edit(
-        `✅ نود به پنل «${escHtml(panel.name)}» اضافه شد.\n\n` +
-        `🖧 نام نود: ${code(rec.info.ip)}\n🌐 آدرس: ${code(rec.info.ip)}\n🔌 پورت: ${code(String(rec.info.port))}`,
-        backKb
-      );
     } else if (data.startsWith("ndhook:")) {
       const i = Number(data.slice(7));
       const monitors = await getNodeMonitors(kv);
@@ -16272,7 +15751,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const hs = r.server || {};
       const hIp = hs.public_net && hs.public_net.ipv4 ? hs.public_net.ipv4.ip : "";
       if (hIp) {
-        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود و نصب نود پیشنهاد می‌شود
+        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود
         return srvProvisionNewServer(kv, env, edit, { host: hIp, password: pw, note: `Hetzner: ${hs.name || ""}` }, hs.id ? `hzsi:${i}:${hs.id}` : `hzs:${i}:0`, chatId);
       }
       return sendSecret(edit, kv, chatId, passMsg("🎉 سرور هتزنر ساخته شد؛ رمز root:", pw), passKb(pw, `hzs:${i}:0`, "🖥️ سرورها"));
@@ -16618,7 +16097,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.delete(`pend:${chatId}`);
       const lnIp = (r.ipv4 && r.ipv4[0]) || "";
       if (lnIp) {
-        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود، رمز تنظیم و نصب نود پیشنهاد می‌شود
+        // سرور ساخته‌شده خودکار به «سرورها» اضافه می‌شود و رمز تنظیم می‌شود
         return srvProvisionNewServer(kv, env, edit, { host: lnIp, password: pass, note: `Linode: ${r.label || ""}` }, r.id ? `lnsi:${i}:${r.id}` : `lns:${i}:0`, chatId);
       }
       await sendSecret(edit, kv, chatId, passMsg("🎉 سرور لینود ساخته شد؛ رمز root:", pass), passKb(pass, `lns:${i}:0`, "🖥️ سرورها"));
