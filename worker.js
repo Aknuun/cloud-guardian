@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.87";
+const BOT_VERSION = "1.8.88";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.88": [
+    "🖥️ صفحه اکانت هتزنر: آی‌پی هر سرور در دکمه‌ای جدا سمت راست نامش (لمس = صفحه سرور)",
+  ],
   "1.8.87": [
     "🔄 صفحه نسخه‌ها: «آپدیت به نسخه آخر» آخرِ واقعی را زنده از گیت‌هاب می‌گیرد (بدون انتظار برای کش/آپدیت خودکار)",
   ],
@@ -18193,8 +18196,14 @@ async function showHzHome(hzAccounts, edit, kv) {
     try { servers = await hzGetAll(hzAccounts[sel].token, "/servers"); } catch (e) {}
     if (!servers) lines.push("⚠️ لیست سرورها خوانده نشد.");
     else if (!servers.length) lines.push("📭 سروری نیست؛ با دکمهٔ زیر بساز.");
-    else for (const s of servers) kb.push({ text: `${hzStatusEmoji(s.status)} ${String(s.name || s.id).slice(0, 30)}`, callback_data: `hzsi:${sel}:${s.id}`, style: "plain" });
-    if (servers && servers.length) kb.push(...grid2(kb.splice(kb.length - servers.length)));
+    // هر سرور یک ردیف: دکمه آی‌پی (راست) + دکمه نام سرور — لمس هر دو = صفحه سرور
+    else for (const s of servers) {
+      const sip = (s.public_net && s.public_net.ipv4 && s.public_net.ipv4.ip) || "—";
+      kb.push([
+        { text: `🌐 ${sip}`, callback_data: `hzsi:${sel}:${s.id}`, style: "plain" },
+        { text: `${hzStatusEmoji(s.status)} ${String(s.name || s.id).slice(0, 30)}`, callback_data: `hzsi:${sel}:${s.id}`, style: "plain" },
+      ]);
+    }
     // تک‌اکانت: اسم در پرانتز نمی‌آید (با چند اکانت برای تشخیص می‌آید)
     const multi = hzAccounts.length > 1;
     kb.push([{ text: multi ? `➕ ساخت سرور در ${nm}` : "➕ ساخت سرور", callback_data: `hzsc:${sel}` }]);
@@ -18236,14 +18245,8 @@ async function showHzServers(hzAccounts, i, page, edit) {
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
   const slice = servers.slice(page * HZ_PAGE_SIZE, page * HZ_PAGE_SIZE + HZ_PAGE_SIZE);
-  // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور — هر ردیف: دکمه آی‌پی (راست) + دکمه نام سرور
-  const kb = slice.map((s) => {
-    const ip = (s.public_net && s.public_net.ipv4 && s.public_net.ipv4.ip) || "—";
-    return [
-      { text: `🌐 ${ip}`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" },
-      { text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" },
-    ];
-  });
+  // hzsi:<acc>:<serverId>: جزئیات و عملیات سرور
+  const kb = grid2(slice.map((s) => ({ text: `${hzStatusEmoji(s.status)} ${s.name} [${s.status}]`, callback_data: `hzsi:${i}:${s.id}`, style: "plain" })));
   const nav = [];
   nav.push(page > 0 ? { text: "◀️", callback_data: `hzs:${i}:${page - 1}` } : EMPTY_BTN);
   nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
