@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.83";
+const BOT_VERSION = "1.8.84";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.84": [
+    "📉 رژیم write: ادغام dedupe هشدار در یک کلید + شمارنده‌های تجمیعی (صرفه‌جویی ~۷۰٪ write)",
+  ],
   "1.8.83": [
     "📡 هاب تله‌متری و اعلان‌ها به ربات لایو منتقل شد (پیام نصب جدید به سازنده می‌رسد)",
   ],
@@ -3223,28 +3226,53 @@ function fmtBytes(n) {
 function qTodayKey() {
   return "qstat:" + new Date().toISOString().slice(0, 10);
 }
-async function qRun(kv, jobs) {
+// شمارنده تجمیعی کم‌هزینه: دلتا در مموی ایزوله، فلاش حداکثر هر ۱۰ دقیقه.
+// با مرگ ایزوله ممکن است ذره‌ای کم بشمارد — برای آمار نمایشی قابل‌قبول (صرفه‌جویی ~۸۰٪ write).
+async function qBatched(kv, bucketFn, field, name, inc) {
   try {
-    if (!kv || !jobs || !jobs.length) return;
-    const k = qTodayKey();
+    if (!kv || !name) return;
+    const now = Date.now();
+    const day = new Date().toISOString().slice(0, 10);
+    let acc = null;
+    try { acc = memGet("qb:" + field); } catch (e) {}
+    if (!acc || typeof acc !== "object" || !acc.counts) acc = { day, counts: {}, flush: 0 };
+    if (acc.day && acc.day !== day && Object.keys(acc.counts).length) {
+      // باقیمانده روز قبل (گذار نیمه‌شب) — یک‌بار فلاش
+      try {
+        const kk = bucketFn(acc.day);
+        let bb = null;
+        try { bb = await kv.get(kk, "json"); } catch (e) {}
+        if (!bb || typeof bb !== "object") bb = {};
+        if (!bb[field] || typeof bb[field] !== "object") bb[field] = {};
+        for (const n of Object.keys(acc.counts)) bb[field][n] = (Number(bb[field][n]) || 0) + Number(acc.counts[n]);
+        await kv.put(kk, JSON.stringify(bb), { expirationTtl: 4 * 86400 });
+      } catch (e) {}
+      acc = { day, counts: {}, flush: 0 };
+    }
+    acc.day = day;
+    acc.counts[name] = (Number(acc.counts[name]) || 0) + (inc === undefined ? 1 : inc);
+    if (now - (Number(acc.flush) || 0) < 10 * 60000) {
+      try { memSet("qb:" + field, acc, 15 * 60000); } catch (e) {}
+      return;
+    }
+    const k = bucketFn(day);
     let b = null;
     try { b = await kv.get(k, "json"); } catch (e) {}
-    if (!b || typeof b !== "object" || !b.runs) b = { runs: {} };
-    for (const j of jobs) b.runs[j] = (Number(b.runs[j]) || 0) + 1;
+    if (!b || typeof b !== "object") b = {};
+    if (!b[field] || typeof b[field] !== "object") b[field] = {};
+    for (const n of Object.keys(acc.counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(acc.counts[n]);
     await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+    try { memSet("qb:" + field, { day, counts: {}, flush: now }, 15 * 60000); } catch (e) {}
   } catch (e) {}
 }
-// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی؛ هر کدام ۱ write)
+async function qRun(kv, jobs) {
+  if (!kv || !jobs || !jobs.length) return;
+  for (const j of jobs) await qBatched(kv, (d) => "qstat:" + d, "runs", j);
+}
+// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی مثل qRun
 async function qAlert(kv, cat) {
-  try {
-    if (!kv || !cat) return;
-    const k = "qal:" + new Date().toISOString().slice(0, 10);
-    let b = null;
-    try { b = await kv.get(k, "json"); } catch (e) {}
-    if (!b || typeof b !== "object" || !b.cats) b = { cats: {} };
-    b.cats[cat] = (Number(b.cats[cat]) || 0) + 1;
-    await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
-  } catch (e) {}
+  if (!kv || !cat) return;
+  await qBatched(kv, (d) => "qal:" + d, "cats", cat);
 }
 const Q_ALERT_FA = {
   pghook: "هشدار انقضا/حجم", um: "بدمصرف", srvmon: "مانیتور سرور",
@@ -8186,25 +8214,20 @@ async function handlePgHook(token, payload, env, botToken) {
       return;
     }
     const nowMs = Date.now();
-    const pgSeen = async (key) => {
+    // رژیم write: یک کلید pgq هم dedupe هفت‌روزه است هم سکوت ۴۵دقیقه‌ای (قبلاً دو کلید جدا بود).
+    // seen = کلید هست؛ quiet = سن کلید زیر ۴۵ دقیقه (مستقل از باکت، مثل قبل). روی skip تمدید نمی‌شود.
+    const pgGate = async (panelId, username, kind, bucket) => {
       try {
-        const v = await kv.get("pgs:" + key, "text");
-        return v !== null && v !== undefined;
-      } catch (e) { return false; }
+        const v = await kv.get(`pgq:${panelId}:${username}:${kind}`, "text");
+        if (v === null || v === undefined) return true;
+        const dot = String(v).lastIndexOf(".");
+        const age = nowMs - Number(String(v).slice(0, dot < 0 ? undefined : dot));
+        if (Number.isFinite(age) && age < 45 * 60000) return false;
+        return String(dot < 0 ? "" : String(v).slice(dot + 1)) !== String(bucket);
+      } catch (e) { return true; }
     };
-    const pgMark = async (key) => {
-      try { await kv.put("pgs:" + key, String(nowMs), { expirationTtl: 7 * 86400 }); } catch (e) {}
-    };
-    // سکوت ۴۵ دقیقه‌ای هر کاربر برای هر نوع هشدار (مستقل از مقدار): موج‌های پشت‌سرهم یکی می‌شوند.
-    // روی skip تمدید نمی‌شود تا پنل پرحرف نتواند برای همیشه ساکت نگه دارد.
-    const pgQuiet = async (panelId, username, kind) => {
-      try {
-        const v = await kv.get(`pgl:${panelId}:${username}:${kind}`, "text");
-        return v !== null && v !== undefined && nowMs - Number(v) < 45 * 60000;
-      } catch (e) { return false; }
-    };
-    const pgQuietMark = async (panelId, username, kind) => {
-      try { await kv.put(`pgl:${panelId}:${username}:${kind}`, String(nowMs), { expirationTtl: 2 * 86400 }); } catch (e) {}
+    const pgGateMark = async (panelId, username, kind, bucket) => {
+      try { await kv.put(`pgq:${panelId}:${username}:${kind}`, nowMs + "." + bucket, { expirationTtl: 7 * 86400 }); } catch (e) {}
     };
     let anyJob = false;
     const seenRun = new Set();
@@ -8232,28 +8255,26 @@ async function handlePgHook(token, payload, env, botToken) {
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
       // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
-      if (ev.days !== null && ev.days !== undefined && !(await pgQuiet(panel.id, ev.username, "days"))) {
+      if (ev.days !== null && ev.days !== undefined) {
         const dv = Math.floor(ev.days * 10) / 10;
         const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
         if (ok) {
-          const key = panel.id + ":" + ev.username + ":d:" + Math.floor(dv);
           const rk = panel.id + ":" + ev.username + ":days";
-          if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
-            jobs.push({ kind: "days", value: dv, key, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
-            markKeys.push(key);
+          if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "days", Math.floor(dv)))) {
+            jobs.push({ kind: "days", value: dv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
+            markKeys.push({ panelId: panel.id, username: ev.username, kind: "days", bucket: Math.floor(dv) });
             seenRun.add(rk);
           }
         }
       }
-      if (ev.usage !== null && ev.usage !== undefined && !(await pgQuiet(panel.id, ev.username, "usage"))) {
+      if (ev.usage !== null && ev.usage !== undefined) {
         const uv = Math.floor(ev.usage * 10) / 10;
         const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
         if (ok) {
-          const key = panel.id + ":" + ev.username + ":u:" + Math.floor(uv);
           const rk = panel.id + ":" + ev.username + ":usage";
-          if (!seenRun.has(rk) && !markKeys.includes(key) && !(await pgSeen(key))) {
-            jobs.push({ kind: "usage", value: uv, key, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
-            markKeys.push(key);
+          if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "usage", Math.floor(uv)))) {
+            jobs.push({ kind: "usage", value: uv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
+            markKeys.push({ panelId: panel.id, username: ev.username, kind: "usage", bucket: Math.floor(uv) });
             seenRun.add(rk);
           }
         }
@@ -8276,19 +8297,11 @@ async function handlePgHook(token, payload, env, botToken) {
       }
     }
     if (anyJob) {
-      for (const k of markKeys) await pgMark(k);
-      try {
-        const doneKinds = new Set();
-        for (const k of markKeys) {
-          const parts = String(k).split(":");
-          const kind = parts[parts.length - 2] === "d" ? "days" : parts[parts.length - 2] === "u" ? "usage" : null;
-          const user = parts.slice(1, -2).join(":");
-          if (kind && user && !doneKinds.has(kind + "|" + user)) {
-            doneKinds.add(kind + "|" + user);
-            await pgQuietMark(parts[0], user, kind);
-          }
-        }
-      } catch (e) {}
+      for (const m of markKeys) {
+        try {
+          if (m && m.panelId && m.username && m.kind) await pgGateMark(m.panelId, m.username, m.kind, m.bucket);
+        } catch (e) {}
+      }
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
