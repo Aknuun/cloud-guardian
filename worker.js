@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.84";
+const BOT_VERSION = "1.8.85";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.85": [
+    "➕ ساخت رکورد: TXT/MX/NS هم اضافه شد (برای MX اولویت پرسیده می‌شود)؛ تغییر نوع همان ۳ تای قبلی ماند",
+    "✏️ موقع تغییر مقدار، ساب و مقدار فعلی هم نشان داده می‌شود",
+    "🔙 بعد از افزودن رکورد، بازگشت به صفحه همان دامنه است (نه لیست کلودفلر)",
+  ],
   "1.8.84": [
     "📉 رژیم write: ادغام dedupe هشدار در یک کلید + شمارنده‌های تجمیعی (صرفه‌جویی ~۷۰٪ write)",
   ],
@@ -945,6 +950,9 @@ async function arvanGetRegions(token, kv, env) {
   return ARVAN_REGIONS.map((c) => ({ code: c, fa: c, def: false }));
 }
 const RECORD_TYPES = ["A", "AAAA", "CNAME"];
+// ویزارد ساخت رکورد: TXT و NS با همان POST ساده ساخته می‌شوند، MX فقط priority اضافه می‌خواهد.
+// SRV/CAA فیلد ساخت‌یافته (data) می‌خواهند و فعلاً در ویزارد نیستند. تغییر نوع (تکی/گروهی) همان ۳ تای اصلی می‌ماند.
+const ADD_RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "NS"];
 const PAGE_SIZE = 8;
 const RECORD_PAGE_SIZE = 18;
 const CZ_PAGE_SIZE = 12;
@@ -1930,7 +1938,7 @@ const HELP_GUIDE = {
   rec:
     "➕ افزودن رکورد\n\n" +
     "از ردیف اول منوی اصلی یا از داخل هر دامنه، رکورد جدید را گام‌به‌گام بساز:\n" +
-    "نوع (A/AAAA/CNAME) → نام/ساب‌دامنه → مقدار/آی‌پی → TTL → Proxy.",
+    "نوع (A/AAAA/CNAME/TXT/MX/NS) → نام/ساب‌دامنه → مقدار/آی‌پی → TTL → Proxy.",
   bulk:
     "🗂 عملیات گروهی\n\n" +
     "داخل هر دامنه دکمهٔ «🗂 گروهی» را بزن، چند ساب‌دامنه را انتخاب کن و یک‌جا:\n" +
@@ -9558,14 +9566,14 @@ async function showAccounts(accounts, send) {
 }
 
 async function handleAdd(args, accounts, send, kv) {
-  const [, zoneName, type, name, content, ttlArg, proxyArg] = args;
+  const [, zoneName, type, name, content, ttlArg, proxyArg, prioArg] = args;
   if (!zoneName || !type || !name || !content) {
-    await send("⚠️ استفاده: /add <دامنه> <نوع> <نام> <مقدار> [ttl] [proxy]\nمثال: /add example.com A www 1.2.3.4 true");
+    await send("⚠️ استفاده: /add <دامنه> <نوع> <نام> <مقدار> [ttl] [proxy] [priority]\nمثال: /add example.com A www 1.2.3.4 true\nمثال MX: /add example.com MX @ mail.example.com 1 false 10");
     return;
   }
   const typeUp = type.toUpperCase();
-  if (!RECORD_TYPES.includes(typeUp)) {
-    await send("❌ نوع رکورد باید A، AAAA یا CNAME باشد.");
+  if (!ADD_RECORD_TYPES.includes(typeUp)) {
+    await send("❌ نوع رکورد باید یکی از این‌ها باشد: " + ADD_RECORD_TYPES.join("، ") + ".");
     return;
   }
   const zone = await findZone(zoneName, accounts);
@@ -9578,7 +9586,7 @@ async function handleAdd(args, accounts, send, kv) {
   const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
     method: "POST",
     headers: hdr(accounts[zone._acc].token),
-    body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: ttl || 1, proxied }), signal: withTimeout() });
+    body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: ttl || 1, proxied, ...(typeUp === "MX" ? { priority: prioArg && /^\d+$/.test(prioArg) ? Number(prioArg) : 10 } : {}) }), signal: withTimeout() });
   const data = await res.json();
   if (data.success) {
     await invalidateCache(kv, zone.id);
@@ -9749,8 +9757,10 @@ async function addRecordFromPending(pending, content, accounts, kv, chatId, send
   const res = await fetch(`${CF_API}/zones/${pending.zone_id}/dns_records`, {
     method: "POST",
     headers: hdr(accounts[pending.acc].token),
-    body: JSON.stringify({ type: pending.rtype, name: fullName, content, ttl: 1, proxied: false }), signal: withTimeout() });
+    body: JSON.stringify({ type: pending.rtype, name: fullName, content, ttl: 1, proxied: false, ...(pending.rtype === "MX" ? { priority: pending.priority != null ? Number(pending.priority) : 10 } : {}) }), signal: withTimeout() });
   const data = await res.json();
+  // بازگشت به صفحه همان دامنه (نه لیست کلودفلر)
+  const backCb = pending.stok ? `rback:${pending.stok}` : "zones";
   if (data.success) {
     await invalidateCache(kv, pending.zone_id);
     const kb = [];
@@ -9761,13 +9771,13 @@ async function addRecordFromPending(pending, content, accounts, kv, chatId, send
       });
       kb.push([{ text: "🛰 روشن‌کردن Proxy", callback_data: `ep:${token}:${data.result.id}` }]);
     }
-    kb.push([{ text: "🔙 بازگشت", callback_data: "zones" }, { text: "🏠 خانه", callback_data: "menu" }]);
+    kb.push([{ text: "🔙 بازگشت", callback_data: backCb }, { text: "🏠 خانه", callback_data: "menu" }]);
     await send(
-      `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}\nTTL: خودکار`,
+      `✅ رکورد ساخته شد:\n${data.result.type}-${code(data.result.name)} → ${code(data.result.content)}` + (data.result.type === "MX" && data.result.priority != null ? `\n🔢 اولویت: ${data.result.priority}` : "") + `\nTTL: خودکار`,
       kb
     );
   } else {
-    await send("❌ خطا:\n" + cfErrText(data));
+    await send("❌ خطا:\n" + cfErrText(data), [[{ text: "🔙 بازگشت", callback_data: backCb }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
 }
 
@@ -10424,6 +10434,12 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     if (pending.rtype === "CNAME") {
       const { text, kb } = await cnameTargetPickerData(accounts, kv, txt);
       await send(text, kb);
+    } else if (pending.rtype === "MX") {
+      await send("📮 هاست سرور ایمیل را بفرستید (مثلاً mail.example.com):", [[{ text: "⬅️ انصراف", callback_data: "arnameback:" }]]);
+    } else if (pending.rtype === "TXT") {
+      await send("📝 متن رکورد TXT را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "arnameback:" }]]);
+    } else if (pending.rtype === "NS") {
+      await send("🔤 هاست نیم‌سرور را بفرستید (مثلاً ns1.example.com):", [[{ text: "⬅️ انصراف", callback_data: "arnameback:" }]]);
     } else {
       await send("🔤 حالا مقدار IP رکورد را بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "arnameback:" }]]);
     }
@@ -10431,7 +10447,19 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   }
 
   if (type === "ar_content") {
+    if (pending.rtype === "MX") {
+      // کلادفلر برای MX فیلد priority را اجباری می‌خواهد؛ یک قدم اضافه می‌پرسیم
+      await kv.put(`pend:${chatId}`, JSON.stringify({ ...pending, type: "ar_priority", content: txt }), { expirationTtl: 600 });
+      await send("🔢 اولویت MX را بفرستید (عدد؛ خالی = ۱۰):", [[{ text: "⬅️ انصراف", callback_data: "arnameback:" }]]);
+      return;
+    }
     await addRecordFromPending(pending, txt, accounts, kv, chatId, send);
+    return;
+  }
+
+  if (type === "ar_priority") {
+    const pr = /^\d+$/.test(txt) ? Number(txt) : 10;
+    await addRecordFromPending({ ...pending, priority: pr }, pending.content, accounts, kv, chatId, send);
     return;
   }
 
@@ -12579,6 +12607,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const parts = data.split(":");
       const token = parts[1];
       const rtype = parts[2];
+      if (!ADD_RECORD_TYPES.includes(rtype)) return edit("❌ نوع رکورد نامعتبر است.");
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
       const arBack = session.via === "addrec" ? `arz:${session.acc}:${session.zone_id}` : `rback:${token}`;
@@ -12591,9 +12620,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         [{ text: "⬅️ انصراف", callback_data: arBack }],
       ]);
     } else if (data === "arnameback:") {
-      // برگشت از پرامپت مقدار به پرامپت نام (همان فلو افزودن)
+      // برگشت از پرامپت مقدار/اولویت به پرامپت نام (همان فلو افزودن)
       const pending = await kv.get(`pend:${chatId}`, "json");
-      if (!pending || pending.type !== "ar_content") return edit("⏳ عملیات منقضی شده.");
+      if (!pending || (pending.type !== "ar_content" && pending.type !== "ar_priority")) return edit("⏳ عملیات منقضی شده.");
       const arBack =
         pending.via === "addrec" && pending.zone_id ? `arz:${pending.acc}:${pending.zone_id}` : pending.stok ? `rback:${pending.stok}` : "zones";
       await kv.put(`pend:${chatId}`, JSON.stringify({ ...pending, type: "ar_name" }), { expirationTtl: 600 });
@@ -13664,7 +13693,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         JSON.stringify({ type: field, zone_id: session.zone_id, record_id: recordId, rec_name: rec0.name, rec_type: rec0.type, acc: session.acc, token, msgId: messageId, provider: session.provider || "cloudflare", domain: session.domain, backCb: `p:${token}:${Number(session.page) || 0}` }),
         { expirationTtl: 600 }
       );
-      await edit("✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):", [[{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }]]);
+      await edit(`✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):\n\n📛 سابی که تغییر می‌کند: ${code(rec0.name)}\n\n🔴 مقدار فعلی که عوض می‌شود:\n${code(String(rec0.content || ""))}`, [[{ text: "⬅️ انصراف", callback_data: `e:${token}:${recordId}` }]]);
     } else if (data.startsWith("cancel:")) {
       await kv.delete(`pend:${chatId}`);
       const token = data.slice(7);
@@ -16198,9 +16227,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
 }
 
 // انتخاب نوع رکورد در ویزارد افزودن رکورد.
-// at:<token>:<type> = انتخاب نوع (A/AAAA/CNAME) | p:<token>:<page> = بازگشت به صفحهٔ قبل
+// at:<token>:<type> = انتخاب نوع (A/AAAA/CNAME/TXT/MX/NS) | p:<token>:<page> = بازگشت به صفحهٔ قبل
 function typeKeyboard(token, backPage, backCb) {
-  const kb = [RECORD_TYPES.map((t) => ({ text: t, callback_data: `at:${token}:${t}` }))];
+  const kb = [];
+  for (let i = 0; i < ADD_RECORD_TYPES.length; i += 3) {
+    kb.push(ADD_RECORD_TYPES.slice(i, i + 3).map((t) => ({ text: t, callback_data: `at:${token}:${t}` })));
+  }
   kb.push([{ text: "🔙 بازگشت", callback_data: backCb || `p:${token}:${backPage}` }, { text: "🏠 خانه", callback_data: "menu" }]);
   return kb;
 }
