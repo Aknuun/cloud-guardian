@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.86";
+const BOT_VERSION = "1.8.87";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.87": [
+    "🔄 صفحه نسخه‌ها: «آپدیت به نسخه آخر» آخرِ واقعی را زنده از گیت‌هاب می‌گیرد (بدون انتظار برای کش/آپدیت خودکار)",
+  ],
   "1.8.86": [
     "🖥️ لیست سرورهای هتزنر: آی‌پی هر سرور در دکمه‌ای جدا سمت راست نامش (لمس = صفحه سرور)",
   ],
@@ -2751,6 +2754,22 @@ async function selfCachedReleases(kv) {
   }
   if (prev && prev.items.length) return { items: prev.items, stale: true, status };
   return { items: [], stale: false, status };
+}
+
+// تگ‌های زندهٔ گیت‌هاب (برای «آپدیت به نسخه آخر»؛ خرابی/سهمیه → [] و همان کش ملاک است).
+// فقط خواندنی است و چیزی در KV نمی‌نویسد.
+async function selfLiveTags(kv) {
+  try {
+    const t = await fetch(SELF_TAGS_URL, {
+      headers: ghApiHeaders(null, await ghToken(kv, null)),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!t.ok) return [];
+    const tj = await t.json();
+    return (Array.isArray(tj) ? tj : []).map((x) => x && x.name).filter((n) => n && selfVerParts(n));
+  } catch (e) {
+    return [];
+  }
 }
 
 // دیپلوی یک تگ مشخص (هستهٔ مشترک آپدیت خودکار و دکمه‌های دستی).
@@ -12238,10 +12257,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       // settings: صفحهٔ تنظیمات و راهنما (تنظیم رله · مدیریت ادمین‌ها · راهنمای بخش‌ها)
       await edit(settingsHomeText(), await settingsHomeKbFor(env, botToken, kv));
     } else if (data === "vers") {
-      // نسخه‌ها: ۲۰ ریلیز آخر + پین + آپدیت به آخر
+      // نسخه‌ها: ۲۰ ریلیز آخر + پین + آپدیت به آخر (آخرِ واقعی زنده از گیت‌هاب، بدون انتظار برای کش/آپدیت خودکار)
       await edit("⏳ در حال گرفتن لیست نسخه‌ها از گیت‌هاب…");
       const vList = await selfCachedReleases(kv);
-      const vItems = vList.items;
+      let vItems = vList.items.slice();
+      try {
+        const vLive = await selfLiveTags(kv);
+        const vHave = new Set(vItems.map((x) => x.tag));
+        for (const t of vLive) {
+          if (!vHave.has(t)) { vItems.push({ tag: t, at: "" }); vHave.add(t); }
+        }
+        vItems.sort((a, b) => (selfVerGreater(a.tag, b.tag) ? -1 : selfVerGreater(b.tag, a.tag) ? 1 : 0));
+        vItems = vItems.slice(0, 20);
+      } catch (e) {}
       let vPinned = "";
       try { vPinned = (await kv.get("selfup_pinned", "text")) || ""; } catch (e) {}
       if (!vItems.length) {
@@ -12273,7 +12301,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const vBack = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
       if (!/^v?\d+(\.\d+){1,2}$/.test(vTag)) return edit("❌ نسخه نامعتبر است.", vBack);
       const vItems2 = (await selfCachedReleases(kv)).items;
-      if (!vItems2.some((x) => x.tag === vTag)) return edit("❌ این نسخه در لیست ۲۰ ریلیز آخر نیست.", vBack);
+      let vKnown = vItems2.some((x) => x.tag === vTag);
+      if (!vKnown) {
+        try { vKnown = (await selfLiveTags(kv)).includes(vTag); } catch (e) {}
+      }
+      if (!vKnown) return edit("❌ این نسخه در لیست ۲۰ ریلیز آخر نیست.", vBack);
       const vLatest2 = selfLatestTag(vItems2.map((x) => x.tag));
       await edit("⏳ در حال نصب " + vTag + " … (ممکن است تا یک دقیقه طول بکشد)");
       const vr = await selfDeployTag(env, botToken, adminId, { tag: vTag, allowDowngrade: true, via: "manual", skipGuard: false });
@@ -12290,13 +12322,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const vBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
       await edit("⏳ در حال بررسی آخرین نسخه…");
       let vTagNames = [];
-      try {
-        const tRes = await fetch(SELF_TAGS_URL, { headers: ghApiHeaders(null, await ghToken(kv, env)), signal: AbortSignal.timeout(30000) });
-        if (tRes.ok) {
-          const tj = await tRes.json();
-          if (Array.isArray(tj)) vTagNames = tj.map((t) => t && t.name).filter(Boolean);
-        }
-      } catch (e) {}
+      try { vTagNames = await selfLiveTags(kv); } catch (e) {}
       const vItems3 = (await selfCachedReleases(kv)).items;
       for (const x of vItems3) if (x && x.tag) vTagNames.push(x.tag);
       const vLatest3 = selfLatestTag(vTagNames);
