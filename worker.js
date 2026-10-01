@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.89";
+const BOT_VERSION = "1.8.90";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.90": [
+    "✍️ صفحه اصلی سهمیه هم write واقعی هر بخش را نشان می‌دهد (به‌جای تعداد اجرا)",
+  ],
   "1.8.89": [
     "✍️ صفحه‌های سهمیه: به‌جای تعداد اجرا، write واقعی هر دکمه و کرون ثبت می‌شود (تجمیعی، بدون write اضافه)",
   ],
@@ -3803,24 +3806,28 @@ async function renderQuotaMenu(edit, kv, env) {
     lines.push("• نامشخص (آنالیتیکس در دسترس نیست)");
   }
 
-  lines.push("", "📊 مصرف امروز به تفکیک (تعداد اجرا):");
-  let qb = null;
-  try { qb = kv ? await kv.get(qTodayKey(), "json") : null; } catch (e) {}
-  const runs = (qb && qb.runs) || {};
+  lines.push("", "📊 مصرف امروز به تفکیک (write واقعی):");
+  const wmap = await qwDayMap(kv);
   const order = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
-  let anyRun = false;
-  for (const j of order) {
-    const n = Number(runs[j]) || 0;
+  const extra = Object.keys(wmap).filter((k) => QW_CRON.has(k) && !order.includes(k)).sort();
+  let anyRun = false, totW = 0;
+  for (const j of [...order, ...extra]) {
+    const n = Number(wmap[j]) || 0;
     if (!n) continue;
     anyRun = true;
-    lines.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} بار`);
+    totW += n;
+    lines.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} write`);
   }
-  if (!anyRun) lines.push("• هنوز اجرایی ثبت نشده (از فردا پر می‌شود).");
-  if (count !== null) {
-    const est = Math.max(0, count - 1873);
-    lines.push(`• 🤖 پیام‌ها و دکمه‌های تلگرام (تخمین): ${faNum(est.toLocaleString("en-US"))}`);
+  let webW = 0;
+  for (const k of Object.keys(wmap)) if (!QW_CRON.has(k)) webW += (Number(wmap[k]) || 0);
+  if (webW) {
+    anyRun = true;
+    totW += webW;
+    lines.push(`• 🤖 پیام‌ها و دکمه‌های تلگرام: ${faNum(webW.toLocaleString("en-US"))} write`);
   }
-  lines.push("ℹ️ تعداد اجراها دقیق است؛ سهمیه KV به تفکیک کرون را API کلادفلر نمی‌دهد.");
+  if (!anyRun) lines.push("• هنوز write ثبت نشده.");
+  else lines.push(`• جمع write ثبت‌شده: ${faNum(totW.toLocaleString("en-US"))}`);
+  lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۱۰ دقیقه).");
   lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
   lines.push(
