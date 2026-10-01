@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.88";
+const BOT_VERSION = "1.8.89";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.89": [
+    "✍️ صفحه‌های سهمیه: به‌جای تعداد اجرا، write واقعی هر دکمه و کرون ثبت می‌شود (تجمیعی، بدون write اضافه)",
+  ],
   "1.8.88": [
     "🖥️ صفحه اکانت هتزنر: آی‌پی هر سرور در دکمه‌ای جدا سمت راست نامش (لمس = صفحه سرور)",
   ],
@@ -1373,7 +1376,7 @@ export default {
     const qcfg = await getQuotaCfg(env.BOT_KV, env).catch(() => null);
     if (qcfg && qcfg.cronPausedUntil) {
       if (Date.now() < qcfg.cronPausedUntil) {
-        ctx.waitUntil(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+        ctx.waitUntil(quotaGuard({ ...env, BOT_KV: qKvCount(env.BOT_KV, "qg") }, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
         return;
       }
       // پایان خاموشی موقت: زمان‌بندهای اصلی کرون را برگردان
@@ -1382,9 +1385,8 @@ export default {
       ctx.waitUntil(quotaRestoreSchedules(env, env.BOT_KV).catch(() => {}));
     }
     if (cron === "0 9 * * *") {
-      ctx.waitUntil(runSslMonitor(env).catch((e) => console.error("SSLM", String(e))));
-      ctx.waitUntil(runDomExpiryMonitor(env).catch((e) => console.error("DOMEXP", String(e))));
-      ctx.waitUntil(qRun(env.BOT_KV, ["ssl", "domexp"]).catch(() => {}));
+      ctx.waitUntil(runSslMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "ssl") }).catch((e) => console.error("SSLM", String(e))));
+      ctx.waitUntil(runDomExpiryMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "domexp") }).catch((e) => console.error("DOMEXP", String(e))));
     } else if (cron === "*/10 * * * *") {
       // همهٔ کارهای دوره‌ای در یک بلوک؛ زمان‌بندی‌شان در یک کلید (cron_state) ذخیره می‌شود
       ctx.waitUntil(
@@ -1394,60 +1396,59 @@ export default {
           const now = Date.now();
           const jobs = [];
           const patch = {};
-          jobs.push(runNodePoll(env).catch((e) => console.error("NODEPOLL", String(e))));
+          // شمارش write واقعی هر جاب: env جدا با KV شمارنده‌دار (فقط put/delete)
+          const qe = (s) => ({ ...env, BOT_KV: qKvCount(env.BOT_KV, s) });
+          jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
           if (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS) {
             patch.um = now;
-            jobs.push(runUsageMonitor(env, { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
+            jobs.push(runUsageMonitor(qe("um"), { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
           }
           if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
             patch.srv = now;
-            jobs.push(runSrvMonitor(env, botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
+            jobs.push(runSrvMonitor(qe("srv"), botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
           }
           if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS + selfupJitter(env)) {
             patch.selfup = now;
-            jobs.push(maybeSelfUpdate(env, botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
+            jobs.push(maybeSelfUpdate(qe("selfup"), botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
           }
           if (!cs.ann || now - cs.ann >= ANN_MIN_MS - selfupJitter(env)) {
             patch.ann = now;
-            jobs.push(runAnnFetch(env, botToken).catch((e) => console.error("ANN", String(e))));
+            jobs.push(runAnnFetch(qe("ann"), botToken).catch((e) => console.error("ANN", String(e))));
           }
           if (!cs.tm || now - cs.tm >= TM_MIN_MS - selfupJitter(env)) {
             patch.tm = now;
-            jobs.push(runTelemetryPing(env).catch((e) => console.error("TM", String(e))));
+            jobs.push(runTelemetryPing(qe("tm")).catch((e) => console.error("TM", String(e))));
           }
           if (!cs.hubwatch || now - cs.hubwatch >= 60 * 60000) {
             patch.hubwatch = now;
-            jobs.push(runHubWatch(env).catch((e) => console.error("HUBWATCH", String(e))));
+            jobs.push(runHubWatch(qe("hubwatch")).catch((e) => console.error("HUBWATCH", String(e))));
             // واچ‌داگ رله سوار همین تیک ساعتی است (خوانش KV و سهمیه اضافه ندارد)
-            jobs.push(runRelayWatch(env).catch((e) => console.error("RELAYWATCH", String(e))));
+            jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
           }
-          jobs.push(ensureTgWebhook(botToken, ckv, env).catch((e) => console.error("TGSEC", String(e))));
-          jobs.push(runSecretSweep(botToken, ckv).catch((e) => console.error("SECDEL", String(e))));
-          jobs.push(announceRelease(env, botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
+          jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
+          jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
+          jobs.push(announceRelease(qe("ann"), botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
           if (!cs.qg || now - cs.qg >= 60 * 60000) {
             patch.qg = now;
-            jobs.push(quotaGuard(env, botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+            jobs.push(quotaGuard(qe("qg"), botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
           }
-          jobs.push(ensureBotCommands(env, botToken, ckv).catch(() => {}));
+          jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
           await Promise.allSettled(jobs);
-          if (Object.keys(patch).length) await saveCronState(ckv, { ...cs, ...patch });
-          const ran10 = [...Object.keys(patch), "node10", "tgsec", "secsweep"];
-          if (patch.hubwatch) ran10.push("relaywatch");
-          await qRun(ckv, ran10);
+          if (Object.keys(patch).length) await saveCronState(qKvCount(ckv, "cron"), { ...cs, ...patch });
         })()
       );
     } else {
       // کرون هر دقیقه: پول نود (تراز دقیقه‌ای داخل خودش؛ write فقط موقع تغییر) + هاست‌فیلتر + یادآورها
-      ctx.waitUntil(runNodePoll(env, {}).catch((e) => console.error("NODEPOLL1M", String(e))));
+      ctx.waitUntil(runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))));
       ctx.waitUntil(
-        runHostFilter(env).catch(async (e) => {
+        runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
           console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
           try {
             await env.BOT_KV.put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
           } catch (x) {}
         })
       );
-      ctx.waitUntil(runReminders(env).catch((e) => console.error("REMIND", String(e))));
+      ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
     }
   },
 
@@ -1506,7 +1507,7 @@ export default {
 };
 
 async function processUpdate(payload, env, botToken, adminId) {
-  const kv = env.BOT_KV;
+  let kv = env.BOT_KV;
   // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
   await ensureBotCommands(env, botToken, kv).catch(() => {});
 
@@ -1602,6 +1603,15 @@ async function processUpdate(payload, env, botToken, adminId) {
 
     const args = text.split(/\s+/);
     const cmd = args[0].toLowerCase();
+    // شمارش write واقعی این پیام/دستور (فقط put/delete؛ تجمیعی و بدون write اضافه)
+    kv = qKvCount(
+      kv,
+      pending && !text.startsWith("/") && pending.type
+        ? "p:" + String(pending.type).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24)
+        : text.startsWith("/")
+          ? "m:" + cmd.slice(1).replace(/[^a-z0-9_]/g, "").slice(0, 24)
+          : "m:text"
+    );
 
     if (!text.startsWith("/") && (isIpLike(text) || isNameLike(text))) {
       const qa = await kv.get(`qa:${chatId}`, "json");
@@ -3298,14 +3308,47 @@ async function qBatched(kv, bucketFn, field, name, inc) {
     try { memSet("qb:" + field, { day, counts: {}, flush: now }, 15 * 60000); } catch (e) {}
   } catch (e) {}
 }
-async function qRun(kv, jobs) {
-  if (!kv || !jobs || !jobs.length) return;
-  for (const j of jobs) await qBatched(kv, (d) => "qstat:" + d, "runs", j);
-}
-// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی مثل qRun
+// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی و ترتیبی
 async function qAlert(kv, cat) {
   if (!kv || !cat) return;
-  await qBatched(kv, (d) => "qal:" + d, "cats", cat);
+  await qBatchedSeq(kv, (d) => "qal:" + d, "cats", cat);
+}
+// ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
+// فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۱۰ دقیقه
+// (مثل qBatched) پس خودش write اضافه‌ای ندارد. فلاش با kv خام انجام می‌شود (بدون بازگشت).
+const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd"]);
+// زنجیره ترتیبی شمارش: جاب‌های هم‌زمان (Promise.allSettled) نباید حافظه تجمیعی را مسابقه‌ای خراب کنند.
+// qBatched خودش reject نمی‌کند پس زنجیره هرگز نمی‌شکند؛ فلاش داخلش با kv خام است (بدون بازگشت).
+let qbChain = null;
+function qBatchedSeq(kv, bucketFn, field, name, inc) {
+  try {
+    const p = (qbChain || Promise.resolve()).then(() => qBatched(kv, bucketFn, field, name, inc));
+    qbChain = p.catch(() => {});
+    return qbChain;
+  } catch (e) { return Promise.resolve(); }
+}
+function qKvCount(kv, sec) {
+  if (!kv || !sec) return kv;
+  const count = () => qBatchedSeq(kv, (d) => "qw:" + d, "w", sec).catch(() => {});
+  return {
+    get: (k, t) => kv.get(k, t),
+    list: (o) => kv.list(o),
+    put: async (k, v, o) => { try { await count(); } catch (e) {} return kv.put(k, v, o); },
+    delete: async (k) => { try { await count(); } catch (e) {} return kv.delete(k); },
+  };
+}
+// بخش‌بندی کال‌بک دکمه‌ها: پیشوند قبل از «:» (حتماً b: تا با اسم کرون‌ها قاطی نشود)
+function qwBtnSec(data) {
+  const p = String(data || "").split(":")[0] || "?";
+  return "b:" + p.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24);
+}
+// نقشه write امروز به تفکیک بخش
+async function qwDayMap(kv) {
+  try {
+    const d = new Date().toISOString().slice(0, 10);
+    const b = kv ? await kv.get("qw:" + d, "json") : null;
+    return b && b.w && typeof b.w === "object" ? b.w : {};
+  } catch (e) { return {}; }
 }
 const Q_ALERT_FA = {
   pghook: "هشدار انقضا/حجم", um: "بدمصرف", srvmon: "مانیتور سرور",
@@ -12200,6 +12243,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   // خودثبت‌نامی پاسارگارد: غیرادمین فقط دکمه انتخاب پنل/انصراف (بقیه کال‌بک‌ها مثل قبل ساکت رد می‌شوند)
   const pgSelfOpen = data === "pgselfcancel" || data.startsWith("pgself:");
   if (!admins.includes(chatId) && !pgSelfOpen) return;
+  // شمارش write واقعی این دکمه (فقط put/delete؛ تجمیعی و بدون write اضافه)
+  kv = qKvCount(kv, qwBtnSec(data));
 
   const isMain = chatId === adminId;
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
@@ -14441,16 +14486,20 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       L.push(`🔮 پیش‌بینی درخواست تا پایان روز: ${faNum((1873).toLocaleString("en-US"))} (قطعی)`);
       L.push("");
+      const wmap0 = await qwDayMap(kv);
       const order0 = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
-      let any0 = false;
-      for (const j of order0) {
-        const n = Number((M0.runs[j])) || 0;
+      const extra0 = Object.keys(wmap0).filter((k) => QW_CRON.has(k) && !order0.includes(k)).sort();
+      let any0 = false, tot0 = 0;
+      for (const j of [...order0, ...extra0]) {
+        const n = Number(wmap0[j]) || 0;
         if (!n) continue;
         any0 = true;
-        L.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} بار`);
+        tot0 += n;
+        L.push(`• ${Q_JOB_FA[j] || j}: ${faNum(n.toLocaleString("en-US"))} write`);
       }
-      if (!any0) L.push("• هنوز اجرایی ثبت نشده (از فردا پر می‌شود).");
-      L.push("ℹ️ تیک‌ها قطعی‌اند؛ KV تسهیم تخمینی بر اساس فعالیت است.");
+      if (any0) L.push("", `جمع write کرون‌ها: ${faNum(tot0.toLocaleString("en-US"))}`);
+      else L.push("• هنوز write ثبت نشده.");
+      L.push("ℹ️ write واقعی هر کرون (تجمیعی در حافظه، فلاش هر ۱۰ دقیقه).");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qbtns") {
       // سهم تعامل تلگرام: کل منهای تیک‌های قطعی
@@ -14469,7 +14518,21 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       for (const k of ["read", "write", "delete", "list"]) {
         L.push(qKvLine(emw[k], KV_ACTION_LABEL[k] + " (تخمین)", kvw1[k], KV_LIMITS_DAILY[k]));
       }
-      L.push("", "ℹ️ هر پیام/دکمه ≈ ۱ درخواست (کل منهای تیک قطعی کرون‌ها). شمارش دقیق پیام write دوبرابر می‌خواهد.");
+      const wmap1 = await qwDayMap(kv);
+      const bkeys1 = Object.keys(wmap1).filter((k) => !QW_CRON.has(k)).sort((a, b) => (Number(wmap1[b]) || 0) - (Number(wmap1[a]) || 0));
+      let tot1 = 0;
+      for (const k of bkeys1) tot1 += (Number(wmap1[k]) || 0);
+      L.push("", "✍️ write واقعی دکمه‌ها و پیام‌ها:");
+      let any1 = false;
+      for (const k of bkeys1.slice(0, 30)) {
+        const n = Number(wmap1[k]) || 0;
+        if (!n) continue;
+        any1 = true;
+        L.push(`• ${k.replace(/^[bmp]:/, "")}: ${faNum(n.toLocaleString("en-US"))} write`);
+      }
+      if (!any1) L.push("• هنوز write ثبت نشده.");
+      else L.push("", `جمع write دکمه‌ها و پیام‌ها: ${faNum(tot1.toLocaleString("en-US"))}`);
+      L.push("ℹ️ write واقعی هر دکمه/پیام (تجمیعی در حافظه، فلاش هر ۱۰ دقیقه).");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qalerts") {
       // سهم هشدارها: شمارش واقعی ارسال‌ها + تسهیم KV
@@ -20813,7 +20876,6 @@ async function runReminders(env) {
   const now = Date.now();
   const due = list.filter((r) => r && !r.notifiedAt && Number(r.at) <= now);
   if (!due.length) return;
-  await qRun(kv, ["rem"]);
   // علامت‌گذاری به‌عنوان اطلاع‌داده‌شده (برای دکمهٔ «یادآوری مجدد» نگه می‌داریم)
   for (const r of due) r.notifiedAt = now;
   await saveReminders(kv, list);
@@ -20921,8 +20983,6 @@ async function runHostFilter(env, opts = {}) {
     cfg.last_attempt = new Date().toISOString();
     await saveHostFilterCfg(kv, cfg);
   }
-  await qRun(kv, ["hf"]);
-
   const accounts = await getAccounts(kv, env);
   const panels = await getPanels(kv);
   if (!accounts.length || !panels.length) {
