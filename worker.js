@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.92";
+const BOT_VERSION = "1.8.93";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.93": [
+    "✍️ شمارش write برای وبهوک هشدار، تله‌متری، نود، contact و ایمیل هم اضافه شد (سایر آب رفت)",
+  ],
   "1.8.92": [
     "🔧 شمارنده write کاملاً همگام و بدون قفل بازنویسی شد: زیر بار هم‌زمان نه چیزی گم می‌شود نه چیزی گیر می‌کند",
   ],
@@ -1106,7 +1109,7 @@ export default {
   async fetch(request, env, ctx) {
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
-    const kv = env.BOT_KV;
+    let kv = env.BOT_KV;
     const url = new URL(request.url);
 
     if (request.method === "POST" && (url.pathname.startsWith("/ndhook/") || url.pathname.startsWith("/node-hook/"))) {
@@ -1118,7 +1121,7 @@ export default {
       } catch (e) {
         console.error("NDHOOK_PARSE", String(e));
       }
-      ctx.waitUntil(handleNodeEvent(token, payload, env, botToken));
+      ctx.waitUntil(handleNodeEvent(token, payload, { ...env, BOT_KV: qKvCount(env.BOT_KV, "ndhook") }, botToken));
       return ok();
     }
 
@@ -1132,7 +1135,7 @@ export default {
       } catch (e) {
         console.error("PGHOOK_PARSE", String(e));
       }
-      ctx.waitUntil(handlePgHook(token, payload, env, botToken));
+      ctx.waitUntil(handlePgHook(token, payload, { ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken));
       return ok();
     }
 
@@ -1143,6 +1146,7 @@ export default {
         c = await request.json();
       } catch (e) {}
       if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      kv = qKvCount(kv, "contact");
       // ریت‌لیمیت سبک ضد اسپم (۵ پیام در ساعت برای هر IP)
       try {
         const ip = request.headers.get("CF-Connecting-IP") || "x";
@@ -1192,6 +1196,7 @@ export default {
         c = await request.json();
       } catch (e) {}
       if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      kv = qKvCount(kv, "hubdm");
       const chat = Number(c.chat_id) || 0;
       // فقط تحویل به رشتهٔ واقعی: tid باید در همین ورکر ثبت شده و به همین چت تعلق داشته باشد
       const tid = String(c.tid || "");
@@ -1222,6 +1227,7 @@ export default {
         b = await request.json();
       } catch (e) {}
       const iid = String((b && b.install_id) || "").slice(0, 64);
+      kv = qKvCount(kv, "tm");
       if (/^[A-Za-z0-9_-]{8,64}$/.test(iid)) {
         try {
           const clean = (s, re, n) => String(s || "").replace(re, "").slice(0, n);
@@ -1288,6 +1294,7 @@ export default {
         c = await request.json();
       } catch (e) {}
       if (!c || c.key !== CREATOR_CONTACT_KEY) return ok();
+      kv = qKvCount(kv, "hubdm");
       // ریت‌لیمیت سبک ضد اسپم (۵ پیام در ساعت برای هر IP)
       try {
         const ip = request.headers.get("CF-Connecting-IP") || "x";
@@ -1469,7 +1476,7 @@ export default {
   // متن در KV ذخیره می‌شود (inbox:<domain>:<id>) و به ادمین اعلان می‌رود.
   async email(message, env, ctx) {
     try {
-      const kv = env.BOT_KV;
+      const kv = qKvCount(env.BOT_KV, "mail");
       const fromRaw = String(message.from || "");
       const to = String(message.to || "");
       let subjectRaw = "";
@@ -3370,7 +3377,7 @@ function qAlert(kv, cat) {
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۱۰ دقیقه
 // پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
-const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter"]);
+const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
   return {
@@ -3465,6 +3472,7 @@ const Q_JOB_FA = {
   ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
   rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه", meter: "⚙️ سیستم شمارش",
+  pghook: "📥 وبهوک هشدار", ndhook: "📥 وبهوک نود", mail: "📧 ایمیل",
 };
 
 // ساخت متن هشدارهای عبور از سهمیه (درخواست ورکر + KV)
