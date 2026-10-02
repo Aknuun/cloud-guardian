@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.93";
+const BOT_VERSION = "1.8.94";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.94": [
+    "🔔 فیکس باگ قدیمی dedupe هشدار (markKeys هرگز ذخیره نمی‌شد؛ هشدارها تکراری می‌آمد) + باکت ۵٪ حجمی",
+    "📉 تله‌متری: ثبت فقط وقتی چیزی عوض شده یا ۶ ساعت گذشته (~۷۵٪ کمتر)",
+  ],
   "1.8.93": [
     "✍️ شمارش write برای وبهوک هشدار، تله‌متری، نود، contact و ایمیل هم اضافه شد (سایر آب رفت)",
   ],
@@ -1259,7 +1263,14 @@ export default {
             q,
             qw,
           };
-          await kv.put(`tm:${iid}`, JSON.stringify(rec), { expirationTtl: 45 * 86400 });
+          // رژیم write: اگر هیچ فیلد معناداری عوض نشده و آخرین ثبت زیر ۶ ساعت است، ننویس (۹ نصب × ۲۴ پینگ ≈ ۲۰۰ write در روز بود)
+          let tmSame = false;
+          try {
+            tmSame = !!prev && prev.v === rec.v && prev.admin === rec.admin && prev.admin_id === rec.admin_id && prev.bot === rec.bot && prev.worker === rec.worker && prev.account_id === rec.account_id && (prev.ev || "") === (rec.ev || "") && (prev.reply || "") === (rec.reply || "") && JSON.stringify([prev.q, prev.qw]) === JSON.stringify([rec.q, rec.qw]) && !!prev.ts && Date.now() - Number(prev.ts) < 6 * 3600000;
+          } catch (e) { tmSame = false; }
+          if (!tmSame) {
+            await kv.put(`tm:${iid}`, JSON.stringify(rec), { expirationTtl: 45 * 86400 });
+          }
           // نصب تازه → پیام فوری به سازنده با مشخصات کامل.
           if (!prev) {
             try {
@@ -8367,6 +8378,7 @@ async function handlePgHook(token, payload, env, botToken) {
     };
     let anyJob = false;
     const seenRun = new Set();
+    const markKeys = [];
     const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || !e.status));
     let ptoken = null;
     if (needEnrich) {
@@ -8387,7 +8399,6 @@ async function handlePgHook(token, payload, env, botToken) {
         } catch (e) {}
       }
       const jobs = [];
-      const markKeys = [];
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
       // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
@@ -8403,18 +8414,20 @@ async function handlePgHook(token, payload, env, botToken) {
           }
         }
       }
-      if (ev.usage !== null && ev.usage !== undefined) {
-        const uv = Math.floor(ev.usage * 10) / 10;
-        const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
-        if (ok) {
-          const rk = panel.id + ":" + ev.username + ":usage";
-          if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "usage", Math.floor(uv)))) {
-            jobs.push({ kind: "usage", value: uv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
-            markKeys.push({ panelId: panel.id, username: ev.username, kind: "usage", bucket: Math.floor(uv) });
-            seenRun.add(rk);
+        if (ev.usage !== null && ev.usage !== undefined) {
+          const uv = Math.floor(ev.usage * 10) / 10;
+          const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
+          // رژیم write: باکت ۵٪ (۹۰-۹۴ یکی، ۹۵-۹۹ یکی) — صعود تدریجی یک کاربر ده‌ها هشدار/رایت تکراری نمی‌سازد
+          const ub = Math.floor(uv / 5) * 5;
+          if (ok) {
+            const rk = panel.id + ":" + ev.username + ":usage";
+            if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "usage", ub))) {
+              jobs.push({ kind: "usage", value: uv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
+              markKeys.push({ panelId: panel.id, username: ev.username, kind: "usage", bucket: ub });
+              seenRun.add(rk);
+            }
           }
         }
-      }
       if (!jobs.length) continue;
       anyJob = true;
       // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
