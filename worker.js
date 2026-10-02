@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.90";
+const BOT_VERSION = "1.8.91";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.91": [
+    "✍️ ثبت هزینه خود شمارش (meter) + فلاش فوری موقع باز کردن صفحات + خط «سایر (ثبت‌نشده)»",
+    "🕵️ لاگ موقت خطاهای سرور برای شکار افت ۵۰٪ (بعد از تشخیص حذف می‌شود)",
+  ],
   "1.8.90": [
     "✍️ صفحه اصلی سهمیه هم write واقعی هر بخش را نشان می‌دهد (به‌جای تعداد اجرا)",
   ],
@@ -1367,7 +1371,10 @@ export default {
     }
     if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
 
-    ctx.waitUntil(processUpdate(payload, env, botToken, adminId));
+    // شکار موقت خطاهای ۵۰۰ (۱.۸.۹۱): نمونه‌برداری، بعد از تشخیص حذف می‌شود
+    ctx.waitUntil(
+      processUpdate(payload, env, botToken, adminId).catch((e) => dbgLogErr(env, e, "fetch"))
+    );
     return ok();
   },
 
@@ -1438,7 +1445,7 @@ export default {
           jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
           await Promise.allSettled(jobs);
           if (Object.keys(patch).length) await saveCronState(qKvCount(ckv, "cron"), { ...cs, ...patch });
-        })()
+        })().catch((e) => dbgLogErr(env, e, "sched10"))
       );
     } else {
       // کرون هر دقیقه: پول نود (تراز دقیقه‌ای داخل خودش؛ write فقط موقع تغییر) + هاست‌فیلتر + یادآورها
@@ -3293,7 +3300,7 @@ async function qBatched(kv, bucketFn, field, name, inc) {
         for (const n of Object.keys(acc.counts)) bb[field][n] = (Number(bb[field][n]) || 0) + Number(acc.counts[n]);
         await kv.put(kk, JSON.stringify(bb), { expirationTtl: 4 * 86400 });
       } catch (e) {}
-      acc = { day, counts: {}, flush: 0 };
+      acc = { day, counts: { meter: 1 }, flush: 0 };
     }
     acc.day = day;
     acc.counts[name] = (Number(acc.counts[name]) || 0) + (inc === undefined ? 1 : inc);
@@ -3308,8 +3315,45 @@ async function qBatched(kv, bucketFn, field, name, inc) {
     if (!b[field] || typeof b[field] !== "object") b[field] = {};
     for (const n of Object.keys(acc.counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(acc.counts[n]);
     await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
-    try { memSet("qb:" + field, { day, counts: {}, flush: now }, 15 * 60000); } catch (e) {}
+    // هزینه خود فلاش (۱ write) هم ثبت شود — فقط حافظه، بدون I/O اضافه
+    try { memSet("qb:" + field, { day, counts: { meter: 1 }, flush: now }, 15 * 60000); } catch (e) {}
   } catch (e) {}
+}
+// لاگ موقت خطای سرریز (۱.۸.۹۱): نمونه ۱۵٪، TTL یک‌ساعته، بعد از تشخیص پاک می‌شود
+async function dbgLogErr(env, e, where) {
+  try {
+    const kv = env && env.BOT_KV;
+    if (!kv || Math.random() >= 0.15) return;
+    await kv.put("dbg_err:" + Date.now().toString(36) + Math.floor(Math.random() * 99), JSON.stringify({ at: new Date().toISOString(), where, err: String((e && e.stack) || e).slice(0, 400) }), { expirationTtl: 3600 });
+  } catch (x) {}
+}
+// فلاش فوری شمارنده‌های همین ایزوله (برای تازگی صفحه‌های سهمیه) — حداکثر ۲ write
+async function qwFlushNow(kv) {
+  for (const [bf, f] of [[(d) => "qw:" + d, "w"], [(d) => "qal:" + d, "cats"]]) {
+    try {
+      if (!kv) continue;
+      const day = new Date().toISOString().slice(0, 10);
+      let acc = null;
+      try { acc = memGet("qb:" + f); } catch (e) {}
+      if (!acc || !acc.counts || !Object.keys(acc.counts).length) continue;
+      if (acc.day && acc.day !== day) continue;
+      const k = bf(day);
+      let b = null;
+      try { b = await kv.get(k, "json"); } catch (e) {}
+      if (!b || typeof b !== "object") b = {};
+      if (!b[f] || typeof b[f] !== "object") b[f] = {};
+      for (const n of Object.keys(acc.counts)) b[f][n] = (Number(b[f][n]) || 0) + Number(acc.counts[n]);
+      await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+      try { memSet("qb:" + f, { day, counts: { meter: 1 }, flush: Date.now() }, 15 * 60000); } catch (e) {}
+    } catch (e) {}
+  }
+}
+// باقی‌مانده ثبت‌نشده = آمار کلادفلر منهای جمع ثبت‌شده (قبل از نصب، مسیر ایمیل، فلاش‌های هم‌زمان)
+function qwOther(cfWrites, recordedTotal) {
+  if (cfWrites === null || cfWrites === undefined || cfWrites === "") return null;
+  const c = Number(cfWrites);
+  if (!Number.isFinite(c) || c < 0) return null;
+  return Math.max(0, Math.round(c) - (Number(recordedTotal) || 0));
 }
 // شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی و ترتیبی
 async function qAlert(kv, cat) {
@@ -3319,7 +3363,7 @@ async function qAlert(kv, cat) {
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۱۰ دقیقه
 // (مثل qBatched) پس خودش write اضافه‌ای ندارد. فلاش با kv خام انجام می‌شود (بدون بازگشت).
-const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd"]);
+const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter"]);
 // زنجیره ترتیبی شمارش: جاب‌های هم‌زمان (Promise.allSettled) نباید حافظه تجمیعی را مسابقه‌ای خراب کنند.
 // qBatched خودش reject نمی‌کند پس زنجیره هرگز نمی‌شکند؛ فلاش داخلش با kv خام است (بدون بازگشت).
 let qbChain = null;
@@ -3424,7 +3468,7 @@ const Q_JOB_FA = {
   node10: "پول نود (۱۰دقیقه‌ای)", selfup: "آپدیت خودکار",
   ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
-  rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه",
+  rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه", meter: "⚙️ سیستم شمارش",
 };
 
 // ساخت متن هشدارهای عبور از سهمیه (درخواست ورکر + KV)
@@ -3807,6 +3851,7 @@ async function renderQuotaMenu(edit, kv, env) {
   }
 
   lines.push("", "📊 مصرف امروز به تفکیک (write واقعی):");
+  await qwFlushNow(kv);
   const wmap = await qwDayMap(kv);
   const order = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
   const extra = Object.keys(wmap).filter((k) => QW_CRON.has(k) && !order.includes(k)).sort();
@@ -3827,6 +3872,10 @@ async function renderQuotaMenu(edit, kv, env) {
   }
   if (!anyRun) lines.push("• هنوز write ثبت نشده.");
   else lines.push(`• جمع write ثبت‌شده: ${faNum(totW.toLocaleString("en-US"))}`);
+  if (kvOps) {
+    const other = qwOther(kvOps.write, totW);
+    if (other !== null) lines.push(`• 🧾 سایر (ثبت‌نشده): ${faNum(other.toLocaleString("en-US"))} write`);
+  }
   lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۱۰ دقیقه).");
   lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
@@ -14493,6 +14542,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       L.push(`🔮 پیش‌بینی درخواست تا پایان روز: ${faNum((1873).toLocaleString("en-US"))} (قطعی)`);
       L.push("");
+      await qwFlushNow(kv);
       const wmap0 = await qwDayMap(kv);
       const order0 = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
       const extra0 = Object.keys(wmap0).filter((k) => QW_CRON.has(k) && !order0.includes(k)).sort();
@@ -14525,6 +14575,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       for (const k of ["read", "write", "delete", "list"]) {
         L.push(qKvLine(emw[k], KV_ACTION_LABEL[k] + " (تخمین)", kvw1[k], KV_LIMITS_DAILY[k]));
       }
+      await qwFlushNow(kv);
       const wmap1 = await qwDayMap(kv);
       const bkeys1 = Object.keys(wmap1).filter((k) => !QW_CRON.has(k)).sort((a, b) => (Number(wmap1[b]) || 0) - (Number(wmap1[a]) || 0));
       let tot1 = 0;
