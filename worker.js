@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.91";
+const BOT_VERSION = "1.8.92";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.92": [
+    "🔧 شمارنده write کاملاً همگام و بدون قفل بازنویسی شد: زیر بار هم‌زمان نه چیزی گم می‌شود نه چیزی گیر می‌کند",
+  ],
   "1.8.91": [
     "✍️ ثبت هزینه خود شمارش (meter) + فلاش فوری موقع باز کردن صفحات + خط «سایر (ثبت‌نشده)»",
     "🕵️ لاگ موقت خطاهای سرور برای شکار افت ۵۰٪ (بعد از تشخیص حذف می‌شود)",
@@ -3281,42 +3284,46 @@ function qTodayKey() {
 }
 // شمارنده تجمیعی کم‌هزینه: دلتا در مموی ایزوله، فلاش حداکثر هر ۱۰ دقیقه.
 // با مرگ ایزوله ممکن است ذره‌ای کم بشمارد — برای آمار نمایشی قابل‌قبول (صرفه‌جویی ~۸۰٪ write).
-async function qBatched(kv, bucketFn, field, name, inc) {
+// شمارش تجمیعی کاملاً همگام (بدون await): هیچ‌وقت گیر نمی‌کند و مسابقه ندارد.
+// فلاش (I/O) جدا و آتش‌وبرو است؛ اسنپ‌شات با تعویض همگام گرفته می‌شود تا چیزی گم نشود.
+function qCountSync(kv, bucketFn, field, name, inc) {
   try {
     if (!kv || !name) return;
-    const now = Date.now();
     const day = new Date().toISOString().slice(0, 10);
     let acc = null;
     try { acc = memGet("qb:" + field); } catch (e) {}
     if (!acc || typeof acc !== "object" || !acc.counts) acc = { day, counts: {}, flush: 0 };
-    if (acc.day && acc.day !== day && Object.keys(acc.counts).length) {
-      // باقیمانده روز قبل (گذار نیمه‌شب) — یک‌بار فلاش
-      try {
-        const kk = bucketFn(acc.day);
-        let bb = null;
-        try { bb = await kv.get(kk, "json"); } catch (e) {}
-        if (!bb || typeof bb !== "object") bb = {};
-        if (!bb[field] || typeof bb[field] !== "object") bb[field] = {};
-        for (const n of Object.keys(acc.counts)) bb[field][n] = (Number(bb[field][n]) || 0) + Number(acc.counts[n]);
-        await kv.put(kk, JSON.stringify(bb), { expirationTtl: 4 * 86400 });
-      } catch (e) {}
+    if (acc.day && acc.day !== day) {
+      // گذار نیمه‌شب: باقیمانده را فلاش کن، تازه شروع کن (هزینه فلاش هم ثبت شود)
+      const old = acc;
       acc = { day, counts: { meter: 1 }, flush: 0 };
+      try { memSet("qb:" + field, acc, 15 * 60000); } catch (e) {}
+      qFlushSnap(kv, bucketFn(old.day || day), field, old.counts || {});
     }
     acc.day = day;
     acc.counts[name] = (Number(acc.counts[name]) || 0) + (inc === undefined ? 1 : inc);
-    if (now - (Number(acc.flush) || 0) < 10 * 60000) {
+    if (Date.now() - (Number(acc.flush) || 0) >= 10 * 60000) {
+      acc.flush = Date.now();
+      acc.counts.meter = (Number(acc.counts.meter) || 0) + 1;
+      const snap = acc.counts;
+      acc.counts = {};
       try { memSet("qb:" + field, acc, 15 * 60000); } catch (e) {}
-      return;
+      qFlushSnap(kv, bucketFn(day), field, snap);
+    } else {
+      try { memSet("qb:" + field, acc, 15 * 60000); } catch (e) {}
     }
-    const k = bucketFn(day);
+  } catch (e) {}
+}
+// فلاش یک اسنپ‌شات (قبلاً جدا شده؛ فراخوان آتش‌وبرو، هرگز reject نمی‌کند)
+async function qFlushSnap(kv, key, field, counts) {
+  try {
+    if (!kv || !key || !counts || !Object.keys(counts).length) return;
     let b = null;
-    try { b = await kv.get(k, "json"); } catch (e) {}
+    try { b = await kv.get(key, "json"); } catch (e) {}
     if (!b || typeof b !== "object") b = {};
     if (!b[field] || typeof b[field] !== "object") b[field] = {};
-    for (const n of Object.keys(acc.counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(acc.counts[n]);
-    await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
-    // هزینه خود فلاش (۱ write) هم ثبت شود — فقط حافظه، بدون I/O اضافه
-    try { memSet("qb:" + field, { day, counts: { meter: 1 }, flush: now }, 15 * 60000); } catch (e) {}
+    for (const n of Object.keys(counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(counts[n]);
+    await kv.put(key, JSON.stringify(b), { expirationTtl: 4 * 86400 });
   } catch (e) {}
 }
 // لاگ موقت خطای سرریز (۱.۸.۹۱): نمونه ۱۵٪، TTL یک‌ساعته، بعد از تشخیص پاک می‌شود
@@ -3355,33 +3362,22 @@ function qwOther(cfWrites, recordedTotal) {
   if (!Number.isFinite(c) || c < 0) return null;
   return Math.max(0, Math.round(c) - (Number(recordedTotal) || 0));
 }
-// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی و ترتیبی
-async function qAlert(kv, cat) {
+// شمارنده هشدارهای ارسالی روزانه (فقط سر جای هشدار واقعی) — تجمیعی همگام
+function qAlert(kv, cat) {
   if (!kv || !cat) return;
-  await qBatchedSeq(kv, (d) => "qal:" + d, "cats", cat);
+  try { qCountSync(kv, (d) => "qal:" + d, "cats", cat); } catch (e) {}
 }
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۱۰ دقیقه
-// (مثل qBatched) پس خودش write اضافه‌ای ندارد. فلاش با kv خام انجام می‌شود (بدون بازگشت).
+// پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
 const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter"]);
-// زنجیره ترتیبی شمارش: جاب‌های هم‌زمان (Promise.allSettled) نباید حافظه تجمیعی را مسابقه‌ای خراب کنند.
-// qBatched خودش reject نمی‌کند پس زنجیره هرگز نمی‌شکند؛ فلاش داخلش با kv خام است (بدون بازگشت).
-let qbChain = null;
-function qBatchedSeq(kv, bucketFn, field, name, inc) {
-  try {
-    const p = (qbChain || Promise.resolve()).then(() => qBatched(kv, bucketFn, field, name, inc));
-    qbChain = p.catch(() => {});
-    return qbChain;
-  } catch (e) { return Promise.resolve(); }
-}
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
-  const count = () => qBatchedSeq(kv, (d) => "qw:" + d, "w", sec).catch(() => {});
   return {
     get: (k, t) => kv.get(k, t),
     list: (o) => kv.list(o),
-    put: async (k, v, o) => { try { await count(); } catch (e) {} return kv.put(k, v, o); },
-    delete: async (k) => { try { await count(); } catch (e) {} return kv.delete(k); },
+    put: (k, v, o) => { try { qCountSync(kv, (d) => "qw:" + d, "w", sec); } catch (e) {} return kv.put(k, v, o); },
+    delete: (k) => { try { qCountSync(kv, (d) => "qw:" + d, "w", sec); } catch (e) {} return kv.delete(k); },
   };
 }
 // بخش‌بندی کال‌بک دکمه‌ها: پیشوند قبل از «:» (حتماً b: تا با اسم کرون‌ها قاطی نشود)
