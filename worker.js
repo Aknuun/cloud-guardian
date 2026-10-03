@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.97";
+const BOT_VERSION = "1.8.98";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.98": [
+    "📦 دایجست هشدارهای پنل: حجم ساعتی یک‌جا، انقضا روزی یک‌بار، فقط بحران (۰ روز / ۱۰۰٪) فوری",
+    "📦 وضعیت دایجست (آخرین ارسال + صف) به صفحه سهمیه اضافه شد",
+  ],
   "1.8.97": [
     "✍️ نود تکراری داخل یک پاسخ پنل فقط یک‌بار حساب می‌شود (ضد هشدار چندتایی هم‌زمان)",
   ],
@@ -1466,6 +1470,15 @@ export default {
             jobs.push(runHubWatch(qe("hubwatch")).catch((e) => console.error("HUBWATCH", String(e))));
             // واچ‌داگ رله سوار همین تیک ساعتی است (خوانش KV و سهمیه اضافه ندارد)
             jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
+          }
+          // دایجست هشدارهای پنل: حجم ساعتی، انقضا روزانه (ساعت خلوت = صفر write)
+          if (!cs.pgdu || now - cs.pgdu >= 3600000) {
+            patch.pgdu = now;
+            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, ["usage"], "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
+          }
+          if (!cs.pgdd || now - cs.pgdd >= 86400000) {
+            patch.pgdd = now;
+            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, ["days"], "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
           }
           jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
           jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
@@ -3906,6 +3919,25 @@ async function renderQuotaMenu(edit, kv, env) {
     if (other !== null) lines.push(`• 🧾 سایر (ثبت‌نشده): ${faNum(other.toLocaleString("en-US"))} write`);
   }
   lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۳۰ دقیقه یا با ۲۵ شمارش).");
+  // وضعیت دایجست هشدارهای پنل: آخرین ارسال + موارد در صف (۱ list)
+  try {
+    const du = await kv.get("pgdlast:usage", "json");
+    const dd = await kv.get("pgdlast:days", "json");
+    let pending = null;
+    try {
+      const pl = await kv.list({ prefix: "pgdx:", limit: 1000 });
+      if (pl && Array.isArray(pl.keys)) pending = pl.keys.length + (pl.list_complete === false ? "+" : "");
+    } catch (e) {}
+    const dLine = (em, t, d) => {
+      if (!d || !d.ts) return `• ${em} ${t}: هنوز ارسالی نشده`;
+      let s = `• ${em} ${t}: آخرین ارسال ${fmtJalali(d.ts)} (${faNum(d.count || 0)} مورد)`;
+      return s;
+    };
+    lines.push("", "📦 دایجست هشدارهای پنل (حجم: ساعتی · انقضا: روزانه · بحران فوری):");
+    lines.push(dLine("📊", "حجم", du));
+    lines.push(dLine("📅", "انقضا", dd));
+    if (pending !== null) lines.push(`• ⏳ در صف ارسال: ${faNum(pending)} مورد`);
+  } catch (e) {}
   lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
   lines.push(
@@ -8331,6 +8363,56 @@ function pgPanelBot(cfg, panelId) {
   } catch (e) {}
   return "";
 }
+// دایجست هشدارهای پنل: فوری فقط بحران امروزی (۰ روز مانده / حجم ۱۰۰٪)؛ بقیه جمعی (حجم ساعتی، انقضا روزانه)
+function pgIsUrgent(kind, value) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return false;
+  if (kind === "days") return v <= 0;
+  if (kind === "usage") return v >= 100;
+  return false;
+}
+// استخراج job از یک ایونت (خالص؛ بدون gate): [{kind, value, bucket}]
+function pgEventJobs(ev) {
+  const out = [];
+  if (ev.days !== null && ev.days !== undefined) {
+    const dv = Math.floor(ev.days * 10) / 10;
+    if (ev.daysExplicit ? true : dv > 0 && dv <= 1) out.push({ kind: "days", value: dv, bucket: Math.floor(dv) });
+  }
+  if (ev.usage !== null && ev.usage !== undefined) {
+    const uv = Math.floor(ev.usage * 10) / 10;
+    if (ev.usageExplicit ? true : uv >= 90 && uv < 91) out.push({ kind: "usage", value: uv, bucket: Math.floor(uv / 5) * 5 });
+  }
+  return out;
+}
+// مقدار mark: "ts.bucket" (سازگار با قدیمی‌ها)
+function pgMarkParse(v) {
+  const parts = String(v == null ? "" : v).split(".");
+  const ts = Number(parts[0]);
+  return { ts: Number.isFinite(ts) ? ts : 0, bucket: parts.length > 1 ? parts[1] : "" };
+}
+// کلید ایندکس دایجست (۲۴-۴۸ ساعت عمر؛ بعد از ارسال حذف می‌شود؛ بدون read قابل کشف است)
+function pgIndexKey(ts, panelId, kind, owner, bucket, username) {
+  return "pgdx:" + ts + ":" + panelId + ":" + kind + ":" + (Number(owner) > 0 ? Number(owner) : 0) + ":" + bucket + ":" + username;
+}
+function pgIndexParse(name) {
+  const sp = String(name || "").split(":");
+  if (sp.length < 7 || sp[0] !== "pgdx") return null;
+  const ts = Number(sp[1]);
+  if (!Number.isFinite(ts)) return null;
+  return { key: String(name), ts, panelId: sp[2], kind: sp[3], owner: Number(sp[4]) || 0, bucket: sp[5], username: sp.slice(6).join(":") };
+}
+// گروه‌بندی آیتم‌های دایجست: panel -> ownerKey -> [items] (مرتب زمانی)
+function pgDigestGroup(entries) {
+  const out = {};
+  for (const e of entries || []) {
+    if (!e || !e.panelId || !e.username || !e.kind) continue;
+    const p = (out[e.panelId] = out[e.panelId] || {});
+    const ok = "o:" + (Number(e.owner) > 0 ? Number(e.owner) : 0);
+    (p[ok] = p[ok] || []).push(e);
+  }
+  for (const p of Object.values(out)) for (const k of Object.keys(p)) p[k].sort((a, b) => a.ts - b.ts);
+  return out;
+}
 function pgRenewBotKb(renewbot) {
   return renewbot ? [[{ text: "🤖 استارت " + renewbot, url: "https://t.me/" + renewbot }]] : [];
 }
@@ -8423,7 +8505,12 @@ async function handlePgHook(token, payload, env, botToken) {
     let anyJob = false;
     const seenRun = new Set();
     const markKeys = [];
-    const needEnrich = events.some((e) => e && e.username && (e.expireTs == null || !e.status));
+    const indexKeys = [];
+    // enrich فقط برای موارد فوریِ نیازمند داده (دایجستی‌ها با همان دیتای ایونت کافی‌اند؛ پنل شلوغ نمی‌شود)
+    const needEnrich = events.some((e) => {
+      if (!e || !e.username || (e.expireTs != null && e.status)) return false;
+      return pgEventJobs(e).some((j) => pgIsUrgent(j.kind, j.value));
+    });
     let ptoken = null;
     if (needEnrich) {
       try { ptoken = await panelLogin(panel); } catch (e) {}
@@ -8432,7 +8519,9 @@ async function handlePgHook(token, payload, env, botToken) {
     let enrichLeft = 10;
     for (const ev of events) {
       if (!ev.username) continue;
-      if (ptoken && enrichLeft > 0 && (ev.expireTs == null || !ev.status)) {
+      const jobs = pgEventJobs(ev);
+      const urgentAny = jobs.some((j) => pgIsUrgent(j.kind, j.value));
+      if (ptoken && enrichLeft > 0 && urgentAny && (ev.expireTs == null || !ev.status)) {
         enrichLeft--;
         try {
           const pu = await panelGetUser(panel, ptoken, ev.username);
@@ -8442,47 +8531,35 @@ async function handlePgHook(token, payload, env, botToken) {
           }
         } catch (e) {}
       }
-      const jobs = [];
-      // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد» → خبر بده.
+      // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد».
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
       // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
-      if (ev.days !== null && ev.days !== undefined) {
-        const dv = Math.floor(ev.days * 10) / 10;
-        const ok = ev.daysExplicit ? true : dv > 0 && dv <= 1;
-        if (ok) {
-          const rk = panel.id + ":" + ev.username + ":days";
-          if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "days", Math.floor(dv)))) {
-            jobs.push({ kind: "days", value: dv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
-            markKeys.push({ panelId: panel.id, username: ev.username, kind: "days", bucket: Math.floor(dv) });
-            seenRun.add(rk);
-          }
-        }
+      const batch = [];
+      for (const j of jobs) {
+        const rk = panel.id + ":" + ev.username + ":" + j.kind;
+        if (seenRun.has(rk)) continue;
+        if (!(await pgGate(panel.id, ev.username, j.kind, j.bucket))) continue;
+        seenRun.add(rk);
+        batch.push(j);
       }
-        if (ev.usage !== null && ev.usage !== undefined) {
-          const uv = Math.floor(ev.usage * 10) / 10;
-          const ok = ev.usageExplicit ? true : uv >= 90 && uv < 91;
-          // رژیم write: باکت ۵٪ (۹۰-۹۴ یکی، ۹۵-۹۹ یکی) — صعود تدریجی یک کاربر ده‌ها هشدار/رایت تکراری نمی‌سازد
-          const ub = Math.floor(uv / 5) * 5;
-          if (ok) {
-            const rk = panel.id + ":" + ev.username + ":usage";
-            if (!seenRun.has(rk) && (await pgGate(panel.id, ev.username, "usage", ub))) {
-              jobs.push({ kind: "usage", value: uv, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status });
-              markKeys.push({ panelId: panel.id, username: ev.username, kind: "usage", bucket: ub });
-              seenRun.add(rk);
-            }
-          }
-        }
-      if (!jobs.length) continue;
+      if (!batch.length) continue;
       anyJob = true;
+      const ownerNum = Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 ? ev.ownerTg : 0;
+      for (const j of batch) {
+        markKeys.push({ panelId: panel.id, username: ev.username, kind: j.kind, bucket: j.bucket });
+        if (!pgIsUrgent(j.kind, j.value)) indexKeys.push(pgIndexKey(nowMs, panel.id, j.kind, ownerNum, j.bucket, ev.username));
+      }
+      const uj = batch.filter((j) => pgIsUrgent(j.kind, j.value));
+      if (!uj.length) continue; // دایجستی: فقط mark/index ثبت شد؛ پیام جمعی با کرون می‌آید
       // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
       const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner, ev.ownerTg));
       if (ev.ownerTg && Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 && admins.includes(ev.ownerTg) && (await pgStarted(kv, ev.ownerTg))) {
         to.add(ev.ownerTg);
       }
       await qAlert(kv, "pghook");
-      for (const j of jobs) {
+      for (const j of uj) {
         for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
+          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
         }
       }
       if (!to.size) {
@@ -8495,9 +8572,76 @@ async function handlePgHook(token, payload, env, botToken) {
           if (m && m.panelId && m.username && m.kind) await pgGateMark(m.panelId, m.username, m.kind, m.bucket);
         } catch (e) {}
       }
+      for (const k of indexKeys) {
+        try { await kv.put(k, "1", { expirationTtl: 172800 }); } catch (e) {}
+      }
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
+  }
+}
+// فلاش دایجست هشدارهای پنل: markهای ایندکس (pgdx:) خوانده، پیام جمعی فرستاده و ایندکس‌ها حذف می‌شوند.
+// kinds: ["usage"] ساعتی / ["days"] روزانه. ساعت خلوت = صفر write. valFa: نمایش مقدار هر آیتم.
+async function runPgDigest(env, botToken, adminId, kinds, lastKey, headEm, headFa, valFa) {
+  const kv = env.BOT_KV;
+  if (!kv || !botToken) return;
+  try {
+    const cfg = await getPgHookCfg(kv);
+    if (!cfg.enabled) return;
+    const panels = await getPanels(kv);
+    const pmap = {};
+    for (const p of panels) pmap[p.id] = p;
+    const admins = await getAdmins(kv, env);
+    const items = [];
+    let cursor = undefined;
+    for (let pgN = 0; pgN < 5; pgN++) {
+      let pg = null;
+      try { pg = await kv.list({ prefix: "pgdx:", limit: 1000, cursor }); } catch (e) { break; }
+      if (!pg || !Array.isArray(pg.keys)) break;
+      for (const k of pg.keys) {
+        const it = pgIndexParse(k && k.name);
+        if (!it || !kinds.includes(it.kind)) continue;
+        items.push(it);
+      }
+      if (pg.list_complete || !pg.cursor) break;
+      cursor = pg.cursor;
+    }
+    if (!items.length) return;
+    const groups = pgDigestGroup(items);
+    let total = 0;
+    const perPanel = {};
+    for (const pid of Object.keys(groups)) {
+      const panel = pmap[pid] || { id: pid, name: pid };
+      const owners = groups[pid];
+      const all = Object.values(owners).flat();
+      if (!all.length) continue;
+      total += all.length;
+      perPanel[pid] = all.length;
+      const line = (u) => "• " + u.username + " (" + valFa(u) + ")";
+      if (!cfg.silent_me && (await pgStarted(kv, adminId))) {
+        const txt = headEm + " " + headFa + " — پنل " + (panel.name || pid) + " (" + faD(all.length) + " مورد)";
+        for (const ch of chunkText(txt + "\n" + all.map(line).join("\n"))) {
+          try { await sendMessage(botToken, adminId, ch); } catch (e) {}
+        }
+      }
+      for (const ok of Object.keys(owners)) {
+        const oid = Number(ok.slice(2));
+        if (!oid || oid === adminId || !admins.includes(oid) || !(await pgStarted(kv, oid))) continue;
+        const arr = owners[ok];
+        const txt = headEm + " " + headFa + " — پنل " + (panel.name || pid) + " (" + faD(arr.length) + " مورد)";
+        for (const ch of chunkText(txt + "\n" + arr.map(line).join("\n"))) {
+          try { await sendMessage(botToken, oid, ch); } catch (e) {}
+        }
+      }
+    }
+    if (!total) return;
+    for (let i = 0; i < total; i++) qAlert(kv, "pghook");
+    try { await kv.put(lastKey, JSON.stringify({ ts: Date.now(), count: total, panels: perPanel })); } catch (e) {}
+    for (const it of items) {
+      try { await kv.delete(it.key); } catch (e) {}
+    }
+  } catch (e) {
+    console.error("PGDIGEST", String((e && e.message) || e));
   }
 }
 async function renderPgHookHome(edit, kv, env, adminId) {
@@ -8516,6 +8660,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   }
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال (پیام نمی‌آید)"));
   lines.push("📅 آستانه‌ها در خود پنل تنظیم می‌شوند (پیشنهاد: روز ۱، حجم ۹۰٪) — ربات فقط فوروارد می‌کند.");
+  lines.push("📦 ارسال جمعی: حجم ساعتی یک‌جا، انقضا روزی یک‌بار؛ فقط بحران امروزی (۰ روز / ۱۰۰٪) فوری می‌آید.");
   lines.push("🖥 پنل‌های متصل: " + Object.keys(cfg.panels).length + " از " + panels.length);
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر لینک‌شده‌ای (ادمین یا نه) فقط کاربرهای خودش را می‌گیرد (باید استارت زده باشد).");
