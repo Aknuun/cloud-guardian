@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.99";
+const BOT_VERSION = "1.8.100";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.100": [
+    "🔄 تغییر نوع گروهی در نتایج جست‌وجوی آیپی (مثل داخل دامنه) + اعتبارسنجی مقدار",
+    "🛡 گارد پرش خودکار: خلاصه‌ها فقط اگر کاربر جایی نرفته باشد بازترسیم/برگردانده می‌شوند",
+  ],
   "1.8.99": [
     "📦 دایجست پولی: کرون ساعتی/روزانه خودش از پنل می‌خواند — هزینه ثابت، وبهوک غیرفوری صفر write",
     "📦 وضعیت دایجست (آخرین ارسال + اجرای بعدی) در صفحه سهمیه",
@@ -998,6 +1002,20 @@ async function arvanGetRegions(token, kv, env) {
   return ARVAN_REGIONS.map((c) => ({ code: c, fa: c, def: false }));
 }
 const RECORD_TYPES = ["A", "AAAA", "CNAME"];
+// اعتبارسنجی مقدار برای تغییر نوع (تکی/گروهی): A/AAAA حتماً آیپی، CNAME/NS حتماً هاست‌نیم.
+// null یعنی معتبر، وگرنه متن خطای فارسی. خالص و تست‌پذیر.
+function ipBulkTypeCheck(newType, value) {
+  const t = String(newType || "").toUpperCase();
+  const v = String(value || "").trim();
+  if (!v) return "مقداری وارد کنید.";
+  if (t === "A" || t === "AAAA") {
+    if (!isIpLike(v)) return `برای نوع ${t} باید آیپی بفرستید (نه هاست‌نیم).`;
+    if (t === "A" && !isIpv4(v)) return "برای نوع A باید آیپی ورژن ۴ بفرستید.";
+    if (t === "AAAA" && !isIpv6(v)) return "برای نوع AAAA باید آیپی ورژن ۶ بفرستید.";
+  }
+  if ((t === "CNAME" || t === "NS") && isIpLike(v)) return `برای نوع ${t} باید هاست‌نیم بفرستید (نه آیپی).`;
+  return null;
+}
 // ویزارد ساخت رکورد: TXT و NS با همان POST ساده ساخته می‌شوند، MX فقط priority اضافه می‌خواهد.
 // SRV/CAA فیلد ساخت‌یافته (data) می‌خواهند و فعلاً در ویزارد نیستند. تغییر نوع (تکی/گروهی) همان ۳ تای اصلی می‌ماند.
 const ADD_RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "NS"];
@@ -1860,9 +1878,12 @@ async function processUpdate(payload, env, botToken, adminId) {
     }
   } finally {
     // نمایش نتیجهٔ تغییر/تنظیم به مدت ۳ ثانیه و سپس بازگشت خودکار به صفحهٔ قبل
+    // گارد: اگر کاربر در این فاصله جایی رفته (هر ویرایشی)، صفحه‌اش دزدیده نمی‌شود
     if (pendingTextReturn && lastResultMsgId && textChatId) {
+      const navV0 = MSG_EDIT_VER;
       try {
         await sleep(3000);
+        if (MSG_EDIT_VER !== navV0) return;
         await handleCallback(
           { id: "autoreturn", message: { chat: { id: textChatId }, message_id: lastResultMsgId }, data: pendingTextReturn },
           botToken,
@@ -4096,7 +4117,11 @@ async function sendDocument(botToken, chatId, filename, content, caption) {
   return res.json();
 }
 
+// شمارنده ویرایش پیام‌ها در همین ایزوله — گارد «پرش خودکار»:
+// بازترسیم‌های تأخیری (خلاصه → sleep → redraw) فقط اگر از آن موقع هیچ پیامی ویرایش نشده اجرا می‌شوند.
+let MSG_EDIT_VER = 0;
 async function editMessage(botToken, chatId, messageId, text, keyboard) {
+  MSG_EDIT_VER++;
   const t = text.substring(0, 4000);
   const body = {
     chat_id: chatId,
@@ -10749,8 +10774,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const summary = `✅ تغییر یافت\n\nمقدار ${okCount} از ${pending.ids.length} رکورد با موفقیت به:\n${code(txt)}\nبه‌روزرسانی شد.`;
     if (pending.msgId) {
       await editMessage(botToken, chatId, pending.msgId, summary, []);
+      const navV0 = MSG_EDIT_VER;
       await sleep(2000);
-      await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
+      if (MSG_EDIT_VER === navV0) await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
     } else {
       await send(summary, [
         [{ text: "📋 دامنه‌ها", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }],
@@ -10775,8 +10801,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const summary = `✅ تغییر یافت\n\nنوع ${okCount} از ${pending.ids.length} رکورد به ${pending.new_type} تغییر کرد.`;
     if (pending.msgId) {
       await editMessage(botToken, chatId, pending.msgId, summary, []);
+      const navV0 = MSG_EDIT_VER;
       await sleep(2000);
-      await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
+      if (MSG_EDIT_VER === navV0) await redrawRecordsList(kv, accounts, botToken, chatId, pending.msgId, pending.token, 0, env);
     } else {
       await send(summary, [
         [{ text: "📋 دامنه‌ها", callback_data: "zones" }, { text: "🔙 بازگشت", callback_data: "menu" }],
@@ -11299,7 +11326,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
             }
             if (pending.msgId) {
               await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (A)\n🟢 الان: ${code(txt)} (CNAME)`, []);
+              const navV0 = MSG_EDIT_VER;
               await sleep(2000);
+              if (MSG_EDIT_VER !== navV0) return;
               if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
               else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
             } else {
@@ -11354,7 +11383,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
             }
             if (pending.msgId) {
               await editMessage(botToken, chatId, pending.msgId, `🔄 تبدیل شد\n${code(prev.name)}\n🔴 قبلاً: ${code(prev.content)} (CNAME)\n🟢 الان: ${code(txt)} (A)`, []);
+              const navV0 = MSG_EDIT_VER;
               await sleep(2000);
+              if (MSG_EDIT_VER !== navV0) return;
               if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
               else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
             } else {
@@ -11400,7 +11431,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       }
       if (pending.msgId) {
         await editMessage(botToken, chatId, pending.msgId, summary, []);
+        const navV0 = MSG_EDIT_VER;
         await sleep(2000);
+        if (MSG_EDIT_VER !== navV0) return;
         if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
         else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
       } else {
@@ -11457,7 +11490,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
         `🟢 فعلی (${r.type}):\n${code(r.content)}`;
       if (pending.msgId) {
         await editMessage(botToken, chatId, pending.msgId, summary, []);
+        const navV0 = MSG_EDIT_VER;
         await sleep(2000);
+        if (MSG_EDIT_VER !== navV0) return;
         if (pending.srToken) await redrawSearchResultsNav(kv, accounts, botToken, chatId, pending.msgId, pending.srToken);
         else await redrawRecordDetailNav(kv, accounts, botToken, chatId, pending.msgId, env);
       } else {
@@ -11496,6 +11531,16 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
       return;
     }
+    // اگر بین انتخاب‌ها رکورد A/AAAA هست، مقدار باید آیپی باشد (هاست‌نیم روی A رد می‌شود)
+    const needIp = idxs.some((idx) => {
+      const r0 = stored.results[idx];
+      return r0 && r0.provider !== "arvan" && ["A", "AAAA"].includes(String((r0.record && r0.record.type) || "").toUpperCase());
+    });
+    if (needIp && !isIpLike(txt.trim())) {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ip_bulk_edit", token: pending.token, idxs }), { expirationTtl: 600 });
+      await send("⚠️ بین انتخاب‌ها رکورد A/AAAA هست؛ مقدار باید آیپی باشد.\nبرای هاست‌نیم (مثل CNAME) اول «🔄 تغییر نوع» بزنید.\n\nدوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: `ipselback:${pending.token}` }]]);
+      return;
+    }
     const aa = await getArvanAccounts(kv);
     let okCount = 0;
     const cfZones = new Set();
@@ -11528,6 +11573,54 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     const ntoken = makeToken();
     await kv.put(`ips:${ntoken}`, JSON.stringify({ ip: txt, results: nres }), { expirationTtl: 3600 });
     await renderIpSearchMenu({ kv, send, accounts, env, chatId }, ntoken, 0, `✅ ${okCount} از ${idxs.length} ساب به ${code(txt)} تغییر کرد.\n\n`);
+    return;
+  }
+
+  // تغییر نوع گروهی از صفحهٔ نتایج آیپی (کلودفلر؛ آروان تغییر نوع ندارد و رد می‌شود)
+  if (type === "ip_bulk_type") {
+    await kv.delete(`pend:${chatId}`);
+    const stored = await kv.get(`ips:${pending.token}`, "json");
+    const idxs = pending.idxs || [];
+    const newType = pending.new_type;
+    if (!stored || !idxs.length || !RECORD_TYPES.includes(newType)) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    const v = txt.trim();
+    const chk = ipBulkTypeCheck(newType, v);
+    if (chk) {
+      // انتخاب‌ها حفظ می‌شود تا کاربر دوباره بفرستد
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ip_bulk_type", token: pending.token, idxs, new_type: newType }), { expirationTtl: 600 });
+      await send(`⚠️ ${chk}\n\nدوباره بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: `ipselback:${pending.token}` }]]);
+      return;
+    }
+    let okCount = 0;
+    let arvanSkipped = 0;
+    const cfZones = new Set();
+    for (const idx of idxs) {
+      const res = stored.results[idx];
+      if (!res) continue;
+      try {
+        if (res.provider === "arvan") { arvanSkipped++; continue; }
+        const r = await fetch(`${CF_API}/zones/${res.zone_id}/dns_records/${res.record.id}`, {
+          method: "PATCH",
+          headers: hdr(accounts[res.acc].token),
+          body: JSON.stringify({ type: newType, content: v }), signal: withTimeout() });
+        const d = await r.json();
+        if (d.success) {
+          okCount++;
+          cfZones.add(res.zone_id);
+        }
+      } catch (e) {}
+    }
+    for (const z of cfZones) await invalidateCache(kv, z);
+    await kv.delete(`ipsel:${chatId}`);
+    const nres = await ipExactResults(v, accounts, kv, env);
+    const ntoken = makeToken();
+    await kv.put(`ips:${ntoken}`, JSON.stringify({ ip: v, results: nres }), { expirationTtl: 3600 });
+    let note = `✅ ${okCount} از ${idxs.length} ساب به نوع ${newType} با مقدار ${code(v)} تغییر کرد.\n\n`;
+    if (arvanSkipped) note += `ℹ️ ${arvanSkipped} مورد آروان تغییر نوع ندارد و رد شد.\n\n`;
+    await renderIpSearchMenu({ kv, send, accounts, env, chatId }, ntoken, 0, note);
     return;
   }
 
@@ -13786,8 +13879,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await saveFavs(kv, chatId, favs);
       await kv.delete(`sel:${chatId}`);
       await edit(added > 0 ? `✅ ${added} ساب به منتخب‌ها اضافه شد.` : "ℹ️ این ساب‌ها از قبل در منتخب‌ها بودند.", []);
+      const navV0 = MSG_EDIT_VER;
       await sleep(2000);
-      await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+      if (MSG_EDIT_VER === navV0) await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
     } else if (data.startsWith("bulkdel:")) {
       const token = data.slice(8);
       const selState = await kv.get(`sel:${chatId}`, "json");
@@ -13812,8 +13906,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await invalidateCache(kv, session.zone_id);
       await kv.delete(`sel:${chatId}`);
       await edit(`✅ تغییر یافت\n\n${okCount} از ${selState.ids.length} رکورد حذف شد.`, []);
+      const navV0 = MSG_EDIT_VER;
       await sleep(2000);
-      await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+      if (MSG_EDIT_VER === navV0) await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
     } else if (data.startsWith("bulkedit:")) {
       const token = data.slice(9);
       const selState = await kv.get(`sel:${chatId}`, "json");
@@ -13914,8 +14009,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             `🔴 Proxy قبلی: ${record.proxied ? "روشن" : "خاموش"}\n` +
             `🟢 Proxy فعلی: ${d.result.proxied ? "روشن" : "خاموش"}`;
           await edit(sum, []);
+          const navV0 = MSG_EDIT_VER;
           await sleep(2000);
-          await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
+          if (MSG_EDIT_VER === navV0) await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
         } else {
           await edit("❌ خطا:\n" + cfErrText(d));
         }
@@ -14008,8 +14104,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await kv.put(`sr:${token}`, JSON.stringify(stored), { expirationTtl: 3600 });
         const sum = `✅ حذف شد\n\n📛 ساب‌دامین: ${code(gone.name)}\n\n🔴 مقدار قبلی:\n${code(gone.content)}`;
         await edit(sum, []);
+        const navV0 = MSG_EDIT_VER;
         await sleep(2000);
-        await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
+        if (MSG_EDIT_VER === navV0) await redrawSearchResultsNav(kv, accounts, botToken, chatId, messageId, token);
       } else {
         await edit("❌ خطا در حذف:\n" + cfErrText(delData));
       }
@@ -16624,9 +16721,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     await edit("❌ خطا:\n" + String(err && err.message ? err.message : err).substring(0, 3000));
   } finally {
     // نمایش نتیجهٔ تغییر/تنظیم به مدت ۳ ثانیه و سپس بازگشت خودکار به صفحهٔ قبل
+    // گارد: اگر کاربر در این فاصله جایی رفته (هر ویرایشی)، صفحه‌اش دزدیده نمی‌شود
     if (pendingReturn) {
+      const navV0 = MSG_EDIT_VER;
       try {
         await sleep(3000);
+        if (MSG_EDIT_VER !== navV0) return;
         await handleCallback(
           { id: "autoreturn", message: { chat: { id: chatId }, message_id: returnMsgId || messageId }, data: pendingReturn },
           botToken,
@@ -17833,7 +17933,9 @@ async function arvanServerCallback(data, ctx) {
     const r = await arvanSrvAction(ctx, m[2], Number(m[3]), act);
     if (!r) return;
     await edit(`✅ دستور ${act === "power-on" ? "روشن شدن" : act === "power-off" ? "خاموش شدن" : "ریبوت"} ارسال شد.\n(اعمال ممکن است کمی طول بکشد)`, []);
+    const navV0 = MSG_EDIT_VER;
     await sleep(2000);
+    if (MSG_EDIT_VER !== navV0) return true;
     return arvanServerDetail(ctx, m[2], Number(m[3]));
   }
   m = data.match(/^arvsnap:([^:]+):(\d+)$/);
@@ -17971,7 +18073,9 @@ async function arvanServerCallback(data, ctx) {
     const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "resize", { flavor_id: f.id });
     if (!r) return;
     await edit("✅ دستور تغییر سایز ارسال شد (چند دقیقه طول می‌کشد).", []);
+    const navV0 = MSG_EDIT_VER;
     await sleep(2000);
+    if (MSG_EDIT_VER !== navV0) return true;
     return arvanServerDetail(ctx, m[1], Number(m[2]));
   }
   m = data.match(/^arvbuild:([^:]+):(\d+)$/);
@@ -18005,7 +18109,9 @@ async function arvanServerCallback(data, ctx) {
     const r = await arvanSrvAction(ctx, m[1], Number(m[2]), "rebuild", { image_id: im.id });
     if (!r) return;
     await edit("✅ دستور ریبیلد ارسال شد (نصب مجدد چند دقیقه طول می‌کشد).", []);
+    const navV0 = MSG_EDIT_VER;
     await sleep(2000);
+    if (MSG_EDIT_VER !== navV0) return true;
     return arvanServerDetail(ctx, m[1], Number(m[2]));
   }
   m = data.match(/^arvfloat:(\d+):(.+)$/);
@@ -19712,12 +19818,15 @@ async function renderIpSearchMenu(io, token, page, note) {
   if (selMode) {
     kb.push([{ text: "✅ انتخاب همه", callback_data: `ipselall:${token}` }]);
     if (selSet.size > 0) {
-      // ipbulkdel: حذف گروهی | ipbulkedit: تغییر مقدار گروهی | ipbulkfav: افزودن به منتخب‌ها
+      // ipbulkdel: حذف گروهی | ipbulkedit: تغییر مقدار گروهی | ipbulktype: تغییر نوع گروهی | ipbulkfav: افزودن به منتخب‌ها
       kb.push([
         { text: "🗑 حذف انتخاب‌ها", callback_data: `ipbulkdel:${token}` },
         { text: "✏️ تغییر مقدار", callback_data: `ipbulkedit:${token}` },
       ]);
-      kb.push([{ text: "⭐ افزودن به منتخب‌ها", callback_data: `ipbulkfav:${token}` }]);
+      kb.push([
+        { text: "🔄 تغییر نوع", callback_data: `ipbulktype:${token}` },
+        { text: "⭐ منتخب‌ها", callback_data: `ipbulkfav:${token}` },
+      ]);
     }
     // ipseldone: خروج از حالت انتخاب
     kb.push([{ text: "❌ لغو انتخاب", callback_data: `ipseldone:${token}` }]);
@@ -19910,8 +20019,9 @@ async function qaApply(io) {
   await kv.delete(`qa:${chatId}`);
   const sum = diffSummary(data.result.name, prev.content, data.result.content);
   await edit(sum, []);
+  const navV0 = MSG_EDIT_VER;
   await sleep(2000);
-  await redrawMenuNav(kv, botToken, chatId, messageId, io.env);
+  if (MSG_EDIT_VER === navV0) await redrawMenuNav(kv, botToken, chatId, messageId, io.env);
   return true;
 }
 
@@ -20015,12 +20125,13 @@ async function dispatchFavQa(data, io) {
       favs.push({ zone_id: session.zone_id, zone_name: session.zone_name, acc: session.acc, record_id: rid, name: rec.name, type: rec.type });
       added++;
     }
-    await saveFavs(kv, chatId, favs);
-    await edit(`✅ ${added} ساب به منتخب‌ها اضافه شد.`, []);
-    await sleep(2000);
-    await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
-    return true;
-  }
+  await saveFavs(kv, chatId, favs);
+  await edit(`✅ ${added} ساب به منتخب‌ها اضافه شد.`, []);
+  const navV0 = MSG_EDIT_VER;
+  await sleep(2000);
+  if (MSG_EDIT_VER === navV0) await redrawRecordsList(kv, accounts, botToken, chatId, messageId, token, 0, env);
+  return true;
+}
   if (data === "favdel") {
     const favs = await getFavs(kv, chatId);
     if (!favs.length) return edit("📭 سابی در منتخب‌ها نیست.", [[{ text: "⭐ ساب‌های منتخب", callback_data: "favs" }]]);
@@ -20405,6 +20516,31 @@ async function dispatchFavQa(data, io) {
     if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
     await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ip_bulk_edit", token, idxs: st.idxs }), { expirationTtl: 600 });
     await edit(`✏️ مقدار جدید (آیپی) برای ${st.idxs.length} ساب انتخاب‌شده را بفرستید:`, [
+      [{ text: "⬅️ انصراف", callback_data: `ipselback:${token}` }],
+    ]);
+    return true;
+  }
+  if (data.startsWith("ipbulktype:")) {
+    const token = data.slice(11);
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
+    await edit(`🔄 نوع جدید برای ${st.idxs.length} ساب انتخاب‌شده:`, [
+      RECORD_TYPES.map((t) => ({ text: t, callback_data: `ipbulktypev:${token}:${t}` })),
+      [{ text: "⬅️ انصراف", callback_data: `ipselback:${token}` }],
+    ]);
+    return true;
+  }
+  if (data.startsWith("ipbulktypev:")) {
+    const parts = data.split(":");
+    const token = parts[1];
+    const newType = parts[2];
+    const st = await kv.get(`ipsel:${chatId}`, "json");
+    const stored = await kv.get(`ips:${token}`, "json");
+    if (!st || st.token !== token || !stored || !(st.idxs || []).length) return edit("⚠️ چیزی انتخاب نشده.");
+    if (!RECORD_TYPES.includes(newType)) return edit("⚠️ نوع نامعتبر.");
+    await kv.put(`pend:${chatId}`, JSON.stringify({ type: "ip_bulk_type", token, idxs: st.idxs, new_type: newType }), { expirationTtl: 600 });
+    await edit(`🔄 مقدار جدید برای نوع ${newType} (${st.idxs.length} ساب) را بفرستید:`, [
       [{ text: "⬅️ انصراف", callback_data: `ipselback:${token}` }],
     ]);
     return true;
