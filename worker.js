@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.95";
+const BOT_VERSION = "1.8.96";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.96": [
+    "✍️ کش رکوردهای DNS از ۱۵ به ۳۵ دقیقه (ران هاست‌فیلتر معمولاً بازنویسی نمی‌کند)",
+    "✍️ سقف هشدار نود: هر نود حداکثر هر ۳۰ دقیقه یک هشدار (ضد اسپم نوسان)",
+    "✍️ همگام‌سازی دستی نود وقتی چیزی عوض نشده write نمی‌زند",
+  ],
   "1.8.95": [
     "✍️ فلاش شمارنده‌ها هر ۳۰ دقیقه یا با ۲۵ شمارش (هزینه meter یک‌پنجم شد)",
   ],
@@ -4150,8 +4155,9 @@ async function getZoneById(zoneId, accIndex, accounts) {
 
 async function getRecords(zone, accounts, kv) {
   const cacheKey = `cache:rec:${zone.id}`;
+  // کش ۳۵دقیقه‌ای: ران هاست‌فیلتر هر ~۲۵ دقیقه می‌آید و معمولاً به کش می‌خورد (ویرایش دستی جداگانه باطل می‌کند)
   if (kv) {
-    const cached = await kvGetCached(kv, cacheKey, "json", 900000);
+    const cached = await kvGetCached(kv, cacheKey, "json", 2100000);
     if (Array.isArray(cached)) return cached;
   }
   const records = [];
@@ -4167,7 +4173,7 @@ async function getRecords(zone, accounts, kv) {
     if (data.result.length < 100) break;
     page++;
   }
-  if (kv) await kvPutCached(kv, cacheKey, JSON.stringify(records), { expirationTtl: 900 }, 900000);
+  if (kv) await kvPutCached(kv, cacheKey, JSON.stringify(records), { expirationTtl: 2100 }, 2100000);
   return records;
 }
 
@@ -7634,6 +7640,12 @@ function ndFmtTs(iso) {
     return "";
   }
 }
+// سقف هشدار نود: هر نود حداکثر هر ۳۰ دقیقه یک هشدار قطع/وصل می‌گیرد (نوسان مکرر = اسپم پیام + write اضافه).
+const ND_ALERT_COOLDOWN_MS = 30 * 60000;
+function ndShouldAlert(prevNode, nowMs) {
+  const t = prevNode && prevNode.last_alert ? Date.parse(prevNode.last_alert) : 0;
+  return !(t > 0) || nowMs - t >= ND_ALERT_COOLDOWN_MS;
+}
 
 async function panelNodes(p, token) {
   const base = p.url.replace(/\/+$/, "");
@@ -7673,6 +7685,7 @@ async function nodeSyncFromPanel(m, kv) {
     return { error: `خطا در خواندن نودها: ${e && e.message ? e.message : e}` };
   }
   const st = await getNodeState(kv, m.id);
+  const oldSig = _nodeSig(st);
   const now = new Date().toISOString();
   for (const n of list) {
     const prev = st.nodes[n.name];
@@ -7684,10 +7697,12 @@ async function nodeSyncFromPanel(m, kv) {
       reason: n.reason || null,
       ts: now,
       first_seen: (prev && prev.first_seen) || now,
+      last_alert: (prev && prev.last_alert) || null,
     };
   }
   st.ts = now;
-  await saveNodeState(kv, m.id, st);
+  // سینک دستی: اگر هیچ وضعیتی عوض نشده، write نزن.
+  if (_nodeSig(st) !== oldSig) await saveNodeState(kv, m.id, st);
   return { nodes: list };
 }
 
@@ -7733,6 +7748,7 @@ async function runNodePoll(env, opts) {
       const st = await getNodeState(kv, m.id);
       const panelName = (panel && panel.name) || m.name;
       let stDirty = false;
+      const alertStamp = {};
       for (const n of list) {
         const name = String(n.name || "");
         if (!name) continue;
@@ -7742,13 +7758,16 @@ async function runNodePoll(env, opts) {
         if (prev && (dir === "up" || dir === "down")) {
           const prevDir = nodeStatusDir(prev.status);
           if (prevDir && prevDir !== dir && !(m.excluded || []).includes(name)) {
-            stDirty = true; // قطع/وصل
-            const ts = ndFmtTs(now);
-            const msg =
-              dir === "down"
-                ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(name)}${n.address ? `\n🌐 آیپی: ${code(String(n.address))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? code(String(n.reason)) : "—"}`
-                : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
-            for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
+            stDirty = true; // قطع/وصل — وضعیت همیشه ذخیره می‌شود، ولی هشدار سقف ۳۰دقیقه‌ای دارد
+            if (ndShouldAlert(prev, Date.now())) {
+              const ts = ndFmtTs(now);
+              const msg =
+                dir === "down"
+                  ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(name)}${n.address ? `\n🌐 آیپی: ${code(String(n.address))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? code(String(n.reason)) : "—"}`
+                  : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
+              for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
+              alertStamp[name] = now;
+            }
           }
         }
         st.nodes[name] = {
@@ -7759,6 +7778,7 @@ async function runNodePoll(env, opts) {
           reason: n.reason || null,
           ts: now,
           first_seen: (prev && prev.first_seen) || now,
+          last_alert: alertStamp[name] || (prev && prev.last_alert) || null,
         };
       }
       if (stDirty) {
