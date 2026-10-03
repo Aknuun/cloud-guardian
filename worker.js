@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.100";
+const BOT_VERSION = "1.8.101";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.101": [
+    "🐞 فیکس «دو بار بزن»: آپدیت به آخر با گیت‌هاب ناپایدار دیگر «به‌روزی» اشتباه نمی‌گوید + یک‌بار تلاش مجدد",
+  ],
   "1.8.100": [
     "🔄 تغییر نوع گروهی در نتایج جست‌وجوی آیپی (مثل داخل دامنه) + اعتبارسنجی مقدار",
     "🛡 گارد پرش خودکار: خلاصه‌ها فقط اگر کاربر جایی نرفته باشد بازترسیم/برگردانده می‌شوند",
@@ -2769,6 +2772,23 @@ function selfLatestTag(names) {
     if (best === null || selfVerGreater(n, best)) best = n;
   }
   return best;
+}
+// تصمیم خالص «آپدیت به نسخه آخر»: install/latest/github-down.
+// بدون مدرک زنده و با کش کهنه، «به‌روزی» ادعا نمی‌شود (باگ «دو بار بزن»).
+function verLatestDecide(liveTags, cachedItems, cacheFresh, botVersion) {
+  const names = [];
+  const have = new Set();
+  for (const t of liveTags || []) {
+    if (t && !have.has(t)) { names.push(t); have.add(t); }
+  }
+  for (const x of cachedItems || []) {
+    if (x && x.tag && !have.has(x.tag)) { names.push(x.tag); have.add(x.tag); }
+  }
+  const latest = selfLatestTag(names);
+  if (!latest) return { act: "github-down" };
+  if (!(liveTags || []).length && !cacheFresh) return { act: "github-down" };
+  if (!selfVerGreater(latest, botVersion)) return { act: "latest" };
+  return { act: "install", tag: latest };
 }
 
 // ---- نسخه‌ها (منوی تنظیمات): لیست کش‌شده + پین + دیپلوی مشترک ----
@@ -12780,21 +12800,25 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "verlatest") {
       const vBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
       await edit("⏳ در حال بررسی آخرین نسخه…");
-      let vTagNames = [];
-      try { vTagNames = await selfLiveTags(kv); } catch (e) {}
-      const vItems3 = (await selfCachedReleases(kv)).items;
-      for (const x of vItems3) if (x && x.tag) vTagNames.push(x.tag);
-      const vLatest3 = selfLatestTag(vTagNames);
-      if (!vLatest3) return edit("❌ آخرین نسخه پیدا نشد.", vBack2);
-      if (!selfVerGreater(vLatest3, BOT_VERSION)) {
+      let vLive = [];
+      try { vLive = await selfLiveTags(kv); } catch (e) { vLive = []; }
+      if (!vLive.length) {
+        // خطای لحظه‌ای گیت‌هاب (403 سهمیه مشترک): یک‌بار دیگر تلاش کن
+        try { await sleep(3000); } catch (e) {}
+        try { vLive = await selfLiveTags(kv); } catch (e) { vLive = []; }
+      }
+      const vList3 = await selfCachedReleases(kv);
+      const vDec = verLatestDecide(vLive, vList3.items, !vList3.stale && vList3.items.length > 0, BOT_VERSION);
+      if (vDec.act === "github-down") return edit("❌ گیت‌هاب جواب نداد؛ نمی‌توانم مطمئن شوم نسخهٔ آخر چیست (نه اینکه به‌روز باشی). کمی بعد دوباره بزن.", vBack2);
+      if (vDec.act === "latest") {
         try { await kv.delete("selfup_pinned"); } catch (e) {}
         return edit("✅ همین حالا روی آخرین نسخه هستی (v" + BOT_VERSION + ").", vBack2);
       }
-      await edit("⏳ در حال نصب " + vLatest3 + " … (ممکن است تا یک دقیقه طول بکشد)");
-      const vr2 = await selfDeployTag(env, botToken, adminId, { tag: vLatest3, allowDowngrade: false, via: "manual", skipGuard: false });
+      await edit("⏳ در حال نصب " + vDec.tag + " … (ممکن است تا یک دقیقه طول بکشد)");
+      const vr2 = await selfDeployTag(env, botToken, adminId, { tag: vDec.tag, allowDowngrade: false, via: "manual", skipGuard: false });
       if (vr2.ok) {
         try { await kv.delete("selfup_pinned"); } catch (e) {}
-        await edit("✅ به نسخه آخر آپدیت شد: " + vLatest3, vBack2);
+        await edit("✅ به نسخه آخر آپدیت شد: " + vDec.tag + "\n\n🕐 انتشار نسخهٔ جدید روی کلادفلر تا ~۱ دقیقه طول می‌کشد؛ اگر صفحهٔ نسخه‌ها هنوز قدیمی نشان داد کمی صبر کن و دوباره بازش کن.", vBack2);
       } else {
         await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + (vr2.detail ? ": " + vr2.detail : "") + ").", vBack2);
       }
