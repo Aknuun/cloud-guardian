@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.98";
+const BOT_VERSION = "1.8.99";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.99": [
+    "📦 دایجست پولی: کرون ساعتی/روزانه خودش از پنل می‌خواند — هزینه ثابت، وبهوک غیرفوری صفر write",
+    "📦 وضعیت دایجست (آخرین ارسال + اجرای بعدی) در صفحه سهمیه",
+  ],
   "1.8.98": [
     "📦 دایجست هشدارهای پنل: حجم ساعتی یک‌جا، انقضا روزی یک‌بار، فقط بحران (۰ روز / ۱۰۰٪) فوری",
     "📦 وضعیت دایجست (آخرین ارسال + صف) به صفحه سهمیه اضافه شد",
@@ -1471,14 +1475,14 @@ export default {
             // واچ‌داگ رله سوار همین تیک ساعتی است (خوانش KV و سهمیه اضافه ندارد)
             jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
           }
-          // دایجست هشدارهای پنل: حجم ساعتی، انقضا روزانه (ساعت خلوت = صفر write)
+          // دایجست پولی هشدارهای پنل: حجم ساعتی، انقضا روزانه (هزینه ثابت هر اجرا؛ ساعت خلوت ≈ صفر write)
           if (!cs.pgdu || now - cs.pgdu >= 3600000) {
             patch.pgdu = now;
-            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, ["usage"], "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
+            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "usage", "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
           }
           if (!cs.pgdd || now - cs.pgdd >= 86400000) {
             patch.pgdd = now;
-            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, ["days"], "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
+            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
           }
           jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
           jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
@@ -3919,24 +3923,20 @@ async function renderQuotaMenu(edit, kv, env) {
     if (other !== null) lines.push(`• 🧾 سایر (ثبت‌نشده): ${faNum(other.toLocaleString("en-US"))} write`);
   }
   lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۳۰ دقیقه یا با ۲۵ شمارش).");
-  // وضعیت دایجست هشدارهای پنل: آخرین ارسال + موارد در صف (۱ list)
+  // وضعیت دایجست پولی هشدارهای پنل: آخرین ارسال + اجرای بعدی
   try {
     const du = await kv.get("pgdlast:usage", "json");
     const dd = await kv.get("pgdlast:days", "json");
-    let pending = null;
-    try {
-      const pl = await kv.list({ prefix: "pgdx:", limit: 1000 });
-      if (pl && Array.isArray(pl.keys)) pending = pl.keys.length + (pl.list_complete === false ? "+" : "");
-    } catch (e) {}
-    const dLine = (em, t, d) => {
-      if (!d || !d.ts) return `• ${em} ${t}: هنوز ارسالی نشده`;
-      let s = `• ${em} ${t}: آخرین ارسال ${fmtJalali(d.ts)} (${faNum(d.count || 0)} مورد)`;
+    let csNext = null;
+    try { csNext = await kv.get("cron_state", "json"); } catch (e) {}
+    const dLine = (em, t, d, nextMs) => {
+      let s = !d || !d.ts ? `• ${em} ${t}: هنوز ارسالی نشده` : `• ${em} ${t}: آخرین ارسال ${fmtJalali(d.ts)} (${faNum(d.count || 0)} مورد)`;
+      if (nextMs) s += ` · بعدی: ${fmtJalali(nextMs)}`;
       return s;
     };
-    lines.push("", "📦 دایجست هشدارهای پنل (حجم: ساعتی · انقضا: روزانه · بحران فوری):");
-    lines.push(dLine("📊", "حجم", du));
-    lines.push(dLine("📅", "انقضا", dd));
-    if (pending !== null) lines.push(`• ⏳ در صف ارسال: ${faNum(pending)} مورد`);
+    lines.push("", "📦 دایجست هشدارهای پنل (پولی: حجم ساعتی · انقضا روزانه · بحران فوری):");
+    lines.push(dLine("📊", "حجم", du, csNext && Number(csNext.pgdu) > 0 ? Number(csNext.pgdu) + 3600000 : null));
+    lines.push(dLine("📅", "انقضا", dd, csNext && Number(csNext.pgdd) > 0 ? Number(csNext.pgdd) + 86400000 : null));
   } catch (e) {}
   lines.push("");
   lines.push("🔒 استاپ خودکار: " + (cfg.autoStop ? "روشن" : "خاموش"));
@@ -7357,6 +7357,35 @@ async function panelUsersSince(p, token, sinceIso) {
   return out;
 }
 
+// کل کاربرهای پنل برای دایجست پولی (سقف ۶ صفحهٔ ۱۰۰۰تایی)
+async function panelAllUsers(p, token) {
+  const base = p.url.replace(/\/+$/, "");
+  const out = [];
+  let offset = 0;
+  for (let i = 0; i < 6; i++) {
+    const url = `${base}/api/users?limit=1000&offset=${offset}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: withTimeout(25000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const arr = Array.isArray(data.users) ? data.users : [];
+    for (const u of arr) {
+      if (!u) continue;
+      const owner = u.admin && typeof u.admin === "object" ? (u.admin.username || "-") : (u.admin || "-");
+      out.push({
+        username: u.username || String(u.id || ""),
+        used: Number(u.used_traffic || 0),
+        limit: Number(u.data_limit || 0),
+        expire: u.expire != null ? u.expire : u.expire_date,
+        status: String(u.status || ""),
+        owner,
+      });
+    }
+    offset += arr.length;
+    const total = Number(data.total || 0);
+    if (!arr.length || offset >= total) break;
+  }
+  return out;
+}
 function umFindSample(samples, targetMs, maxDiffMs) {
   let best = null;
   let bestDiff = Infinity;
@@ -8384,34 +8413,52 @@ function pgEventJobs(ev) {
   }
   return out;
 }
-// مقدار mark: "ts.bucket" (سازگار با قدیمی‌ها)
-function pgMarkParse(v) {
-  const parts = String(v == null ? "" : v).split(".");
-  const ts = Number(parts[0]);
-  return { ts: Number.isFinite(ts) ? ts : 0, bucket: parts.length > 1 ? parts[1] : "" };
+// آستانه‌های دایجست پولی از کانفیگ وبهوک (پیش‌فرض: حجم ۹۰٪، انقضا ۳ روز)
+function pgUsageTrigger(cfg) {
+  const a = cfg && Array.isArray(cfg.usage) ? cfg.usage.map(Number).filter((x) => Number.isFinite(x) && x > 0 && x <= 100) : [];
+  return a.length ? Math.min(...a) : 90;
 }
-// کلید ایندکس دایجست (۲۴-۴۸ ساعت عمر؛ بعد از ارسال حذف می‌شود؛ بدون read قابل کشف است)
-function pgIndexKey(ts, panelId, kind, owner, bucket, username) {
-  return "pgdx:" + ts + ":" + panelId + ":" + kind + ":" + (Number(owner) > 0 ? Number(owner) : 0) + ":" + bucket + ":" + username;
+function pgDaysTrigger(cfg) {
+  const a = cfg && Array.isArray(cfg.days) ? cfg.days.map(Number).filter((x) => Number.isFinite(x) && x >= 0) : [];
+  return a.length ? Math.max(...a) : 3;
 }
-function pgIndexParse(name) {
-  const sp = String(name || "").split(":");
-  if (sp.length < 7 || sp[0] !== "pgdx") return null;
-  const ts = Number(sp[1]);
-  if (!Number.isFinite(ts)) return null;
-  return { key: String(name), ts, panelId: sp[2], kind: sp[3], owner: Number(sp[4]) || 0, bucket: sp[5], username: sp.slice(6).join(":") };
-}
-// گروه‌بندی آیتم‌های دایجست: panel -> ownerKey -> [items] (مرتب زمانی)
-function pgDigestGroup(entries) {
-  const out = {};
-  for (const e of entries || []) {
-    if (!e || !e.panelId || !e.username || !e.kind) continue;
-    const p = (out[e.panelId] = out[e.panelId] || {});
-    const ok = "o:" + (Number(e.owner) > 0 ? Number(e.owner) : 0);
-    (p[ok] = p[ok] || []).push(e);
+// diff خالص دایجست پولی: لیست فعلی پنل در برابر reported دفعه قبل
+// reported: {username: bucket} — تازه‌ها fresh، بحران‌ها urg، dirty یعنی state عوض شده
+function pgDiffReported(kind, users, reported, trig, nowMs) {
+  const rep = reported && typeof reported === "object" ? reported : {};
+  const fresh = [];
+  const urg = [];
+  let dirty = false;
+  for (const u of users || []) {
+    const username = String((u && u.username) || "");
+    if (!username) continue;
+    if (kind === "usage") {
+      const lim = Number(u.limit);
+      const used = Number(u.used);
+      if (!(lim > 0) || !Number.isFinite(used) || used < 0) continue;
+      const pct = (used / lim) * 100;
+      const b = Math.floor(pct / 5) * 5;
+      const prev = rep[username];
+      if (pct >= 100) {
+        if (prev !== 100) { urg.push({ username, kind, value: Math.floor(pct * 10) / 10, bucket: 100, ownerName: u.owner || "", ts: nowMs }); rep[username] = 100; dirty = true; }
+      } else if (pct >= trig) {
+        if (prev === undefined || prev !== b) { fresh.push({ username, kind, value: Math.floor(pct * 10) / 10, bucket: b, ownerName: u.owner || "", ts: nowMs }); rep[username] = b; dirty = true; }
+      } else if (pct < trig - 5 && prev !== undefined) { delete rep[username]; dirty = true; }
+    } else {
+      if (u.expire === null || u.expire === undefined || u.expire === "" || u.expire === 0) continue;
+      const ets = pgExpireTs(u.expire);
+      if (!Number.isFinite(ets)) continue;
+      const d = (ets - nowMs) / 86400000;
+      const prev = rep[username];
+      if (d <= 0) {
+        if (prev !== -1) { urg.push({ username, kind, value: Math.floor(d * 10) / 10, bucket: 0, ownerName: u.owner || "", ts: nowMs }); rep[username] = -1; dirty = true; }
+      } else if (d <= trig) {
+        const b = Math.floor(d);
+        if (prev === undefined || prev !== b) { fresh.push({ username, kind, value: Math.floor(d * 10) / 10, bucket: b, ownerName: u.owner || "", ts: nowMs }); rep[username] = b; dirty = true; }
+      } else if (d > trig + 1 && prev !== undefined) { delete rep[username]; dirty = true; }
+    }
   }
-  for (const p of Object.values(out)) for (const k of Object.keys(p)) p[k].sort((a, b) => a.ts - b.ts);
-  return out;
+  return { fresh, urg, dirty, reported: rep };
 }
 function pgRenewBotKb(renewbot) {
   return renewbot ? [[{ text: "🤖 استارت " + renewbot, url: "https://t.me/" + renewbot }]] : [];
@@ -8505,7 +8552,6 @@ async function handlePgHook(token, payload, env, botToken) {
     let anyJob = false;
     const seenRun = new Set();
     const markKeys = [];
-    const indexKeys = [];
     // enrich فقط برای موارد فوریِ نیازمند داده (دایجستی‌ها با همان دیتای ایونت کافی‌اند؛ پنل شلوغ نمی‌شود)
     const needEnrich = events.some((e) => {
       if (!e || !e.username || (e.expireTs != null && e.status)) return false;
@@ -8531,11 +8577,12 @@ async function handlePgHook(token, payload, env, botToken) {
           }
         } catch (e) {}
       }
+      // فقط بحران امروزی فوری است (۰ روز / ۱۰۰٪)؛ بقیه را دایجست پولی پوشش می‌دهد (صفر write اینجا).
       // پنل مرجع آستانه است: فیلد صریح days_left/usage_percent یعنی خود پنل گفته «آستانه خورد».
       // مقادیر محاسبه‌شده (مثلاً داخل ایونت ساخت کاربر) فقط در باند دقیق: روز بالای ۰ تا ۱، حجم ۹۰ تا زیر ۹۱.
-      // بقیه (ساخت/ویرایش/حذف، تمام‌شده‌ها) ساکت می‌مانند.
       const batch = [];
       for (const j of jobs) {
+        if (!pgIsUrgent(j.kind, j.value)) continue;
         const rk = panel.id + ":" + ev.username + ":" + j.kind;
         if (seenRun.has(rk)) continue;
         if (!(await pgGate(panel.id, ev.username, j.kind, j.bucket))) continue;
@@ -8544,20 +8591,16 @@ async function handlePgHook(token, payload, env, botToken) {
       }
       if (!batch.length) continue;
       anyJob = true;
-      const ownerNum = Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 ? ev.ownerTg : 0;
       for (const j of batch) {
         markKeys.push({ panelId: panel.id, username: ev.username, kind: j.kind, bucket: j.bucket });
-        if (!pgIsUrgent(j.kind, j.value)) indexKeys.push(pgIndexKey(nowMs, panel.id, j.kind, ownerNum, j.bucket, ev.username));
       }
-      const uj = batch.filter((j) => pgIsUrgent(j.kind, j.value));
-      if (!uj.length) continue; // دایجستی: فقط mark/index ثبت شد؛ پیام جمعی با کرون می‌آید
       // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
       const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner, ev.ownerTg));
       if (ev.ownerTg && Number.isInteger(ev.ownerTg) && ev.ownerTg > 0 && admins.includes(ev.ownerTg) && (await pgStarted(kv, ev.ownerTg))) {
         to.add(ev.ownerTg);
       }
       await qAlert(kv, "pghook");
-      for (const j of uj) {
+      for (const j of batch) {
         for (const id of to) {
           await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
         }
@@ -8572,74 +8615,87 @@ async function handlePgHook(token, payload, env, botToken) {
           if (m && m.panelId && m.username && m.kind) await pgGateMark(m.panelId, m.username, m.kind, m.bucket);
         } catch (e) {}
       }
-      for (const k of indexKeys) {
-        try { await kv.put(k, "1", { expirationTtl: 172800 }); } catch (e) {}
-      }
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
   }
 }
-// فلاش دایجست هشدارهای پنل: markهای ایندکس (pgdx:) خوانده، پیام جمعی فرستاده و ایندکس‌ها حذف می‌شوند.
-// kinds: ["usage"] ساعتی / ["days"] روزانه. ساعت خلوت = صفر write. valFa: نمایش مقدار هر آیتم.
-async function runPgDigest(env, botToken, adminId, kinds, lastKey, headEm, headFa, valFa) {
+// دایجست پولی هشدارهای پنل: هر اجرا لیست کاربرهای هر پنل را می‌گیرد و با reported دفعه قبل مقایسه می‌کند.
+// هزینه ثابت است (۱ read + حداکثر ۱ state-write + ۱ lastKey-write در هر اجرا با محتوای تازه)؛ مستقل از تعداد کاربر.
+// kind: "usage" (ساعتی) یا "days" (روزانه). بحران‌های تازه (۱۰۰٪ / ۰ روز) فوری هم ارسال می‌شوند.
+async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa, valFa) {
   const kv = env.BOT_KV;
   if (!kv || !botToken) return;
   try {
     const cfg = await getPgHookCfg(kv);
     if (!cfg.enabled) return;
     const panels = await getPanels(kv);
-    const pmap = {};
-    for (const p of panels) pmap[p.id] = p;
+    if (!panels.length) return;
     const admins = await getAdmins(kv, env);
-    const items = [];
-    let cursor = undefined;
-    for (let pgN = 0; pgN < 5; pgN++) {
-      let pg = null;
-      try { pg = await kv.list({ prefix: "pgdx:", limit: 1000, cursor }); } catch (e) { break; }
-      if (!pg || !Array.isArray(pg.keys)) break;
-      for (const k of pg.keys) {
-        const it = pgIndexParse(k && k.name);
-        if (!it || !kinds.includes(it.kind)) continue;
-        items.push(it);
-      }
-      if (pg.list_complete || !pg.cursor) break;
-      cursor = pg.cursor;
-    }
-    if (!items.length) return;
-    const groups = pgDigestGroup(items);
+    const trig = kind === "usage" ? pgUsageTrigger(cfg) : pgDaysTrigger(cfg);
+    const nowMs = Date.now();
     let total = 0;
     const perPanel = {};
-    for (const pid of Object.keys(groups)) {
-      const panel = pmap[pid] || { id: pid, name: pid };
-      const owners = groups[pid];
-      const all = Object.values(owners).flat();
-      if (!all.length) continue;
-      total += all.length;
-      perPanel[pid] = all.length;
+    for (const panel of panels) {
+      if (!panel || !panel.id || !panel.url || !panel.username) continue;
+      let token = null;
+      try { token = await panelLogin(panel); } catch (e) { token = null; }
+      if (!token) continue;
+      let users = null;
+      try { users = await panelAllUsers(panel, token); } catch (e) { users = null; }
+      if (!Array.isArray(users)) continue;
+      const skey = "pgdr:" + panel.id + ":" + kind;
+      let st = null;
+      try { st = await kv.get(skey, "json"); } catch (e) { st = null; }
+      if (!st || typeof st !== "object" || !st.reported || typeof st.reported !== "object") st = { reported: {}, lastSent: 0, lastCount: 0 };
+      const r = pgDiffReported(kind, users, st.reported, trig, nowMs);
+      st.reported = r.reported;
+      if (r.dirty) {
+        try { await kv.put(skey, JSON.stringify({ reported: st.reported, lastSent: st.lastSent || 0, lastCount: st.lastCount || 0 })); } catch (e) {}
+      }
+      // بحران‌های تازه: فوری (نادر)
+      for (const u of r.urg) {
+        const to = new Set(await pgRecipients(kv, env, adminId, panel.id, u.ownerName || "", null));
+        await qAlert(kv, "pghook");
+        for (const id of to) {
+          await pgSendAlert(botToken, id, panel, { username: u.username, kind, value: u.value, owner: u.ownerName || "", renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
+        }
+      }
+      if (!r.fresh.length) continue;
+      total += r.fresh.length;
+      perPanel[panel.id] = r.fresh.length;
+      for (let i = 0; i < r.fresh.length; i++) qAlert(kv, "pghook");
       const line = (u) => "• " + u.username + " (" + valFa(u) + ")";
+      const owners = {};
+      for (const u of r.fresh) {
+        const ok = u.ownerName || "";
+        (owners[ok] = owners[ok] || []).push(u);
+      }
       if (!cfg.silent_me && (await pgStarted(kv, adminId))) {
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || pid) + " (" + faD(all.length) + " مورد)";
-        for (const ch of chunkText(txt + "\n" + all.map(line).join("\n"))) {
+        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(r.fresh.length) + " مورد)";
+        for (const ch of chunkText(txt + "\n" + r.fresh.map(line).join("\n"))) {
           try { await sendMessage(botToken, adminId, ch); } catch (e) {}
         }
       }
-      for (const ok of Object.keys(owners)) {
-        const oid = Number(ok.slice(2));
-        if (!oid || oid === adminId || !admins.includes(oid) || !(await pgStarted(kv, oid))) continue;
-        const arr = owners[ok];
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || pid) + " (" + faD(arr.length) + " مورد)";
-        for (const ch of chunkText(txt + "\n" + arr.map(line).join("\n"))) {
-          try { await sendMessage(botToken, oid, ch); } catch (e) {}
+      for (const on of Object.keys(owners)) {
+        if (!on) continue;
+        const to = (await pgRecipients(kv, env, adminId, panel.id, on, null)).filter((x) => x !== adminId);
+        const started = [];
+        for (const x of to) {
+          try { if (await pgStarted(kv, x)) started.push(x); } catch (e) {}
+        }
+        if (!started.length) continue;
+        const arr = owners[on];
+        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(arr.length) + " مورد)";
+        for (const id of started) {
+          for (const ch of chunkText(txt + "\n" + arr.map(line).join("\n"))) {
+            try { await sendMessage(botToken, id, ch); } catch (e) {}
+          }
         }
       }
     }
     if (!total) return;
-    for (let i = 0; i < total; i++) qAlert(kv, "pghook");
     try { await kv.put(lastKey, JSON.stringify({ ts: Date.now(), count: total, panels: perPanel })); } catch (e) {}
-    for (const it of items) {
-      try { await kv.delete(it.key); } catch (e) {}
-    }
   } catch (e) {
     console.error("PGDIGEST", String((e && e.message) || e));
   }
@@ -8659,8 +8715,8 @@ async function renderPgHookHome(edit, kv, env, adminId) {
     try { await kv.put("pghook_seen", "1"); } catch (e) {}
   }
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال (پیام نمی‌آید)"));
-  lines.push("📅 آستانه‌ها در خود پنل تنظیم می‌شوند (پیشنهاد: روز ۱، حجم ۹۰٪) — ربات فقط فوروارد می‌کند.");
-  lines.push("📦 ارسال جمعی: حجم ساعتی یک‌جا، انقضا روزی یک‌بار؛ فقط بحران امروزی (۰ روز / ۱۰۰٪) فوری می‌آید.");
+  lines.push("📅 آستانه‌ها در خود پنل تنظیم می‌شوند (پیشنهاد: روز ۱، حجم ۹۰٪).");
+  lines.push("📦 ارسال جمعی پولی: حجم ساعتی یک‌جا، انقضا روزی یک‌بار (کرون خودش از پنل می‌خواند)؛ فقط بحران امروزی (۰ روز / ۱۰۰٪) فوری می‌آید.");
   lines.push("🖥 پنل‌های متصل: " + Object.keys(cfg.panels).length + " از " + panels.length);
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر لینک‌شده‌ای (ادمین یا نه) فقط کاربرهای خودش را می‌گیرد (باید استارت زده باشد).");
