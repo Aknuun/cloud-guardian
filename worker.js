@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.12";
+const BOT_VERSION = "1.9.13";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.13": [
+    "📋 لیست هاست‌ها: سه ستون جداگانه (Host | Address | Network) با استثنای جداگانه هر فیلد",
+  ],
   "1.9.12": [
     "🐞 فیکس «strings must be encoded in UTF-8»: برش امن ایموجی + پاک‌سازی surrogate تنها در همه پیام‌ها",
   ],
@@ -16258,7 +16261,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(r.text, r.kb);
     } else if (data.startsWith("hfexc:")) {
       const parts = data.split(":");
-      const key = parts[1] + ":" + parts[2];
+      const key = parts[1] + ":" + parts[2] + ":" + (parts[3] || "host");
       const cfg = await getHostFilterCfg(kv);
       const set = new Set(cfg.exceptions || []);
       if (set.has(key)) set.delete(key);
@@ -16279,9 +16282,17 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         let hosts = [];
         try { hosts = await panelHosts(panel, token); } catch (e) {}
         for (const h of hosts || []) {
-          const key = panel.id + ":" + h.id;
-          if (put) set.add(key);
-          else set.delete(key);
+          const base = panel.id + ":" + h.id;
+          if (put) {
+            set.add(base + ":host");
+            set.add(base + ":address");
+            set.add(base + ":sni");
+          } else {
+            set.delete(base + ":host");
+            set.delete(base + ":address");
+            set.delete(base + ":sni");
+            set.delete(base); // clean old format
+          }
         }
       }
       cfg.exceptions = [...set];
@@ -16301,9 +16312,17 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         let hosts = [];
         try { hosts = token ? await panelHosts(panel, token) : []; } catch (e) {}
         for (const h of hosts || []) {
-          const key = panel.id + ":" + h.id;
-          if (put) set.add(key);
-          else set.delete(key);
+          const base = panel.id + ":" + h.id;
+          if (put) {
+            set.add(base + ":host");
+            set.add(base + ":address");
+            set.add(base + ":sni");
+          } else {
+            set.delete(base + ":host");
+            set.delete(base + ":address");
+            set.delete(base + ":sni");
+            set.delete(base); // clean old format
+          }
         }
       }
       cfg.exceptions = [...set];
@@ -22601,11 +22620,30 @@ async function runHostFilter(env, opts = {}) {
         }
       }
       if (!domains.size) continue;
+      // Build per-field exception set for this host
+      const excFields = new Set();
+      const baseKey = panel.id + ":" + h.id;
+      if ((cfg.exceptions || []).includes(baseKey + ":host")) excFields.add("host");
+      if ((cfg.exceptions || []).includes(baseKey + ":address")) excFields.add("address");
+      if ((cfg.exceptions || []).includes(baseKey + ":sni")) excFields.add("sni");
+      // Backward compat: if old key exists, treat as all fields excepted
+      if ((cfg.exceptions || []).includes(baseKey)) {
+        excFields.add("host");
+        excFields.add("address");
+        excFields.add("sni");
+      }
+      // Filter domains by excepted fields
+      const allowedDomains = new Set();
+      if (!excFields.has("address")) for (const v of h.address || []) if (isDomainLike(v)) allowedDomains.add(String(v).toLowerCase());
+      if (!excFields.has("sni")) for (const v of h.sni || []) if (isDomainLike(v)) allowedDomains.add(String(v).toLowerCase());
+      if (!excFields.has("host")) for (const v of h.host || []) if (isDomainLike(v)) allowedDomains.add(String(v).toLowerCase());
+      if (!allowedDomains.size) continue;
       hostItems.push({
         panel,
         token,
         host: h,
-        domains: [...domains],
+        domains: [...allowedDomains],
+        excFields,
         orig: { address: h.address || [], sni: h.sni || [], host: h.host || [] },
       });
     }
@@ -23396,7 +23434,7 @@ async function renderHostFilterHosts(edit, kv, env, chatId, note) {
   const selIds = chatId ? await hfgSelGet(kv, chatId) : null;
   const selMode = selIds !== null;
   const selSet = new Set(selIds || []);
-  const lines = ["📋 لیست هاست‌ها (فقط فعال‌ها)", "", "دو ستون هر ردیف (host | address) = استثنا/برگشت همان هاست (آبی در چرخه · خاکستری مستثنا)", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
+  const lines = ["📋 لیست هاست‌ها (فقط فعال‌ها)", "", "سه ستون: Host | Address | Network — کلیک هر کدام = استثنای همون فیلد (آبی در چرخه · خاکستری مستثنا)", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
   if (note) lines.push(note, "");
   const kb = [];
   kb.push([
@@ -23424,24 +23462,33 @@ async function renderHostFilterHosts(edit, kv, env, chatId, note) {
       n++;
       const hostLabel = String(h.remark || (Array.isArray(h.sni) && h.sni[0]) || "host").slice(0, 22);
       const addrLabel = String((Array.isArray(h.address) && h.address[0]) || "—").slice(0, 26);
+      const sniVals = Array.isArray(h.sni) ? h.sni : [];
+      const hostVals = Array.isArray(h.host) ? h.host : [];
+      const netLabel = (sniVals[0] || hostVals[0] || "—").slice(0, 26);
       const key = panel.id + ":" + h.id;
-      const isExc = exc.has(key);
+      const excHost = exc.has(key + ":host");
+      const excAddr = exc.has(key + ":address");
+      const excNet = exc.has(key + ":sni");
       const picked = selSet.has(key);
       const mark = selMode ? (picked ? "✅ " : "⬜ ") : "";
-      lines.push(`${mark}${n}) ${hostLabel} · ${addrLabel}`);
+      lines.push(`${mark}${n}) ${hostLabel} | ${addrLabel} | ${netLabel}`);
       if (selMode) {
-        // حالت انتخاب گروهی: هر دو ستون همان انتخاب را تاگل می‌کنند
         kb.push([
-          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(hostLabel, 28)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
-          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(addrLabel, 28)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
+          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(hostLabel, 20)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
+          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(addrLabel, 20)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
+          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(netLabel, 20)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
         ]);
       } else {
-        // دو ستون host | address — کلیک روی هر کدام = تاگل استثنا همان هاست (آبی/خاکستری)
-        const st = isExc ? "plain" : "primary";
-        const mk = isExc ? "⬜ " : "✅ ";
+        const stH = excHost ? "plain" : "primary";
+        const mkH = excHost ? "⬜ " : "✅ ";
+        const stA = excAddr ? "plain" : "primary";
+        const mkA = excAddr ? "⬜ " : "✅ ";
+        const stN = excNet ? "plain" : "primary";
+        const mkN = excNet ? "⬜ " : "✅ ";
         kb.push([
-          { text: mk + hfdShort(hostLabel, 30), style: st, callback_data: `hfexc:${panel.id}:${h.id}` },
-          { text: mk + hfdShort(addrLabel, 30), style: st, callback_data: `hfexc:${panel.id}:${h.id}` },
+          { text: mkH + hfdShort(hostLabel, 20), style: stH, callback_data: `hfexc:${panel.id}:${h.id}:host` },
+          { text: mkA + hfdShort(addrLabel, 20), style: stA, callback_data: `hfexc:${panel.id}:${h.id}:address` },
+          { text: mkN + hfdShort(netLabel, 20), style: stN, callback_data: `hfexc:${panel.id}:${h.id}:sni` },
         ]);
       }
     }
@@ -23484,21 +23531,18 @@ async function hfHostCheck(kv, env, panelId, hostId) {
   if (h.is_disabled) {
     return { text: "⏸ این هاست غیرفعال است؛ بررسی نمی‌شود.", kb: back };
   }
-  const excKey = String(panelId) + ":" + String(h.id);
-  if ((cfg.exceptions || []).includes(excKey)) {
-    return {
-      text: "🚫 این هاست در لیست استثناست؛ بررسی نمی‌شود.\n\nاگر می‌خواهی بررسی شود، از لیست هاست دکمهٔ «✅ استثنا» را بزن تا از استثنا خارج شود.",
-      kb: [[{ text: "✅ خروج از استثنا و بازگشت", callback_data: `hfexc:${panelId}:${h.id}` }]],
-    };
-  }
+  const baseKey = String(panelId) + ":" + String(h.id);
+  const excHost = (cfg.exceptions || []).includes(baseKey + ":host") || (cfg.exceptions || []).includes(baseKey);
+  const excAddr = (cfg.exceptions || []).includes(baseKey + ":address") || (cfg.exceptions || []).includes(baseKey);
+  const excNet = (cfg.exceptions || []).includes(baseKey + ":sni") || (cfg.exceptions || []).includes(baseKey);
+  const lines = [`🔎 بررسی هاست ${h.id}`, "", `Host: ${excHost ? "🚫 مستثنا" : "✅ در چرخه"}`, `Address: ${excAddr ? "🚫 مستثنا" : "✅ در چرخه"}`, `Network (SNI/Host): ${excNet ? "🚫 مستثنا" : "✅ در چرخه"}`, ""];
   const domains = new Set();
   for (const f of ["address", "sni", "host"]) {
     for (const v of h[f] || []) if (isDomainLike(v)) domains.add(String(v).toLowerCase());
   }
-  const lines = [`🔎 بررسی هاست ${h.id}`, ""];
+  if (!domains.size) lines.push("دامنه‌ای برای بررسی ندارد.");
   let anyBlocked = false;
   const blockedDomains = [];
-  if (!domains.size) lines.push("دامنه‌ای برای بررسی ندارد.");
   for (const d of domains) {
     const ping = await pingTarget(d, cfg, env, kv);
     if (ping.error) {
