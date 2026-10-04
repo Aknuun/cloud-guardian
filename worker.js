@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.10";
+const BOT_VERSION = "1.9.11";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.11": [
+    "🛑 هشدار «آی‌پی فیلتر — تعویض نشد» فقط یک‌بار برای هر دوره + راه‌حل؛ تا سالم‌شدن آی‌پی تکرار نمی‌شود",
+  ],
   "1.9.10": [
     "📄 صفحه‌بندی ۱۰ ردیفه همه‌جا (ساب‌ها ۳۰تایی) — ورق‌زدن و write کمتر",
   ],
@@ -4192,7 +4195,14 @@ async function tg(botToken, method, body) {
     body: JSON.stringify(body),
     signal: withTimeout(30000),
   });
-  return res.json();
+  const data = await res.json();
+  if (!data.ok) {
+    const err = new Error(`TG_${method}: ${data.error_code} ${data.description}`);
+    err.tgCode = data.error_code;
+    err.tgDesc = data.description;
+    throw err;
+  }
+  return data;
 }
 
 async function sendMessage(botToken, chatId, text, keyboard) {
@@ -4220,14 +4230,18 @@ async function sendDocument(botToken, chatId, filename, content, caption) {
 // شمارنده ویرایش پیام‌ها در همین ایزوله — گارد «پرش خودکار»:
 // بازترسیم‌های تأخیری (خلاصه → sleep → redraw) فقط اگر از آن موقع هیچ پیامی ویرایش نشده اجرا می‌شوند.
 let MSG_EDIT_VER = 0;
-async function editMessage(botToken, chatId, messageId, text, keyboard) {
+async function editMessage(botToken, chatId, messageId, text, keyboard, inlineMessageId) {
   MSG_EDIT_VER++;
   const t = text.substring(0, 4000);
   const body = {
-    chat_id: chatId,
-    message_id: messageId,
     text: t,
   };
+  if (inlineMessageId) {
+    body.inline_message_id = inlineMessageId;
+  } else {
+    body.chat_id = chatId;
+    body.message_id = messageId;
+  }
   if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
   if (t.includes("<code>")) body.parse_mode = "HTML";
   return tg(botToken, "editMessageText", body);
@@ -12924,11 +12938,12 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
 async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const chatId = cb.message ? cb.message.chat.id : null;
   const messageId = cb.message ? cb.message.message_id : null;
+  const inlineMessageId = cb.inline_message_id || null;
   let data = cb.data || "";
 
   await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
 
-  if (!chatId) return;
+  if (!chatId && !inlineMessageId) return;
 
   if (data === "noop") return;
 
@@ -12985,7 +13000,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const navRecOk = (d) => NAV_REC_EQ.has(d) || NAV_REC_PRE.some((p) => d.startsWith(p));
   const edit = async (text, kb) => {
     const r = await applyPerm(text, kb);
-    const res = await editMessage(botToken, chatId, messageId, r.text, r.kb);
+    const res = await editMessage(botToken, chatId, messageId, r.text, r.kb, inlineMessageId);
     if (!kbHasOwnBack(r.kb)) await navRecord(messageId);
     const isPerm = text && String(text).indexOf(PERM_MARK) !== -1;
     if (!isPerm && isResultText(text)) {
@@ -21387,10 +21402,34 @@ const FOREIGN_CHECK_NODES = [
 const HOSTFILTER_IP_DOWN_FAILS = 4;
 const HOSTFILTER_DEFAULT_RECHECK = 1;
 const HOSTFILTER_DEFAULT_RECHECK_MIN = 1;
-// ضداسپم سطح آی‌پی: هر قطعی (وضعیت + آی‌پی) فقط یک‌بار در ۲۴ ساعت پیام می‌گیرد —
-// نه یک‌بار برای هر ساب‌دامنه. تعویض موفق، ساب را از latch کم می‌کند و با خالی‌شدن،
- // latch پاک می‌شود تا قطعی بعدی (بعد از وصل‌شدن) دوباره خبر بدهد.
+// ضداسپم سطح آی‌پی: هر قطعی (وضعیت + آی‌پی) فقط یک‌بار پیام می‌گیرد —
+// نه یک‌بار برای هر ساب‌دامنه و نه تکرار روزانه. ساب سالم‌شده از latch کم می‌شود و
+// با خالی‌شدن، latch پاک می‌شود تا دورهٔ بعدی قطعی دوباره خبر بدهد.
+// سقف ۳۰ روزه فقط برای فراموش‌نشدن latchهای یتیم است.
 const HOSTFILTER_IP_NOTICE_TTL_MS = 24 * 3600000;
+const HOSTFILTER_IP_LATCH_MAX_MS = 30 * 86400000;
+// سقف نگهداری latch ضداسپم برحسب نوع (خالص): ip: تا بهبودی (سقف ۳۰ روزه)، بقیه ۲۴ ساعت
+function hfLatchTtlMs(key) {
+  return String(key || "").startsWith("ip:") ? HOSTFILTER_IP_LATCH_MAX_MS : HOSTFILTER_IP_NOTICE_TTL_MS;
+}
+// کم‌کردن ساب‌های بهبودیافته از latch آی‌پی‌ها (خالص): {latches, dirty}
+function hfIpLatchClean(latches, healthyLower) {
+  const out = {};
+  let dirty = false;
+  const healthy = healthyLower instanceof Set ? healthyLower : new Set();
+  for (const k of Object.keys(latches || {})) {
+    const le = latches[k];
+    if (!String(k).startsWith("ip:") || !le || !Array.isArray(le.subs)) {
+      out[k] = le;
+      continue;
+    }
+    const kept = le.subs.filter((s) => !healthy.has(String(s).toLowerCase()));
+    if (kept.length !== le.subs.length) dirty = true;
+    if (kept.length) out[k] = { ...le, subs: kept };
+    else dirty = true;
+  }
+  return { latches: out, dirty };
+}
 
 async function getHostIpNoticeAll(kv) {
   try {
@@ -22655,6 +22694,22 @@ async function runHostFilter(env, opts = {}) {
   const ipCache = {};
   const ipNotices = await getHostIpNoticeAll(kv);
   let ipNoticesDirty = false;
+  // پاک‌سازی latch آی‌پی‌های بهبودیافته: سابی که این ران سالم برگشته از subs کم می‌شود
+  // تا قطعی بعدیِ همون آی‌پی دوباره هشدار بدهد (فقط ساب‌های همین ران بررسی‌شده).
+  if (Object.keys(ipNotices).length) {
+    const healthy = new Set();
+    for (const t of Object.keys(results)) {
+      if (!filtered[t]) healthy.add(String(t).toLowerCase());
+    }
+    if (healthy.size) {
+      const cleaned = hfIpLatchClean(ipNotices, healthy);
+      if (cleaned.dirty) {
+        for (const k of Object.keys(ipNotices)) delete ipNotices[k];
+        Object.assign(ipNotices, cleaned.latches);
+        ipNoticesDirty = true;
+      }
+    }
+  }
   const maxChanges = Math.max(1, Number(opts.maxChanges) || cfg.maxChanges);
   let changedCount = 0;
   let ipBlockedCount = 0;
@@ -22785,14 +22840,14 @@ async function runHostFilter(env, opts = {}) {
           const fresh =
             prev &&
             Number(prev.ts || 0) > 0 &&
-            Date.now() - Number(prev.ts) < HOSTFILTER_IP_NOTICE_TTL_MS;
+            Date.now() - Number(prev.ts) < hfLatchTtlMs(latchKey);
           const mustNotify = manual || opts.force || !fresh;
           if (mustNotify) {
             const head = diag.ipDown
               ? "🛑 آی‌پی/سرور خاموش است — تعویض انجام نشد"
               : diag.iranAccess
                 ? "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
-                : "🚫 آی‌پی فیلتر شده است (نه دامنه)";
+                : "🚫 آی‌پی فیلتر شده است (نه دامنه) — تعویض انجام نشد";
             const tail = diag.ipDown
               ? (diag.foreignUnknown
                 ? "❌ از ایران پاسخی نیامد و بررسی خارجی هم ناموفق بود (حداقل " + HOSTFILTER_IP_DOWN_FAILS + " عدم پینگ)؛ احتمالاً سرور/IP خاموش است — در صورت روشن‌بودن سرور، بررسی بعدی دقیق‌تر خبر می‌دهد."
@@ -22800,6 +22855,11 @@ async function runHostFilter(env, opts = {}) {
               : diag.iranAccess
                 ? "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست (ایران‌اکسس)."
                 : "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر ساب‌دامنهٔ این هاست قرار دارد.";
+            const fix = diag.ipDown
+              ? "🛠 راه‌حل: سرور/آی‌پی را روشن کنید؛ تا روشن‌شدن، تعویض نمی‌کنم."
+              : diag.iranAccess
+                ? "🛠 راه‌حل: «ایران‌اکسس» را در سرور خاموش کنید تا از خارج هم در دسترس شود؛ خودکار ادامه می‌دهم."
+                : "🛠 راه‌حل: به این آی‌پیِ فیلتر رسیدگی یا تعویضش کنید (تعویض آی‌پی سرور)، یا این ساب را دستی روی آی‌پی/دامنهٔ سالم بگذارید؛ تعویض خودکار نمی‌کنم چون مشکل از آی‌پی است نه دامنه.";
             const members = (ipMembers[diag.ip] || []).filter((x) => x !== dv);
             const txt =
               head + "\n" +
@@ -22809,16 +22869,27 @@ async function runHostFilter(env, opts = {}) {
               "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
               (members.length ? "➕ " + members.length + " ساب‌دامنهٔ دیگر روی همین آی‌پی در این بررسی\n" : "") +
               "📝 " + tail + "\n" +
+              fix + "\n" +
+              "🔕 برای همین دوره فقط یک‌بار می‌آید؛ پس از سالم‌شدن آی‌پی، دورهٔ بعدی دوباره خبر می‌دهد.\n" +
               "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
             await hfNotify(botToken, admins, txt);
             await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
           }
           // ساب را زیر نظر latch نگه دار (حتی در حالت suppress) تا تعویض/بهبود، latch را آزاد کند.
+          // فقط وقتی چیزی واقعاً عوض شده dirty می‌شود تا ران‌های تکراری write اضافه نزنند.
           {
             const subs = new Set(Array.isArray(prev && prev.subs) ? prev.subs : []);
             subs.add(dv);
-            ipNotices[latchKey] = { kind, ip: diag.ip || "", ts: mustNotify ? Date.now() : (prev && prev.ts) || Date.now(), subs: [...subs] };
-            ipNoticesDirty = true;
+            const nextLatch = {
+              kind,
+              ip: diag.ip || "",
+              ts: mustNotify ? Date.now() : (prev && prev.ts) || Date.now(),
+              subs: [...subs],
+            };
+            if (!prev || JSON.stringify(prev) !== JSON.stringify(nextLatch)) {
+              ipNotices[latchKey] = nextLatch;
+              ipNoticesDirty = true;
+            }
           }
           continue;
         }
@@ -22903,13 +22974,13 @@ async function runHostFilter(env, opts = {}) {
     }
   }
 
-  // پاک‌سازی حافظهٔ ضداسپم: ورودی‌های قدیمی‌تر از ۲۴ ساعت حذف می‌شوند تا در صورت ادامهٔ مشکل دوباره خبر بدهد
+  // پاک‌سازی حافظهٔ ضداسپم: ip: تا بهبودی (سقف ۳۰ روزه) نگه داشته می‌شود، بقیه بعد از ۲۴ ساعت
   if (ipNoticesDirty || Object.keys(ipNotices).length) {
     const nowMs = Date.now();
     let pruned = false;
     for (const k of Object.keys(ipNotices)) {
       const e = ipNotices[k];
-      if (!e || !e.ts || nowMs - Number(e.ts) >= HOSTFILTER_IP_NOTICE_TTL_MS) {
+      if (!e || !e.ts || nowMs - Number(e.ts) >= hfLatchTtlMs(k)) {
         delete ipNotices[k];
         pruned = true;
       }
