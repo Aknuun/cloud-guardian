@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.106";
+const BOT_VERSION = "1.8.107";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.107": [
+    "🔁 مبنای کامل ساب (tun33 → tun33-1) + بدون تلمبار + پیش‌نمایش دقیقاً مثل اجرا",
+  ],
   "1.8.106": [
     "✏️ چرخش روزانه تغییر دستی پنل را تشخیص می‌دهد: مبنای تازه + شمارنده از نو + گزارش",
   ],
@@ -21651,23 +21654,18 @@ function hfdShort(s, maxBytes) {
   }
   return out;
 }
-// جدا کردن مبنا از لیبل اول: dl-007 → dl ؛ dl1 → dl (خالص)
-function hfdStripBase(label) {
-  const t = String(label || "").toLowerCase();
-  const s = t.replace(/[-_0-9]+$/, "");
-  return s || t || "sub";
-}
-// تعیین مبنا و زون از مقدار فعلی (خالص؛ zones شکل getAllZones)
+// تعیین مبنا و زون از مقدار فعلی (خالص؛ zones شکل getAllZones).
+// مبنا = کل لیبل اول، دست‌نخورده (tun33 → tun33، نه tun) تا پسوند به آن بچسبد: tun33-1
 function hfdResolveBase(value, zones) {
   const v = String(value || "").trim().toLowerCase().replace(/\.$/, "");
   if (!v) return { error: "empty" };
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v) || /^[0-9a-f:]+$/i.test(v) && v.includes(":")) return { error: "ip" };
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v) || (/^[0-9a-f:]+$/i.test(v) && v.includes(":"))) return { error: "ip" };
   const z = zoneForName(zones, v);
   if (!z) return { error: "external" };
   const zn = String(z.name || "").toLowerCase();
   const rel = v === zn ? "" : v.slice(0, -(zn.length + 1));
   const label0 = (rel.split(".")[0] || "").toLowerCase();
-  return { base: hfdStripBase(label0), zone: z, zoneName: z.name };
+  return { base: label0 || "sub", zone: z, zoneName: z.name };
 }
 // اولین نام آزاد base+sep+suffix در زون (خالص؛ namesLower مجموعه نام‌های موجود با حروف کوچک)
 function hfdFreeName(namesLower, base, sep, zoneName, style, counter, randFn) {
@@ -21680,14 +21678,39 @@ function hfdFreeName(namesLower, base, sep, zoneName, style, counter, randFn) {
   }
   return { error: "no_free_name" };
 }
-// تصمیم مبنا در برابر مقدار زنده (خالص):
-// external = مقدار زنده با آخرین ست‌شدهٔ ما فرق دارد (دستی/خارجی عوض شده)
-// reset = مبنا هم عوض شده → شمارنده از ۱ (سری تازه از مبنای جدید)
-function hfdBaseDecision(prevBase, prevCurrent, liveVal, fresh) {
-  if (!fresh || fresh.error) return { skip: true, reason: (fresh && fresh.error) || "resolve" };
-  const external = !!(prevCurrent && prevCurrent.length && !prevCurrent.includes(liveVal));
-  const reset = external && !!prevBase && prevBase !== fresh.base;
-  return { external, reset, base: fresh.base, zoneName: fresh.zoneName };
+// تصمیم مبنای مؤثر برای یک مقدار زنده (خالص؛ قلب چرخش و پیش‌نمایش):
+// - خروجی خودمان (در recorded هست) → همان مبنای ذخیره‌شده، ادامهٔ شمارنده (بدون تلمبار)
+// - دستی هم‌ریشه (شروع با base+sep) → همان مبنا، فقط پرچم external برای گزارش
+// - دستی نامرتبط → مبنای تازه (لیبل کامل زنده) + reset شمارنده
+// - stored: {base,zoneName} (اولویت با lastBase)؛ prefix دستی همیشه می‌برد
+function hfdEffBase(o) {
+  const fresh = (o && o.fresh) || {};
+  if (fresh.error) return { skip: true, reason: fresh.error };
+  const live = String(o.live);
+  const liveL = live.toLowerCase();
+  const sep = o.sep === "" ? "" : "-";
+  const recorded = Array.isArray(o.recorded) ? o.recorded.map(String) : [];
+  const stored = o.stored && !o.stored.error && o.stored.base ? o.stored : null;
+  const external = recorded.length > 0 && !recorded.includes(live);
+  let base = null;
+  let zoneName = null;
+  let reset = false;
+  if (external) {
+    const sb = stored ? String(stored.base).toLowerCase() : "";
+    if (sb && (liveL === sb || liveL.startsWith(sb + sep))) {
+      base = stored.base;
+      zoneName = stored.zoneName || fresh.zoneName;
+    } else {
+      base = fresh.base;
+      zoneName = fresh.zoneName;
+      reset = true;
+    }
+  } else {
+    base = stored ? stored.base : fresh.base;
+    zoneName = (stored && stored.zoneName) || fresh.zoneName;
+  }
+  if (o.prefix) base = o.prefix;
+  return { external, reset, base, zoneName };
 }
 // اجرای بعدی از روی ساعت لنگر (تهران HH:MM) و بازه ساعت (خالص)
 function hfdNextRun(at, intervalH, nowMs) {
@@ -21803,17 +21826,24 @@ async function runDailySubRotate(env, opts = {}) {
           out.push(val);
           continue;
         }
-        // تغییر دستی/خارجی؟ مبنا از مقدار زنده، شمارنده از نو
-        const bd = hfdBaseDecision(it.lastBase && it.lastBase[field], it.current && it.current[field], val, rb);
-        const base = (it.prefix || bd.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || bd.base;
+        // مبنای مؤثر: خروجی خودمان → ادامه سری (بدون تلمبار)؛ دستی نامرتبط → مبنای تازه + شمارنده از ۱
+        const storedB = (it.lastBase && it.lastBase[field] && it.lastBase[field].base) ? it.lastBase[field]
+          : (it.base && it.base[field] && !it.base[field].error ? it.base[field] : null);
+        const eff = hfdEffBase({ stored: storedB, recorded: it.current && it.current[field], live: val, fresh: rb, sep: it.sep, prefix: it.prefix });
+        if (eff.skip) {
+          out.push(val);
+          continue;
+        }
+        const base = String(eff.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || eff.base;
+        const zone = zones.find((z) => String(z.name || "").toLowerCase() === String(eff.zoneName || "").toLowerCase()) || rb.zone;
         let recs = [];
-        try { recs = await getRecords(rb.zone, accounts, kv); } catch (e) { recs = []; }
+        try { recs = await getRecords(zone, accounts, kv); } catch (e) { recs = []; }
         const names = new Set(recs.map((r) => String(r.name || "").toLowerCase()));
-        if (bd.reset) {
+        if (eff.reset) {
           it.counters = it.counters || {};
           it.counters[field] = 1;
         }
-        const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", rb.zoneName, it.style, (it.counters && it.counters[field]) || 1);
+        const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", eff.zoneName, it.style, (it.counters && it.counters[field]) || 1);
         if (fn.error) {
           await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "no_free_name" });
           out.push(val);
@@ -21821,7 +21851,7 @@ async function runDailySubRotate(env, opts = {}) {
         }
         const vl = String(val).toLowerCase();
         const src = recs.filter((r) => String(r.name || "").toLowerCase() === vl && ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
-        const cr = await cfCreateRecords(rb.zone, fn.name, src.length ? src : null, accounts, kv, val);
+        const cr = await cfCreateRecords(zone, fn.name, src.length ? src : null, accounts, kv, val);
         if (cr.error) {
           await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "create_fail: " + String(cr.error).slice(0, 120) });
           out.push(val);
@@ -21830,11 +21860,11 @@ async function runDailySubRotate(env, opts = {}) {
         it.counters = it.counters || {};
         it.counters[field] = fn.counter;
         it.lastBase = it.lastBase || {};
-        it.lastBase[field] = base;
+        it.lastBase[field] = { base, zoneName: eff.zoneName };
         it.prev = it.prev || {};
         it.prev[field] = (it.prev[field] || []).concat([val]).slice(-3);
         out.push(fn.name);
-        events.push({ field, from: val, to: fn.name, manual: !!bd.external });
+        events.push({ field, from: val, to: fn.name, manual: !!eff.external });
         cfg.totalCreated = (cfg.totalCreated || 0) + 1;
       }
       host[field] = out;
@@ -22681,29 +22711,26 @@ async function renderDailyRotHosts(edit, kv, env, chatId, note) {
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function hfdPreview(cfg, it, pid, hid, kv, accounts, zones, liveHost) {
-  // پیش‌نمایش نام بعدی هر فیلد فعال (بدون مصرف شمارنده) — مبنا از مقدار زنده تا تغییر دستی هم دیده شود
+  // پیش‌نمایش نام بعدی هر فیلد فعال (بدون مصرف شمارنده) — دقیقاً با منطق رانر
   const out = {};
   for (const field of ["address", "sni", "host"]) {
     if (!it.fields || !it.fields[field]) continue;
-    let b = null;
     const liveVals = liveHost && Array.isArray(liveHost[field]) ? liveHost[field] : [];
     const lv = liveVals.find((x) => String(x || "").trim());
-    if (lv) {
-      const rb = hfdResolveBase(lv, zones);
-      if (!rb.error) b = { base: rb.base, zoneName: rb.zoneName };
-    }
-    if (!b) {
-      const s = it.base && it.base[field];
-      if (s && !s.error && s.base && s.zoneName) b = s;
-    }
-    if (!b) { out[field] = null; continue; }
-    const zone = zones.find((z) => String(z.name).toLowerCase() === String(b.zoneName).toLowerCase());
-    if (!zone) { out[field] = null; continue; }
+    if (!lv) { out[field] = null; continue; }
+    const rb = hfdResolveBase(lv, zones);
+    if (rb.error) { out[field] = null; continue; }
+    const storedB = (it.lastBase && it.lastBase[field] && it.lastBase[field].base) ? it.lastBase[field]
+      : (it.base && it.base[field] && !it.base[field].error ? it.base[field] : null);
+    const eff = hfdEffBase({ stored: storedB, recorded: it.current && it.current[field], live: lv, fresh: rb, sep: it.sep, prefix: it.prefix });
+    if (eff.skip) { out[field] = null; continue; }
+    const zone = zones.find((z) => String(z.name || "").toLowerCase() === String(eff.zoneName || "").toLowerCase()) || rb.zone;
     let recs = [];
     try { recs = await getRecords(zone, accounts, kv); } catch (e) { recs = []; }
     const names = new Set(recs.map((r) => String(r.name || "").toLowerCase()));
-    const base = (it.prefix || b.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || b.base;
-    const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", b.zoneName, it.style, (it.counters && it.counters[field]) || 1);
+    const base = String(eff.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || eff.base;
+    const counter = eff.reset ? 1 : ((it.counters && it.counters[field]) || 1);
+    const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", eff.zoneName, it.style, counter);
     out[field] = fn.error ? null : fn.name;
   }
   return out;
