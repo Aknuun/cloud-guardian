@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.109";
+const BOT_VERSION = "1.8.110";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.110": [
+    "✨ ۹ فونت زیبانویس + لیست انتخاب + غیرفعال‌ها بی‌رنگ + دکمه در لیست پنل‌ها",
+  ],
   "1.8.109": [
     "✨ زیبانویس اسم هاست‌های پنل: مدل + فونت + فرمت/فاصله + جای پرچم/پروتکل + پیش‌نمایش",
   ],
@@ -7955,7 +7958,10 @@ async function panelDefineView(kv, back) {
   lines.push("ثبت، ویرایش یا حذف پنل‌های پاسارگارد:");
   const kb = [];
   for (const p of panels) {
-    kb.push([{ text: `🖥 ${p.name}`, callback_data: `pnlops:${p.id}` }]);
+    kb.push([
+      { text: `🖥 ${p.name}`, callback_data: `pnlops:${p.id}` },
+      { text: "✨", callback_data: `pbt:${p.id}` },
+    ]);
   }
   kb.push([{ text: "🌐 چرخش روزانه همه پنل‌ها", callback_data: "hfdpanel:all" }]);
   kb.push([{ text: "➕ افزودن پنل", callback_data: "pnladd" }]);
@@ -7979,8 +7985,8 @@ async function renderPanelOps(edit, kv, pid) {
   await edit(lines.join("\n"), kb);
 }
 // ===================== زیبانویس اسم هاست‌ها =====================
-const PBT_FONTS = ["plain", "bold", "italic", "bolditalic", "mono"];
-const PBT_FONT_FA = { plain: "معمولی", bold: "توپر", italic: "کج", bolditalic: "توپرکج", mono: "ماشینی" };
+const PBT_FONTS = ["plain", "bold", "italic", "bolditalic", "mono", "sans", "sansbold", "circled", "fullwidth"];
+const PBT_FONT_FA = { plain: "معمولی", bold: "توپر", italic: "کج", bolditalic: "توپرکج", mono: "ماشینی", sans: "گرد", sansbold: "گردتوپر", circled: "دایره‌ای", fullwidth: "پهن" };
 const PBT_SEPS = [" | ", " • ", " ⋮ ", " — "];
 const PBT_PRESETS = {
   classic: { font: "bold", sep: " | ", spacing: "normal", flagSide: "left", protoSide: "right" },
@@ -8010,6 +8016,22 @@ function pbtStyleChar(ch, font) {
   if (font === "mono") {
     if (isD) return String.fromCodePoint(0x1d7f6 + Number(c));
     return String.fromCodePoint((c === up ? 0x1d670 : 0x1d68a) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "sans") {
+    if (isD) return c;
+    return String.fromCodePoint((c === up ? 0x1d5a0 : 0x1d5ba) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "sansbold") {
+    if (isD) return String.fromCodePoint(0x1d7e2 + Number(c));
+    return String.fromCodePoint((c === up ? 0x1d5d4 : 0x1d5ee) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "circled") {
+    if (isD) return c === "0" ? "\u24EA" : String.fromCodePoint(0x2460 + Number(c) - 1);
+    return String.fromCodePoint((c === up ? 0x24b6 : 0x24d0) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "fullwidth") {
+    if (isD) return String.fromCodePoint(0xff10 + Number(c));
+    return String.fromCodePoint((c === up ? 0xff21 : 0xff41) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
   }
   return c;
 }
@@ -8090,6 +8112,23 @@ async function renderPbtPick(edit, kv, env, chatId, pid, note) {
   kb.push([{ text: "🔙 عملیات پنل", callback_data: `pnlops:${pid}` }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
+// لیست فونت‌ها با نمونهٔ زنده؛ فعلی آبی، بقیه بی‌رنگ
+async function renderPbtFonts(edit, kv, pid) {
+  const o = await pbtOptsGet(kv);
+  const lines = ["🔤 انتخاب فونت", ""];
+  const kb = [];
+  for (let i = 0; i < PBT_FONTS.length; i += 2) {
+    kb.push(
+      PBT_FONTS.slice(i, i + 2).map((f) => ({
+        text: `${o.font === f ? "✅ " : ""}${pbtStyleText("Aa", f)} ${PBT_FONT_FA[f] || f}`,
+        style: o.font === f ? "primary" : "plain",
+        callback_data: `pbtfontv:${pid}:${f}`,
+      }))
+    );
+  }
+  kb.push([{ text: "🔙 بازگشت", callback_data: `pbtopt:${pid}` }]);
+  await edit(lines.join("\n"), kb);
+}
 function pbtPreviewFor(host, o) {
   const sp = pbtSplitRemark(host.remark);
   const proto = String((host && (host.inbound_tag || host.security)) || "").trim();
@@ -8121,10 +8160,20 @@ async function renderPbtOpts(edit, kv, env, chatId, pid) {
   lines.push("🔤 فونت: " + (PBT_FONT_FA[o.font] || o.font));
   lines.push("🔣 جداکننده: «" + o.sep.trim() + "» · فاصله: " + (o.spacing === "tight" ? "چسبیده" : "معمولی"));
   lines.push("🚩 پرچم: " + (o.flagSide === "left" ? "چپ" : "راست") + " · 📡 پروتکل: " + (o.protoSide === "none" ? "بدون" : o.protoSide === "left" ? "چپ" : "راست"));
+  const presetMatch = (k) => {
+    const pr = PBT_PRESETS[k];
+    return pr && pr.font === o.font && pr.sep === o.sep && pr.spacing === o.spacing && pr.flagSide === o.flagSide && pr.protoSide === o.protoSide;
+  };
   const kb = [];
-  kb.push(Object.keys(PBT_PRESETS).map((k) => ({ text: PBT_PRESET_FA[k], callback_data: `pbtpreset:${pid}:${k}` })));
+  kb.push(
+    Object.keys(PBT_PRESETS).map((k) => ({
+      text: `${presetMatch(k) ? "✅ " : ""}${PBT_PRESET_FA[k]}`,
+      style: presetMatch(k) ? "primary" : "plain",
+      callback_data: `pbtpreset:${pid}:${k}`,
+    }))
+  );
   kb.push([
-    { text: "🔤 فونت", callback_data: `pbtfont:${pid}` },
+    { text: `🔤 فونت: ${PBT_FONT_FA[o.font] || o.font}`, callback_data: `pbtfonts:${pid}` },
     { text: "🔣 جداکننده", callback_data: `pbtsep:${pid}` },
   ]);
   kb.push([
@@ -15842,10 +15891,15 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (!pr) return edit("⚠️ مدل نامعتبر.");
       await pbtOptsSave(kv, { ...pr });
       await renderPbtOpts(edit, kv, env, chatId, pid);
-    } else if (data.startsWith("pbtfont:")) {
-      const pid = data.slice(8);
+    } else if (data.startsWith("pbtfonts:")) {
+      await renderPbtFonts(edit, kv, data.slice(9));
+    } else if (data.startsWith("pbtfontv:")) {
+      const parts = data.split(":");
+      const pid = parts[1];
+      const f = parts[2];
+      if (!PBT_FONTS.includes(f)) return edit("⚠️ فونت نامعتبر.");
       const o = await pbtOptsGet(kv);
-      o.font = PBT_FONTS[(PBT_FONTS.indexOf(o.font) + 1) % PBT_FONTS.length];
+      o.font = f;
       await pbtOptsSave(kv, o);
       await renderPbtOpts(edit, kv, env, chatId, pid);
     } else if (data.startsWith("pbtsep:")) {
