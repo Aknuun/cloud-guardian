@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.02";
+const BOT_VERSION = "1.9.03";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.03": [
+    "✍️ کم کردن واقعی: بدون فلاش فوری، کش رکورد ۶۰دقیقه، ثبت هزینه فلاش‌ها و ویزاردها",
+  ],
   "1.9.02": [
     "✍️ فلاش شمارنده‌ها هر ۶۰ دقیقه یا با ۱۰۰ شمارش (هزینه meter حدود یک‌سوم)",
   ],
@@ -1709,18 +1712,10 @@ async function processUpdate(payload, env, botToken, adminId) {
     const accounts = await getAccounts(kv, env);
     const pending = await kv.get(`pend:${chatId}`, "json");
 
-    if (pending && !text.startsWith("/")) {
-      await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
-      // ورودی کاربر مصرف شد — پیامش را پاک کن تا زیر دکمه‌ها نماند و چت شلوغ نشود
-      await deleteMessage(botToken, chatId, userMsgId);
-      return;
-    }
-
-    if (pending) await kv.delete(`pend:${chatId}`);
-
     const args = text.split(/\s+/);
     const cmd = args[0].toLowerCase();
-    // شمارش write واقعی این پیام/دستور (فقط put/delete؛ تجمیعی و بدون write اضافه)
+    // شمارش write واقعی این پیام/دستور — قبل از ویزارد تا putهای داخل resolvePending هم ثبت شوند (بخش p:*).
+    // فقط put/delete شمرده می‌شود؛ تجمیعی و بدون write اضافه.
     kv = qKvCount(
       kv,
       pending && !text.startsWith("/") && pending.type
@@ -1729,6 +1724,15 @@ async function processUpdate(payload, env, botToken, adminId) {
           ? "m:" + cmd.slice(1).replace(/[^a-z0-9_]/g, "").slice(0, 24)
           : "m:text"
     );
+
+    if (pending && !text.startsWith("/")) {
+      await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
+      // ورودی کاربر مصرف شد — پیامش را پاک کن تا زیر دکمه‌ها نماند و چت شلوغ نشود
+      await deleteMessage(botToken, chatId, userMsgId);
+      return;
+    }
+
+    if (pending) await kv.delete(`pend:${chatId}`);
 
     if (!text.startsWith("/") && (isIpLike(text) || isNameLike(text))) {
       const qa = await kv.get(`qa:${chatId}`, "json");
@@ -3407,10 +3411,10 @@ function qTodayKey() {
   return "qstat:" + new Date().toISOString().slice(0, 10);
 }
 // شمارنده تجمیعی کم‌هزینه: دلتا در مموی ایزوله.
-// با مرگ ایزوله ممکن است ذره‌ای کم بشمارد — برای آمار نمایشی قابل‌قبول.
+// رژیم مصرف: فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش، بدون فلاش فوری اولین put (صرفه‌جویی واقعی write).
+// بها: ایزوله‌های کم‌کار که زود می‌میرند شمارششان گم می‌شود — تفکیک، تمرکز روی پرمصرف‌هاست نه دقت مطلق.
 // شمارش تجمیعی کاملاً همگام (بدون await): هیچ‌وقت گیر نمی‌کند و مسابقه ندارد.
 // فلاش (I/O) جدا و آتش‌وبرو است؛ اسنپ‌شات با تعویض همگام گرفته می‌شود تا چیزی گم نشود.
-// رژیم مصرف: فلاش هر ۶۰ دقیقه یا با ۱۰۰ شمارش (هر کدام زودتر) تا هزینه meter ناچیز بماند.
 // حافظه ۷۵ دقیقه‌ای (بزرگ‌تر از بازه فلاش) تا بین دو فلاش منقضی نشود.
 function qCountSync(kv, bucketFn, field, name, inc) {
   try {
@@ -3418,11 +3422,11 @@ function qCountSync(kv, bucketFn, field, name, inc) {
     const day = new Date().toISOString().slice(0, 10);
     let acc = null;
     try { acc = memGet("qb:" + field); } catch (e) {}
-    if (!acc || typeof acc !== "object" || !acc.counts) acc = { day, counts: {}, flush: 0 };
+    if (!acc || typeof acc !== "object" || !acc.counts) acc = { day, counts: {}, flush: Date.now() };
     if (acc.day && acc.day !== day) {
-      // گذار نیمه‌شب: باقیمانده را فلاش کن، تازه شروع کن (هزینه فلاش هم ثبت شود)
+      // گذار نیمه‌شب: باقیمانده را فلاش کن، تازه شروع کن (هزینه فلاش را خود qFlushSnap ثبت می‌کند)
       const old = acc;
-      acc = { day, counts: { meter: 1 }, flush: 0 };
+      acc = { day, counts: {}, flush: Date.now() };
       try { memSet("qb:" + field, acc, 75 * 60000); } catch (e) {}
       qFlushSnap(kv, bucketFn(old.day || day), field, old.counts || {});
     }
@@ -3430,9 +3434,8 @@ function qCountSync(kv, bucketFn, field, name, inc) {
     acc.counts[name] = (Number(acc.counts[name]) || 0) + (inc === undefined ? 1 : inc);
     let accTotal = 0;
     try { for (const k of Object.keys(acc.counts)) accTotal += Number(acc.counts[k]) || 0; } catch (e) {}
-    if (Date.now() - (Number(acc.flush) || 0) >= 60 * 60000 || accTotal >= 100) {
+    if (Date.now() - (Number(acc.flush) || 0) >= 60 * 60000 || accTotal >= 25) {
       acc.flush = Date.now();
-      acc.counts.meter = (Number(acc.counts.meter) || 0) + 1;
       const snap = acc.counts;
       acc.counts = {};
       try { memSet("qb:" + field, acc, 75 * 60000); } catch (e) {}
@@ -3442,7 +3445,9 @@ function qCountSync(kv, bucketFn, field, name, inc) {
     }
   } catch (e) {}
 }
-// فلاش یک اسنپ‌شات (قبلاً جدا شده؛ فراخوان آتش‌وبرو، هرگز reject نمی‌کند)
+// فلاش یک اسنپ‌شات (قبلاً جدا شده؛ فراخوان آتش‌وبرو، هرگز reject نمی‌کند).
+// هزینهٔ خودِ فلاش (۱ write) هم همان‌جا زیر meter ثبت می‌شود تا «سایر» باد نکند.
+// (بازگشت ندارد: acc همان‌جا صفر شده، پس تودرتویی حداکثر یک سطح است و می‌ایستد.)
 async function qFlushSnap(kv, key, field, counts) {
   try {
     if (!kv || !key || !counts || !Object.keys(counts).length) return;
@@ -3452,6 +3457,7 @@ async function qFlushSnap(kv, key, field, counts) {
     if (!b[field] || typeof b[field] !== "object") b[field] = {};
     for (const n of Object.keys(counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(counts[n]);
     await kv.put(key, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+    try { qCountSync(kv, (d) => "qw:" + d, "w", "meter"); } catch (e) {}
   } catch (e) {}
 }
 // لاگ موقت خطای سرریز (۱.۸.۹۱): نمونه ۱۵٪، TTL یک‌ساعته، بعد از تشخیص پاک می‌شود
@@ -3479,7 +3485,7 @@ async function qwFlushNow(kv) {
       if (!b[f] || typeof b[f] !== "object") b[f] = {};
       for (const n of Object.keys(acc.counts)) b[f][n] = (Number(b[f][n]) || 0) + Number(acc.counts[n]);
       await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
-      try { memSet("qb:" + f, { day, counts: { meter: 1 }, flush: Date.now() }, 15 * 60000); } catch (e) {}
+      try { memSet("qb:" + f, { day, counts: {}, flush: Date.now() }, 15 * 60000); } catch (e) {}
     } catch (e) {}
   }
 }
@@ -3496,7 +3502,7 @@ function qAlert(kv, cat) {
   try { qCountSync(kv, (d) => "qal:" + d, "cats", cat); } catch (e) {}
 }
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
-// فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۶۰ دقیقه یا با ۱۰۰ شمارش
+// فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش
 // پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
 const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
 function qKvCount(kv, sec) {
@@ -4001,7 +4007,7 @@ async function renderQuotaMenu(edit, kv, env) {
     const other = qwOther(kvOps.write, totW);
     if (other !== null) lines.push(`• 🧾 سایر (ثبت‌نشده): ${faNum(other.toLocaleString("en-US"))} write`);
   }
-  lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۶۰ دقیقه یا با ۱۰۰ شمارش).");
+  lines.push("ℹ️ write واقعی اندازه‌گیری‌شدهٔ هر بخش است (تجمیعی، فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش).");
   // وضعیت دایجست پولی هشدارهای پنل: آخرین ارسال + اجرای بعدی
   try {
     const du = await kv.get("pgdlast:usage", "json");
@@ -4273,9 +4279,9 @@ async function getZoneById(zoneId, accIndex, accounts) {
 
 async function getRecords(zone, accounts, kv) {
   const cacheKey = `cache:rec:${zone.id}`;
-  // کش ۳۵دقیقه‌ای: ران هاست‌فیلتر هر ~۲۵ دقیقه می‌آید و معمولاً به کش می‌خورد (ویرایش دستی جداگانه باطل می‌کند)
+  // کش ۶۰دقیقه‌ای: ران هاست‌فیلتر هر ~۲۵ دقیقه می‌آید و معمولاً به کش می‌خورد (ویرایش دستی جداگانه باطل می‌کند)
   if (kv) {
-    const cached = await kvGetCached(kv, cacheKey, "json", 2100000);
+    const cached = await kvGetCached(kv, cacheKey, "json", 3600000);
     if (Array.isArray(cached)) return cached;
   }
   const records = [];
@@ -4291,7 +4297,7 @@ async function getRecords(zone, accounts, kv) {
     if (data.result.length < 100) break;
     page++;
   }
-  if (kv) await kvPutCached(kv, cacheKey, JSON.stringify(records), { expirationTtl: 2100 }, 2100000);
+  if (kv) await kvPutCached(kv, cacheKey, JSON.stringify(records), { expirationTtl: 3600 }, 3600000);
   return records;
 }
 
@@ -15239,7 +15245,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       if (any0) L.push("", `جمع write کرون‌ها: ${faNum(tot0.toLocaleString("en-US"))}`);
       else L.push("• هنوز write ثبت نشده.");
-      L.push("ℹ️ write واقعی هر کرون (تجمیعی در حافظه، فلاش هر ۶۰ دقیقه یا با ۱۰۰ شمارش).");
+      L.push("ℹ️ write واقعی هر کرون (تجمیعی در حافظه، فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش).");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qbtns") {
       // سهم تعامل تلگرام: کل منهای تیک‌های قطعی
@@ -15273,7 +15279,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       if (!any1) L.push("• هنوز write ثبت نشده.");
       else L.push("", `جمع write دکمه‌ها و پیام‌ها: ${faNum(tot1.toLocaleString("en-US"))}`);
-      L.push("ℹ️ write واقعی هر دکمه/پیام (تجمیعی در حافظه، فلاش هر ۶۰ دقیقه یا با ۱۰۰ شمارش).");
+      L.push("ℹ️ write واقعی هر دکمه/پیام (تجمیعی در حافظه، فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش).");
       await edit(L.join("\n"), [[{ text: "🔙 سهمیه", callback_data: "quota" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "qalerts") {
       // سهم هشدارها: شمارش واقعی ارسال‌ها + تسهیم KV
