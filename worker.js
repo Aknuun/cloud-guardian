@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.110";
+const BOT_VERSION = "1.8.111";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.111": [
+    "🔍 بررسی تکی صادقانه: اگر مشکل سطح آی‌پی است می‌گوید تعویض ساب بی‌فایده است",
+  ],
   "1.8.110": [
     "✨ ۹ فونت زیبانویس + لیست انتخاب + غیرفعال‌ها بی‌رنگ + دکمه در لیست پنل‌ها",
   ],
@@ -21606,6 +21609,14 @@ async function hfDiagIp(ip, cfg, env, kv) {
   return diag;
 }
 
+// تصمیم پیام «بررسی تکی» از روی تشخیص‌ها (خالص):
+// swappable=false یعنی همهٔ موارد مشکل سطح آی‌پی‌اند و وعدهٔ تعویض نباید داد
+function hfChkAdvice(diags) {
+  const blocked = (diags || []).filter(Boolean);
+  if (!blocked.length) return { swappable: false, ipOnly: false };
+  const ipOnly = blocked.every((d) => d.ipBlocked || d.ipDown || d.iranAccess);
+  return { swappable: !ipOnly, ipOnly };
+}
 async function hfDiagDomain(dv, cfg, env, kv) {
   const diag = { ipBlocked: false, ipDown: false, iranAccess: false, ip: null, handled: false, foreignUnknown: false, iranBlocked: false, foreignFail: 0 };
   let ips = null;
@@ -23230,6 +23241,7 @@ async function hfHostCheck(kv, env, panelId, hostId) {
   }
   const lines = [`🔎 بررسی هاست ${h.id}`, ""];
   let anyBlocked = false;
+  const blockedDomains = [];
   if (!domains.size) lines.push("دامنه‌ای برای بررسی ندارد.");
   for (const d of domains) {
     const ping = await pingTarget(d, cfg, env, kv);
@@ -23239,7 +23251,7 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     }
     const info = hostFilterPingBlocked(ping, cfg);
     const blocked = hostFilterIsBlocked(info, cfg);
-    if (blocked) anyBlocked = true;
+    if (blocked) { anyBlocked = true; blockedDomains.push(d); }
     lines.push(`${blocked ? "🔴" : "🟢"} ${d} — ${info.blockedCities}/${cfg.citiesSel.length} شهر بلاک`);
     for (const nid of Object.keys(ping.nodes)) {
       const n = ping.nodes[nid];
@@ -23249,6 +23261,25 @@ async function hfHostCheck(kv, env, panelId, hostId) {
     await sleep(700);
   }
   if (anyBlocked) {
+    // تشخیص سطح IP: اگر همهٔ موارد مشکل آی‌پی‌اند، وعدهٔ تعویض ساب نده (بی‌فایده است)
+    const diags = [];
+    for (const d of blockedDomains) {
+      try {
+        const dg = await hfDiagDomain(d, cfg, env, kv);
+        diags.push({ domain: d, ipBlocked: !!dg.ipBlocked, ipDown: !!dg.ipDown, iranAccess: !!dg.iranAccess, ip: dg.ip || "" });
+      } catch (e) {
+        diags.push({ domain: d });
+      }
+    }
+    const adv = hfChkAdvice(diags);
+    if (adv.ipOnly) {
+      for (const dg of diags) {
+        const why = dg.ipDown ? "سرور/آی‌پی خاموش" : dg.iranAccess ? "ایران‌اکسس" : "آی‌پی فیلتر (نه دامنه)";
+        lines.push(`• ${dg.domain}: ${why}${dg.ip ? ` (${dg.ip})` : ""}`);
+      }
+      lines.push("", "🔴 مشکل سطح آی‌پی است — تعویض ساب‌دامنه فایده ندارد (ساب جدید هم به همین آی‌پی وصل می‌شود). سرور/آی‌پی را عوض کن.");
+      return { text: lines.join("\n"), kb: back };
+    }
     lines.push("", "🔴 این هاست فیلتر است؛ تعویض با کرون (دکمه اول) یا فوری و همین‌جا (دکمه دوم):");
     return {
       text: lines.join("\n"),
