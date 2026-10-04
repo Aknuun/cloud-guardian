@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.107";
+const BOT_VERSION = "1.8.108";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.108": [
+    "🔁 چرخش روزانه رفت داخل دکمه پنل (هر پنل صفحه خودش) + اسکوپ پنل",
+  ],
   "1.8.107": [
     "🔁 مبنای کامل ساب (tun33 → tun33-1) + بدون تلمبار + پیش‌نمایش دقیقاً مثل اجرا",
   ],
@@ -7947,17 +7950,29 @@ async function panelDefineView(kv, back) {
     lines.push("");
   }
   lines.push("ثبت، ویرایش یا حذف پنل‌های پاسارگارد:");
-  return {
-    text: lines.join("\n"),
-    kb: [
-      [{ text: "➕ افزودن پنل", callback_data: "pnladd" }],
-      [
-        { text: "🗑 حذف پنل", callback_data: "pnld" },
-        { text: "✏️ ویرایش پنل", callback_data: "pnle" },
-      ],
-      [{ text: "🔙 بازگشت", callback_data: back || "menu" }, { text: "🏠 خانه", callback_data: "menu" }],
-    ],
-  };
+  const kb = [];
+  for (const p of panels) {
+    kb.push([{ text: `🖥 ${p.name}`, callback_data: `pnlops:${p.id}` }]);
+  }
+  kb.push([{ text: "🌐 چرخش روزانه همه پنل‌ها", callback_data: "hfdpanel:all" }]);
+  kb.push([{ text: "➕ افزودن پنل", callback_data: "pnladd" }]);
+  kb.push([
+    { text: "🗑 حذف پنل", callback_data: "pnld" },
+    { text: "✏️ ویرایش پنل", callback_data: "pnle" },
+  ]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: back || "menu" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  return { text: lines.join("\n"), kb };
+}
+// صفحه عملیات یک پنل: چرخش روزانه و (به‌زودی) زیبانویس هاست‌ها
+async function renderPanelOps(edit, kv, pid) {
+  const panels = await getPanels(kv);
+  const p = panels.find((x) => String(x.id) === String(pid));
+  if (!p) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 پنل‌ها", callback_data: "pndef" }]]);
+  const lines = ["🖥 عملیات پنل «" + p.name + "»", "🌐 " + p.url, ""];
+  const kb = [];
+  kb.push([{ text: "🔁 چرخش روزانه ساب‌ها", callback_data: `hfdpanel:${p.id}` }]);
+  kb.push([{ text: "🔙 پنل‌ها", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
 }
 
 // ساخت خودکار «مانیتور نود» برای یک پنل تازه (اگر نباشد) و همگام‌سازی اولیهٔ نودها.
@@ -11676,7 +11691,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     cfg.intervalH = h;
     cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
     await saveDailyRotCfg(kv, cfg);
-    await renderDailyRotHome(send, kv, env);
+    await renderDailyRotHome(send, kv, env, chatId);
     return;
   }
   if (type === "hfd_at") {
@@ -11691,7 +11706,7 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     cfg.at = String(m[1]).padStart(2, "0") + ":" + m[2];
     cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
     await saveDailyRotCfg(kv, cfg);
-    await renderDailyRotHome(send, kv, env);
+    await renderDailyRotHome(send, kv, env, chatId);
     return;
   }
   if (type === "hfd_pre") {
@@ -15651,13 +15666,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "hflist") {
       await renderHostFilterHosts(edit, kv, env);
     } else if (data === "hfd") {
-      await renderDailyRotHome(edit, kv, env);
+      await renderDailyRotHome(edit, kv, env, chatId);
+    } else if (data.startsWith("hfdpanel:")) {
+      const pid = data.slice(9);
+      await hfdScopeSet(kv, chatId, pid === "all" ? "" : pid);
+      await renderDailyRotHome(edit, kv, env, chatId);
+    } else if (data.startsWith("pnlops:")) {
+      await renderPanelOps(edit, kv, data.slice(7));
     } else if (data === "hfdtg") {
       const cfg = await getDailyRotCfg(kv);
       cfg.enabled = !cfg.enabled;
       if (cfg.enabled && !cfg.next_run) cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
       await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHome(edit, kv, env);
+      await renderDailyRotHome(edit, kv, env, chatId);
     } else if (data === "hfdint") {
       const cfg = await getDailyRotCfg(kv);
       const kb = [
@@ -15673,7 +15694,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       cfg.intervalH = h;
       cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
       await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHome(edit, kv, env);
+      await renderDailyRotHome(edit, kv, env, chatId);
     } else if (data === "hfdintc") {
       const cfg = await getDailyRotCfg(kv);
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_int" }), { expirationTtl: 600 });
@@ -15695,10 +15716,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       if (mode === "set") return edit("⚠️ در حالت تنظیم، انتخاب گروهی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
       const cfg = await getDailyRotCfg(kv);
       const panels = await getPanels(kv);
+      const scope = await hfdScopeGet(kv, chatId);
       const accounts = await getAccounts(kv, env);
       const zones = await getAllZones(accounts, kv);
       let n = 0;
       for (const panel of panels) {
+        if (scope && String(panel.id) !== String(scope)) continue;
         const r = await hfdPanelHosts(kv, panel);
         if (r.error) continue;
         for (const h of r.hosts || []) {
@@ -15811,7 +15834,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const rr = await runDailySubRotate({ ...env, BOT_KV: kv }, { force: true });
       await edit(`✅ چرخش دستی تمام شد: ${rr.changed || 0} هاست چرخید${rr.skipped ? ` · ${rr.skipped} رد شد` : ""}${rr.error ? `\n⚠️ ${rr.error}` : ""}.`, [[{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfdlog") {
-      await renderDailyRotLog(edit, kv);
+      await renderDailyRotLog(edit, kv, chatId);
     } else if (data.startsWith("hfchk:")) {
       const parts = data.split(":");
       const cfg0 = await getHostFilterCfg(kv);
@@ -22517,7 +22540,6 @@ async function renderHostFilterHome(edit, kv, env) {
   kb.push([{ text: "⚡ فورس بررسی کامل", callback_data: "hfforceall" }]);
   // hfhist: تاریخچهٔ تعویض‌ها | hflist: لیست هاست‌ها + استثنا و بررسی تک‌تک (جای بررسی فوری حذف‌شده)
   kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
-  kb.push([{ text: "🔁 تعویض روزانه ساب‌ها", callback_data: "hfd" }]);
   kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
   // بازگشت به منوی اصلی
@@ -22593,10 +22615,23 @@ async function renderHostFilterBackups(edit, kv) {
 }
 
 // ---------- رابط تعویض روزانه ساب‌ها ----------
-async function renderDailyRotHome(edit, kv, env) {
+async function renderDailyRotHome(edit, kv, env, chatId) {
   const cfg = await getDailyRotCfg(kv);
-  const n = Object.keys(cfg.items).length;
+  let scope = await hfdScopeGet(kv, chatId);
+  const panels = await getPanels(kv);
+  let scopeName = "همه پنل‌ها";
+  if (scope) {
+    const sp = panels.find((p) => String(p.id) === String(scope));
+    if (!sp) {
+      scope = "";
+      await hfdScopeSet(kv, chatId, "");
+    } else {
+      scopeName = sp.name || scope;
+    }
+  }
+  const n = Object.keys(cfg.items).filter((k) => !scope || k.startsWith(scope + ":")).length;
   const lines = ["🔁 تعویض روزانه ساب‌ها", ""];
+  lines.push("🖥 پنل: " + scopeName);
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
   lines.push("⏱ هر " + cfg.intervalH + " ساعت · 🕐 لنگر: " + cfg.at + " (تهران)");
   lines.push("⏭ اجرای بعدی: " + (cfg.next_run ? ndFmtTs(cfg.next_run) + " به وقت ایران" : "—"));
@@ -22608,7 +22643,8 @@ async function renderDailyRotHome(edit, kv, env) {
   kb.push([{ text: "⏱ بازه", callback_data: "hfdint" }, { text: "🕐 ساعت", callback_data: "hfdat" }]);
   kb.push([{ text: "🖥 هاست‌ها", callback_data: "hfdhosts" }, { text: "⚡ اجرای دستی", callback_data: "hfdrun", style: "primary" }]);
   kb.push([{ text: "📜 گزارش", callback_data: "hfdlog" }]);
-  kb.push([{ text: "🔙 تعویض خودکار", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  if (scope) kb.push([{ text: "🔙 عملیات پنل", callback_data: `pnlops:${scope}` }, { text: "🏠 خانه", callback_data: "menu" }]);
+  else kb.push([{ text: "🔙 پنل‌ها", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
 async function hfdPanelHosts(kv, panel, loginMs, hostsMs) {
@@ -22660,6 +22696,18 @@ async function hfdModeGet(kv, chatId) {
 async function hfdModeSet(kv, chatId, mode) {
   try { await kv.put(`hfdmode:${chatId}`, JSON.stringify({ mode }), { expirationTtl: 3600 }); } catch (e) {}
 }
+// اسکوپ پنل چرخش روزانه: pid یک پنل یا "" (همه). خالص‌نما با KV فیک در تست.
+async function hfdScopeGet(kv, chatId) {
+  try {
+    const s = await kv.get(`hfdpanel:${chatId}`, "text");
+    if (s === "all" || s === "") return "";
+    if (s && /^[A-Za-z0-9_-]{4,64}$/.test(s)) return s;
+  } catch (e) {}
+  return "";
+}
+async function hfdScopeSet(kv, chatId, pid) {
+  try { await kv.put(`hfdpanel:${chatId}`, pid === "all" ? "" : String(pid || ""), { expirationTtl: 3600 }); } catch (e) {}
+}
 const HFD_MODES = ["address", "sni", "set"];
 const HFD_MODE_FA = { address: "🖥 address", sni: "🖥 sni", set: "⚙️ تنظیم" };
 // لیست هاست در «حالت» فعلی: اول فیلد (address/sni) بعد هاست‌ها؛ حالت ⚙️ یعنی باز کردن تنظیم تکی
@@ -22674,7 +22722,9 @@ async function renderDailyRotHosts(edit, kv, env, chatId, note) {
   if (note) lines.push(note, "");
   const kb = [];
   kb.push(HFD_MODES.map((m) => ({ text: `${mode === m ? "✅ " : ""}${HFD_MODE_FA[m]}`, style: mode === m ? "primary" : "plain", callback_data: `hfdm:${m}` })));
+  const scope = await hfdScopeGet(kv, chatId);
   for (const panel of panels) {
+    if (scope && String(panel.id) !== String(scope)) continue;
     lines.push("— " + (panel.name || panel.id));
     const r = await hfdPanelHosts(kv, panel);
     if (r.error) {
@@ -22776,10 +22826,13 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
   kb.push([{ text: "🔙 هاست‌ها", callback_data: "hfdhosts" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
-async function renderDailyRotLog(edit, kv) {
+async function renderDailyRotLog(edit, kv, chatId) {
   let log = [];
   try { log = (await kv.get("host_filter_log", "json")) || []; } catch (e) { log = []; }
-  const rows = (Array.isArray(log) ? log : []).filter((e) => e && (e.kind === "dailyrot" || e.kind === "dailyrot_revert")).slice(0, 12);
+  const scope = await hfdScopeGet(kv, chatId);
+  const rows = (Array.isArray(log) ? log : [])
+    .filter((e) => e && (e.kind === "dailyrot" || e.kind === "dailyrot_revert") && (!scope || String(e.panel_id) === String(scope)))
+    .slice(0, 12);
   const lines = ["📜 گزارش چرخش روزانه", ""];
   if (!rows.length) lines.push("📭 هنوز چرخشی ثبت نشده.");
   for (const e of rows) {
