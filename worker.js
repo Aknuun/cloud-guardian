@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.104";
+const BOT_VERSION = "1.8.105";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.105": [
+    "🔁 مدل میدانی چرخش روزانه: اول address/sni بعد هاست‌ها (آبی/خاکستری)",
+  ],
   "1.8.104": [
     "🗂 عملیات گروهی چرخش روزانه: انتخاب همه/هیچ + استایل/جداکننده/فیلد برای همه + آبی/خاکستری",
   ],
@@ -15674,79 +15677,88 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_at" }), { expirationTtl: 600 });
       await edit(`🕐 ساعت لنگر را به وقت تهران بفرستید (HH:MM مثل 03:00؛ فعلی: ${cfg.at}):`, [[{ text: "⬅️ انصراف", callback_data: "hfd" }]]);
     } else if (data === "hfdhosts") {
-      await renderDailyRotHosts(edit, kv, env);
-    } else if (data === "hfdall") {
+      await renderDailyRotHosts(edit, kv, env, chatId);
+    } else if (data.startsWith("hfdm:")) {
+      const m = data.slice(5);
+      if (!HFD_MODES.includes(m)) return edit("⚠️ حالت نامعتبر.");
+      await hfdModeSet(kv, chatId, m);
+      await renderDailyRotHosts(edit, kv, env, chatId);
+    } else if (data === "hfdmall") {
+      // انتخاب همه در حالت فعلی (فقط همان فیلد روشن می‌شود)
+      const mode = await hfdModeGet(kv, chatId);
+      if (mode === "set") return edit("⚠️ در حالت تنظیم، انتخاب گروهی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
       const cfg = await getDailyRotCfg(kv);
       const panels = await getPanels(kv);
       const accounts = await getAccounts(kv, env);
       const zones = await getAllZones(accounts, kv);
-      let added = 0;
+      let n = 0;
       for (const panel of panels) {
         const r = await hfdPanelHosts(kv, panel);
         if (r.error) continue;
         for (const h of r.hosts || []) {
           if (h.is_disabled) continue;
           const key = hfdItemKey(String(panel.id), String(h.id));
-          if (!cfg.items[key]) {
-            cfg.items[key] = hfdEnsureItem(h, zones);
-            added++;
+          let it = cfg.items[key];
+          if (!it) {
+            it = hfdEnsureItem(h, zones);
+            it.fields = { address: false, sni: false, host: false };
+            cfg.items[key] = it;
           }
+          if (!it.fields[mode]) { it.fields[mode] = true; n++; }
         }
       }
       await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHosts(edit, kv, env, added > 0 ? `✅ ${added} هاست انتخاب شد.` : "ℹ️ همه از قبل انتخاب شده بودند.");
-    } else if (data === "hfdnone") {
+      await renderDailyRotHosts(edit, kv, env, chatId, n > 0 ? `✅ «${mode}» برای ${n} هاست فعال شد.` : "ℹ️ تغییری نکرد.");
+    } else if (data === "hfdmnone") {
+      // پاک‌سازی حالت فعلی (همان فیلد از همه برداشته می‌شود؛ خالی‌شده‌ها حذف)
+      const mode = await hfdModeGet(kv, chatId);
+      if (mode === "set") return edit("⚠️ در حالت تنظیم، پاک‌سازی گروهی نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
       const cfg = await getDailyRotCfg(kv);
-      const n = Object.keys(cfg.items).length;
-      cfg.items = {};
+      let n = 0;
+      for (const key of Object.keys(cfg.items)) {
+        const it = cfg.items[key];
+        if (!it || !it.fields || !it.fields[mode]) continue;
+        it.fields[mode] = false;
+        n++;
+        if (!it.fields.address && !it.fields.sni && !it.fields.host) delete cfg.items[key];
+      }
       await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHosts(edit, kv, env, n > 0 ? `⬜ انتخاب ${n} هاست لغو شد.` : "ℹ️ چیزی انتخاب نشده بود.");
-    } else if (data.startsWith("hfdgstyle:")) {
-      const st = data.slice(10);
-      if (!HFD_STYLES.includes(st)) return edit("⚠️ استایل نامعتبر.");
-      const cfg = await getDailyRotCfg(kv);
-      const n = hfdGroupPatch(cfg.items, Object.keys(cfg.items), { style: st });
-      await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHosts(edit, kv, env, `🎨 استایل ${n} هاست شد «${HFD_STYLE_FA[st]}».`);
-    } else if (data.startsWith("hfdgsep:")) {
-      const s = data.slice(8);
-      if (s !== "dash" && s !== "none") return edit("⚠️ نامعتبر.");
-      const cfg = await getDailyRotCfg(kv);
-      const n = hfdGroupPatch(cfg.items, Object.keys(cfg.items), { sep: s === "dash" ? "-" : "" });
-      await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHosts(edit, kv, env, `🔣 جداکنندهٔ ${n} هاست شد «${s === "dash" ? "-" : "بدون"}».`);
-    } else if (data.startsWith("hfdfields:")) {
-      const parts = data.split(":");
-      const f = parts[1];
-      const on = parts[2] === "1";
-      if (!["address", "sni"].includes(f)) return edit("⚠️ فیلد نامعتبر.");
-      const cfg = await getDailyRotCfg(kv);
-      const n = hfdGroupPatch(cfg.items, Object.keys(cfg.items), { field: f, on });
-      await saveDailyRotCfg(kv, cfg);
-      await renderDailyRotHosts(edit, kv, env, `${on ? "✅" : "⬜"} فیلد ${f} برای ${n} هاست ${on ? "فعال" : "غیرفعال"} شد.`);
-    } else if (data.startsWith("hfdh:")) {
+      await renderDailyRotHosts(edit, kv, env, chatId, n > 0 ? `🧹 «${mode}» از ${n} هاست برداشته شد.` : "ℹ️ چیزی برای پاک‌سازی نبود.");
+    } else if (data.startsWith("hfdp:")) {
       const parts = data.split(":");
       const pid = parts[1];
       const hid = parts[2];
+      const mode = await hfdModeGet(kv, chatId);
+      if (mode === "set") {
+        await renderDailyRotSet(edit, kv, env, pid, hid);
+        return;
+      }
       const cfg = await getDailyRotCfg(kv);
       const key = hfdItemKey(pid, hid);
-      if (cfg.items[key]) {
-        delete cfg.items[key];
-        await saveDailyRotCfg(kv, cfg);
-        await renderDailyRotHosts(edit, kv, env);
-      } else {
+      const prev = cfg.items[key] || null;
+      let host = null;
+      if (!prev) {
         const panels = await getPanels(kv);
         const panel = panels.find((p) => String(p.id) === String(pid));
         if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
         const r = await hfdPanelHosts(kv, panel);
-        const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(hid)) : null;
+        host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(hid)) : null;
         if (!host) return edit("❌ هاست پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
-        const accounts = await getAccounts(kv, env);
-        const zones = await getAllZones(accounts, kv);
-        cfg.items[key] = hfdEnsureItem(host, zones);
-        await saveDailyRotCfg(kv, cfg);
-        await renderDailyRotSet(edit, kv, env, pid, hid);
       }
+      let zones = [];
+      if (!prev) {
+        const accounts = await getAccounts(kv, env);
+        zones = await getAllZones(accounts, kv);
+      }
+      const rr = hfdPickField(prev, mode, host, zones);
+      if (rr.error) return edit("⚠️ حالت نامعتبر.");
+      if (rr.remove) delete cfg.items[key];
+      else cfg.items[key] = rr.item;
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotHosts(edit, kv, env, chatId);
+    } else if (data.startsWith("hfdopen:")) {
+      const parts = data.split(":");
+      await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
     } else if (data.startsWith("hfdset:")) {
       const parts = data.split(":");
       await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
@@ -22567,32 +22579,46 @@ function hfdEnsureItem(host, zones) {
   }
   return { fields: { address: true, sni: true, host: false }, style: "num", sep: "-", prefix: "", counters: { address: 1, sni: 1, host: 1 }, base, prev: {}, last_run: null, last_names: [] };
 }
-// اعمال گروهی روی آیتم‌های منتخب: {style} | {sep} | {field, on} — تعداد واقعاً اعمال‌شده برمی‌گردد (خالص)
-function hfdGroupPatch(items, keys, patch) {
-  let n = 0;
-  for (const k of keys || []) {
-    const it = items ? items[k] : null;
-    if (!it) continue;
-    let did = false;
-    if (patch.style && HFD_STYLES.includes(patch.style)) { it.style = patch.style; did = true; }
-    if (patch.sep !== undefined) { it.sep = patch.sep === "" ? "" : "-"; did = true; }
-    if (patch.field && ["address", "sni", "host"].includes(patch.field)) {
-      it.fields = it.fields || {};
-      it.fields[patch.field] = !!patch.on;
-      did = true;
-    }
-    if (did) n++;
+// تاگل یک فیلد در حالت انتخاب میدانی (خالص):
+// آیتم تازه فقط همان فیلد را روشن می‌گیرد؛ خاموش‌شدن آخرین فیلد یعنی حذف ({remove:true})
+function hfdPickField(prevItem, field, host, zones) {
+  if (field !== "address" && field !== "sni") return { error: "bad_field" };
+  if (!prevItem) {
+    const it = hfdEnsureItem(host, zones);
+    it.fields = { address: false, sni: false, host: false };
+    it.fields[field] = true;
+    return { item: it };
   }
-  return n;
+  const it = JSON.parse(JSON.stringify(prevItem));
+  it.fields = it.fields || {};
+  it.fields[field] = !it.fields[field];
+  if (!it.fields.address && !it.fields.sni && !it.fields.host) return { remove: true };
+  return { item: it };
 }
-async function renderDailyRotHosts(edit, kv, env, note) {
+async function hfdModeGet(kv, chatId) {
+  try {
+    const m = await kv.get(`hfdmode:${chatId}`, "json");
+    if (m && (m.mode === "sni" || m.mode === "set")) return m.mode;
+  } catch (e) {}
+  return "address";
+}
+async function hfdModeSet(kv, chatId, mode) {
+  try { await kv.put(`hfdmode:${chatId}`, JSON.stringify({ mode }), { expirationTtl: 3600 }); } catch (e) {}
+}
+const HFD_MODES = ["address", "sni", "set"];
+const HFD_MODE_FA = { address: "🖥 address", sni: "🖥 sni", set: "⚙️ تنظیم" };
+// لیست هاست در «حالت» فعلی: اول فیلد (address/sni) بعد هاست‌ها؛ حالت ⚙️ یعنی باز کردن تنظیم تکی
+async function renderDailyRotHosts(edit, kv, env, chatId, note) {
   await edit("⏳ در حال خواندن هاست‌ها از پنل…");
   const cfg = await getDailyRotCfg(kv);
+  const mode = await hfdModeGet(kv, chatId);
   const panels = await getPanels(kv);
   if (!panels.length) return edit("📭 پنلی ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "hfd" }]]);
-  const lines = ["🖥 انتخاب هاست‌ها برای چرخش روزانه", ""];
+  const modeHint = mode === "set" ? "باز کردن تنظیم تکی هر هاست" : `فعال‌کردن «${mode}» برای چرخش (بزن روی هاست)`;
+  const lines = ["🖥 هاست‌ها — حالت: " + (HFD_MODE_FA[mode] || mode), modeHint, ""];
   if (note) lines.push(note, "");
   const kb = [];
+  kb.push(HFD_MODES.map((m) => ({ text: `${mode === m ? "✅ " : ""}${HFD_MODE_FA[m]}`, style: mode === m ? "primary" : "plain", callback_data: `hfdm:${m}` })));
   for (const panel of panels) {
     lines.push("— " + (panel.name || panel.id));
     const r = await hfdPanelHosts(kv, panel);
@@ -22603,38 +22629,28 @@ async function renderDailyRotHosts(edit, kv, env, note) {
     const rows = [];
     for (const h of r.hosts) {
       if (h.is_disabled) continue;
-      const on = !!cfg.items[hfdItemKey(String(panel.id), String(h.id))];
+      const it = cfg.items[hfdItemKey(String(panel.id), String(h.id))];
       const cur = []
         .concat(Array.isArray(h.address) ? h.address.slice(0, 1) : [])
         .concat(Array.isArray(h.sni) ? h.sni.slice(0, 1) : [])
         .map((x) => String(x).slice(0, 28)).join("، ");
-      // فعال آبی / غیرفعال خاکستری
-      rows.push([{ text: `${on ? "✅ " : "⬜ "}${hfdShort(h.remark || h.id, 36)}`, style: on ? "primary" : "plain", callback_data: `hfdh:${panel.id}:${h.id}` }]);
-      if (cur) lines.push((on ? "✅ " : "⬜ ") + hfdShort(h.remark || h.id, 48) + " — " + cur);
+      if (mode === "set") {
+        const on = !!it;
+        rows.push([{ text: `${on ? "✅ " : "⬜ "}${hfdShort(h.remark || h.id, 36)}`, style: on ? "primary" : "plain", callback_data: `hfdopen:${panel.id}:${h.id}` }]);
+      } else {
+        const on = !!(it && it.fields && it.fields[mode]);
+        // فعال آبی / غیرفعال خاکستری
+        rows.push([{ text: `${on ? "✅ " : "⬜ "}${hfdShort(h.remark || h.id, 36)}`, style: on ? "primary" : "plain", callback_data: `hfdp:${panel.id}:${h.id}` }]);
+      }
+      if (cur) {
+        const fl = it && it.fields ? ["address", "sni", "host"].filter((f) => it.fields[f]).join("+") : "";
+        lines.push((it ? "✅ " : "⬜ ") + hfdShort(h.remark || h.id, 44) + " — " + cur + (fl ? ` · [${fl}]` : ""));
+      }
     }
     for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat());
   }
-  const nSel = Object.keys(cfg.items).length;
-  kb.push([{ text: "✅ انتخاب همه", callback_data: "hfdall" }, { text: "⬜ لغو همه", callback_data: "hfdnone" }]);
-  if (nSel > 0) {
-    lines.push(`🗂 ${nSel} انتخاب شده — اعمال گروهی:`);
-    kb.push([
-      { text: "🔢 عدد", callback_data: "hfdgstyle:num" },
-      { text: "🔤 حرف", callback_data: "hfdgstyle:alpha" },
-      { text: "🎲 قاطی", callback_data: "hfdgstyle:mix" },
-    ]);
-    kb.push([
-      { text: "🔣 جدا: -", callback_data: "hfdgsep:dash" },
-      { text: "🔣 جدا: بدون", callback_data: "hfdgsep:none" },
-    ]);
-    kb.push([
-      { text: "✅ address همه", callback_data: "hfdfields:address:1" },
-      { text: "⬜ address همه", callback_data: "hfdfields:address:0" },
-    ]);
-    kb.push([
-      { text: "✅ sni همه", callback_data: "hfdfields:sni:1" },
-      { text: "⬜ sni همه", callback_data: "hfdfields:sni:0" },
-    ]);
+  if (mode !== "set") {
+    kb.push([{ text: "✅ همه", callback_data: "hfdmall" }, { text: "🧹 پاک‌سازی", callback_data: "hfdmnone" }]);
   }
   kb.push([{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
