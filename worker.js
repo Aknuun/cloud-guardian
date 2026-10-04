@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.09";
+const BOT_VERSION = "1.9.10";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.10": [
+    "📄 صفحه‌بندی ۱۰ ردیفه همه‌جا (ساب‌ها ۳۰تایی) — ورق‌زدن و write کمتر",
+  ],
   "1.9.09": [
     "📋 لیست هاست دو ستونه (host | address) با تاگل استثنا + حذف ذره‌بین",
   ],
@@ -1079,12 +1082,12 @@ function ipBulkTypeCheck(newType, value) {
 // ویزارد ساخت رکورد: TXT و NS با همان POST ساده ساخته می‌شوند، MX فقط priority اضافه می‌خواهد.
 // SRV/CAA فیلد ساخت‌یافته (data) می‌خواهند و فعلاً در ویزارد نیستند. تغییر نوع (تکی/گروهی) همان ۳ تای اصلی می‌ماند.
 const ADD_RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "NS"];
-const PAGE_SIZE = 8;
-const RECORD_PAGE_SIZE = 18;
-const CZ_PAGE_SIZE = 12;
-const CZR_PAGE_SIZE = 16;
-const LN_PAGE_SIZE = 10;
-const HZ_PAGE_SIZE = 10;
+const PAGE_SIZE = 10;
+const RECORD_PAGE_SIZE = 30;
+const CZ_PAGE_SIZE = 20;
+const CZR_PAGE_SIZE = 20;
+const LN_PAGE_SIZE = 20;
+const HZ_PAGE_SIZE = 20;
 
 const EMPTY_BTN = { text: "\u00A0", callback_data: "noop" };
 
@@ -5475,7 +5478,7 @@ async function redrawLbSettingsNav(kv, accounts, botToken, chatId, messageId, en
 // لود بالانسر به معنای چند رکورد A/AAAA/CNAME هم‌نام روی یک ساب‌دامین است
 // که ترافیک بین‌شان پخش می‌شود. همهٔ دامنه‌ها مستقیم نشان داده می‌شوند.
 
-const LB_PAGE = 18;
+const LB_PAGE = 20;
 
 async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
@@ -5526,7 +5529,7 @@ async function renderLbZonesList(page, filter, edit, kv, accounts, env) {
   await edit(title, kb);
 }
 
-const LB_GROUPS_PAGE = 15; // ۵ ردیف ۳ ستونه
+const LB_GROUPS_PAGE = 30; // ۱۰ ردیف ۳ ستونه
 
 async function renderLbZoneGroups(edit, kv, accounts, acc, zoneId, page, env) {
   const zone = await getZoneById(zoneId, acc, accounts);
@@ -9220,7 +9223,7 @@ function maskPw(p) {
   return s.slice(0, 2) + "••••";
 }
 
-const ZONE_PAGE_SIZE = 16;
+const ZONE_PAGE_SIZE = 20;
 
 async function showZones(page, filter, accounts, send, kv, chatId) {
   const all = await getAllZones(accounts, kv);
@@ -10139,7 +10142,7 @@ async function renderTrafficHome(edit, kv, accounts, token, days) {
 // ===================== مرکز ترافیک سایتها (منوی فیچرها) =====================
 // همهٔ دامنه‌ها مستقیم نشان داده می‌شوند (مثل بخش کلودفلر) با دکمه‌های فیلتر اکانت پایین.
 
-const TRAF_PAGE = 18;
+const TRAF_PAGE = 20;
 
 async function renderTrafficZones(page, filter, edit, kv, accounts, env) {
   const all = await getAllZones(accounts, kv);
@@ -17476,7 +17479,7 @@ async function renderReminderServers(kv, token, page, edit) {
   const servers = await kv.get(`rmsess:${token}`, "json");
   if (!Array.isArray(servers)) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   if (!servers.length) return edit("📭 سروری در پنل‌ها پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "remnew" }, { text: "🏠 خانه", callback_data: "menu" }]]);
-  const per = 8;
+  const per = 10;
   const pages = Math.max(1, Math.ceil(servers.length / per));
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
@@ -17848,7 +17851,7 @@ async function arvanDomains(ctx, page = 0) {
       ]
     );
   }
-  const per = 8;
+  const per = 10;
   const pages = Math.max(1, Math.ceil(items.length / per));
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
@@ -17886,7 +17889,7 @@ async function arvanRecords(ctx, acc, domain, page = 0) {
       [{ text: "🔙 بازگشت", callback_data: "arvdoms" }, { text: "🏠 خانه", callback_data: "menu" }],
     ]);
   }
-  const per = 9;
+  const per = 10;
   const pages = Math.max(1, Math.ceil(records.length / per));
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
