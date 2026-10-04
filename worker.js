@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.102";
+const BOT_VERSION = "1.8.103";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.103": [
+    "🐞 فیکس لیست هاست چرخش روزانه: فیدبک فوری، تایم‌اوت کوتاه با خطای واضح، دکمه‌های سبک",
+  ],
   "1.8.102": [
     "🔁 تعویض روزانه ساب‌ها: چرخش زمانی address/sni با پسوند عدد/حرف/قاطی، بدون حذف ساب قبلی + برگشت",
   ],
@@ -21574,6 +21577,20 @@ function hfdNextSuffix(style, counter, randFn) {
   }
   return { suffix: String(c), next: c + 1 };
 }
+// برش امن متن دکمه به سقف بایت (کاراکترهای ۴بایتی اموجی/ریاضی نصف نمی‌شوند). خالص.
+function hfdShort(s, maxBytes) {
+  const m = Math.max(1, Math.floor(Number(maxBytes) || 36));
+  let out = "";
+  let n = 0;
+  const enc = new TextEncoder();
+  for (const ch of String(s || "")) {
+    const b = enc.encode(ch).length;
+    if (n + b > m) break;
+    out += ch;
+    n += b;
+  }
+  return out;
+}
 // جدا کردن مبنا از لیبل اول: dl-007 → dl ؛ dl1 → dl (خالص)
 function hfdStripBase(label) {
   const t = String(label || "").toLowerCase();
@@ -22482,18 +22499,20 @@ async function renderDailyRotHome(edit, kv, env) {
   kb.push([{ text: "🔙 تعویض خودکار", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
 }
-async function hfdPanelHosts(kv, panel) {
+async function hfdPanelHosts(kv, panel, loginMs, hostsMs) {
   let token = null;
-  try { token = await panelLogin(panel); } catch (e) { token = null; }
+  try { token = await panelLogin(panel, loginMs || 10000); } catch (e) { token = null; }
   if (!token) return { error: "login_failed" };
   try {
-    const list = await panelHosts(panel, token);
-    return { hosts: Array.isArray(list) ? list : [] };
+    const list = await panelHosts(panel, token, hostsMs || 15000);
+    return { hosts: Array.isArray(list) ? list : [], token };
   } catch (e) {
-    return { error: "fetch_failed" };
+    return { error: /abort|timeout/i.test(String((e && e.message) || e)) ? "timeout" : "fetch_failed", token };
   }
 }
+const HFD_ERR_FA = { login_failed: "⚠️ ورود به پنل ناموفق.", timeout: "⚠️ پنل جواب نداد (تایم‌اوت).", fetch_failed: "⚠️ خواندن هاست‌ها ناموفق." };
 async function renderDailyRotHosts(edit, kv, env) {
+  await edit("⏳ در حال خواندن هاست‌ها از پنل…");
   const cfg = await getDailyRotCfg(kv);
   const panels = await getPanels(kv);
   if (!panels.length) return edit("📭 پنلی ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "hfd" }]]);
@@ -22503,7 +22522,7 @@ async function renderDailyRotHosts(edit, kv, env) {
     lines.push("— " + (panel.name || panel.id));
     const r = await hfdPanelHosts(kv, panel);
     if (r.error) {
-      lines.push("⚠️ خوانده نشد.");
+      lines.push(HFD_ERR_FA[r.error] || "⚠️ خوانده نشد.");
       continue;
     }
     const rows = [];
@@ -22514,8 +22533,8 @@ async function renderDailyRotHosts(edit, kv, env) {
         .concat(Array.isArray(h.address) ? h.address.slice(0, 1) : [])
         .concat(Array.isArray(h.sni) ? h.sni.slice(0, 1) : [])
         .map((x) => String(x).slice(0, 28)).join("، ");
-      rows.push([{ text: `${on ? "✅ " : "⬜ "}${String(h.remark || h.id).slice(0, 24)}`, callback_data: `hfdh:${panel.id}:${h.id}` }]);
-      if (cur) lines.push((on ? "✅ " : "⬜ ") + String(h.remark || h.id).slice(0, 30) + " — " + cur);
+      rows.push([{ text: `${on ? "✅ " : "⬜ "}${hfdShort(h.remark || h.id, 36)}`, callback_data: `hfdh:${panel.id}:${h.id}` }]);
+      if (cur) lines.push((on ? "✅ " : "⬜ ") + hfdShort(h.remark || h.id, 48) + " — " + cur);
     }
     for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat());
   }
@@ -22541,6 +22560,7 @@ async function hfdPreview(cfg, it, pid, hid, kv, accounts, zones) {
   return out;
 }
 async function renderDailyRotSet(edit, kv, env, pid, hid) {
+  await edit("⏳ در حال خواندن تنظیم هاست…");
   const cfg = await getDailyRotCfg(kv);
   const it = cfg.items[hfdItemKey(pid, hid)];
   if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 هاست‌ها", callback_data: "hfdhosts" }]]);
