@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.03";
+const BOT_VERSION = "1.9.04";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.04": [
+    "✍️ گیت فاصله هاست‌فیلتر روی پایان ران قبلی: هر ران کامل فقط ۱ write کانفیگ",
+  ],
   "1.9.03": [
     "✍️ کم کردن واقعی: بدون فلاش فوری، کش رکورد ۶۰دقیقه، ثبت هزینه فلاش‌ها و ویزاردها",
   ],
@@ -21827,6 +21830,12 @@ async function hostFilterRevert(kv, env, panelId, hostId) {
   return { ok: true };
 }
 
+// آیا ران کامل الان موعد است؟ (خالص — روی last_run، بدون هیچ write)
+function hfDue(lastRunIso, intervalMin, nowMs) {
+  const lastMs = lastRunIso ? Date.parse(lastRunIso) : 0;
+  if (lastMs && nowMs - lastMs < Math.max(1, Number(intervalMin) || 25) * 60000) return false;
+  return true;
+}
 function hfIsReality(host) {
   const hay = [host && host.inbound_tag, host && host.remark, host && host.security]
     .map((x) => String(x || ""))
@@ -22371,12 +22380,9 @@ async function runHostFilter(env, opts = {}) {
   if (!cfg.enabled && !opts.force && !manual) return { skipped: "disabled", cfg };
 
   if (!opts.force && !manual) {
-    const lastMs = cfg.last_attempt ? Date.parse(cfg.last_attempt) : 0;
-    if (lastMs && Date.now() - lastMs < cfg.intervalMin * 60000) return { skipped: "interval", cfg };
-  }
-  if (!manual) {
-    cfg.last_attempt = new Date().toISOString();
-    await saveHostFilterCfg(kv, cfg);
+    // گیت فاصله روی last_run (پایان ران قبلی): خود ران شروع save نمی‌خواهد → هر ران کامل فقط ۱ write کانفیگ.
+    // بها: اگر رانی وسط راه بمیرد، تیک بعدی ران تازه می‌زند (خودترمیم؛ نادر).
+    if (!hfDue(cfg.last_run, cfg.intervalMin, Date.now())) return { skipped: "interval", cfg };
   }
   const accounts = await getAccounts(kv, env);
   const panels = await getPanels(kv);
