@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.108";
+const BOT_VERSION = "1.8.109";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.109": [
+    "✨ زیبانویس اسم هاست‌های پنل: مدل + فونت + فرمت/فاصله + جای پرچم/پروتکل + پیش‌نمایش",
+  ],
   "1.8.108": [
     "🔁 چرخش روزانه رفت داخل دکمه پنل (هر پنل صفحه خودش) + اسکوپ پنل",
   ],
@@ -7963,7 +7966,7 @@ async function panelDefineView(kv, back) {
   kb.push([{ text: "🔙 بازگشت", callback_data: back || "menu" }, { text: "🏠 خانه", callback_data: "menu" }]);
   return { text: lines.join("\n"), kb };
 }
-// صفحه عملیات یک پنل: چرخش روزانه و (به‌زودی) زیبانویس هاست‌ها
+// صفحه عملیات یک پنل: چرخش روزانه و زیبانویس هاست‌ها
 async function renderPanelOps(edit, kv, pid) {
   const panels = await getPanels(kv);
   const p = panels.find((x) => String(x.id) === String(pid));
@@ -7971,8 +7974,167 @@ async function renderPanelOps(edit, kv, pid) {
   const lines = ["🖥 عملیات پنل «" + p.name + "»", "🌐 " + p.url, ""];
   const kb = [];
   kb.push([{ text: "🔁 چرخش روزانه ساب‌ها", callback_data: `hfdpanel:${p.id}` }]);
+  kb.push([{ text: "✨ زیبانویس اسم هاست‌ها", callback_data: `pbt:${p.id}` }]);
   kb.push([{ text: "🔙 پنل‌ها", callback_data: "pndef" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n"), kb);
+}
+// ===================== زیبانویس اسم هاست‌ها =====================
+const PBT_FONTS = ["plain", "bold", "italic", "bolditalic", "mono"];
+const PBT_FONT_FA = { plain: "معمولی", bold: "توپر", italic: "کج", bolditalic: "توپرکج", mono: "ماشینی" };
+const PBT_SEPS = [" | ", " • ", " ⋮ ", " — "];
+const PBT_PRESETS = {
+  classic: { font: "bold", sep: " | ", spacing: "normal", flagSide: "left", protoSide: "right" },
+  modern: { font: "italic", sep: " • ", spacing: "normal", flagSide: "left", protoSide: "none" },
+  minimal: { font: "plain", sep: " — ", spacing: "tight", flagSide: "right", protoSide: "none" },
+};
+const PBT_PRESET_FA = { classic: "کلاسیک", modern: "مدرن", minimal: "مینیمال" };
+// نگاشت یک کاراکتر لاتین/رقم به فونت ریاضی (خالص؛ فارسی و بقیه دست‌نخورده)
+function pbtStyleChar(ch, font) {
+  const c = String(ch || "");
+  if (!/^[A-Za-z0-9]$/.test(c)) return c;
+  const isD = c >= "0" && c <= "9";
+  const up = c.toUpperCase();
+  const lo = c.toLowerCase();
+  if (font === "bold") {
+    if (isD) return String.fromCodePoint(0x1d7ce + Number(c));
+    return String.fromCodePoint((c === up ? 0x1d400 : 0x1d41a) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "italic") {
+    if (isD) return c;
+    return String.fromCodePoint((c === up ? 0x1d434 : 0x1d44e) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "bolditalic") {
+    if (isD) return c;
+    return String.fromCodePoint((c === up ? 0x1d468 : 0x1d482) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  if (font === "mono") {
+    if (isD) return String.fromCodePoint(0x1d7f6 + Number(c));
+    return String.fromCodePoint((c === up ? 0x1d670 : 0x1d68a) + (c === up ? up.charCodeAt(0) - 65 : lo.charCodeAt(0) - 97));
+  }
+  return c;
+}
+function pbtStyleText(s, font) {
+  if (!PBT_FONTS.includes(font) || font === "plain") return String(s == null ? "" : s);
+  return String(s == null ? "" : s).split("").map((ch) => pbtStyleChar(ch, font)).join("");
+}
+// جدا کردن پرچم‌های ابتدای اسم از بدنه (خالص؛ Regional_Indicator جدا چون در بعضی موتورها جزو Pictographic نیست)
+function pbtSplitRemark(remark) {
+  const t = String(remark || "");
+  const m = /^([\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D\s]+)/u.exec(t);
+  const flags = m ? m[1].trim() : "";
+  const core = (m ? t.slice(m[1].length) : t).trim();
+  return { flags, core: core || t.trim() };
+}
+// ترکیب نهایی اسم (خالص): پرچم چپ/راست + پروتکل چپ/راست/بدون + جداکننده با فاصله معمولی/چسبیده
+function pbtCompose(o) {
+  const name = pbtStyleText(o.name || "", o.font);
+  const proto = o.proto ? pbtStyleText(o.proto, o.font) : "";
+  const sep = o.spacing === "tight" ? String(o.sep || "").trim() : String(o.sep || " | ");
+  let core = name;
+  if (proto && o.protoSide !== "none") {
+    core = o.protoSide === "left" ? proto + sep + name : name + sep + proto;
+  }
+  const flags = String(o.flags || "").trim();
+  if (!flags) return core;
+  if ((o.flagSide || "left") === "left") return o.spacing === "tight" ? flags + core : flags + " " + core;
+  return o.spacing === "tight" ? core + flags : core + " " + flags;
+}
+async function pbtOptsGet(kv) {
+  try {
+    const c = await kv.get("pbeaut_cfg", "json");
+    if (c && PBT_FONTS.includes(c.font) && PBT_SEPS.includes(c.sep)) {
+      return {
+        font: c.font, sep: c.sep, spacing: c.spacing === "tight" ? "tight" : "normal",
+        flagSide: c.flagSide === "right" ? "right" : "left",
+        protoSide: ["left", "right", "none"].includes(c.protoSide) ? c.protoSide : "right",
+      };
+    }
+  } catch (e) {}
+  return { ...PBT_PRESETS.classic };
+}
+async function pbtOptsSave(kv, o) {
+  try { await kv.put("pbeaut_cfg", JSON.stringify(o)); } catch (e) {}
+}
+async function pbtSessGet(kv, chatId) {
+  try {
+    const s = await kv.get(`pbeaut:${chatId}`, "json");
+    if (s && s.pid) {
+      if (!Array.isArray(s.sel)) s.sel = [];
+      return s;
+    }
+  } catch (e) {}
+  return null;
+}
+async function renderPbtPick(edit, kv, env, chatId, pid, note) {
+  await edit("⏳ در حال خواندن هاست‌ها از پنل…");
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => String(p.id) === String(pid));
+  if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 پنل‌ها", callback_data: "pndef" }]]);
+  const sess = (await pbtSessGet(kv, chatId)) || null;
+  const sel = new Set(sess && String(sess.pid) === String(pid) ? sess.sel.map(String) : []);
+  const r = await hfdPanelHosts(kv, panel);
+  if (r.error) return edit((HFD_ERR_FA[r.error] || "⚠️ خوانده نشد."), [[{ text: "🔙 بازگشت", callback_data: `pnlops:${pid}` }]]);
+  const lines = ["✨ زیبانویس اسم هاست‌ها — «" + panel.name + "»", "هاست‌ها را انتخاب کن:", ""];
+  if (note) lines.push(note, "");
+  const kb = [];
+  const rows = [];
+  for (const h of r.hosts || []) {
+    if (h.is_disabled) continue;
+    const on = sel.has(String(h.id));
+    rows.push([{ text: `${on ? "✅ " : "⬜ "}${hfdShort(h.remark || h.id, 36)}`, style: on ? "primary" : "plain", callback_data: `pbtg:${pid}:${h.id}` }]);
+    lines.push((on ? "✅ " : "⬜ ") + hfdShort(h.remark || h.id, 44));
+  }
+  for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat());
+  kb.push([{ text: "✅ انتخاب همه", callback_data: `pbtall:${pid}` }, { text: "🧹 پاک‌سازی", callback_data: `pbtnone:${pid}` }]);
+  if (sel.size) kb.push([{ text: `➡️ ادامه (${sel.size} هاست)`, callback_data: `pbtopt:${pid}`, style: "success" }]);
+  kb.push([{ text: "🔙 عملیات پنل", callback_data: `pnlops:${pid}` }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+function pbtPreviewFor(host, o) {
+  const sp = pbtSplitRemark(host.remark);
+  const proto = String((host && (host.inbound_tag || host.security)) || "").trim();
+  return {
+    before: String(host.remark || ""),
+    after: pbtCompose({ flags: sp.flags, name: sp.core, proto, font: o.font, sep: o.sep, spacing: o.spacing, flagSide: o.flagSide, protoSide: o.protoSide }),
+    noProto: !proto,
+  };
+}
+async function renderPbtOpts(edit, kv, env, chatId, pid) {
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => String(p.id) === String(pid));
+  if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 پنل‌ها", callback_data: "pndef" }]]);
+  const sess = await pbtSessGet(kv, chatId);
+  const sel = sess && String(sess.pid) === String(pid) ? sess.sel.map(String) : [];
+  if (!sel.length) return edit("⚠️ هاستی انتخاب نشده.", [[{ text: "🔙 هاست‌ها", callback_data: `pbt:${pid}` }]]);
+  const o = await pbtOptsGet(kv);
+  const r = await hfdPanelHosts(kv, panel);
+  if (r.error) return edit(HFD_ERR_FA[r.error] || "⚠️ خوانده نشد.", [[{ text: "🔙 هاست‌ها", callback_data: `pbt:${pid}` }]]);
+  const first = (r.hosts || []).find((h) => sel.includes(String(h.id)));
+  const lines = ["✨ مدل و فرمت زیبانویس — «" + panel.name + "»", `(${sel.length} هاست انتخاب شده)`, ""];
+  if (first) {
+    const pv = pbtPreviewFor(first, o);
+    lines.push("👁 پیش‌نمایش (" + String(first.remark || "").slice(0, 30) + "):");
+    lines.push("قبل: " + first.remark);
+    lines.push("بعد: " + pv.after + (pv.noProto ? " (پروتکلی ندارد)" : ""));
+    lines.push("");
+  }
+  lines.push("🔤 فونت: " + (PBT_FONT_FA[o.font] || o.font));
+  lines.push("🔣 جداکننده: «" + o.sep.trim() + "» · فاصله: " + (o.spacing === "tight" ? "چسبیده" : "معمولی"));
+  lines.push("🚩 پرچم: " + (o.flagSide === "left" ? "چپ" : "راست") + " · 📡 پروتکل: " + (o.protoSide === "none" ? "بدون" : o.protoSide === "left" ? "چپ" : "راست"));
+  const kb = [];
+  kb.push(Object.keys(PBT_PRESETS).map((k) => ({ text: PBT_PRESET_FA[k], callback_data: `pbtpreset:${pid}:${k}` })));
+  kb.push([
+    { text: "🔤 فونت", callback_data: `pbtfont:${pid}` },
+    { text: "🔣 جداکننده", callback_data: `pbtsep:${pid}` },
+  ]);
+  kb.push([
+    { text: "↔️ فاصله", callback_data: `pbtsp:${pid}` },
+    { text: "🚩 پرچم", callback_data: `pbtflag:${pid}` },
+    { text: "📡 پروتکل", callback_data: `pbtproto:${pid}` },
+  ]);
+  kb.push([{ text: `✅ اعمال روی ${sel.length} هاست`, callback_data: `pbtgo:${pid}`, style: "success" }]);
+  kb.push([{ text: "🔙 هاست‌ها", callback_data: `pbt:${pid}` }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
 // ساخت خودکار «مانیتور نود» برای یک پنل تازه (اگر نباشد) و همگام‌سازی اولیهٔ نودها.
@@ -15673,6 +15835,100 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await renderDailyRotHome(edit, kv, env, chatId);
     } else if (data.startsWith("pnlops:")) {
       await renderPanelOps(edit, kv, data.slice(7));
+    } else if (data.startsWith("pbtpreset:")) {
+      const parts = data.split(":");
+      const pid = parts[1];
+      const pr = PBT_PRESETS[parts[2]];
+      if (!pr) return edit("⚠️ مدل نامعتبر.");
+      await pbtOptsSave(kv, { ...pr });
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtfont:")) {
+      const pid = data.slice(8);
+      const o = await pbtOptsGet(kv);
+      o.font = PBT_FONTS[(PBT_FONTS.indexOf(o.font) + 1) % PBT_FONTS.length];
+      await pbtOptsSave(kv, o);
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtsep:")) {
+      const pid = data.slice(7);
+      const o = await pbtOptsGet(kv);
+      o.sep = PBT_SEPS[(PBT_SEPS.indexOf(o.sep) + 1) % PBT_SEPS.length];
+      await pbtOptsSave(kv, o);
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtsp:")) {
+      const pid = data.slice(6);
+      const o = await pbtOptsGet(kv);
+      o.spacing = o.spacing === "tight" ? "normal" : "tight";
+      await pbtOptsSave(kv, o);
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtflag:")) {
+      const pid = data.slice(8);
+      const o = await pbtOptsGet(kv);
+      o.flagSide = o.flagSide === "left" ? "right" : "left";
+      await pbtOptsSave(kv, o);
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtproto:")) {
+      const pid = data.slice(9);
+      const o = await pbtOptsGet(kv);
+      o.protoSide = o.protoSide === "left" ? "right" : o.protoSide === "right" ? "none" : "left";
+      await pbtOptsSave(kv, o);
+      await renderPbtOpts(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbtopt:")) {
+      await renderPbtOpts(edit, kv, env, chatId, data.slice(7));
+    } else if (data.startsWith("pbtall:")) {
+      const pid = data.slice(7);
+      const panels = await getPanels(kv);
+      const panel = panels.find((p) => String(p.id) === String(pid));
+      if (!panel) return edit("❌ پنل پیدا نشد.");
+      const r = await hfdPanelHosts(kv, panel);
+      if (r.error) return edit(HFD_ERR_FA[r.error] || "⚠️ خوانده نشد.");
+      const sel = (r.hosts || []).filter((h) => !h.is_disabled).map((h) => String(h.id));
+      try { await kv.put(`pbeaut:${chatId}`, JSON.stringify({ pid, sel }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderPbtPick(edit, kv, env, chatId, pid, `✅ ${sel.length} هاست انتخاب شد.`);
+    } else if (data.startsWith("pbtnone:")) {
+      const pid = data.slice(8);
+      try { await kv.put(`pbeaut:${chatId}`, JSON.stringify({ pid, sel: [] }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderPbtPick(edit, kv, env, chatId, pid, "🧹 انتخاب پاک شد.");
+    } else if (data.startsWith("pbtgo:")) {
+      const pid = data.slice(6);
+      const panels = await getPanels(kv);
+      const panel = panels.find((p) => String(p.id) === String(pid));
+      if (!panel) return edit("❌ پنل پیدا نشد.");
+      const sess = await pbtSessGet(kv, chatId);
+      const sel = sess && String(sess.pid) === String(pid) ? sess.sel.map(String) : [];
+      if (!sel.length) return edit("⚠️ هاستی انتخاب نشده.", [[{ text: "🔙 هاست‌ها", callback_data: `pbt:${pid}` }]]);
+      const o = await pbtOptsGet(kv);
+      await edit("⏳ در حال زیبانویسی…");
+      const r = await hfdPanelHosts(kv, panel);
+      if (r.error) return edit(HFD_ERR_FA[r.error] || "⚠️ خوانده نشد.");
+      let ok = 0;
+      let fail = 0;
+      for (const hid of sel) {
+        const h = (r.hosts || []).find((x) => String(x.id) === hid);
+        if (!h) { fail++; continue; }
+        const pv = pbtPreviewFor(h, o);
+        if (!pv.after || pv.after === h.remark) continue;
+        try {
+          const put = await panelPutHost(panel, r.token, { ...h, remark: pv.after });
+          if (put && put.error) fail++;
+          else ok++;
+        } catch (e) { fail++; }
+      }
+      try { await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "host_beautify", panel_id: pid, remark: panel.name, count: ok, fail }); } catch (e) {}
+      await edit(`✨ تمام شد: ${ok} هاست زیبا شد${fail ? ` · ⚠️ ${fail} ناموفق` : ""}.`, [[{ text: "🔙 هاست‌ها", callback_data: `pbt:${pid}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data.startsWith("pbtg:")) {
+      const parts = data.split(":");
+      const pid = parts[1];
+      const hid = String(parts[2]);
+      const sess = (await pbtSessGet(kv, chatId)) || { pid, sel: [] };
+      const sel = new Set((sess.pid === pid ? sess.sel : []).map(String));
+      if (sel.has(hid)) sel.delete(hid);
+      else sel.add(hid);
+      try { await kv.put(`pbeaut:${chatId}`, JSON.stringify({ pid, sel: [...sel] }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderPbtPick(edit, kv, env, chatId, pid);
+    } else if (data.startsWith("pbt:")) {
+      const pid = data.slice(4);
+      try { await kv.put(`pbeaut:${chatId}`, JSON.stringify({ pid, sel: [] }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderPbtPick(edit, kv, env, chatId, pid);
     } else if (data === "hfdtg") {
       const cfg = await getDailyRotCfg(kv);
       cfg.enabled = !cfg.enabled;
