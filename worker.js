@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.07";
+const BOT_VERSION = "1.9.08";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.08": [
+    "✍️ تاریخچه برگشت فقط برای صفحه‌های بی‌دکمه (کم شدن write دکمه‌ها)",
+  ],
   "1.9.07": [
     "✍️ نود: بدون save جدا برای last_poll + پین فقط هشدار قطعی",
   ],
@@ -4093,7 +4096,22 @@ const DATA_CB = /^(z:|zf:|e:|p:|sel:|selp:|dd:|arv:|arvpage:|sr:|zsf:|ap:|cz:|nd
 const DANGER_CB = /(^|[:_])(del|delete|dacc|daccy|pnlx|nddel|nddely|sslmdy|bulkdel|stop|suspend|cancel|revoke|reset)([:_]|$)/;
 
 function isPlaceholderBtn(b) {
-  return !b || typeof b !== "object" || b.text === "\u00A0";
+  return !b || typeof b !== "object" || b.text === " ";
+}
+// صفحه دکمه برگشت/خانه خودش را دارد؟ اگر بله، تاریخچه سراسری لازم نیست (صرفه‌جویی write؛
+// دکمه برگشت سراسری برای همان صفحه‌های بی‌دکمه که واقعاً لازمش دارند می‌ماند).
+function kbHasOwnBack(kb) {
+  try {
+    for (const row of kb || []) {
+      for (const b of row || []) {
+        if (!b || typeof b !== "object") continue;
+        const cb = String(b.callback_data || "");
+        if (cb === "menu" || cb === "back") return true;
+        if (isMenuBackBtn(b)) return true;
+      }
+    }
+  } catch (e) {}
+  return false;
 }
 function isMenuBackBtn(b) {
   if (!b || typeof b !== "object") return false;
@@ -12962,7 +12980,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const edit = async (text, kb) => {
     const r = await applyPerm(text, kb);
     const res = await editMessage(botToken, chatId, messageId, r.text, r.kb);
-    await navRecord(messageId);
+    if (!kbHasOwnBack(r.kb)) await navRecord(messageId);
     const isPerm = text && String(text).indexOf(PERM_MARK) !== -1;
     if (!isPerm && isResultText(text)) {
       pendingReturn = findReturnCb(r.kb, parentCb(data));
