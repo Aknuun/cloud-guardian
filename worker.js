@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.11";
+const BOT_VERSION = "1.9.12";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.12": [
+    "🐞 فیکس «strings must be encoded in UTF-8»: برش امن ایموجی + پاک‌سازی surrogate تنها در همه پیام‌ها",
+  ],
   "1.9.11": [
     "🛑 هشدار «آی‌پی فیلتر — تعویض نشد» فقط یک‌بار برای هر دوره + راه‌حل؛ تا سالم‌شدن آی‌پی تکرار نمی‌شود",
   ],
@@ -4185,9 +4188,31 @@ function applyBtnStyles(body) {
   body.reply_markup.inline_keyboard = ik.map(styleRow);
 }
 
+// تلگرام روی surrogate تنها «400 strings must be encoded in UTF-8» می‌دهد؛
+// معمولاً از برش وسط ایموجی با substring/slice (واحدهای UTF-16) می‌آید.
+// tgCleanStr surrogateهای تنها را حذف می‌کند، tgClipCp با مرز code-point می‌بُرد.
+function tgCleanStr(s) {
+  let out = "";
+  for (const ch of String(s == null ? "" : s)) {
+    const cp = ch.codePointAt(0);
+    if (cp >= 0xd800 && cp <= 0xdfff) continue; // lone surrogate
+    out += ch;
+  }
+  return out;
+}
+function tgClipCp(s, n) {
+  const str = String(s == null ? "" : s);
+  const arr = Array.from(str);
+  return arr.length > n ? arr.slice(0, n).join("") : str;
+}
 async function tg(botToken, method, body) {
   try {
     applyBtnStyles(body);
+  } catch (e) {}
+  // کمربند نهایی: هیچ متنی با surrogate تنها به تلگرام نرود (هر مسیر send/edit)
+  try {
+    if (body && typeof body.text === "string") body.text = tgCleanStr(body.text);
+    if (body && typeof body.caption === "string") body.caption = tgCleanStr(body.caption);
   } catch (e) {}
   const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
@@ -4206,7 +4231,7 @@ async function tg(botToken, method, body) {
 }
 
 async function sendMessage(botToken, chatId, text, keyboard) {
-  const t = text.substring(0, 4000);
+  const t = tgClipCp(text, 4000);
   const body = { chat_id: chatId, text: t };
   if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
   if (t.includes("<code>")) body.parse_mode = "HTML";
@@ -4218,7 +4243,7 @@ async function sendDocument(botToken, chatId, filename, content, caption) {
   const form = new FormData();
   form.append("chat_id", String(chatId));
   form.append("document", new Blob([content], { type: "text/csv;charset=utf-8" }), filename);
-  if (caption) form.append("caption", String(caption).slice(0, 1000));
+  if (caption) form.append("caption", tgClipCp(caption, 1000));
   const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
     method: "POST",
     body: form,
@@ -4232,7 +4257,7 @@ async function sendDocument(botToken, chatId, filename, content, caption) {
 let MSG_EDIT_VER = 0;
 async function editMessage(botToken, chatId, messageId, text, keyboard, inlineMessageId) {
   MSG_EDIT_VER++;
-  const t = text.substring(0, 4000);
+  const t = tgClipCp(text, 4000);
   const body = {
     text: t,
   };
@@ -23437,7 +23462,7 @@ async function renderHostFilterHosts(edit, kv, env, chatId, note) {
     kb.push([{ text: "🗂 انتخاب گروهی", callback_data: "hfgmode" }]);
   }
   kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(lines.join("\n").slice(0, 3500), kb);
+  await edit(tgClipCp(lines.join("\n"), 3500), kb);
 }
 
 async function hfHostCheck(kv, env, panelId, hostId) {
