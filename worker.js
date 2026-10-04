@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.06";
+const BOT_VERSION = "1.9.07";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.07": [
+    "✍️ نود: بدون save جدا برای last_poll + پین فقط هشدار قطعی",
+  ],
   "1.9.06": [
     "📋 لیست هاست فیلتر خلوت شد: فقط فعال‌ها + تاگل استثنا با کلیک (آبی/خاکستری)",
   ],
@@ -6033,7 +6036,7 @@ async function runSslMonitor(env) {
       for (const a of admins) {
         try {
           const r = await sendMessage(botToken, a, msg);
-          if (r && r.message_id) await stickAlert(kv, botToken, a, r.message_id);
+          if (r && r.result && r.result.message_id) await stickAlert(kv, botToken, a, r.result.message_id);
         } catch (e) {
           console.error("SSL_ALERT", String(e));
         }
@@ -6516,7 +6519,7 @@ function chunkText(text, limit = 3800) {
   return chunks;
 }
 
-async function sendPanelMsg(botToken, chatId, text, kv) {
+async function sendPanelMsg(botToken, chatId, text, kv, pin) {
   let head = null;
   for (const chunk of chunkText(text)) {
     try {
@@ -6526,12 +6529,19 @@ async function sendPanelMsg(botToken, chatId, text, kv) {
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
-      if (head === null && r && r.message_id) head = r.message_id;
+      if (head === null && r && r.result && r.result.message_id) head = r.result.message_id;
     } catch (e) {
       console.error("PANEL_MSG", String(e));
     }
   }
-  if (head !== null) await stickAlert(kv, botToken, chatId, head);
+  // pin=false یعنی فقط پیام (بدون پین/write اضافه) — برای هشدارهای کم‌اهمیت مثل وصل‌شدن مجدد
+  if (head !== null && pin !== false) await stickAlert(kv, botToken, chatId, head);
+}
+// آیا این تیک کرون باید پول بزند؟ (خالص) تراز دقیقه‌ای یا عقب‌افتادگی بیش از ۲ برابر فاصله
+function ndShouldPoll(tickAligned, lastMs, intervalMin, nowMs) {
+  if (tickAligned) return true;
+  const iv = Math.max(1, Number(intervalMin) || 10);
+  return !!(lastMs && nowMs - lastMs > iv * 60000 * 2 + 60000);
 }
 
 async function panelLogin(p, timeoutMs) {
@@ -7915,14 +7925,15 @@ async function runNodePoll(env, opts) {
     let monitorsDirty = false;
     for (const m of monitors) {
       if (m.enabled === false) continue;
-      // فاصلهٔ پایش قابل تنظیم: تراز با دقیقهٔ دیواری (بدون write) + عقب‌افتادگی (خواب کرون)
+      // فاصلهٔ پایش قابل تنظیم: تراز با دقیقهٔ دیواری (بدون write) + عقب‌افتادگی (خواب کرون).
+      // مبنای عقب‌افتادگی st.ts است (داخل همان state که موقع تغییر ذخیره می‌شود) تا save جدا لازم نباشد.
       const intervalMin = Math.max(1, Number(m.intervalMin) || 10);
+      let st0 = null;
       if (!opts || opts.force !== true) {
         const tick = Math.floor(Date.now() / 60000);
-        if (tick % intervalMin !== 0) {
-          const lastMs = m.last_poll_ts ? Date.parse(m.last_poll_ts) : 0;
-          if (!(lastMs && Date.now() - lastMs > intervalMin * 60000 * 2 + 60000)) continue;
-        }
+        st0 = await getNodeState(kv, m.id);
+        const lastMs = (st0 && st0.ts ? Date.parse(st0.ts) : 0) || (m.last_poll_ts ? Date.parse(m.last_poll_ts) : 0);
+        if (!ndShouldPoll(tick % intervalMin === 0, lastMs, intervalMin, Date.now())) continue;
       }
       const panel = panels.find((p) => p.id === m.panel_id);
       if (!panel) continue;
@@ -7939,7 +7950,7 @@ async function runNodePoll(env, opts) {
         console.error("NDPOLL_FETCH", e && e.message ? e.message : String(e));
         continue;
       }
-      const st = await getNodeState(kv, m.id);
+      const st = st0 || (await getNodeState(kv, m.id));
       const panelName = (panel && panel.name) || m.name;
       const poll = ndApplyPoll(st.nodes, list, now);
       let stDirty = poll.hasNew;
@@ -7953,7 +7964,8 @@ async function runNodePoll(env, opts) {
             dir === "down"
               ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(name)}${n.address ? `\n🌐 آیپی: ${code(String(n.address))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${n.reason ? code(String(n.reason)) : "—"}`
               : `✅ نود وصل شد!\n🖥 پنل: ${escHtml(panelName)}\n🖧 نود: ${code(name)}\n⏱ زمان: ${ts} به وقت ایران${n.reason ? `\nℹ️ ${escHtml(String(n.reason))}` : ""}`;
-          for (const a of admins) await sendPanelMsg(botToken, a, msg, kv);
+          // پین فقط برای قطعی (وصل‌شدن پیام می‌گیرد ولی پین/write اضافه نه)
+          for (const a of admins) await sendPanelMsg(botToken, a, msg, kv, dir === "down");
           poll.next[name].last_alert = now;
         }
       }
@@ -7961,11 +7973,8 @@ async function runNodePoll(env, opts) {
       if (stDirty) {
         st.ts = now;
         await saveNodeState(kv, m.id, st);
-        m.last_poll_ts = now;
-        monitorsDirty = true;
       }
     }
-    if (monitorsDirty) await saveNodeMonitors(kv, monitors);
   } catch (e) {
     console.error("NDPOLL", e && e.stack ? e.stack : String(e));
   }
