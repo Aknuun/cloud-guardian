@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.105";
+const BOT_VERSION = "1.8.106";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.106": [
+    "✏️ چرخش روزانه تغییر دستی پنل را تشخیص می‌دهد: مبنای تازه + شمارنده از نو + گزارش",
+  ],
   "1.8.105": [
     "🔁 مدل میدانی چرخش روزانه: اول address/sni بعد هاست‌ها (آبی/خاکستری)",
   ],
@@ -21677,6 +21680,15 @@ function hfdFreeName(namesLower, base, sep, zoneName, style, counter, randFn) {
   }
   return { error: "no_free_name" };
 }
+// تصمیم مبنا در برابر مقدار زنده (خالص):
+// external = مقدار زنده با آخرین ست‌شدهٔ ما فرق دارد (دستی/خارجی عوض شده)
+// reset = مبنا هم عوض شده → شمارنده از ۱ (سری تازه از مبنای جدید)
+function hfdBaseDecision(prevBase, prevCurrent, liveVal, fresh) {
+  if (!fresh || fresh.error) return { skip: true, reason: (fresh && fresh.error) || "resolve" };
+  const external = !!(prevCurrent && prevCurrent.length && !prevCurrent.includes(liveVal));
+  const reset = external && !!prevBase && prevBase !== fresh.base;
+  return { external, reset, base: fresh.base, zoneName: fresh.zoneName };
+}
 // اجرای بعدی از روی ساعت لنگر (تهران HH:MM) و بازه ساعت (خالص)
 function hfdNextRun(at, intervalH, nowMs) {
   const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(at || ""));
@@ -21791,10 +21803,16 @@ async function runDailySubRotate(env, opts = {}) {
           out.push(val);
           continue;
         }
-        const base = (it.prefix || rb.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || rb.base;
+        // تغییر دستی/خارجی؟ مبنا از مقدار زنده، شمارنده از نو
+        const bd = hfdBaseDecision(it.lastBase && it.lastBase[field], it.current && it.current[field], val, rb);
+        const base = (it.prefix || bd.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || bd.base;
         let recs = [];
         try { recs = await getRecords(rb.zone, accounts, kv); } catch (e) { recs = []; }
         const names = new Set(recs.map((r) => String(r.name || "").toLowerCase()));
+        if (bd.reset) {
+          it.counters = it.counters || {};
+          it.counters[field] = 1;
+        }
         const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", rb.zoneName, it.style, (it.counters && it.counters[field]) || 1);
         if (fn.error) {
           await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "no_free_name" });
@@ -21811,13 +21829,17 @@ async function runDailySubRotate(env, opts = {}) {
         }
         it.counters = it.counters || {};
         it.counters[field] = fn.counter;
+        it.lastBase = it.lastBase || {};
+        it.lastBase[field] = base;
         it.prev = it.prev || {};
         it.prev[field] = (it.prev[field] || []).concat([val]).slice(-3);
         out.push(fn.name);
-        events.push({ field, from: val, to: fn.name });
+        events.push({ field, from: val, to: fn.name, manual: !!bd.external });
         cfg.totalCreated = (cfg.totalCreated || 0) + 1;
       }
       host[field] = out;
+      it.current = it.current || {};
+      it.current[field] = out.slice();
     }
     if (!events.length) { skipped++; continue; }
     const put = await panelPutHost(panel, token, host);
@@ -21831,7 +21853,7 @@ async function runDailySubRotate(env, opts = {}) {
     it.last_run = new Date().toISOString();
     it.last_names = events.map((e) => e.field + ":" + e.to);
     for (const ev of events) {
-      lines.push("• " + ev.field + ": " + ev.from + " ➜ " + ev.to);
+      lines.push((ev.manual ? "✏️ " : "• ") + ev.field + ": " + ev.from + " ➜ " + ev.to + (ev.manual ? " (تغییر دستی شناسایی شد)" : ""));
     }
     await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, remark: host.remark, events });
   }
@@ -21883,6 +21905,9 @@ async function hfdRevert(env, panelId, hostId) {
   const put = await panelPutHost(panel, token, host);
   if (put.error) return { error: String(put.error).slice(0, 120) };
   it.prev = {};
+  it.current = it.current || {};
+  for (const f of fields) it.current[f] = host[f].slice();
+  if (it.lastBase) for (const f of fields) delete it.lastBase[f];
   await saveDailyRotCfg(kv, cfg);
   await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot_revert", panel_id: panelId, host_id: hostId, remark: host.remark, fields });
   return { ok: true, fields };
@@ -22655,13 +22680,23 @@ async function renderDailyRotHosts(edit, kv, env, chatId, note) {
   kb.push([{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
-async function hfdPreview(cfg, it, pid, hid, kv, accounts, zones) {
-  // پیش‌نمایش نام بعدی هر فیلد فعال (بدون مصرف شمارنده)
+async function hfdPreview(cfg, it, pid, hid, kv, accounts, zones, liveHost) {
+  // پیش‌نمایش نام بعدی هر فیلد فعال (بدون مصرف شمارنده) — مبنا از مقدار زنده تا تغییر دستی هم دیده شود
   const out = {};
   for (const field of ["address", "sni", "host"]) {
     if (!it.fields || !it.fields[field]) continue;
-    const b = it.base && it.base[field];
-    if (!b || b.error || !b.base || !b.zoneName) { out[field] = null; continue; }
+    let b = null;
+    const liveVals = liveHost && Array.isArray(liveHost[field]) ? liveHost[field] : [];
+    const lv = liveVals.find((x) => String(x || "").trim());
+    if (lv) {
+      const rb = hfdResolveBase(lv, zones);
+      if (!rb.error) b = { base: rb.base, zoneName: rb.zoneName };
+    }
+    if (!b) {
+      const s = it.base && it.base[field];
+      if (s && !s.error && s.base && s.zoneName) b = s;
+    }
+    if (!b) { out[field] = null; continue; }
     const zone = zones.find((z) => String(z.name).toLowerCase() === String(b.zoneName).toLowerCase());
     if (!zone) { out[field] = null; continue; }
     let recs = [];
@@ -22685,7 +22720,12 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
   const r = panel ? await hfdPanelHosts(kv, panel) : { error: "x" };
   const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(hid)) : null;
   const lines = ["⚙️ تنظیم هاست", "", "🖥 " + (panel ? panel.name : pid) + " · 📄 " + (host ? String(host.remark || hid).slice(0, 40) : hid), ""];
-  const pv = await hfdPreview(cfg, it, pid, hid, kv, accounts, zones);
+  const pv = await hfdPreview(cfg, it, pid, hid, kv, accounts, zones, host);
+  const manualTouched = ["address", "sni", "host"].some((f) => {
+    const rec = it.current && it.current[f];
+    const live = host && Array.isArray(host[f]) ? host[f].map((x) => String(x)) : [];
+    return rec && rec.length && live.length && JSON.stringify([...rec].map(String).sort()) !== JSON.stringify([...live].sort());
+  });
   for (const field of ["address", "sni", "host"]) {
     const cur = host && Array.isArray(host[field]) ? host[field].map((x) => String(x).slice(0, 34)).join("، ") : "—";
     const b = it.base && it.base[field];
@@ -22693,6 +22733,7 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
     lines.push((it.fields && it.fields[field] ? "✅ " : "⬜ ") + field + ": " + cur);
     lines.push("   مبنا: " + baseStr + (pv[field] ? " · بعدی: " + pv[field] : ""));
   }
+  if (manualTouched) lines.push("✏️ مقدار زنده با آخرین چرخش فرق دارد (دستی عوض شده)؛ چرخش بعدی با مقدار جدید ادامه می‌دهد.");
   lines.push("");
   lines.push("🎨 پسوند: " + (HFD_STYLE_FA[it.style] || it.style) + " · جداکننده: " + (it.sep === "" ? "بدون" : "-") + (it.prefix ? " · پیشوند دستی: " + it.prefix : ""));
   if (it.last_run) lines.push("🕐 آخرین چرخش: " + ndFmtTs(it.last_run));
