@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.08";
+const BOT_VERSION = "1.9.09";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.09": [
+    "📋 لیست هاست دو ستونه (host | address) با تاگل استثنا + حذف ذره‌بین",
+  ],
   "1.9.08": [
     "✍️ تاریخچه برگشت فقط برای صفحه‌های بی‌دکمه (کم شدن write دکمه‌ها)",
   ],
@@ -23269,10 +23272,6 @@ function hfgToggleSel(ids, key) {
   else s.add(k);
   return [...s];
 }
-// دکمه استثنا: در چرخه = آبی، مستثنا = خاکستری (callback_data را صداکننده می‌گذارد)
-function hfExcBtn(isExc) {
-  return isExc ? { text: "🚫 استثنا", style: "plain" } : { text: "✅ در چرخه", style: "primary" };
-}
 // هاست قابل‌نمایش در لیست؟ غیرفعال‌ها و آنهایی که status غیرفعال دارند مخفی‌اند.
 // (هاست‌های بدون فیلد status نمایش داده می‌شوند تا چیزی گم نشود.)
 function hfHostVisible(h) {
@@ -23298,7 +23297,7 @@ async function renderHostFilterHosts(edit, kv, env, chatId, note) {
   const selIds = chatId ? await hfgSelGet(kv, chatId) : null;
   const selMode = selIds !== null;
   const selSet = new Set(selIds || []);
-  const lines = ["📋 لیست هاست‌ها (فقط فعال‌ها)", "", "کلیک روی هاست = استثنا/برگشت (آبی در چرخه · خاکستری مستثنا) · 🔎 = بررسی فوری · فورس از صفحه بررسی", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
+  const lines = ["📋 لیست هاست‌ها (فقط فعال‌ها)", "", "دو ستون هر ردیف (host | address) = استثنا/برگشت همان هاست (آبی در چرخه · خاکستری مستثنا)", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
   if (note) lines.push(note, "");
   const kb = [];
   kb.push([
@@ -23324,26 +23323,26 @@ async function renderHostFilterHosts(edit, kv, env, chatId, note) {
     for (const h of hosts) {
       if (!hfHostVisible(h)) continue;
       n++;
-      const addr = (Array.isArray(h.address) && h.address[0]) || "";
-      const label = String(addr || h.remark || "host").substring(0, 24);
+      const hostLabel = String(h.remark || (Array.isArray(h.sni) && h.sni[0]) || "host").slice(0, 22);
+      const addrLabel = String((Array.isArray(h.address) && h.address[0]) || "—").slice(0, 26);
       const key = panel.id + ":" + h.id;
       const isExc = exc.has(key);
       const picked = selSet.has(key);
-      lines.push(`${selMode && !picked ? "⬜ " : selMode && picked ? "✅ " : ""}${n}) ${label}`);
+      const mark = selMode ? (picked ? "✅ " : "⬜ ") : "";
+      lines.push(`${mark}${n}) ${hostLabel} · ${addrLabel}`);
       if (selMode) {
-        // حالت انتخاب گروهی: تاگل انتخاب + بررسی تکی سر جاش
+        // حالت انتخاب گروهی: هر دو ستون همان انتخاب را تاگل می‌کنند
         kb.push([
-          { text: `${picked ? "✅ " : "⬜ "}${label.substring(0, 14)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
-          { text: "🔎", callback_data: `hfchk:${panel.id}:${h.id}` },
+          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(hostLabel, 28)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
+          { text: `${picked ? "✅ " : "⬜ "}${hfdShort(addrLabel, 28)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
         ]);
       } else {
-        // کلیک روی هاست = تاگل استثنا (آبی در چرخه / خاکستری مستثنا) + دکمه بررسی
-        const eb = hfExcBtn(isExc);
-        eb.text = `${isExc ? "⬜ " : "✅ "}${label.substring(0, 20)}`;
-        eb.callback_data = `hfexc:${panel.id}:${h.id}`;
+        // دو ستون host | address — کلیک روی هر کدام = تاگل استثنا همان هاست (آبی/خاکستری)
+        const st = isExc ? "plain" : "primary";
+        const mk = isExc ? "⬜ " : "✅ ";
         kb.push([
-          eb,
-          { text: "🔎", callback_data: `hfchk:${panel.id}:${h.id}` },
+          { text: mk + hfdShort(hostLabel, 30), style: st, callback_data: `hfexc:${panel.id}:${h.id}` },
+          { text: mk + hfdShort(addrLabel, 30), style: st, callback_data: `hfexc:${panel.id}:${h.id}` },
         ]);
       }
     }
