@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.04";
+const BOT_VERSION = "1.9.05";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.05": [
+    "🗂 انتخاب گروهی در لیست هاست فیلتر (استثنای گروهی + آبی/خاکستری مثل روزانه)",
+  ],
   "1.9.04": [
     "✍️ گیت فاصله هاست‌فیلتر روی پایان ران قبلی: هر ران کامل فقط ۱ write کانفیگ",
   ],
@@ -15894,7 +15897,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "hf") {
       await renderHostFilterHome(edit, kv, env);
     } else if (data === "hflist") {
-      await renderHostFilterHosts(edit, kv, env);
+      await renderHostFilterHosts(edit, kv, env, chatId);
     } else if (data === "hfd") {
       await renderDailyRotHome(edit, kv, env, chatId);
     } else if (data.startsWith("hfdpanel:")) {
@@ -16186,7 +16189,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       else set.add(key);
       cfg.exceptions = [...set];
       await saveHostFilterCfg(kv, cfg);
-      await renderHostFilterHosts(edit, kv, env);
+      await renderHostFilterHosts(edit, kv, env, chatId);
     } else if (data === "hfexcall" || data === "hfunexcall") {
       // استثنای گروهی سراسری: همهٔ هاست‌های همهٔ پنل‌ها
       const put = data === "hfexcall";
@@ -16207,7 +16210,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       cfg.exceptions = [...set];
       await saveHostFilterCfg(kv, cfg);
-      await renderHostFilterHosts(edit, kv, env);
+      await renderHostFilterHosts(edit, kv, env, chatId);
     } else if (data.startsWith("hfexcpanel:") || data.startsWith("hfunexcpanel:")) {
       // استثنای گروهی یک پنل
       const put = data.startsWith("hfexcpanel:");
@@ -16229,7 +16232,50 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       cfg.exceptions = [...set];
       await saveHostFilterCfg(kv, cfg);
-      await renderHostFilterHosts(edit, kv, env);
+      await renderHostFilterHosts(edit, kv, env, chatId);
+    } else if (data === "hfgmode") {
+      try { await kv.put(`hfgsel:${chatId}`, JSON.stringify({ ids: [] }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderHostFilterHosts(edit, kv, env, chatId);
+    } else if (data === "hfgdone") {
+      try { await kv.delete(`hfgsel:${chatId}`); } catch (e) {}
+      await renderHostFilterHosts(edit, kv, env, chatId);
+    } else if (data.startsWith("hfgs:")) {
+      const parts = data.split(":");
+      const key = parts[1] + ":" + parts[2];
+      const cur = await hfgSelGet(kv, chatId);
+      if (cur === null) return edit("⏳ حالت انتخاب منقضی شد.", [[{ text: "🔙 بازگشت", callback_data: "hflist" }]]);
+      try { await kv.put(`hfgsel:${chatId}`, JSON.stringify({ ids: hfgToggleSel(cur, key) }), { expirationTtl: 3600 }); } catch (e) {}
+      await renderHostFilterHosts(edit, kv, env, chatId);
+    } else if (data === "hfgall" || data === "hfgclr") {
+      const put = data === "hfgall";
+      if (put) {
+        const panels = await getPanels(kv);
+        const ids = [];
+        for (const panel of panels) {
+          let token = null;
+          try { token = await panelLogin(panel); } catch (e) {}
+          let hosts = [];
+          try { hosts = token ? await panelHosts(panel, token) : []; } catch (e) {}
+          for (const h of hosts || []) ids.push(panel.id + ":" + h.id);
+        }
+        try { await kv.put(`hfgsel:${chatId}`, JSON.stringify({ ids }), { expirationTtl: 3600 }); } catch (e) {}
+      } else {
+        try { await kv.put(`hfgsel:${chatId}`, JSON.stringify({ ids: [] }), { expirationTtl: 3600 }); } catch (e) {}
+      }
+      await renderHostFilterHosts(edit, kv, env, chatId);
+    } else if (data === "hfgexc" || data === "hfgunexc") {
+      const put = data === "hfgexc";
+      const cur = await hfgSelGet(kv, chatId);
+      if (cur === null || !cur.length) return edit("⚠️ چیزی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: "hflist" }]]);
+      const cfg = await getHostFilterCfg(kv);
+      const set = new Set(cfg.exceptions || []);
+      for (const k of cur) {
+        if (put) set.add(k);
+        else set.delete(k);
+      }
+      cfg.exceptions = [...set];
+      await saveHostFilterCfg(kv, cfg);
+      await renderHostFilterHosts(edit, kv, env, chatId, put ? `🚫 ${cur.length} هاست مستثنا شد.` : `✅ ${cur.length} هاست به چرخه برگشت.`);
     } else if (data === "pghook") {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       await renderPgHookHome(edit, kv, env, adminId);
@@ -23182,11 +23228,34 @@ async function renderDailyRotLog(edit, kv, chatId) {
   }
   await edit(lines.join("\n").slice(0, 3500), [[{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
-async function renderHostFilterHosts(edit, kv, env) {
+// تاگل انتخاب گروهی (خالص): آرایه جدید برمی‌گرداند
+function hfgToggleSel(ids, key) {
+  const s = new Set(Array.isArray(ids) ? ids.map(String) : []);
+  const k = String(key);
+  if (s.has(k)) s.delete(k);
+  else s.add(k);
+  return [...s];
+}
+// دکمه استثنا: در چرخه = آبی، مستثنا = خاکستری (callback_data را صداکننده می‌گذارد)
+function hfExcBtn(isExc) {
+  return isExc ? { text: "🚫 استثنا", style: "plain" } : { text: "✅ در چرخه", style: "primary" };
+}
+async function hfgSelGet(kv, chatId) {
+  try {
+    const s = await kv.get(`hfgsel:${chatId}`, "json");
+    if (s && Array.isArray(s.ids)) return s.ids.map(String);
+  } catch (e) {}
+  return null;
+}
+async function renderHostFilterHosts(edit, kv, env, chatId, note) {
   const panels = await getPanels(kv);
   const cfg = await getHostFilterCfg(kv);
   const exc = new Set(cfg.exceptions || []);
+  const selIds = chatId ? await hfgSelGet(kv, chatId) : null;
+  const selMode = selIds !== null;
+  const selSet = new Set(selIds || []);
   const lines = ["📋 لیست هاست‌ها", "", "🔎 بررسی = چک فوری همین هاست · ⚡ فورس = بررسی و تعویض فوری همین هاست · 🚫/✅ استثنا = حذف/افزودن از تعویض خودکار", "⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""];
+  if (note) lines.push(note, "");
   const kb = [];
   kb.push([
     { text: "🚫 استثنای همه", callback_data: "hfexcall" },
@@ -23214,18 +23283,44 @@ async function renderHostFilterHosts(edit, kv, env) {
       const label = String(addr || h.remark || "host").substring(0, 24);
       const key = panel.id + ":" + h.id;
       const isExc = exc.has(key);
-      lines.push(`${n}) ${h.is_disabled ? "⏸ " : ""}${label}`);
-      // hfchk: بررسی فوری همین هاست | hfforce: بررسی و تعویض فوری همین هاست | hfexc: استثنای تعویض خودکار
-      kb.push([
-        { text: "🔎 " + label.substring(0, 16), callback_data: `hfchk:${panel.id}:${h.id}` },
-        { text: "⚡ فورس", callback_data: `hfforce:${panel.id}:${h.id}` },
-        { text: (isExc ? "✅" : "🚫") + " استثنا", callback_data: `hfexc:${panel.id}:${h.id}` },
-      ]);
+      const picked = selSet.has(key);
+      lines.push(`${selMode && !picked ? "⬜ " : selMode && picked ? "✅ " : ""}${n}) ${h.is_disabled ? "⏸ " : ""}${label}`);
+      if (selMode) {
+        // حالت انتخاب گروهی: تاگل انتخاب + بررسی/فورس تکی سر جاش
+        kb.push([
+          { text: `${picked ? "✅ " : "⬜ "}${label.substring(0, 14)}`, style: picked ? "primary" : "plain", callback_data: `hfgs:${panel.id}:${h.id}` },
+          { text: "🔎", callback_data: `hfchk:${panel.id}:${h.id}` },
+          { text: "⚡", callback_data: `hfforce:${panel.id}:${h.id}` },
+        ]);
+      } else {
+        // hfchk: بررسی فوری همین هاست | hfforce: بررسی و تعویض فوری همین هاست | hfexc: استثنای تعویض خودکار
+        const eb = hfExcBtn(isExc);
+        eb.callback_data = `hfexc:${panel.id}:${h.id}`;
+        kb.push([
+          { text: "🔎 " + label.substring(0, 16), callback_data: `hfchk:${panel.id}:${h.id}` },
+          { text: "⚡ فورس", callback_data: `hfforce:${panel.id}:${h.id}` },
+          eb,
+        ]);
+      }
     }
   }
   if (!n) lines.push("📭 هاستی پیدا نشد.");
+  if (selMode) {
+    lines.push(`🗂 ${selSet.size} انتخاب شده:`);
+    kb.push([
+      { text: "🚫 استثنا برای انتخاب‌ها", callback_data: "hfgexc" },
+      { text: "✅ لغو استثنا", callback_data: "hfgunexc" },
+    ]);
+    kb.push([
+      { text: "✅ انتخاب همه", callback_data: "hfgall" },
+      { text: "🧹 پاک‌سازی", callback_data: "hfgclr" },
+    ]);
+    kb.push([{ text: "❌ خروج از انتخاب", callback_data: "hfgdone" }]);
+  } else {
+    kb.push([{ text: "🗂 انتخاب گروهی", callback_data: "hfgmode" }]);
+  }
   kb.push([{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(lines.join("\n"), kb);
+  await edit(lines.join("\n").slice(0, 3500), kb);
 }
 
 async function hfHostCheck(kv, env, panelId, hostId) {
