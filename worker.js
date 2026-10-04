@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.8.101";
+const BOT_VERSION = "1.8.102";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.8.102": [
+    "🔁 تعویض روزانه ساب‌ها: چرخش زمانی address/sni با پسوند عدد/حرف/قاطی، بدون حذف ساب قبلی + برگشت",
+  ],
   "1.8.101": [
     "🐞 فیکس «دو بار بزن»: آپدیت به آخر با گیت‌هاب ناپایدار دیگر «به‌روزی» اشتباه نمی‌گوید + یک‌بار تلاش مجدد",
   ],
@@ -1529,6 +1532,7 @@ export default {
         })
       );
       ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
+      ctx.waitUntil(runDailySubRotate({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hfd") }).catch((e) => console.error("DAILYROT", String(e))));
     }
   },
 
@@ -3460,7 +3464,7 @@ function qAlert(kv, cat) {
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۳۰ دقیقه یا با ۲۵ شمارش
 // پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
-const QW_CRON = new Set(["hf", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
+const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
   return {
@@ -3550,7 +3554,7 @@ function qKvLine(em, label, v, lim) {
   return `• ${em} ${label}: ` + faNum(Number(v || 0).toLocaleString("en-US")) + (lim ? " / " + faNum(Number(lim).toLocaleString("en-US")) : "") + (pp === null ? "" : ` (${faNum(pp)}٪)`) + " — " + quotaBar(pp);
 }
 const Q_JOB_FA = {
-  hf: "تعویض خودکار هاست", um: "مانیتور مصرف", srv: "مانیتور سرور",
+  hf: "تعویض خودکار هاست", hfd: "🔁 چرخش روزانه ساب", um: "مانیتور مصرف", srv: "مانیتور سرور",
   node10: "پول نود (۱۰دقیقه‌ای)", selfup: "آپدیت خودکار",
   ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
@@ -3940,7 +3944,7 @@ async function renderQuotaMenu(edit, kv, env) {
   lines.push("", "📊 مصرف امروز به تفکیک (write واقعی):");
   await qwFlushNow(kv);
   const wmap = await qwDayMap(kv);
-  const order = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+  const order = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
   const extra = Object.keys(wmap).filter((k) => QW_CRON.has(k) && !order.includes(k)).sort();
   let anyRun = false, totW = 0;
   for (const j of [...order, ...extra]) {
@@ -11644,6 +11648,51 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  // ورودی‌های چرخش روزانه: بازه (ساعت)، ساعت لنگر (HH:MM)، پیشوند دستی مبنا
+  if (type === "hfd_int") {
+    await kv.delete(`pend:${chatId}`);
+    const h = Math.floor(Number(txt.trim()) || 0);
+    if (!(h >= 1 && h <= 720)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_int" }), { expirationTtl: 600 });
+      await send("⚠️ بازه باید عدد ۱ تا ۷۲۰ (ساعت) باشد. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "hfd" }]]);
+      return;
+    }
+    const cfg = await getDailyRotCfg(kv);
+    cfg.intervalH = h;
+    cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
+    await saveDailyRotCfg(kv, cfg);
+    await renderDailyRotHome(send, kv, env);
+    return;
+  }
+  if (type === "hfd_at") {
+    await kv.delete(`pend:${chatId}`);
+    const m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(txt.trim());
+    if (!m) {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_at" }), { expirationTtl: 600 });
+      await send("⚠️ ساعت باید HH:MM باشد (مثل 03:00). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "hfd" }]]);
+      return;
+    }
+    const cfg = await getDailyRotCfg(kv);
+    cfg.at = String(m[1]).padStart(2, "0") + ":" + m[2];
+    cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
+    await saveDailyRotCfg(kv, cfg);
+    await renderDailyRotHome(send, kv, env);
+    return;
+  }
+  if (type === "hfd_pre") {
+    await kv.delete(`pend:${chatId}`);
+    const v = txt.trim().toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24);
+    const cfg = await getDailyRotCfg(kv);
+    const it = cfg.items[hfdItemKey(pending.pid, pending.hid)];
+    if (!it) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    it.prefix = v;
+    await saveDailyRotCfg(kv, cfg);
+    await renderDailyRotSet(send, kv, env, pending.pid, pending.hid);
+    return;
+  }
   if (type === "bulk_type_convert") {
     await kv.delete(`pend:${chatId}`);
     let okCount = 0;
@@ -14927,7 +14976,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       L.push("");
       await qwFlushNow(kv);
       const wmap0 = await qwDayMap(kv);
-      const order0 = ["hf", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+      const order0 = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
       const extra0 = Object.keys(wmap0).filter((k) => QW_CRON.has(k) && !order0.includes(k)).sort();
       let any0 = false, tot0 = 0;
       for (const j of [...order0, ...extra0]) {
@@ -15586,6 +15635,117 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await renderHostFilterHome(edit, kv, env);
     } else if (data === "hflist") {
       await renderHostFilterHosts(edit, kv, env);
+    } else if (data === "hfd") {
+      await renderDailyRotHome(edit, kv, env);
+    } else if (data === "hfdtg") {
+      const cfg = await getDailyRotCfg(kv);
+      cfg.enabled = !cfg.enabled;
+      if (cfg.enabled && !cfg.next_run) cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotHome(edit, kv, env);
+    } else if (data === "hfdint") {
+      const cfg = await getDailyRotCfg(kv);
+      const kb = [
+        [12, 24, 48].map((h) => ({ text: `${cfg.intervalH === h ? "✅ " : ""}هر ${h} ساعت`, callback_data: `hfdintv:${h}` })),
+        [{ text: "✏️ ساعت دلخواه", callback_data: "hfdintc" }],
+        [{ text: "🔙 بازگشت", callback_data: "hfd" }],
+      ];
+      await edit(`⏱ بازهٔ چرخش (فعلی: هر ${cfg.intervalH} ساعت):`, kb);
+    } else if (data.startsWith("hfdintv:")) {
+      const h = Math.floor(Number(data.slice(8)) || 0);
+      if (!(h >= 1 && h <= 720)) return edit("⚠️ بازه نامعتبر.", [[{ text: "🔙 بازگشت", callback_data: "hfd" }]]);
+      const cfg = await getDailyRotCfg(kv);
+      cfg.intervalH = h;
+      cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, Date.now());
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotHome(edit, kv, env);
+    } else if (data === "hfdintc") {
+      const cfg = await getDailyRotCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_int" }), { expirationTtl: 600 });
+      await edit(`⏱ بازه را به ساعت بفرستید (۱ تا ۷۲۰؛ فعلی: ${cfg.intervalH}):`, [[{ text: "⬅️ انصراف", callback_data: "hfd" }]]);
+    } else if (data === "hfdat") {
+      const cfg = await getDailyRotCfg(kv);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_at" }), { expirationTtl: 600 });
+      await edit(`🕐 ساعت لنگر را به وقت تهران بفرستید (HH:MM مثل 03:00؛ فعلی: ${cfg.at}):`, [[{ text: "⬅️ انصراف", callback_data: "hfd" }]]);
+    } else if (data === "hfdhosts") {
+      await renderDailyRotHosts(edit, kv, env);
+    } else if (data.startsWith("hfdh:")) {
+      const parts = data.split(":");
+      const pid = parts[1];
+      const hid = parts[2];
+      const cfg = await getDailyRotCfg(kv);
+      const key = hfdItemKey(pid, hid);
+      if (cfg.items[key]) {
+        delete cfg.items[key];
+        await saveDailyRotCfg(kv, cfg);
+        await renderDailyRotHosts(edit, kv, env);
+      } else {
+        const panels = await getPanels(kv);
+        const panel = panels.find((p) => String(p.id) === String(pid));
+        if (!panel) return edit("❌ پنل پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+        const r = await hfdPanelHosts(kv, panel);
+        const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(hid)) : null;
+        if (!host) return edit("❌ هاست پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+        const accounts = await getAccounts(kv, env);
+        const zones = await getAllZones(accounts, kv);
+        const base = {};
+        for (const f of ["address", "sni", "host"]) {
+          const vals = Array.isArray(host[f]) ? host[f] : [];
+          const v0 = vals.find((x) => String(x || "").trim());
+          base[f] = v0 ? hfdResolveBase(v0, zones) : { error: "empty" };
+          if (base[f].zone) { const zn = base[f].zoneName; base[f] = { base: base[f].base, zoneName: zn }; }
+        }
+        cfg.items[key] = { fields: { address: true, sni: true, host: false }, style: "num", sep: "-", prefix: "", counters: { address: 1, sni: 1, host: 1 }, base, prev: {}, last_run: null, last_names: [] };
+        await saveDailyRotCfg(kv, cfg);
+        await renderDailyRotSet(edit, kv, env, pid, hid);
+      }
+    } else if (data.startsWith("hfdset:")) {
+      const parts = data.split(":");
+      await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
+    } else if (data.startsWith("hfdf:")) {
+      const parts = data.split(":");
+      const cfg = await getDailyRotCfg(kv);
+      const it = cfg.items[hfdItemKey(parts[1], parts[2])];
+      if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+      const f = parts[3];
+      if (!["address", "sni", "host"].includes(f)) return edit("⚠️ فیلد نامعتبر.");
+      it.fields = it.fields || {};
+      it.fields[f] = !it.fields[f];
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
+    } else if (data.startsWith("hfdst:")) {
+      const parts = data.split(":");
+      const cfg = await getDailyRotCfg(kv);
+      const it = cfg.items[hfdItemKey(parts[1], parts[2])];
+      if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+      const i = HFD_STYLES.indexOf(it.style);
+      it.style = HFD_STYLES[(i + 1 + HFD_STYLES.length) % HFD_STYLES.length];
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
+    } else if (data.startsWith("hfdsep:")) {
+      const parts = data.split(":");
+      const cfg = await getDailyRotCfg(kv);
+      const it = cfg.items[hfdItemKey(parts[1], parts[2])];
+      if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+      it.sep = it.sep === "" ? "-" : "";
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotSet(edit, kv, env, parts[1], parts[2]);
+    } else if (data.startsWith("hfdpre:")) {
+      const parts = data.split(":");
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_pre", pid: parts[1], hid: parts[2] }), { expirationTtl: 600 });
+      await edit("✏️ پیشوند دستی مبنا را بفرستید (حروف کوچک انگلیسی؛ خالی = خودکار):", [[{ text: "⬅️ انصراف", callback_data: `hfdset:${parts[1]}:${parts[2]}` }]]);
+    } else if (data.startsWith("hfdrev:")) {
+      const parts = data.split(":");
+      await edit("⏳ در حال برگشت به مقادیر قبلی…");
+      const rr = await hfdRevert(env, parts[1], parts[2]);
+      if (rr.error) await edit("❌ برگشت ناموفق: " + rr.error + ".", [[{ text: "🔙 بازگشت", callback_data: `hfdset:${parts[1]}:${parts[2]}` }]]);
+      else await edit("✅ به مقادیر قبلی برگشت." + (rr.fields ? "\n (" + rr.fields.join("، ") + ")" : ""), [[{ text: "🔙 بازگشت", callback_data: `hfdset:${parts[1]}:${parts[2]}` }]]);
+    } else if (data === "hfdrun") {
+      await edit("⏳ در حال چرخش دستی… (ممکن است کمی طول بکشد)");
+      const rr = await runDailySubRotate({ ...env, BOT_KV: kv }, { force: true });
+      await edit(`✅ چرخش دستی تمام شد: ${rr.changed || 0} هاست چرخید${rr.skipped ? ` · ${rr.skipped} رد شد` : ""}${rr.error ? `\n⚠️ ${rr.error}` : ""}.`, [[{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (data === "hfdlog") {
+      await renderDailyRotLog(edit, kv);
     } else if (data.startsWith("hfchk:")) {
       const parts = data.split(":");
       const cfg0 = await getHostFilterCfg(kv);
@@ -21384,6 +21544,275 @@ async function runReminders(env) {
   }
 }
 
+// ===================== چرخش روزانه ساب‌ها (تعویض خودکار زمانی) =====================
+// هاست‌های منتخب کاربر هر N ساعت یک ساب‌دامنهٔ تازه (عدد/حرف/قاطی) می‌گیرند؛
+// ساب قبلی از DNS حذف نمی‌شود (فقط اشاره‌گر پنل جابه‌جا می‌شود) و امکان برگشت به قبلی هست.
+const HFD_STYLES = ["num", "alpha", "mix"];
+const HFD_STYLE_FA = { num: "🔢 عدد", alpha: "🔤 حرف", mix: "🎲 قاطی" };
+// عدد ۱مبنا به حروف: 1→a … 26→z 27→aa (خالص)
+function hfdAlpha(n) {
+  let s = "";
+  let x = Math.max(1, Math.floor(Number(n) || 1));
+  while (x > 0) {
+    const r = (x - 1) % 26;
+    s = String.fromCharCode(97 + r) + s;
+    x = Math.floor((x - 1) / 26);
+  }
+  return s;
+}
+// پسوند بعدی هر استایل (خالص؛ randFn برای تست)
+function hfdNextSuffix(style, counter, randFn) {
+  const c = Math.max(1, Math.floor(Number(counter) || 1));
+  if (style === "alpha") return { suffix: hfdAlpha(c), next: c + 1 };
+  if (style === "mix") {
+    const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const rnd = randFn || ((m) => { const b = new Uint8Array(m); crypto.getRandomValues(b); return [...b]; });
+    const rr = rnd(4);
+    let s = "";
+    for (let i = 0; i < 4; i++) s += abc[Number(rr[i] || 0) % abc.length];
+    return { suffix: s, next: c + 1 };
+  }
+  return { suffix: String(c), next: c + 1 };
+}
+// جدا کردن مبنا از لیبل اول: dl-007 → dl ؛ dl1 → dl (خالص)
+function hfdStripBase(label) {
+  const t = String(label || "").toLowerCase();
+  const s = t.replace(/[-_0-9]+$/, "");
+  return s || t || "sub";
+}
+// تعیین مبنا و زون از مقدار فعلی (خالص؛ zones شکل getAllZones)
+function hfdResolveBase(value, zones) {
+  const v = String(value || "").trim().toLowerCase().replace(/\.$/, "");
+  if (!v) return { error: "empty" };
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v) || /^[0-9a-f:]+$/i.test(v) && v.includes(":")) return { error: "ip" };
+  const z = zoneForName(zones, v);
+  if (!z) return { error: "external" };
+  const zn = String(z.name || "").toLowerCase();
+  const rel = v === zn ? "" : v.slice(0, -(zn.length + 1));
+  const label0 = (rel.split(".")[0] || "").toLowerCase();
+  return { base: hfdStripBase(label0), zone: z, zoneName: z.name };
+}
+// اولین نام آزاد base+sep+suffix در زون (خالص؛ namesLower مجموعه نام‌های موجود با حروف کوچک)
+function hfdFreeName(namesLower, base, sep, zoneName, style, counter, randFn) {
+  let c = Math.max(1, Math.floor(Number(counter) || 1));
+  for (let i = 0; i < 200; i++) {
+    const r = hfdNextSuffix(style, c, randFn);
+    const cand = String(base + sep + r.suffix + "." + zoneName).toLowerCase();
+    if (!namesLower.has(cand)) return { name: cand, counter: r.next };
+    if (style !== "mix") c = r.next;
+  }
+  return { error: "no_free_name" };
+}
+// اجرای بعدی از روی ساعت لنگر (تهران HH:MM) و بازه ساعت (خالص)
+function hfdNextRun(at, intervalH, nowMs) {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(at || ""));
+  const hh = m ? Number(m[1]) : 3;
+  const mm = m ? Number(m[2]) : 0;
+  const step = Math.max(1, Math.min(720, Math.floor(Number(intervalH) || 24))) * 3600000;
+  const dayMs = 86400000;
+  const tNow = nowMs + TEHRAN_OFFSET_MS;
+  const dayStart = Math.floor(tNow / dayMs) * dayMs;
+  let cand = dayStart + (hh * 60 + mm) * 60000 - TEHRAN_OFFSET_MS;
+  let guard = 0;
+  while (cand <= nowMs && guard++ < 5000) cand += step;
+  return new Date(cand).toISOString();
+}
+async function getDailyRotCfg(kv) {
+  let c = null;
+  try { c = await kvGetCached(kv, "dailyrot_cfg", "json", 30000); } catch (e) {}
+  if (!c || typeof c !== "object") c = {};
+  const iv = Math.floor(Number(c.intervalH) || 24);
+  return {
+    enabled: c.enabled === true,
+    intervalH: iv >= 1 && iv <= 720 ? iv : 24,
+    at: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(c.at || "")) ? c.at : "03:00",
+    next_run: c.next_run || null,
+    totalCreated: Number(c.totalCreated) || 0,
+    items: c.items && typeof c.items === "object" ? c.items : {},
+  };
+}
+async function saveDailyRotCfg(kv, cfg) {
+  try { await kvPutCached(kv, "dailyrot_cfg", JSON.stringify(cfg), undefined, 30000); } catch (e) {}
+}
+function hfdItemKey(panelId, hostId) {
+  return panelId + ":" + hostId;
+}
+// اجرای چرخش روزانه: هر آیتم → هر فیلد فعال → هر مقدار دامنه‌ای → ساب تازه + PUT پنل.
+// ساب قبلی از DNS حذف نمی‌شود؛ مقادیر قبلی برای «برگشت» نگه داشته می‌شوند.
+async function runDailySubRotate(env, opts = {}) {
+  const kv = env.BOT_KV;
+  if (!kv) return { error: "no_kv" };
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+  const cfg = await getDailyRotCfg(kv);
+  const force = !!(opts && opts.force);
+  if (!cfg.enabled && !force) return { skipped: "disabled" };
+  const nowMs = Date.now();
+  if (!force) {
+    if (!cfg.next_run) {
+      cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, nowMs);
+      await saveDailyRotCfg(kv, cfg);
+      return { scheduled: cfg.next_run };
+    }
+    if (Date.parse(cfg.next_run) > nowMs) return { skipped: "wait" };
+  }
+  const ids = Object.keys(cfg.items || {});
+  if (!ids.length) return { skipped: "empty" };
+  const panels = await getPanels(kv);
+  const accounts = await getAccounts(kv, env);
+  const zones = await getAllZones(accounts, kv);
+  const admins = await getAdmins(kv, env);
+  const tokenCache = {};
+  let changed = 0;
+  let skipped = 0;
+  const lines = [];
+  for (const key of ids) {
+    const it = cfg.items[key];
+    if (!it) { skipped++; continue; }
+    const ci = key.indexOf(":");
+    const pid = key.slice(0, ci);
+    const hid = key.slice(ci + 1);
+    const panel = panels.find((p) => String(p.id) === pid);
+    if (!panel) {
+      await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, error: "panel_gone" });
+      skipped++;
+      continue;
+    }
+    let token = tokenCache[panel.id];
+    if (token === undefined) {
+      try { token = await panelLogin(panel); } catch (e) { token = null; }
+      tokenCache[panel.id] = token;
+    }
+    if (!token) {
+      await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, error: "login_failed" });
+      skipped++;
+      continue;
+    }
+    let hosts = [];
+    try { hosts = await panelHosts(panel, token); } catch (e) { hosts = []; }
+    const host = (hosts || []).find((h) => String(h.id) === String(hid));
+    if (!host || host.is_disabled) {
+      await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, error: !host ? "host_gone" : "host_disabled" });
+      skipped++;
+      continue;
+    }
+    const reality = hfIsReality(host);
+    const cur = {
+      address: Array.isArray(host.address) ? host.address.slice() : [],
+      sni: Array.isArray(host.sni) ? host.sni.slice() : [],
+      host: Array.isArray(host.host) ? host.host.slice() : [],
+    };
+    const events = [];
+    for (const field of ["address", "sni", "host"]) {
+      if (!it.fields || !it.fields[field]) continue;
+      if (reality && field !== "address") {
+        await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, error: "reality_sni_protected" });
+        continue;
+      }
+      const out = [];
+      for (const val of cur[field]) {
+        const rb = hfdResolveBase(val, zones);
+        if (rb.error) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: rb.error === "ip" ? "ip_literal" : "external_zone" });
+          out.push(val);
+          continue;
+        }
+        const base = (it.prefix || rb.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || rb.base;
+        let recs = [];
+        try { recs = await getRecords(rb.zone, accounts, kv); } catch (e) { recs = []; }
+        const names = new Set(recs.map((r) => String(r.name || "").toLowerCase()));
+        const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", rb.zoneName, it.style, (it.counters && it.counters[field]) || 1);
+        if (fn.error) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "no_free_name" });
+          out.push(val);
+          continue;
+        }
+        const vl = String(val).toLowerCase();
+        const src = recs.filter((r) => String(r.name || "").toLowerCase() === vl && ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
+        const cr = await cfCreateRecords(rb.zone, fn.name, src.length ? src : null, accounts, kv, val);
+        if (cr.error) {
+          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "create_fail: " + String(cr.error).slice(0, 120) });
+          out.push(val);
+          continue;
+        }
+        it.counters = it.counters || {};
+        it.counters[field] = fn.counter;
+        it.prev = it.prev || {};
+        it.prev[field] = (it.prev[field] || []).concat([val]).slice(-3);
+        out.push(fn.name);
+        events.push({ field, from: val, to: fn.name });
+        cfg.totalCreated = (cfg.totalCreated || 0) + 1;
+      }
+      host[field] = out;
+    }
+    if (!events.length) { skipped++; continue; }
+    const put = await panelPutHost(panel, token, host);
+    if (put.error) {
+      for (const ev of events) {
+        await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field: ev.field, from: ev.from, to: ev.to, error: "put_fail: " + String(put.error).slice(0, 120) });
+      }
+      continue;
+    }
+    changed++;
+    it.last_run = new Date().toISOString();
+    it.last_names = events.map((e) => e.field + ":" + e.to);
+    for (const ev of events) {
+      lines.push("• " + ev.field + ": " + ev.from + " ➜ " + ev.to);
+    }
+    await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, remark: host.remark, events });
+  }
+  // اجرای بعدی (عقب‌افتادگی جبران می‌شود)
+  try {
+    let nxt = cfg.next_run && Date.parse(cfg.next_run) > 0 ? Date.parse(cfg.next_run) : nowMs;
+    const step = Math.max(1, Math.min(720, cfg.intervalH || 24)) * 3600000;
+    let guard = 0;
+    while (nxt <= nowMs && guard++ < 5000) nxt += step;
+    cfg.next_run = new Date(nxt).toISOString();
+  } catch (e) {
+    cfg.next_run = hfdNextRun(cfg.at, cfg.intervalH, nowMs);
+  }
+  await saveDailyRotCfg(kv, cfg);
+  if (changed > 0 || skipped > 0) {
+    const msg = ["🔁 چرخش روزانه ساب‌ها", "", `✅ ${changed} هاست چرخید${skipped ? ` · ⏭ ${skipped} رد شد` : ""}`, ""].concat(lines.slice(0, 20)).concat(["", "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران"]).join("\n");
+    try {
+      for (const a of admins) await sendMessage(botToken, a, msg.slice(0, 3500));
+    } catch (e) {}
+  }
+  return { changed, skipped };
+}
+// برگشت یک هاست به مقادیر قبلیِ چرخش روزانه (بدون حذف DNS)
+async function hfdRevert(env, panelId, hostId) {
+  const kv = env.BOT_KV;
+  if (!kv) return { error: "no_kv" };
+  const cfg = await getDailyRotCfg(kv);
+  const it = cfg.items[hfdItemKey(panelId, hostId)];
+  if (!it || !it.prev || !Object.keys(it.prev).length) return { error: "prev_empty" };
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => String(p.id) === String(panelId));
+  if (!panel) return { error: "panel_gone" };
+  let token = null;
+  try { token = await panelLogin(panel); } catch (e) { token = null; }
+  if (!token) return { error: "login_failed" };
+  let hosts = [];
+  try { hosts = await panelHosts(panel, token); } catch (e) { hosts = []; }
+  const host = (hosts || []).find((h) => String(h.id) === String(hostId));
+  if (!host) return { error: "host_gone" };
+  const fields = [];
+  for (const f of ["address", "sni", "host"]) {
+    const pv = it.prev[f];
+    if (pv && pv.length) {
+      host[f] = [pv[pv.length - 1]];
+      fields.push(f);
+    }
+  }
+  if (!fields.length) return { error: "prev_empty" };
+  const put = await panelPutHost(panel, token, host);
+  if (put.error) return { error: String(put.error).slice(0, 120) };
+  it.prev = {};
+  await saveDailyRotCfg(kv, cfg);
+  await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot_revert", panel_id: panelId, host_id: hostId, remark: host.remark, fields });
+  return { ok: true, fields };
+}
 async function runHostFilter(env, opts = {}) {
   const kv = env.BOT_KV;
   if (!kv) return { error: "no_kv" };
@@ -21959,6 +22388,7 @@ async function renderHostFilterHome(edit, kv, env) {
   kb.push([{ text: "⚡ فورس بررسی کامل", callback_data: "hfforceall" }]);
   // hfhist: تاریخچهٔ تعویض‌ها | hflist: لیست هاست‌ها + استثنا و بررسی تک‌تک (جای بررسی فوری حذف‌شده)
   kb.push([{ text: "📋 لیست هاست‌ها", callback_data: "hflist" }, { text: "📜 تاریخچه", callback_data: "hfhist" }]);
+  kb.push([{ text: "🔁 تعویض روزانه ساب‌ها", callback_data: "hfd" }]);
   kb.push([{ text: "⚙️ تنظیمات چک‌هاست", callback_data: "hfsetch" }]);
   kb.push([{ text: "💾 بکاپ", callback_data: "hfbk" }]);
   // بازگشت به منوی اصلی
@@ -22033,6 +22463,130 @@ async function renderHostFilterBackups(edit, kv) {
   await edit(lines.join("\n"), kb);
 }
 
+// ---------- رابط تعویض روزانه ساب‌ها ----------
+async function renderDailyRotHome(edit, kv, env) {
+  const cfg = await getDailyRotCfg(kv);
+  const n = Object.keys(cfg.items).length;
+  const lines = ["🔁 تعویض روزانه ساب‌ها", ""];
+  lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال"));
+  lines.push("⏱ هر " + cfg.intervalH + " ساعت · 🕐 لنگر: " + cfg.at + " (تهران)");
+  lines.push("⏭ اجرای بعدی: " + (cfg.next_run ? ndFmtTs(cfg.next_run) + " به وقت ایران" : "—"));
+  lines.push("🖥 هاست‌های منتخب: " + n + " · 🆕 ساب ساخته‌شده: " + cfg.totalCreated);
+  lines.push("");
+  lines.push("روش: هر اجرا، فیلدهای فعال هر هاست منتخب یک ساب‌دامنهٔ تازه می‌گیرند (پسوند عدد/حرف/قاطی)؛ ساب قبلی از DNS حذف نمی‌شود و «برگشت به قبلی» هم هست. در هاست REALITY فقط address می‌چرخد.");
+  const kb = [];
+  kb.push([{ text: cfg.enabled ? "⏸ غیرفعال‌سازی" : "▶️ فعال‌سازی", callback_data: "hfdtg" }]);
+  kb.push([{ text: "⏱ بازه", callback_data: "hfdint" }, { text: "🕐 ساعت", callback_data: "hfdat" }]);
+  kb.push([{ text: "🖥 هاست‌ها", callback_data: "hfdhosts" }, { text: "⚡ اجرای دستی", callback_data: "hfdrun", style: "primary" }]);
+  kb.push([{ text: "📜 گزارش", callback_data: "hfdlog" }]);
+  kb.push([{ text: "🔙 تعویض خودکار", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  await edit(lines.join("\n"), kb);
+}
+async function hfdPanelHosts(kv, panel) {
+  let token = null;
+  try { token = await panelLogin(panel); } catch (e) { token = null; }
+  if (!token) return { error: "login_failed" };
+  try {
+    const list = await panelHosts(panel, token);
+    return { hosts: Array.isArray(list) ? list : [] };
+  } catch (e) {
+    return { error: "fetch_failed" };
+  }
+}
+async function renderDailyRotHosts(edit, kv, env) {
+  const cfg = await getDailyRotCfg(kv);
+  const panels = await getPanels(kv);
+  if (!panels.length) return edit("📭 پنلی ثبت نشده.", [[{ text: "🔙 بازگشت", callback_data: "hfd" }]]);
+  const lines = ["🖥 انتخاب هاست‌ها برای چرخش روزانه", ""];
+  const kb = [];
+  for (const panel of panels) {
+    lines.push("— " + (panel.name || panel.id));
+    const r = await hfdPanelHosts(kv, panel);
+    if (r.error) {
+      lines.push("⚠️ خوانده نشد.");
+      continue;
+    }
+    const rows = [];
+    for (const h of r.hosts) {
+      if (h.is_disabled) continue;
+      const on = !!cfg.items[hfdItemKey(String(panel.id), String(h.id))];
+      const cur = []
+        .concat(Array.isArray(h.address) ? h.address.slice(0, 1) : [])
+        .concat(Array.isArray(h.sni) ? h.sni.slice(0, 1) : [])
+        .map((x) => String(x).slice(0, 28)).join("، ");
+      rows.push([{ text: `${on ? "✅ " : "⬜ "}${String(h.remark || h.id).slice(0, 24)}`, callback_data: `hfdh:${panel.id}:${h.id}` }]);
+      if (cur) lines.push((on ? "✅ " : "⬜ ") + String(h.remark || h.id).slice(0, 30) + " — " + cur);
+    }
+    for (let i = 0; i < rows.length; i += 2) kb.push(rows.slice(i, i + 2).flat());
+  }
+  kb.push([{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function hfdPreview(cfg, it, pid, hid, kv, accounts, zones) {
+  // پیش‌نمایش نام بعدی هر فیلد فعال (بدون مصرف شمارنده)
+  const out = {};
+  for (const field of ["address", "sni", "host"]) {
+    if (!it.fields || !it.fields[field]) continue;
+    const b = it.base && it.base[field];
+    if (!b || b.error || !b.base || !b.zoneName) { out[field] = null; continue; }
+    const zone = zones.find((z) => String(z.name).toLowerCase() === String(b.zoneName).toLowerCase());
+    if (!zone) { out[field] = null; continue; }
+    let recs = [];
+    try { recs = await getRecords(zone, accounts, kv); } catch (e) { recs = []; }
+    const names = new Set(recs.map((r) => String(r.name || "").toLowerCase()));
+    const base = (it.prefix || b.base || "").toLowerCase().replace(/[^a-z0-9-]/g, "") || b.base;
+    const fn = hfdFreeName(names, base, it.sep === "" ? "" : "-", b.zoneName, it.style, (it.counters && it.counters[field]) || 1);
+    out[field] = fn.error ? null : fn.name;
+  }
+  return out;
+}
+async function renderDailyRotSet(edit, kv, env, pid, hid) {
+  const cfg = await getDailyRotCfg(kv);
+  const it = cfg.items[hfdItemKey(pid, hid)];
+  if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 هاست‌ها", callback_data: "hfdhosts" }]]);
+  const panels = await getPanels(kv);
+  const panel = panels.find((p) => String(p.id) === String(pid));
+  const accounts = await getAccounts(kv, env);
+  const zones = await getAllZones(accounts, kv);
+  const r = panel ? await hfdPanelHosts(kv, panel) : { error: "x" };
+  const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(hid)) : null;
+  const lines = ["⚙️ تنظیم هاست", "", "🖥 " + (panel ? panel.name : pid) + " · 📄 " + (host ? String(host.remark || hid).slice(0, 40) : hid), ""];
+  const pv = await hfdPreview(cfg, it, pid, hid, kv, accounts, zones);
+  for (const field of ["address", "sni", "host"]) {
+    const cur = host && Array.isArray(host[field]) ? host[field].map((x) => String(x).slice(0, 34)).join("، ") : "—";
+    const b = it.base && it.base[field];
+    const baseStr = !b ? "—" : b.error ? "نامناسب (" + (b.error === "ip" ? "آیپی" : "خارج از زون‌های ما") + ")" : b.base + " · " + b.zoneName;
+    lines.push((it.fields && it.fields[field] ? "✅ " : "⬜ ") + field + ": " + cur);
+    lines.push("   مبنا: " + baseStr + (pv[field] ? " · بعدی: " + pv[field] : ""));
+  }
+  lines.push("");
+  lines.push("🎨 پسوند: " + (HFD_STYLE_FA[it.style] || it.style) + " · جداکننده: " + (it.sep === "" ? "بدون" : "-") + (it.prefix ? " · پیشوند دستی: " + it.prefix : ""));
+  if (it.last_run) lines.push("🕐 آخرین چرخش: " + ndFmtTs(it.last_run));
+  if (it.prev && Object.keys(it.prev).length) lines.push("↩️ قبلی برای برگشت موجود است.");
+  const kb = [];
+  kb.push(["address", "sni", "host"].map((f) => ({ text: `${it.fields && it.fields[f] ? "✅ " : "⬜ "}${f}`, callback_data: `hfdf:${pid}:${hid}:${f}` })));
+  kb.push([
+    { text: "🎨 " + (HFD_STYLE_FA[it.style] || it.style), callback_data: `hfdst:${pid}:${hid}` },
+    { text: "🔣 جدا: " + (it.sep === "" ? "بدون" : "-"), callback_data: `hfdsep:${pid}:${hid}` },
+  ]);
+  kb.push([{ text: "✏️ پیشوند دستی", callback_data: `hfdpre:${pid}:${hid}` }]);
+  if (it.prev && Object.keys(it.prev).length) kb.push([{ text: "↩️ برگشت به قبلی", callback_data: `hfdrev:${pid}:${hid}`, style: "primary" }]);
+  kb.push([{ text: "🔙 هاست‌ها", callback_data: "hfdhosts" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  await edit(lines.join("\n").slice(0, 3500), kb);
+}
+async function renderDailyRotLog(edit, kv) {
+  let log = [];
+  try { log = (await kv.get("host_filter_log", "json")) || []; } catch (e) { log = []; }
+  const rows = (Array.isArray(log) ? log : []).filter((e) => e && (e.kind === "dailyrot" || e.kind === "dailyrot_revert")).slice(0, 12);
+  const lines = ["📜 گزارش چرخش روزانه", ""];
+  if (!rows.length) lines.push("📭 هنوز چرخشی ثبت نشده.");
+  for (const e of rows) {
+    const t = e.ts ? ndFmtTs(e.ts) : "?";
+    const ev = Array.isArray(e.events) ? e.events.map((x) => `${x.field}:${x.from}➜${x.to}`).join("، ") : "";
+    lines.push("• " + t + " — " + (e.remark || e.host_id || "") + (ev ? "\n  " + ev : "") + (e.error ? "\n  ⚠️ " + String(e.error).slice(0, 80) : ""));
+  }
+  await edit(lines.join("\n").slice(0, 3500), [[{ text: "🔙 بازگشت", callback_data: "hfd" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+}
 async function renderHostFilterHosts(edit, kv, env) {
   const panels = await getPanels(kv);
   const cfg = await getHostFilterCfg(kv);
