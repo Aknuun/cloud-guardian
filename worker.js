@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.17";
+const BOT_VERSION = "1.9.18";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.18": [
+    "🔧 فیکس back handler: try-catch تو در تو برای target و fallback menu + ارسال پیام ساده در صورت شکست کامل",
+  ],
   "1.9.17": [
     "🔧 فیکس هندلر back: try-catch fallback به منو اگر target خطا دهد (رفع خطای داخلی «back»)",
   ],
@@ -13119,7 +13122,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: target }, botToken, adminId, kv, env, (depth || 0) + 1);
     } catch (e) {
       // اگر target هم خطا داد، برو منو
-      await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: "menu" }, botToken, adminId, kv, env, (depth || 0) + 1);
+      try {
+        await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: "menu" }, botToken, adminId, kv, env, (depth || 0) + 1);
+      } catch (e2) {
+        // اگر منو هم شکست خورد، پیام خطا ساده بفرست
+        await sendMessage(botToken, adminId, "❌ خطای داخلی در back handler. به منو برگردید: /start");
+      }
     }
     return;
   }
