@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.18";
+const BOT_VERSION = "1.9.19";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.19": [
+    "📊 فیکس ردیابی write: quota flushها هم تحت ردیابی (meter) — کاهش «سایر (ثبت‌نشده)»",
+    "⚡ interval پیش‌فرض ۶۰دقیقه فعال — write روزانه هاست‌فیلتر ~نصف",
+  ],
   "1.9.18": [
     "🔧 فیکس back handler: try-catch تو در تو برای target و fallback menu + ارسال پیام ساده در صورت شکست کامل",
   ],
@@ -3504,7 +3508,8 @@ async function qFlushSnap(kv, key, field, counts) {
     if (!b || typeof b !== "object") b = {};
     if (!b[field] || typeof b[field] !== "object") b[field] = {};
     for (const n of Object.keys(counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(counts[n]);
-    await kv.put(key, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+    // فلش خودِ quota هم تحت ردیابی (meter)
+    await qKvCount(kv, "meter").put(key, JSON.stringify(b), { expirationTtl: 4 * 86400 });
     try { qCountSync(kv, (d) => "qw:" + d, "w", "meter"); } catch (e) {}
   } catch (e) {}
 }
@@ -3532,7 +3537,8 @@ async function qwFlushNow(kv) {
       if (!b || typeof b !== "object") b = {};
       if (!b[f] || typeof b[f] !== "object") b[f] = {};
       for (const n of Object.keys(acc.counts)) b[f][n] = (Number(b[f][n]) || 0) + Number(acc.counts[n]);
-      await kv.put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
+      // فلش quota خودِ کوانتا هم تحت ردیابی (meter)
+      await qKvCount(kv, "meter").put(k, JSON.stringify(b), { expirationTtl: 4 * 86400 });
       try { memSet("qb:" + f, { day, counts: {}, flush: Date.now() }, 15 * 60000); } catch (e) {}
     } catch (e) {}
   }
