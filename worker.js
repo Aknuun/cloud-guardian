@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.13";
+const BOT_VERSION = "1.9.14";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.14": [
+    "⚡ interval پیش‌فرض ۶۰دقیقه (بود ۲۵) — write روزانه هاست‌فیلتر <نیم",
+    "🛡 saveHostFilterCfg با memGet guard — فقط در تغییر واقعی بنویس",
+    "📦 بکاپ مشروط (hfStoreSnapshotFrom) — فقط در تغییر بنویس",
+    "📝 hostFilterLog بنویس‌باجه (هر ۱۰ رویداد یک write) — کاهش ۹۰٪ write لاگ",
+  ],
   "1.9.13": [
     "📋 لیست هاست‌ها: سه ستون جداگانه (Host | Address | Network) با استثنای جداگانه هر فیلد",
   ],
@@ -21497,7 +21503,7 @@ async function getHostFilterCfg(kv) {
   if (!sel.length) sel = IR_CITIES.slice();
   return {
     enabled: cfg.enabled !== false,
-    intervalMin: Math.max(1, Number(cfg.intervalMin) || 25),
+    intervalMin: Math.max(1, Number(cfg.intervalMin) || 60),
     iv25: cfg.iv25 === true,
     cities: Math.min(Math.max(1, Number(cfg.cities) || HOSTFILTER_DEFAULT_CITIES), sel.length),
     citiesSel: sel,
@@ -21520,7 +21526,12 @@ async function getHostFilterCfg(kv) {
 }
 
 async function saveHostFilterCfg(kv, cfg) {
-  await kvPutCached(kv, "host_filter_cfg", JSON.stringify(cfg), undefined, 30000);
+  const json = JSON.stringify(cfg);
+  // فقط اگر تغییر کرده بنویس (کاهش write روزانه)
+  const prev = memGet("kv:host_filter_cfg");
+  if (prev !== undefined && prev === json) return;
+  await kvPutCached(kv, "host_filter_cfg", json, undefined, 30000);
+  memSet("kv:host_filter_cfg", json);
 }
 
 async function getHostStateAll(kv) {
@@ -21537,12 +21548,24 @@ async function saveHostStateAll(kv, s) {
 }
 
 async function hostFilterLog(kv, entry) {
-  let log = await kvGetCached(kv, "host_filter_log", "json", 30000);
-  if (!Array.isArray(log)) log = [];
-  log = log.slice();
-  log.unshift(entry);
-  if (log.length > HOSTFILTER_MAX_LOG) log = log.slice(0, HOSTFILTER_MAX_LOG);
-  await kvPutCached(kv, "host_filter_log", JSON.stringify(log), undefined, 30000);
+  // بنویس و بنویس باجه (batch): در حافظه شمارش کن، هر ۱۰ ورودی یک بار در KV بنویس
+  const HF_LOG_BATCH = 10;
+  const counterKey = "kv:hflog_counter";
+  const bufferKey = "kv:hflog_buffer";
+  let buf = memGet(bufferKey) || [];
+  buf.unshift(entry);
+  let cnt = (memGet(counterKey) || 0) + 1;
+  memSet(counterKey, cnt);
+  memSet(bufferKey, buf);
+  if (cnt >= HF_LOG_BATCH) {
+    // flush به KV
+    let log = await kvGetCached(kv, "host_filter_log", "json", 30000);
+    if (!Array.isArray(log)) log = [];
+    log = buf.concat(log).slice(0, HOSTFILTER_MAX_LOG);
+    await kvPutCached(kv, "host_filter_log", JSON.stringify(log), undefined, 30000);
+    memSet(counterKey, 0);
+    memSet(bufferKey, []);
+  }
 }
 
 function isDomainLike(v) {
@@ -22001,7 +22024,7 @@ async function hostFilterRevert(kv, env, panelId, hostId) {
 // آیا ران کامل الان موعد است؟ (خالص — روی last_run، بدون هیچ write)
 function hfDue(lastRunIso, intervalMin, nowMs) {
   const lastMs = lastRunIso ? Date.parse(lastRunIso) : 0;
-  if (lastMs && nowMs - lastMs < Math.max(1, Number(intervalMin) || 25) * 60000) return false;
+  if (lastMs && nowMs - lastMs < Math.max(1, Number(intervalMin) || 60) * 60000) return false;
   return true;
 }
 function hfIsReality(host) {
@@ -22058,6 +22081,12 @@ async function hfStoreSnapshotFrom(kv, cfg, label, hostItems) {
     hosts.push({ panel_id: it.panel.id, host_id: it.host.id, remark: it.host.remark, address: it.orig.address || [], sni: it.orig.sni || [], host: it.orig.host || [] });
   }
   const backups = await getHfBackups(kv);
+  // فقط اگر تغییر کرده بکاپ بگیر (مقایسه با آخرین بکاپ)
+  const last = backups[0];
+  const hostsJson = JSON.stringify(hosts);
+  if (last && last.hosts && JSON.stringify(last.hosts) === hostsJson) {
+    return null; // تغییری نکرد، بکاپ نگیر
+  }
   const entry = { id: makeToken() + makeToken(), ts: new Date().toISOString(), label: label || "خودکار", count: hosts.length, hosts };
   backups.unshift(entry);
   while (backups.length > cfg.backupKeep) backups.pop();
