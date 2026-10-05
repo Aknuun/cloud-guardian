@@ -13112,7 +13112,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.put(`navhist:${chatId}:${messageId}`, JSON.stringify(hist.slice(-8)), { expirationTtl: 86400 });
     } catch (e) {}
     if ((depth || 0) > 2) return edit("⏳ برگشتی نیست.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
-    await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: target }, botToken, adminId, kv, env, (depth || 0) + 1);
+    try {
+      await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: target }, botToken, adminId, kv, env, (depth || 0) + 1);
+    } catch (e) {
+      // اگر target هم خطا داد، برو منو
+      await handleCallback({ ...cb, id: `nb${Date.now().toString(36)}`, data: "menu" }, botToken, adminId, kv, env, (depth || 0) + 1);
+    }
     return;
   }
 
