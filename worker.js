@@ -7347,7 +7347,7 @@ async function renderSrvDetail(edit, kv, env, idx) {
     [{ text: "🔄 ریبوت", callback_data: `srvreboot:${idx}` }, { text: "⏱ آپدیت و آپگرید", callback_data: `srvupd:${idx}` }],
     [{ text: "ℹ️ مشخصات سیستم", callback_data: `srvinfo:${idx}` }, { text: "💾 فضای دیسک", callback_data: `srvdisk:${idx}` }],
     [{ text: "✏️ ویرایش", callback_data: `srvedit:${idx}` }, { text: "🗑 حذف", callback_data: `srvdelx:${s.id}`, style: "danger" }],
-    [{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }],
+    [{ text: "🔙 بازگشت", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }],
   ];
   await edit(lines.join("\n"), kb);
 }
