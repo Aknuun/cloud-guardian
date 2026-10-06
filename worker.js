@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.19";
+const BOT_VERSION = "1.9.20";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.20": [
+    "🔧 یک‌جاسازی هشدارهای حجم در وبهوک: یک پیام جمعی برای هر پنل به جای پیام جداگانه برای هر کاربر",
+  ],
   "1.9.19": [
     "📊 فیکس ردیابی write: quota flushها هم تحت ردیابی (meter) — کاهش «سایر (ثبت‌نشده)»",
     "⚡ interval پیش‌فرض ۶۰دقیقه فعال — write روزانه هاست‌فیلتر ~نصف",
@@ -9014,13 +9017,58 @@ async function handlePgHook(token, payload, env, botToken) {
         to.add(ev.ownerTg);
       }
       await qAlert(kv, "pghook");
+      // جمع‌آوری هشدارهای این پنل برای ارسال یک‌جا (consolidated)
+      if (!panelAlerts) panelAlerts = new Map();
+      const key = panel.id;
+      if (!panelAlerts.has(key)) panelAlerts.set(key, { panel, alerts: [], recipients: new Set() });
+      const pa = panelAlerts.get(key);
+      pa.recipients = new Set([...pa.recipients, ...to]);
       for (const j of batch) {
-        for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: ev.username, kind: j.kind, value: j.value, expireTs: ev.expireTs, usedTraffic: ev.usedTraffic, dataLimit: ev.dataLimit, status: ev.status, owner: ev.owner, renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
-        }
+        pa.alerts.push({ username: ev.username, kind: j.kind, value: j.value, expireTs: ev.expireTs, status: ev.status, owner: ev.owner });
       }
       if (!to.size) {
         try { logE("PGHOOK_NORECIP", panel.id + " :: " + ev.username); } catch (e) {}
+      }
+    }
+    // ارسال یک‌جای هشدارهای تجمیع شده برای هر پنل
+    if (panelAlerts && panelAlerts.size > 0) {
+      const cfgLocal = cfg;
+      for (const [, pa] of panelAlerts) {
+        const panel = pa.panel;
+        const recipients = Array.from(pa.recipients);
+        if (!recipients.length) continue;
+        const byUser = new Map();
+        for (const a of pa.alerts) {
+          const key = a.username;
+          if (!byUser.has(key)) byUser.set(key, { username: a.username, value: 0, expireTs: a.expireTs, status: a.status, owner: a.owner });
+          const entry = byUser.get(key);
+          if (a.kind === "usage" && a.value > entry.value) entry.value = a.value;
+          if (a.expireTs) entry.expireTs = a.expireTs;
+          if (a.status) entry.status = a.status;
+        }
+        const lines = ["📊 هشدار حجم — پنل " + (panel.name || panel.id), ""];
+        for (const u of byUser.values()) {
+          lines.push("👤 " + u.username + " — " + u.value + "%");
+        }
+        lines.push("", "⏱ " + fmtJalali(Date.now()));
+        const text = lines.join("\n");
+        const firstUser = byUser.values().next().value;
+        const kb = [];
+        if (firstUser) {
+          const un = String(firstUser.username || "").slice(0, 200);
+          const row = [];
+          if (pgPanelBot(cfgLocal, panel.id)) {
+            row.push({ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=" + pgPanelBot(cfgLocal, panel.id) + "&text=" + encodeURIComponent(un), style: "success" });
+          }
+          const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
+          if (pbase) {
+            row.push({ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/#/users?search=" + encodeURIComponent(un), style: "primary" });
+          }
+          if (row.length) kb.push(row);
+        }
+        for (const id of pa.recipients) {
+          await sendMessage(botToken, id, text, kb.length ? { inline_keyboard: kb } : undefined).catch(() => {});
+        }
       }
     }
     if (anyJob) {
