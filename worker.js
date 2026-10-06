@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.22";
+const BOT_VERSION = "1.9.23";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.23": [
+    "⚡ لاگ ران هاست‌فیلتر با یک write آخر ران (به‌جای write به‌ازای هر دامین)",
+    "📊 writeهای خام (کرش‌لاگ و دیباگ) هم تحت ردیابی سهمیه رفتند",
+    "🖥 افزودن سرور از ساب‌دامنه: انتخاب چندتایی از دامنه‌ها/منتخب‌ها + رمز یکی برای همه",
+    "🎯 ساب مرجع SNI در چرخش روزانه: رکورد SNI جدید با منبع ساب اول ساخته می‌شود",
+  ],
   "1.9.22": [
     "🔙 فیکس ریشه‌ای دکمه‌های بازگشت: answerCallbackQuery تحمل‌پذیر + مقصد صریح در ویرایش رکورد، لیست رکوردها، صندوق ایمیل، جستجو، سرور هتزنر/لینود",
   ],
@@ -1624,7 +1630,7 @@ export default {
         runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
           console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
           try {
-            await env.BOT_KV.put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
+            await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
           } catch (x) {}
         })
       );
@@ -3517,9 +3523,8 @@ async function qFlushSnap(kv, key, field, counts) {
     if (!b || typeof b !== "object") b = {};
     if (!b[field] || typeof b[field] !== "object") b[field] = {};
     for (const n of Object.keys(counts)) b[field][n] = (Number(b[field][n]) || 0) + Number(counts[n]);
-    // فلش خودِ quota هم تحت ردیابی (meter)
+    // خود فلاش از طریق wrapper شمرده می‌شود (meter)؛ صدای صریح اضافه حذف شد (شمارش تکراری).
     await qKvCount(kv, "meter").put(key, JSON.stringify(b), { expirationTtl: 4 * 86400 });
-    try { qCountSync(kv, (d) => "qw:" + d, "w", "meter"); } catch (e) {}
   } catch (e) {}
 }
 // لاگ موقت خطای سرریز (۱.۸.۹۱): نمونه ۱۵٪، TTL یک‌ساعته، بعد از تشخیص پاک می‌شود
@@ -3527,7 +3532,7 @@ async function dbgLogErr(env, e, where) {
   try {
     const kv = env && env.BOT_KV;
     if (!kv || Math.random() >= 0.15) return;
-    await kv.put("dbg_err:" + Date.now().toString(36) + Math.floor(Math.random() * 99), JSON.stringify({ at: new Date().toISOString(), where, err: String((e && e.stack) || e).slice(0, 400) }), { expirationTtl: 3600 });
+    await qKvCount(kv, "meter").put("dbg_err:" + Date.now().toString(36) + Math.floor(Math.random() * 99), JSON.stringify({ at: new Date().toISOString(), where, err: String((e && e.stack) || e).slice(0, 400) }), { expirationTtl: 3600 });
   } catch (x) {}
 }
 // فلاش فوری شمارنده‌های همین ایزوله (برای تازگی صفحه‌های سهمیه) — حداکثر ۲ write
@@ -4919,7 +4924,8 @@ async function resolveIPs(name, kv) {
     }
     if (ips.length > 0) break;
   }
-  if (kv && ips.length) await kvPutCached(kv, cacheKey, JSON.stringify(ips), { expirationTtl: 3600 }, 3600000);
+  // کش ۶ ساعته (بود ۱ ساعت): ساب‌ها به‌ندرت آی‌پی عوض می‌کنند؛ جهش‌های دوره‌ای re-cache کم می‌شود.
+  if (kv && ips.length) await kvPutCached(kv, cacheKey, JSON.stringify(ips), { expirationTtl: 21600 }, 21600000);
   return ips;
 }
 
@@ -7137,6 +7143,124 @@ async function srvBulkAdd(kv, pairs) {
   return { added: addedHosts.length, addedHosts, skipped, total: pairs.length };
 }
 
+// ---------- افزودن سرور از ساب‌دامنه ----------
+// منبع: دامنه‌ها (رکوردهای A/AAAA/CNAME) یا منتخب‌ها؛ انتخاب چندتایی ✅/⬜،
+// بعد رمز یکی برای همه (تایپ یا رمز ذخیره‌شده)، بعد افزودن گروهی.
+async function renderSrvSubSrc(edit) {
+  await edit("➕ افزودن سرور از ساب‌دامنه\n\nساب‌ها از کجا بیایند؟", [
+    [{ text: "📁 از دامنه‌ها", callback_data: "srvsubzone" }],
+    [{ text: "⭐ از منتخب‌ها", callback_data: "srvsubfav" }],
+    [{ text: "⬅️ انصراف", callback_data: "srv" }],
+  ]);
+}
+
+async function renderSrvSubZones(edit, kv, env) {
+  const accounts = await getAccounts(kv, env);
+  const zones = await getAllZones(accounts, kv);
+  if (!zones.length) return edit("📭 دامنه‌ای یافت نشد.", [[{ text: "🔙 بازگشت", callback_data: "srvsub" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  const kb = grid2(zones.map((z) => ({ text: `📁 ${z.name}`, callback_data: `srvsubz:${z._acc}:${z.id}` })));
+  kb.push([{ text: "🔙 بازگشت", callback_data: "srvsub" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  await edit("📁 دامنه را انتخاب کنید:", kb);
+}
+
+async function renderSrvSubPick(edit, kv, chatId) {
+  const st = await kv.get(`srvsub:${chatId}`, "json");
+  if (!st || !Array.isArray(st.items) || !st.items.length) {
+    await kv.delete(`srvsub:${chatId}`);
+    return edit("⏳ نشست منقضی شده.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
+  }
+  const items = st.items;
+  const chosen = new Set(st.ids || []);
+  const pages = Math.max(1, Math.ceil(items.length / RECORD_PAGE_SIZE));
+  let page = st.page || 0;
+  if (page < 0) page = 0;
+  if (page >= pages) page = pages - 1;
+  st.page = page;
+  await kv.put(`srvsub:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+  const slice = items.slice(page * RECORD_PAGE_SIZE, page * RECORD_PAGE_SIZE + RECORD_PAGE_SIZE);
+  const base = page * RECORD_PAGE_SIZE;
+  const kb = [];
+  for (let i = 0; i < slice.length; i += 2) {
+    const row = [];
+    for (let j = i; j < i + 2; j++) {
+      if (j < slice.length) {
+        const idx = base + j;
+        row.push({ text: `${chosen.has(idx) ? "✅" : "⬜"} ${slice[j].label}`, callback_data: `srvsubsel:${idx}` });
+      } else row.push(EMPTY_BTN);
+    }
+    kb.push(row);
+  }
+  const nav = [];
+  nav.push(page > 0 ? { text: "◀️", callback_data: `srvsubpg:${page - 1}` } : EMPTY_BTN);
+  nav.push({ text: `📄 ${page + 1}/${pages}`, callback_data: "noop" });
+  nav.push(page < pages - 1 ? { text: "▶️", callback_data: `srvsubpg:${page + 1}` } : EMPTY_BTN);
+  kb.push(nav);
+  kb.push([
+    { text: `✅ افزودن (${chosen.size})`, callback_data: "srvsubsave" },
+    { text: "❌ انصراف", callback_data: "srvsubcancel" },
+  ]);
+  await edit(`➕ افزودن سرور از ساب‌دامنه — ${st.title}\n\nساب‌ها را انتخاب کنید (⬜ → ✅):`, kb);
+}
+
+// ساب‌های منتخب را به کاندیدای سرور (نام + آی‌پی) تبدیل می‌کند.
+async function srvSubCandidates(kv, accounts, items) {
+  const out = [];
+  let skipped = 0;
+  for (const it of items) {
+    let content = it.content || "";
+    let type = String(it.type || "").toUpperCase();
+    if (it.fav) {
+      try {
+        const rec = await getRecordById(it.fav.acc, it.fav.zone_id, it.fav.record_id, accounts);
+        if (!rec) { skipped++; continue; }
+        content = rec.content || "";
+        type = String(rec.type || type).toUpperCase();
+      } catch (e) { skipped++; continue; }
+    }
+    let ip = "";
+    if ((type === "A" || type === "AAAA") && isIpLike(String(content || ""))) ip = String(content);
+    else {
+      try {
+        const ips = await resolveIPs(String(it.name || ""), kv);
+        if (ips && ips[0] && isIpLike(String(ips[0]))) ip = String(ips[0]);
+      } catch (e) {}
+    }
+    if (!ip) { skipped++; continue; }
+    out.push({ name: it.name, host: ip, port: 22 });
+  }
+  return { out, skipped };
+}
+
+async function srvSubFinish(kv, chatId, pw) {
+  const st = await kv.get(`srvsubsel:${chatId}`, "json");
+  const cands = (st && st.cands) || [];
+  const skipped = (st && st.skipped) || 0;
+  const list = await getServersList(kv);
+  const have = new Set(list.map((s) => `${String(s.host || "").toLowerCase()}:${s.port || 22}`));
+  let added = 0, dup = 0;
+  for (const c of cands) {
+    const key = `${String(c.host).toLowerCase()}:${c.port || 22}`;
+    if (have.has(key)) { dup++; continue; }
+    have.add(key);
+    list.push({
+      id: makeToken() + makeToken(),
+      name: String(c.name).slice(0, 60),
+      host: c.host,
+      port: c.port || 22,
+      user: "root",
+      note: `افزوده از ساب‌دامنه ${c.name}`,
+      auth: pw ? "pass" : "none",
+      password: pw || "",
+      created: Date.now(),
+    });
+    added++;
+  }
+  if (added) await saveServersList(kv, list);
+  await kv.delete(`srvsubsel:${chatId}`);
+  await kv.delete(`srvsub:${chatId}`);
+  return { added, dup, skipped };
+}
+
 async function renderSrvPw(edit, kv) {
   const pws = await getSrvPasswords(kv);
   const lines = [
@@ -7343,7 +7467,10 @@ async function renderServersHome(edit, kv, env) {
     { text: "📥 افزودن گروهی", callback_data: "srvaddbulk" },
     { text: "➕ افزودن سرور", callback_data: "srvadd" },
   ]);
-  kb.push([{ text: "📥 وارد کردن از دیتاسنترها", callback_data: "srvimport" }]);
+  kb.push([
+    { text: "➕ افزودن از ساب‌دامنه", callback_data: "srvsub" },
+    { text: "📥 وارد کردن از دیتاسنترها", callback_data: "srvimport" },
+  ]);
   if (list.length) kb.push([{ text: "🗑 حذف سرور", callback_data: "srvdel" }]);
   kb.push([
     { text: "📊 مانیتور سرورها", callback_data: "srvmon" },
@@ -11440,6 +11567,19 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  if (type === "srv_sub_pw") {
+    // رمز یکی برای همهٔ سرورهای انتخاب‌شده از ساب‌دامنه («-» یعنی بدون رمز)
+    await kv.delete(`pend:${chatId}`);
+    const pw = txt === "-" ? "" : txt;
+    const r = await srvSubFinish(kv, chatId, pw);
+    await send(
+      `✅ ${r.added} سرور اضافه شد.${r.dup ? ` (${r.dup} تکراری رد شد)` : ""}${r.skipped ? ` (${r.skipped} بدون آی‌پی رد شد)` : ""}` +
+        (pw ? "" : "\n\n⚠️ چون رمز ندادی، برای هر سرور از «✏️ ویرایش» احراز هویت را تنظیم کن."),
+      [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }], [{ text: "🏠 خانه", callback_data: "menu" }]]
+    );
+    return;
+  }
+
   if (type === "srv_relay_set") {
     // ثبت/تغییر رلهٔ SSH توسط خود کاربر: آدرس → توکن → تست اتصال
     if (pending.step === "url") {
@@ -12108,6 +12248,37 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       return;
     }
     it.prefix = v;
+    await saveDailyRotCfg(kv, cfg);
+    await renderDailyRotSet(send, kv, env, pending.pid, pending.hid);
+    return;
+  }
+  if (type === "hfd_ref") {
+    await kv.delete(`pend:${chatId}`);
+    const cfg = await getDailyRotCfg(kv);
+    const it = cfg.items[hfdItemKey(pending.pid, pending.hid)];
+    if (!it) {
+      await send("⏳ نشست منقضی شد.", mainMenuKeyboard());
+      return;
+    }
+    const v = txt.trim().toLowerCase();
+    if (v === "-") {
+      delete it.refSub;
+      await saveDailyRotCfg(kv, cfg);
+      await renderDailyRotSet(send, kv, env, pending.pid, pending.hid);
+      return;
+    }
+    const panels = await getPanels(kv);
+    const panel = panels.find((p) => String(p.id) === String(pending.pid));
+    const accounts = await getAccounts(kv, env);
+    const r = panel ? await hfdPanelHosts(kv, panel) : { error: "x" };
+    const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(pending.hid)) : null;
+    const subs = host ? ["address", "sni", "host"].flatMap((f) => (Array.isArray(host[f]) ? host[f].map((x) => String(x).toLowerCase()) : [])) : [];
+    if (!subs.includes(v)) {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_ref", pid: pending.pid, hid: pending.hid }), { expirationTtl: 600 });
+      await send("⚠️ این ساب در هاست نیست. یکی از ساب‌های فعلی را بفرستید (یا «-» برای حذف):", [[{ text: "⬅️ انصراف", callback_data: `hfdset:${pending.pid}:${pending.hid}` }]]);
+      return;
+    }
+    it.refSub = v;
     await saveDailyRotCfg(kv, cfg);
     await renderDailyRotSet(send, kv, env, pending.pid, pending.hid);
     return;
@@ -15575,6 +15746,71 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         `🔐 رمز پیش‌فرض root برای ${fresh.length} سرور جدید را بفرستید (یکی برای همه؛ اگر رمزها فرق دارند «-» بفرستید تا بعداً از «✏️ ویرایش» هر سرور تنظیم کنید):`,
         [[{ text: "⬅️ انصراف", callback_data: "srv" }]]
       );
+    } else if (data === "srvsub") {
+      await renderSrvSubSrc(edit);
+    } else if (data === "srvsubzone") {
+      await renderSrvSubZones(edit, kv, env);
+    } else if (data.startsWith("srvsubz:")) {
+      const parts = data.split(":");
+      const acc = Number(parts[1]);
+      const zoneId = parts.slice(2).join(":");
+      const zone = await getZoneById(zoneId, acc, accounts);
+      if (!zone) return edit("❌ دامنه پیدا نشد.", [[{ text: "🔙 بازگشت", callback_data: "srvsubzone" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      const records = await getRecords(zone, accounts, kv);
+      const subs = records.filter((r) => ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
+      if (!subs.length) return edit(`📭 ساب مناسب در ${zone.name} نیست.`, [[{ text: "🔙 بازگشت", callback_data: "srvsubzone" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      const labels = duplicateLabels(subs, zone.name);
+      const items = subs.map((r) => ({ label: labels[r.id] || r.name, name: r.name, type: r.type, content: r.content }));
+      await kv.put(`srvsub:${chatId}`, JSON.stringify({ title: zone.name, items, ids: [], page: 0 }), { expirationTtl: 3600 });
+      await renderSrvSubPick(edit, kv, chatId, 0);
+    } else if (data === "srvsubfav") {
+      const favs = await getFavs(kv, chatId);
+      if (!favs.length) return edit("📭 سابی در منتخب‌ها نیست.", [[{ text: "🔙 بازگشت", callback_data: "srvsub" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      const items = favs.map((f) => ({ label: `${favShortName(f)}-${favTypeShort(f)} — ${f.zone_name}`, name: f.name, type: f.type, fav: { zone_id: f.zone_id, zone_name: f.zone_name, acc: f.acc, record_id: f.record_id } }));
+      await kv.put(`srvsub:${chatId}`, JSON.stringify({ title: "منتخب‌ها", items, ids: [], page: 0 }), { expirationTtl: 3600 });
+      await renderSrvSubPick(edit, kv, chatId, 0);
+    } else if (data.startsWith("srvsubsel:")) {
+      const idx = Number(data.slice(10));
+      const st = (await kv.get(`srvsub:${chatId}`, "json")) || { ids: [], page: 0 };
+      if (!st.items || !st.items[idx]) return edit("⏳ نشست منقضی شده.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
+      const ids = st.ids || [];
+      const at = ids.indexOf(idx);
+      if (at >= 0) ids.splice(at, 1);
+      else ids.push(idx);
+      st.ids = ids;
+      await kv.put(`srvsub:${chatId}`, JSON.stringify(st), { expirationTtl: 3600 });
+      await renderSrvSubPick(edit, kv, chatId, st.page || 0);
+    } else if (data.startsWith("srvsubpg:")) {
+      await renderSrvSubPick(edit, kv, chatId, Number(data.slice(10)) || 0);
+    } else if (data === "srvsubsave") {
+      const st = await kv.get(`srvsub:${chatId}`, "json");
+      const ids = (st && st.ids) || [];
+      if (!st || !ids.length) return edit("⚠️ چیزی انتخاب نشده.", [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      await edit("⏳ در حال آماده‌سازی…");
+      const sel = ids.map((x) => st.items[x]).filter(Boolean);
+      const { out, skipped } = await srvSubCandidates(kv, accounts, sel);
+      if (!out.length) {
+        await kv.delete(`srvsub:${chatId}`);
+        return edit(`⚠️ آی‌پی معتبری از انتخاب‌ها به دست نیامد.${skipped ? ` (${skipped} رد شد)` : ""}`, [[{ text: "🔙 بازگشت", callback_data: "srv" }]]);
+      }
+      await kv.put(`srvsubsel:${chatId}`, JSON.stringify({ cands: out, skipped }), { expirationTtl: 3600 });
+      await kv.delete(`srvsub:${chatId}`);
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_sub_pw" }), { expirationTtl: 900 });
+      const pws = await getSrvPasswords(kv);
+      const kb = pws.map((p, i) => [{ text: `🔑 رمز ${i + 1} (${maskPw(p)})`, callback_data: `srvsubpw:${i}` }]);
+      kb.push([{ text: "⬅️ انصراف", callback_data: "srv" }]);
+      await edit(`🔐 رمز root برای ${out.length} سرور را بفرستید (یکی برای همه؛ «-» یعنی بدون رمز؛ یا یکی از رمزهای ذخیره‌شده):`, kb);
+    } else if (data === "srvsubcancel") {
+      await kv.delete(`srvsub:${chatId}`);
+      await renderServersHome(edit, kv, env);
+    } else if (data.startsWith("srvsubpw:")) {
+      const i = Number(data.slice(9));
+      const pws = await getSrvPasswords(kv);
+      const password = pws[i];
+      if (!password) return edit("❌ رمز پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
+      await kv.delete(`pend:${chatId}`);
+      const r = await srvSubFinish(kv, chatId, password);
+      await edit(`✅ ${r.added} سرور اضافه شد.${r.dup ? ` (${r.dup} تکراری رد شد)` : ""}${r.skipped ? ` (${r.skipped} بدون آی‌پی رد شد)` : ""}`, [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "srvtermius") {
       // خروجی CSV سرورها با قالب ایمپورت Termius
       const list = await getServersList(kv);
@@ -16326,7 +16562,23 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const parts = data.split(":");
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_pre", pid: parts[1], hid: parts[2] }), { expirationTtl: 600 });
       await edit("✏️ پیشوند دستی مبنا را بفرستید (حروف کوچک انگلیسی؛ خالی = خودکار):", [[{ text: "⬅️ انصراف", callback_data: `hfdset:${parts[1]}:${parts[2]}` }]]);
-    } else if (data.startsWith("hfdrev:")) {
+    } else if (data.startsWith("hfdref:")) {
+      const parts = data.split(":");
+      const cfg = await getDailyRotCfg(kv);
+      const it = cfg.items[hfdItemKey(parts[1], parts[2])];
+      if (!it) return edit("❌ این هاست منتخب نیست.", [[{ text: "🔙 بازگشت", callback_data: "hfdhosts" }]]);
+      const panels = await getPanels(kv);
+      const panel = panels.find((p) => String(p.id) === String(parts[1]));
+      const accounts = await getAccounts(kv, env);
+      const r = panel ? await hfdPanelHosts(kv, panel) : { error: "x" };
+      const host = !r.error ? (r.hosts || []).find((h) => String(h.id) === String(parts[2])) : null;
+      const subs = host ? ["address", "sni", "host"].flatMap((f) => (Array.isArray(host[f]) ? host[f].map((x) => String(x)) : [])) : [];
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hfd_ref", pid: parts[1], hid: parts[2] }), { expirationTtl: 600 });
+      await edit(
+        "🎯 ساب مرجع SNI را بفرستید (نام کامل ساب؛ موقع چرخش، رکورد SNI جدید با منبع همین ساب ساخته می‌شود؛ «-» یعنی حذف):" +
+          (subs.length ? "\n\nساب‌های فعلی:\n" + subs.map((s) => "• " + s).join("\n") : ""),
+        [[{ text: "⬅️ انصراف", callback_data: `hfdset:${parts[1]}:${parts[2]}` }]]
+      );    } else if (data.startsWith("hfdrev:")) {
       const parts = data.split(":");
       await edit("⏳ در حال برگشت به مقادیر قبلی…");
       const rr = await hfdRevert(env, parts[1], parts[2]);
@@ -21654,6 +21906,15 @@ async function hostFilterLog(kv, entry) {
   }
 }
 
+// نوشتن دسته‌ای لاگ در یک write (برای آخر ران‌ها): ترتیب newest-first حفظ می‌شود.
+async function hostFilterLogMany(kv, entries) {
+  if (!entries || !entries.length) return;
+  let log = await kvGetCached(kv, "host_filter_log", "json", 30000);
+  if (!Array.isArray(log)) log = [];
+  log = entries.slice().reverse().concat(log).slice(0, HOSTFILTER_MAX_LOG);
+  await kvPutCached(kv, "host_filter_log", JSON.stringify(log), undefined, 30000);
+}
+
 function isDomainLike(v) {
   return typeof v === "string" && /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(v) && !/^\d{1,3}(\.\d{1,3}){3}$/.test(v);
 }
@@ -22499,7 +22760,13 @@ async function runDailySubRotate(env, opts = {}) {
           continue;
         }
         const vl = String(val).toLowerCase();
-        const src = recs.filter((r) => String(r.name || "").toLowerCase() === vl && ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
+        let src = recs.filter((r) => String(r.name || "").toLowerCase() === vl && ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
+        // ساب مرجع: رکورد SNI جدید با منبع ساب مرجع ساخته می‌شود (مچ SNI با منبع ساب اول)؛
+        // اگر ساب مرجع در این زون رکوردی نداشت، رفتار قبلی (منبع خود ساب) حفظ می‌شود.
+        if (field === "sni" && it.refSub) {
+          const refSrc = recs.filter((r) => String(r.name || "").toLowerCase() === String(it.refSub).toLowerCase() && ["A", "AAAA", "CNAME"].includes(String(r.type || "").toUpperCase()));
+          if (refSrc.length) src = refSrc;
+        }
         const cr = await cfCreateRecords(zone, fn.name, src.length ? src : null, accounts, kv, val);
         if (cr.error) {
           await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "dailyrot", panel_id: pid, host_id: hid, field, from: String(val).slice(0, 80), error: "create_fail: " + String(cr.error).slice(0, 120) });
@@ -22872,6 +23139,10 @@ async function runHostFilter(env, opts = {}) {
   const ipCache = {};
   const ipNotices = await getHostIpNoticeAll(kv);
   let ipNoticesDirty = false;
+  // بافر لاگ این ران: همه رویدادها آخر ران با یک write ذخیره می‌شوند (به‌جای write
+  // به‌ازای هر دامین). برای کال‌بک‌های تکی (revert/restore) همان hostFilterLog فوری است.
+  const pendingLogs = [];
+  const hfLog = (e) => { pendingLogs.push(e); };
   // پاک‌سازی latch آی‌پی‌های بهبودیافته: سابی که این ران سالم برگشته از subs کم می‌شود
   // تا قطعی بعدیِ همون آی‌پی دوباره هشدار بدهد (فقط ساب‌های همین ران بررسی‌شده).
   if (Object.keys(ipNotices).length) {
@@ -22954,7 +23225,7 @@ async function runHostFilter(env, opts = {}) {
         // ضداسپم: هشدار هر دامنه فقط یک‌بار در ۲۴ ساعت می‌آید (بررسی دستی همیشه پیام می‌دهد).
         const hfIsReal = hfIsReality(item.host);
         if (hfIsReal && field !== "address") {
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv, field, reason: "REALITY" });
+          hfLog({ ts: new Date().toISOString(), kind: "protected_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv, field, reason: "REALITY" });
           const prevP = ipNotices[dv];
           const freshP =
             prevP &&
@@ -22975,7 +23246,7 @@ async function runHostFilter(env, opts = {}) {
         }
         // Fastly: مثل قبل فقط هشدار (با همان ضداسپم یک‌بار در ۲۴ ساعت)، مگر تعویض Fastly روشن باشد.
         if (!cfg.realityRotate && !hfIsReal && hfIsFastly(item.host, dv)) {
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: "Fastly" });
+          hfLog({ ts: new Date().toISOString(), kind: "protected", panel_id: item.panel.id, host_id: item.host.id, from: dv, reason: "Fastly" });
           const prevP = ipNotices[dv];
           const freshP =
             prevP &&
@@ -23051,7 +23322,7 @@ async function runHostFilter(env, opts = {}) {
               "🔕 برای همین دوره فقط یک‌بار می‌آید؛ پس از سالم‌شدن آی‌پی، دورهٔ بعدی دوباره خبر می‌دهد.\n" +
               "⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران";
             await hfNotify(botToken, admins, txt);
-            await hostFilterLog(kv, { ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
+            hfLog({ ts: new Date().toISOString(), kind, panel_id: item.panel.id, host_id: item.host.id, from: dv, ip: diag.ip, foreignFail: diag.foreignFail });
           }
           // ساب را زیر نظر latch نگه دار (حتی در حالت suppress) تا تعویض/بهبود، latch را آزاد کند.
           // فقط وقتی چیزی واقعاً عوض شده dirty می‌شود تا ران‌های تکراری write اضافه نزنند.
@@ -23074,7 +23345,7 @@ async function runHostFilter(env, opts = {}) {
 
         // For sni/host camouflage values only rotate our own zones; alert otherwise.
         if (field !== "address" && !zoneForName(zones, dv)) {
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "external_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv });
+          hfLog({ ts: new Date().toISOString(), kind: "external_sni", panel_id: item.panel.id, host_id: item.host.id, from: dv });
           await hfNotify(
             botToken,
             admins,
@@ -23090,12 +23361,12 @@ async function runHostFilter(env, opts = {}) {
         }
         const nn = await hostFilterNewName(zones, accounts, kv, dv);
         if (nn.error) {
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "new_name_fail", from: dv, error: nn.error });
+          hfLog({ ts: new Date().toISOString(), kind: "new_name_fail", from: dv, error: nn.error });
           continue;
         }
         const cr = await cfCreateRecords(nn.zone, nn.name, nn.source, accounts, kv, dv);
         if (cr.error) {
-          await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "create_fail", from: dv, to: nn.name, error: cr.error });
+          hfLog({ ts: new Date().toISOString(), kind: "create_fail", from: dv, to: nn.name, error: cr.error });
           continue;
         }
         repl[dv] = nn.name;
@@ -23110,7 +23381,7 @@ async function runHostFilter(env, opts = {}) {
     const put = await panelPutHost(item.panel, item.token, item.host);
     if (put.error) {
       for (const ev of events) {
-        await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "put_fail", host_id: item.host.id, from: ev.from, to: ev.to, error: put.error });
+        hfLog({ ts: new Date().toISOString(), kind: "put_fail", host_id: item.host.id, from: ev.from, to: ev.to, error: put.error });
       }
       continue;
     }
@@ -23136,7 +23407,7 @@ async function runHostFilter(env, opts = {}) {
     lines.push("⏱ " + ndFmtTs(new Date().toISOString()) + " به وقت ایران");
     const kb = [[{ text: "↩️ دامنهٔ قبلی را جایگزین کن", callback_data: "hfrev:" + key }]];
     await hfNotify(botToken, admins, lines.join("\n"), kb);
-    await hostFilterLog(kv, { ts: new Date().toISOString(), kind: "rotated", panel_id: item.panel.id, host_id: item.host.id, remark: item.host.remark, events });
+    hfLog({ ts: new Date().toISOString(), kind: "rotated", panel_id: item.panel.id, host_id: item.host.id, remark: item.host.remark, events });
     for (const ev of events) {
       if (ipNotices[ev.from]) {
         delete ipNotices[ev.from];
@@ -23165,6 +23436,8 @@ async function runHostFilter(env, opts = {}) {
     }
     if (ipNoticesDirty || pruned) await saveHostIpNoticeAll(kv, ipNotices);
   }
+  // فلاش لاگ‌های بافرشده این ران با یک write (به‌جای write به‌ازای هر دامین)
+  if (pendingLogs.length) await hostFilterLogMany(kv, pendingLogs);
   // ران‌های بدون تعویض چیزی برای ذخیره ندارند (کاهش write روزانه)
   if (JSON.stringify(states) !== statesJson0) await saveHostStateAll(kv, states);
   cfg.last_run = new Date().toISOString();
@@ -23487,6 +23760,12 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
   if (manualTouched) lines.push("✏️ مقدار زنده با آخرین چرخش فرق دارد (دستی عوض شده)؛ چرخش بعدی با مقدار جدید ادامه می‌دهد.");
   lines.push("");
   lines.push("🎨 پسوند: " + (HFD_STYLE_FA[it.style] || it.style) + " · جداکننده: " + (it.sep === "" ? "بدون" : "-") + (it.prefix ? " · پیشوند دستی: " + it.prefix : ""));
+  if (it.refSub) {
+    const allLive = ["address", "sni", "host"].flatMap((f) => (host && Array.isArray(host[f]) ? host[f].map((x) => String(x).toLowerCase()) : []));
+    const refOk = allLive.includes(String(it.refSub).toLowerCase());
+    lines.push("🎯 ساب مرجع SNI: " + it.refSub + (refOk ? "" : " (در هاست نیست!)"));
+  }
+  if (it.last_run) lines.push("🕐 آخرین چرخش: " + ndFmtTs(it.last_run));
   if (it.last_run) lines.push("🕐 آخرین چرخش: " + ndFmtTs(it.last_run));
   if (it.prev && Object.keys(it.prev).length) lines.push("↩️ قبلی برای برگشت موجود است.");
   const kb = [];
@@ -23496,6 +23775,7 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
     { text: "🔣 جدا: " + (it.sep === "" ? "بدون" : "-"), callback_data: `hfdsep:${pid}:${hid}` },
   ]);
   kb.push([{ text: "✏️ پیشوند دستی", callback_data: `hfdpre:${pid}:${hid}` }]);
+  kb.push([{ text: `🎯 ساب مرجع SNI${it.refSub ? ": " + String(it.refSub).slice(0, 24) : ""}`, callback_data: `hfdref:${pid}:${hid}` }]);
   if (it.prev && Object.keys(it.prev).length) kb.push([{ text: "↩️ برگشت به قبلی", callback_data: `hfdrev:${pid}:${hid}`, style: "primary" }]);
   kb.push([{ text: "🔙 هاست‌ها", callback_data: "hfdhosts" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
