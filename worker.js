@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.25";
+const BOT_VERSION = "1.9.26";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.26": [
+    "🚨 هشدار نود تکی شد: گیت مشترک ۱۰ دقیقه‌ای برای پول/وبهook/چند مانیتور + وصل‌شدن همیشه اعلام می‌شود",
+  ],
   "1.9.25": [
     "🚨 هشدارهای فوری (۱۰۰٪) یکی شدن: بافر ۳ دقیقه‌ای KV + فلاش کرون دقیقه‌ای؛ باگ کرش panelAlerts و کیبورد تودرتو هم رفع شد",
   ],
@@ -8050,9 +8053,28 @@ function ndFmtTs(iso) {
 }
 // سقف هشدار نود: هر نود حداکثر هر ۳۰ دقیقه یک هشدار قطع/وصل می‌گیرد (نوسان مکرر = اسپم پیام + write اضافه).
 const ND_ALERT_COOLDOWN_MS = 30 * 60000;
-function ndShouldAlert(prevNode, nowMs) {
+const ND_QUIET_MS = 10 * 60000;
+function ndShouldAlert(prevNode, nowMs, dir) {
   const t = prevNode && prevNode.last_alert ? Date.parse(prevNode.last_alert) : 0;
-  return !(t > 0) || nowMs - t >= ND_ALERT_COOLDOWN_MS;
+  if (!(t > 0)) return true;
+  // وصل‌شدن (ریکاوری) همیشه اعلام می‌شود، مگر تازه همین را گفته باشیم —
+  // وگرنه قطعی اعلام می‌شود ولی وصل‌شدنِ چند دقیقه بعدش با سقف ۳۰ دقیقه گم می‌شود.
+  if (dir === "up" && prevNode.last_dir !== "up") return true;
+  return nowMs - t >= ND_ALERT_COOLDOWN_MS;
+}
+// گیت مشترک ضدتکرار هشدار نود (۱۰ دقیقه، در KV): همهٔ منابع هشدار (چند مانیتور
+// روی یک پنل، کرون‌های ۱ و ۱۰ دقیقه‌ای هم‌زمان، وبهوک+پول) از یک کلید استفاده
+// می‌کنند تا یک رویداد فقط یک پیام بدهد. از سقف ۳۰ دقیقه‌ای تنگ‌تر است، پس
+// هشدار مشروع بعدی را عقب نمی‌اندازد. روی خطای KV باز است (هشدار گم نشود).
+async function ndGate(kv, panelId, name, dir) {
+  if (!kv) return true;
+  const key = `ndq:${panelId}:${name}:${dir}`;
+  try {
+    const v = await kv.get(key, "text");
+    if (v !== null && v !== undefined && Date.now() - Number(v) < ND_QUIET_MS) return false;
+    await kv.put(key, String(Date.now()), { expirationTtl: 3600 });
+  } catch (e) { return true; }
+  return true;
 }
 // خالص‌سازی یک پول نود: تکراری‌های هم‌نام داخل یک پاسخ فقط یک‌بار حساب می‌شوند؛
 // نود تازه هشدار نمی‌خواهد (فقط dirty)؛ نودی که از لیست پنل افتاده حفظ می‌شود.
@@ -8082,6 +8104,7 @@ function ndApplyPoll(prevNodes, list, now) {
       ts: now,
       first_seen: (prev && prev.first_seen) || now,
       last_alert: (prev && prev.last_alert) || null,
+      last_dir: (prev && prev.last_dir) || null,
     };
   }
   return { next, events, hasNew };
@@ -8138,6 +8161,7 @@ async function nodeSyncFromPanel(m, kv) {
       ts: now,
       first_seen: (prev && prev.first_seen) || now,
       last_alert: (prev && prev.last_alert) || null,
+      last_dir: (prev && prev.last_dir) || null,
     };
   }
   st.ts = now;
@@ -8193,8 +8217,10 @@ async function runNodePoll(env, opts) {
       for (const ev of poll.events) {
         if ((m.excluded || []).includes(ev.name)) continue;
         stDirty = true; // قطع/وصل — وضعیت همیشه ذخیره می‌شود، ولی هشدار سقف ۳۰دقیقه‌ای دارد
-        if (ndShouldAlert(st.nodes[ev.name], Date.now())) {
+        if (ndShouldAlert(st.nodes[ev.name], Date.now(), ev.dir)) {
           const n = ev.node, name = ev.name, dir = ev.dir;
+          // گیت مشترک: مانیتور دوم/سوم همین پنل یا کرون موازی، همین رویداد را دوباره نفرستد
+          if (!(await ndGate(kv, panel.id, name, dir))) continue;
           const ts = ndFmtTs(now);
           const msg =
             dir === "down"
@@ -8203,6 +8229,7 @@ async function runNodePoll(env, opts) {
           // پین فقط برای قطعی (وصل‌شدن پیام می‌گیرد ولی پین/write اضافه نه)
           for (const a of admins) await sendPanelMsg(botToken, a, msg, kv, dir === "down");
           poll.next[name].last_alert = now;
+          poll.next[name].last_dir = dir;
         }
       }
       for (const name of Object.keys(poll.next)) st.nodes[name] = poll.next[name];
@@ -9480,7 +9507,8 @@ async function handleNodeEvent(token, payload, env, botToken) {
     if (!dir) return;
     const st = await getNodeState(kv, m.id);
     const cur = st.nodes[nodeName];
-    if (cur && cur.status === dir) return;
+    // پول وضعیت‌های خام API را ذخیره می‌کند («offline» و...)، پس مقایسهٔ خام کافی نیست
+    if (cur && (cur.status === dir || nodeStatusDir(cur.status) === dir)) return;
     const hookIp = payload.ip || payload.address || (cur && cur.address) || null;
     st.nodes[nodeName] = {
       name: nodeName,
@@ -9489,6 +9517,8 @@ async function handleNodeEvent(token, payload, env, botToken) {
       reason: reason ? String(reason) : null,
       ts: new Date().toISOString(),
       first_seen: (cur && cur.first_seen) || new Date().toISOString(),
+      last_alert: new Date().toISOString(),
+      last_dir: dir,
     };
     st.ts = st.nodes[nodeName].ts;
     await saveNodeState(kv, m.id, st);
@@ -9497,6 +9527,8 @@ async function handleNodeEvent(token, payload, env, botToken) {
     const admins = await getAdmins(kv, env);
     const panelName = (panel && panel.name) || m.name;
     const ts = ndFmtTs(st.nodes[nodeName].ts);
+    // گیت مشترک با پول: همان رویداد از دو مسیر، دو پیام نشود
+    if (!(await ndGate(kv, panel.id, nodeName, dir))) return;
     const msg =
       (dir === "down"
         ? `🚨 نود قطع شد!\n🖥 پنل: ${code(panelName)}\n🖧 نود: ${code(nodeName)}${hookIp ? `\n🌐 آیپی: ${code(String(hookIp))}` : ""}\n⏱ زمان: ${ts} به وقت ایران\n🔎 علت: ${reason ? code(String(reason)) : "—"}`
