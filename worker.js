@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.23";
+const BOT_VERSION = "1.9.24";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.24": [
+    "🖥 افزودن سرور از ساب‌دامنه: ساب‌های هم‌آی‌پی (سرور مشترک) دیگر تکراری حساب نمی‌شوند؛ فقط اسم تکراری رد می‌شود",
+  ],
   "1.9.23": [
     "⚡ لاگ ران هاست‌فیلتر با یک write آخر ران (به‌جای write به‌ازای هر دامین)",
     "📊 writeهای خام (کرش‌لاگ و دیباگ) هم تحت ردیابی سهمیه رفتند",
@@ -7236,10 +7239,12 @@ async function srvSubFinish(kv, chatId, pw) {
   const cands = (st && st.cands) || [];
   const skipped = (st && st.skipped) || 0;
   const list = await getServersList(kv);
-  const have = new Set(list.map((s) => `${String(s.host || "").toLowerCase()}:${s.port || 22}`));
+  // تکراری = هم‌نام بودن: چند ساب می‌توانند روی یک سرور/آی‌پی مشترک باشند و
+  // هر کدام ورودی جدا می‌خواهند؛ فقط اسم تکراری رد می‌شود (نه آی‌پی مشترک).
+  const have = new Set(list.map((s) => String(s.name || "").toLowerCase()));
   let added = 0, dup = 0;
   for (const c of cands) {
-    const key = `${String(c.host).toLowerCase()}:${c.port || 22}`;
+    const key = String(c.name).toLowerCase();
     if (have.has(key)) { dup++; continue; }
     have.add(key);
     list.push({
