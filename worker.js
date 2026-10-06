@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.21";
+const BOT_VERSION = "1.9.22";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.22": [
+    "🔙 فیکس ریشه‌ای دکمه‌های بازگشت: answerCallbackQuery تحمل‌پذیر + مقصد صریح در ویرایش رکورد، لیست رکوردها، صندوق ایمیل، جستجو، سرور هتزنر/لینود",
+  ],
   "1.9.21": [
     "🔧 fix auto-update: ensure KV_ID binding and CF_ACCOUNTS env vars deployed for self-update cron",
   ],
@@ -5208,9 +5211,9 @@ async function renderRecordDetail(kv, accounts, edit, chatId, token, recordId, b
       callback_data: `rtraf:${token}:${recordId}`,
     },
   ]);
-  // بازگشت پایین + خانه سمت راستش
+  // بازگشت پایین + خانه سمت راستش (backCb مسیر واقعی لیست قبلی است: جستجو/زون/منتخب/...)
   detailKb.push([
-    { text: "🔙 بازگشت", callback_data: "back" },
+    { text: "🔙 بازگشت", callback_data: backCb || "back" },
     { text: "🏠 خانه", callback_data: "menu" },
   ]);
   await edit(text, detailKb);
@@ -9518,11 +9521,11 @@ async function renderRecords(zone, records, token, page, send, selected, backCb)
     nav.push(page < pages - 1 ? { text: "▶️", callback_data: `selp:${token}:${page + 1}` } : EMPTY_BTN);
   } else {
     nav.push(page > 0 ? { text: "◀️", callback_data: `p:${token}:${page - 1}` } : EMPTY_BTN);
-    nav.push(pages > 1 ? { text: `📄 ${page + 1}/${pages}`, callback_data: "noop" } : { text: "🔙 بازگشت", callback_data: "back" });
+    nav.push(pages > 1 ? { text: `📄 ${page + 1}/${pages}`, callback_data: "noop" } : { text: "🔙 بازگشت", callback_data: backCb || "back" });
     nav.push(page < pages - 1 ? { text: "▶️", callback_data: `p:${token}:${page + 1}` } : EMPTY_BTN);
   }
   keyboard.push(nav);
-  if (pages > 1 && selected === undefined) keyboard.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  if (pages > 1 && selected === undefined) keyboard.push([{ text: "🔙 بازگشت", callback_data: backCb || "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
 
   const title = selected !== undefined
     ? `🗂 ${zone.name} — ${selSet.size} انتخاب شده`
@@ -10142,7 +10145,7 @@ async function renderFmailBox(edit, kv, acc, zoneId, accounts) {
       aliases.slice(i, i + 3).map((p, j) => ({ text: `🗑 ${p}`, callback_data: `fmailaliasdel:${acc}:${zoneId}:${i + j}` }))
     );
   }
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: "fmail" }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(lines.join("\n").slice(0, 3500), kb);
 }
 async function renderFmailOne(edit, kv, acc, zoneId, id, accounts) {
@@ -13044,7 +13047,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const inlineMessageId = cb.inline_message_id || null;
   let data = cb.data || "";
 
-  await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+  // بستن اسپینر دکمه best-effort است: در فراخوانی‌های داخلی (back و...) آیدی جعلی
+  // است و خطای تلگرام نباید کل هندلر را بکشد (از ۱.۹.۱۱ که tg روی خطا throw می‌کند).
+  try {
+    await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
+  } catch (e) {}
 
   if (!chatId && !inlineMessageId) return;
 
@@ -13682,7 +13689,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`🔍 جستجو در ${zoneName}\n\nبر اساس چه چیزی جستجو کنیم؟`, [
         [{ text: "🔤 بر اساس نام/دامنه", callback_data: `zsf:${token}:name` }],
         [{ text: "🌐 بر اساس IP/مقدار", callback_data: `zsf:${token}:content` }],
-        [{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }],
+        [{ text: "🔙 بازگشت", callback_data: `z:${session.acc}:${session.zone_id}` }, { text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (data.startsWith("zsf:")) {
       const parts = data.split(":");
@@ -19639,7 +19646,7 @@ async function showHzServerInfo(hzAccounts, i, serverId, edit, kv) {
     { text: "🔄 بروزرسانی", callback_data: `hzsi:${i}:${serverId}` },
     { text: "🗑 حذف سرور", callback_data: `hzsu:${i}:${serverId}:del`, style: "danger" },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `hzs:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
@@ -20101,7 +20108,7 @@ async function showLnServerInfo(lnAccounts, i, serverId, edit) {
     { text: "❌ IPv6", callback_data: `lnsu:${i}:${serverId}:u6` },
     { text: "🗑 حذف سرور", callback_data: `lnsu:${i}:${serverId}:del` },
   ]);
-  kb.push([{ text: "🔙 بازگشت", callback_data: "back" }, { text: "🏠 خانه", callback_data: "menu" }]);
+  kb.push([{ text: "🔙 بازگشت", callback_data: `lns:${i}:0` }, { text: "🏠 خانه", callback_data: "menu" }]);
   await edit(text, kb);
 }
 
