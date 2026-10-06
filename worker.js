@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.24";
+const BOT_VERSION = "1.9.25";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.25": [
+    "🚨 هشدارهای فوری (۱۰۰٪) یکی شدن: بافر ۳ دقیقه‌ای KV + فلاش کرون دقیقه‌ای؛ باگ کرش panelAlerts و کیبورد تودرتو هم رفع شد",
+  ],
   "1.9.24": [
     "🖥 افزودن سرور از ساب‌دامنه: ساب‌های هم‌آی‌پی (سرور مشترک) دیگر تکراری حساب نمی‌شوند؛ فقط اسم تکراری رد می‌شود",
   ],
@@ -1639,6 +1642,8 @@ export default {
       );
       ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
       ctx.waitUntil(runDailySubRotate({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hfd") }).catch((e) => console.error("DAILYROT", String(e))));
+      // فلاش بافر هشدارهای فوری (حداکثر ۳ دقیقه تأخیر تا پیام جمعی)
+      ctx.waitUntil(pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))));
     }
   },
 
@@ -9021,6 +9026,101 @@ function pgRenewBotKb(renewbot) {
 function pgRenewBotLine(renewbot) {
   return renewbot ? `\n\n📦 پیام‌های اتمام حجم را هم در ربات ${renewbot} می‌گیری — اون را هم استارت بزن:` : "";
 }
+// بافر کوتاه‌مدت هشدارهای فوری (۱۰۰٪ / ۰ روز) در KV: وبهوک‌های جدا (هر کاربر
+// یک ریکوئست) حداکثر پنجرهٔ زیر نگه داشته می‌شوند تا یک پیام جمعی بروند —
+// وگرنه هر وبهوک یک پیام جدا می‌شود. فلاش با کرون هر دقیقه + فرصت‌طلبانه.
+const PG_URG_WIN_MS = 3 * 60000;
+const PG_URG_MAXBTN = 25;
+async function pgUbPush(kv, panelId, items) {
+  if (!kv || !panelId || !items || !items.length) return null;
+  const key = `pgub:${panelId}`;
+  let buf = null;
+  try { buf = await kv.get(key, "json"); } catch (e) {}
+  if (!buf || typeof buf !== "object" || !Array.isArray(buf.items)) buf = { ts: Date.now(), items: [] };
+  buf.items.push(...items);
+  try { await kv.put(key, JSON.stringify(buf), { expirationTtl: 3600 }); } catch (e) {}
+  return buf;
+}
+async function pgUbFlush(env, botToken, adminId, force) {
+  const kv = env && env.BOT_KV;
+  if (!kv || !botToken) return 0;
+  let cfg = null, panels = [];
+  try {
+    cfg = await getPgHookCfg(kv);
+    if (!cfg || !cfg.enabled) return 0;
+    panels = await getPanels(kv);
+  } catch (e) { return 0; }
+  const pids = Object.keys(cfg.panels || {});
+  if (!pids.length) return 0;
+  let sent = 0;
+  for (const pid of pids) {
+    const key = `pgub:${pid}`;
+    let buf = null;
+    try { buf = await kv.get(key, "json"); } catch (e) {}
+    if (!buf || !Array.isArray(buf.items) || !buf.items.length) continue;
+    if (!force && Date.now() - Number(buf.ts || 0) < PG_URG_WIN_MS) continue;
+    const panel = panels.find((x) => String(x.id) === String(pid));
+    try { await kv.delete(key); } catch (e) {}
+    if (!panel) continue;
+    // گروه‌بندی بر اساس ادمین (مثل دایجست): ادمین اصلی همه، هر لینک‌شده فقط خودش
+    const byOwner = {};
+    for (const a of buf.items) {
+      const ok = a.owner || "";
+      (byOwner[ok] = byOwner[ok] || []).push(a);
+    }
+    const fmtLine = (a) => a.kind === "usage"
+      ? `• ${a.username} — ${a.value}٪`
+      : `• ${a.username} — انقضا ${pgUbHours(a)} ساعت`;
+    const renewbot = pgPanelBot(cfg, pid);
+    const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
+    const dash = (pgDashOf(cfg, pid) && String(pgDashOf(cfg, pid)).startsWith("/")) ? pgDashOf(cfg, pid) : "/dashboard";
+    const btnRows = [];
+    const btnUsers = buf.items.slice(0, PG_URG_MAXBTN);
+    for (const u of btnUsers) {
+      const un = String(u.username || "").slice(0, 200);
+      if (!un) continue;
+      const row = [];
+      if (renewbot) row.push({ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=" + renewbot + "&text=" + encodeURIComponent(un), style: "success" });
+      if (pbase) row.push({ text: "🖥 تمدید با پنل", url: pbase + dash + "/#/users?search=" + encodeURIComponent(un), style: "primary" });
+      if (row.length) btnRows.push(row);
+    }
+    const kb = btnRows.length ? btnRows : undefined;
+    const total = buf.items.length;
+    const head = `🚨 هشدار فوری — پنل ${(panel.name || pid)} (${faNum(total)})`;
+    const adminTo = new Set();
+    for (const a of buf.items) for (const id of a.to || []) if (Number(id) === Number(adminId)) adminTo.add(Number(id));
+    if (adminTo.size && !cfg.silent_me) {
+      try {
+        if (await pgStarted(kv, adminId)) {
+          const txt = head + "\n\n" + buf.items.map(fmtLine).join("\n") + "\n\n⏱ " + fmtJalali(Date.now());
+          for (const ch of chunkText(txt)) { try { await sendMessage(botToken, adminId, ch, kb); } catch (e) {} }
+          sent++;
+        }
+      } catch (e) {}
+    }
+    for (const on of Object.keys(byOwner)) {
+      if (!on) continue;
+      const arr = byOwner[on];
+      const recips = new Set();
+      for (const a of arr) for (const id of a.to || []) if (Number(id) !== Number(adminId)) recips.add(id);
+      const started = [];
+      for (const x of recips) { try { if (await pgStarted(kv, x)) started.push(x); } catch (e) {} }
+      if (!started.length) continue;
+      const txt = head + "\n\n" + arr.map(fmtLine).join("\n") + "\n\n⏱ " + fmtJalali(Date.now());
+      for (const id of started) {
+        for (const ch of chunkText(txt)) { try { await sendMessage(botToken, id, ch, kb); } catch (e) {} }
+      }
+      sent++;
+    }
+  }
+  return sent;
+}
+function pgUbHours(a) {
+  try {
+    if (a.expireTs && Number(a.expireTs) > Date.now()) return Math.floor((Number(a.expireTs) - Date.now()) / 3600000);
+  } catch (e) {}
+  return Math.max(0, Math.floor(Number(a.value) * 24));
+}
 async function pgSendAlert(botToken, to, panel, a, test) {
   const head = a.kind === "usage" ? "📊 هشدار حجم" : "🔔 هشدار انقضا";
   const lines = [(test ? "🧪 تستی — " : "") + head, "🖥 پنل: " + code(panel.name || panel.id), ""];
@@ -9155,60 +9255,19 @@ async function handlePgHook(token, payload, env, botToken) {
         to.add(ev.ownerTg);
       }
       await qAlert(kv, "pghook");
-      // جمع‌آوری هشدارهای این پنل برای ارسال یک‌جا (consolidated)
-      if (!panelAlerts) panelAlerts = new Map();
-      const key = panel.id;
-      if (!panelAlerts.has(key)) panelAlerts.set(key, { panel, alerts: [], recipients: new Set() });
-      const pa = panelAlerts.get(key);
-      pa.recipients = new Set([...pa.recipients, ...to]);
-      for (const j of batch) {
-        pa.alerts.push({ username: ev.username, kind: j.kind, value: j.value, expireTs: ev.expireTs, status: ev.status, owner: ev.owner });
-      }
+      // بافر ۳ دقیقه‌ای KV: وبهوک‌های جداگانهٔ همین پنل یک پیام جمعی می‌شوند
+      // (به‌جای یک پیام به‌ازای هر کاربر). گیت pgGate بالا ضداسپم را نگه می‌دارد.
+      await pgUbPush(kv, panel.id, batch.map((j) => ({
+        username: ev.username, kind: j.kind, value: j.value,
+        expireTs: ev.expireTs || null, status: ev.status || "",
+        owner: ev.owner || "", to: Array.from(to),
+      })));
       if (!to.size) {
         try { logE("PGHOOK_NORECIP", panel.id + " :: " + ev.username); } catch (e) {}
       }
     }
-    // ارسال یک‌جای هشدارهای تجمیع شده برای هر پنل
-    if (panelAlerts && panelAlerts.size > 0) {
-      const cfgLocal = cfg;
-      for (const [, pa] of panelAlerts) {
-        const panel = pa.panel;
-        const recipients = Array.from(pa.recipients);
-        if (!recipients.length) continue;
-        const byUser = new Map();
-        for (const a of pa.alerts) {
-          const key = a.username;
-          if (!byUser.has(key)) byUser.set(key, { username: a.username, value: 0, expireTs: a.expireTs, status: a.status, owner: a.owner });
-          const entry = byUser.get(key);
-          if (a.kind === "usage" && a.value > entry.value) entry.value = a.value;
-          if (a.expireTs) entry.expireTs = a.expireTs;
-          if (a.status) entry.status = a.status;
-        }
-        const lines = ["📊 هشدار حجم — پنل " + (panel.name || panel.id), ""];
-        for (const u of byUser.values()) {
-          lines.push("👤 " + u.username + " — " + u.value + "%");
-        }
-        lines.push("", "⏱ " + fmtJalali(Date.now()));
-        const text = lines.join("\n");
-        const firstUser = byUser.values().next().value;
-        const kb = [];
-        if (firstUser) {
-          const un = String(firstUser.username || "").slice(0, 200);
-          const row = [];
-          if (pgPanelBot(cfgLocal, panel.id)) {
-            row.push({ text: "🔄 تمدید با ربات", url: "tg://resolve?domain=" + pgPanelBot(cfgLocal, panel.id) + "&text=" + encodeURIComponent(un), style: "success" });
-          }
-          const pbase = String((panel && panel.url) || "").replace(/\/+$/, "");
-          if (pbase) {
-            row.push({ text: "🖥 تمدید با پنل", url: pbase + "/dashboard/#/users?search=" + encodeURIComponent(un), style: "primary" });
-          }
-          if (row.length) kb.push(row);
-        }
-        for (const id of pa.recipients) {
-          await sendMessage(botToken, id, text, kb.length ? { inline_keyboard: kb } : undefined).catch(() => {});
-        }
-      }
-    }
+    // فلاش فرصت‌طلبانهٔ بافرهای رسیده (مستقل از کرون دقیقه‌ای)
+    try { await pgUbFlush(env, botToken, adminId, false); } catch (e) {}
     if (anyJob) {
       for (const m of markKeys) {
         try {
@@ -9253,14 +9312,14 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
       if (r.dirty) {
         try { await kv.put(skey, JSON.stringify({ reported: st.reported, lastSent: st.lastSent || 0, lastCount: st.lastCount || 0 })); } catch (e) {}
       }
-      // بحران‌های تازه: فوری (نادر)
+      // بحران‌های تازه: فوری (نادر) — به بافر ۳ دقیقه‌ای می‌روند تا یک پیام جمعی شوند
+      const ubItems = [];
       for (const u of r.urg) {
         const to = new Set(await pgRecipients(kv, env, adminId, panel.id, u.ownerName || "", null));
         await qAlert(kv, "pghook");
-        for (const id of to) {
-          await pgSendAlert(botToken, id, panel, { username: u.username, kind, value: u.value, owner: u.ownerName || "", renewbot: pgPanelBot(cfg, panel.id), dashpath: pgDashOf(cfg, panel.id) }, false);
-        }
+        ubItems.push({ username: u.username, kind, value: u.value, expireTs: null, status: "", owner: u.ownerName || "", to: Array.from(to) });
       }
+      if (ubItems.length) await pgUbPush(kv, panel.id, ubItems);
       if (!r.fresh.length) continue;
       total += r.fresh.length;
       perPanel[panel.id] = r.fresh.length;
@@ -9294,6 +9353,8 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
         }
       }
     }
+    // فلاش فرصت‌طلبانهٔ بافر فوری (مستقل از کرون دقیقه‌ای)
+    try { await pgUbFlush(env, botToken, adminId, false); } catch (e) {}
     if (!total) return;
     try { await kv.put(lastKey, JSON.stringify({ ts: Date.now(), count: total, panels: perPanel })); } catch (e) {}
   } catch (e) {
