@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.0.0";
+const BOT_VERSION = "2.0.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.0.1": [
+    "📋 دستور نصب ایجنت در همه پیام‌ها mono شد: با یک ضربه کپی می‌شود",
+  ],
   "2.0.0": [
     "🖥️ معماری جدید ایجنت سرور: همه کارهای سنگین روی سرور مشتری (جایگزین رله) + اجرای هاست‌فیلتر فاز ۳ روی ایجنت",
     "📩 هشدار حجم/انقضا تکی برای هر کاربر با دو دکمه (🔄 تمدید با ربات · 🖥️ تمدید با پنل)؛ heartbeat، حالت اضطراری خودکار و دکمه آپدیت ایجنت",
@@ -7141,7 +7144,7 @@ async function runGuardianWatchdog(env, botToken, adminId) {
     try { qAlert(kv, "guardian"); } catch (e) {}
     const admins = await guardianAdmins(kv, env);
     const wb = await guardianWorkerBase(kv, env);
-    const cmd = guardianInstallCmd(wb, cfg.token);
+    const cmd = code(guardianInstallCmd(wb, cfg.token));
     const msg = [
       "⚠️ حالت اضطراری: سرور جواب نداد",
       "",
@@ -7188,7 +7191,7 @@ async function maybeGuardianMigrationNotice(env, botToken, adminId) {
   const admins = await guardianAdmins(kv, env);
   if (!admins.length) return;
   const wb = await guardianWorkerBase(kv, env);
-  const cmd = guardianInstallCmd(wb, tok);
+  const cmd = code(guardianInstallCmd(wb, tok));
   const msg = [
     "🖥 خبر مهم نسخهٔ v" + BOT_VERSION,
     "",
@@ -14269,7 +14272,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       let wb = "";
       try { wb = await guardianWorkerBase(kv, env); } catch (e) {}
-      const cmd = guardianInstallCmd(wb, gCfg.token);
+      const cmd = code(guardianInstallCmd(wb, gCfg.token));
       await edit(
         [
           "🖥 نصب ایجنت روی سرور",
@@ -14304,7 +14307,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         } else {
           let wb2 = "";
           try { wb2 = await guardianWorkerBase(kv, env); } catch (e) {}
-          await edit("❌ ایجنت جواب نداد (" + String(r.error || "unknown") + "). اگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + guardianInstallCmd(wb2, gCfg2.token), gBack2);
+          await edit("❌ ایجنت جواب نداد (" + String(r.error || "unknown") + "). اگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + code(guardianInstallCmd(wb2, gCfg2.token)), gBack2);
         }
       }
     } else if (data === "hubstats") {
