@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.29";
+const BOT_VERSION = "1.9.30";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.30": [
+    "📥 وارد کردن از دیتاسنترها دیگر گیر نمی‌کند: خواندن موازی هر ۳ پرووایدر + ریجن‌های موازی آروان + کش ریجن",
+  ],
   "1.9.29": [
     "🔔 فقط هشدار ۹۵٪ حجم و ۱ روز مانده می‌آید؛ اتمام حجم/تاریخ ساکت شد + هر عبور فقط یک پیام (rep مشترک وبهوک و دایجست)",
   ],
@@ -7414,46 +7417,68 @@ function srvListBtn(list) {
 
 // جمع‌آوری سرورهای هر سه دیتاسنتر برای «وارد کردن به سرورها»
 async function collectProviderServers(kv, env, hzAccounts, lnAccounts, arvanAccounts) {
-  const items = [];
+  // هر سه پرووایدر موازی (قبلاً سریال بود و جمع تایم‌اوتها پیام را روی
+  // «در حال خواندن…» گیر می‌انداخت)؛ خرابی یکی، بقیه را متوقف نمی‌کند.
   const counts = { hz: 0, ln: 0, arvan: 0 };
-  for (const acc of hzAccounts || []) {
-    try {
-      const arr = (await hzGetAll(acc.token, "/servers")) || [];
-      counts.hz += arr.length;
-      for (const s of arr) {
-        const ip = s && s.public_net && s.public_net.ipv4 ? s.public_net.ipv4.ip : "";
-        if (!ip) continue;
-        items.push({ src: "hetzner", srcFa: "🇩🇪 هتزنر", name: s.name || ip, host: ip, port: 22, user: "root" });
-      }
-    } catch (e) {}
-  }
-  for (const acc of lnAccounts || []) {
-    try {
-      const arr = (await lnGetAll(acc.token, "/linode/instances")) || [];
-      counts.ln += arr.length;
-      for (const s of arr) {
-        const ip = s && s.ipv4 && s.ipv4[0];
-        if (!ip) continue;
-        items.push({ src: "linode", srcFa: "🟢 لینود", name: s.label || ip, host: ip, port: 22, user: "root" });
-      }
-    } catch (e) {}
-  }
-  for (let ai = 0; ai < (arvanAccounts || []).length; ai++) {
-    try {
-      const regs = (await arvanGetRegions(arvanAccounts[ai].token, kv, env)) || [];
-      for (const rg of regs) {
-        try {
-          const r = await arvanEccServers({ kv, env, arvanAccounts }, ai, rg.code);
-          if (r.error || !r.servers) continue;
-          counts.arvan += r.servers.length;
-          for (const s of r.servers) {
+  const hzJob = (async () => {
+    const out = [];
+    for (const acc of hzAccounts || []) {
+      try {
+        const arr = (await hzGetAll(acc.token, "/servers")) || [];
+        counts.hz += arr.length;
+        for (const s of arr) {
+          const ip = s && s.public_net && s.public_net.ipv4 ? s.public_net.ipv4.ip : "";
+          if (!ip) continue;
+          out.push({ src: "hetzner", srcFa: "🇩🇪 هتزنر", name: s.name || ip, host: ip, port: 22, user: "root" });
+        }
+      } catch (e) {}
+    }
+    return out;
+  })();
+  const lnJob = (async () => {
+    const out = [];
+    for (const acc of lnAccounts || []) {
+      try {
+        const arr = (await lnGetAll(acc.token, "/linode/instances")) || [];
+        counts.ln += arr.length;
+        for (const s of arr) {
+          const ip = s && s.ipv4 && s.ipv4[0];
+          if (!ip) continue;
+          out.push({ src: "linode", srcFa: "🟢 لینود", name: s.label || ip, host: ip, port: 22, user: "root" });
+        }
+      } catch (e) {}
+    }
+    return out;
+  })();
+  const arvanJob = (async () => {
+    const out = [];
+    for (let ai = 0; ai < (arvanAccounts || []).length; ai++) {
+      try {
+        // ریجن‌های کش‌شده (۲۴ ساعته) + خواندن موازی ریجن‌ها با سقف ۴
+        const regs = (await arvanGetRegionsCached(ai, arvanAccounts[ai].token, kv, env, false)) || [];
+        const perRegion = await hfPMap(regs, async (rg) => {
+          try {
+            const r = await arvanEccServers({ kv, env, arvanAccounts }, ai, rg.code);
+            if (r.error || !r.servers) return [];
+            return r.servers;
+          } catch (e2) { return []; }
+        }, 4);
+        for (const servers of perRegion) {
+          counts.arvan += servers.length;
+          for (const s of servers) {
             const ip = (s.pub && s.pub[0]) || (s.priv && s.priv[0]);
             if (!ip || ip === "—") continue;
-            items.push({ src: "arvan", srcFa: "🇮🇷 آروان", name: s.name || ip, host: ip, port: 22, user: "root" });
+            out.push({ src: "arvan", srcFa: "🇮🇷 آروان", name: s.name || ip, host: ip, port: 22, user: "root" });
           }
-        } catch (e2) {}
-      }
-    } catch (e) {}
+        }
+      } catch (e) {}
+    }
+    return out;
+  })();
+  const [hzRes, lnRes, arvanRes] = await Promise.allSettled([hzJob, lnJob, arvanJob]);
+  const items = [];
+  for (const r of [hzRes, lnRes, arvanRes]) {
+    if (r && r.status === "fulfilled" && Array.isArray(r.value)) items.push(...r.value);
   }
   return { items, counts };
 }
