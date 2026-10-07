@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.28";
+const BOT_VERSION = "1.9.29";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.29": [
+    "🔔 فقط هشدار ۹۵٪ حجم و ۱ روز مانده می‌آید؛ اتمام حجم/تاریخ ساکت شد + هر عبور فقط یک پیام (rep مشترک وبهوک و دایجست)",
+  ],
   "1.9.28": [
     "🐞 فیکس دکمه غیرفعال‌سازی: کش حافظه با رشته مسموم می‌شد و تنظیمات ریست/دکمه مرده به نظر می‌رسید",
   ],
@@ -8995,12 +8998,13 @@ function pgPanelBot(cfg, panelId) {
   } catch (e) {}
   return "";
 }
-// دایجست هشدارهای پنل: فوری فقط بحران امروزی (۰ روز مانده / حجم ۱۰۰٪)؛ بقیه جمعی (حجم ساعتی، انقضا روزانه)
+// دایجست هشدارهای پنل: فقط یک باند برای هر نوع — حجم دقیقاً ۹۵٪، انقضا (۰، ۱] روز.
+// اتمام حجم (۱۰۰٪+) و تاریخ‌گذشته (≤۰) عمداً گزارش نمی‌شوند (فقط state جلو می‌رود).
 function pgIsUrgent(kind, value) {
   const v = Number(value);
   if (!Number.isFinite(v)) return false;
-  if (kind === "days") return v <= 0;
-  if (kind === "usage") return v >= 100;
+  if (kind === "days") return v > 0 && v <= 1;
+  if (kind === "usage") return v >= 95 && v < 100;
   return false;
 }
 // استخراج job از یک ایونت (خالص؛ بدون gate): [{kind, value, bucket}]
@@ -9008,11 +9012,11 @@ function pgEventJobs(ev) {
   const out = [];
   if (ev.days !== null && ev.days !== undefined) {
     const dv = Math.floor(ev.days * 10) / 10;
-    if (ev.daysExplicit ? true : dv > 0 && dv <= 1) out.push({ kind: "days", value: dv, bucket: Math.floor(dv) });
+    if (ev.daysExplicit ? true : dv > 0 && dv <= 1) out.push({ kind: "days", value: dv, bucket: 1 });
   }
   if (ev.usage !== null && ev.usage !== undefined) {
     const uv = Math.floor(ev.usage * 10) / 10;
-    if (ev.usageExplicit ? true : uv >= 90 && uv < 91) out.push({ kind: "usage", value: uv, bucket: Math.floor(uv / 5) * 5 });
+    if (ev.usageExplicit ? true : uv >= 95 && uv < 96) out.push({ kind: "usage", value: uv, bucket: 95 });
   }
   return out;
 }
@@ -9026,11 +9030,13 @@ function pgDaysTrigger(cfg) {
   return a.length ? Math.max(...a) : 3;
 }
 // diff خالص دایجست پولی: لیست فعلی پنل در برابر reported دفعه قبل
-// reported: {username: bucket} — تازه‌ها fresh، بحران‌ها urg، dirty یعنی state عوض شده
+// reported: {username: bucket} — تازه‌ها fresh، dirty یعنی state عوض شده.
+// فقط یک باند هشدار می‌دهد: حجم [۹۵، ۱۰۰) با باکت ۹۵، انقضا (۰، ۱] با باکت ۱.
+// اتمام حجم (۱۰۰٪+) و تاریخ‌گذشته فقط state را جلو می‌برند (بدون پیام).
+// urg دیگر تولید نمی‌شود (حذف شد؛ مسیر فوری فقط وبهوک است).
 function pgDiffReported(kind, users, reported, trig, nowMs) {
   const rep = reported && typeof reported === "object" ? reported : {};
   const fresh = [];
-  const urg = [];
   let dirty = false;
   for (const u of users || []) {
     const username = String((u && u.username) || "");
@@ -9040,13 +9046,12 @@ function pgDiffReported(kind, users, reported, trig, nowMs) {
       const used = Number(u.used);
       if (!(lim > 0) || !Number.isFinite(used) || used < 0) continue;
       const pct = (used / lim) * 100;
-      const b = Math.floor(pct / 5) * 5;
       const prev = rep[username];
       if (pct >= 100) {
-        if (prev !== 100) { urg.push({ username, kind, value: Math.floor(pct * 10) / 10, bucket: 100, ownerName: u.owner || "", ts: nowMs }); rep[username] = 100; dirty = true; }
-      } else if (pct >= trig) {
-        if (prev === undefined || prev !== b) { fresh.push({ username, kind, value: Math.floor(pct * 10) / 10, bucket: b, ownerName: u.owner || "", ts: nowMs }); rep[username] = b; dirty = true; }
-      } else if (pct < trig - 5 && prev !== undefined) { delete rep[username]; dirty = true; }
+        if (prev !== 100) { rep[username] = 100; dirty = true; }
+      } else if (pct >= 95) {
+        if (prev === undefined || prev !== 95) { fresh.push({ username, kind, value: Math.floor(pct * 10) / 10, bucket: 95, ownerName: u.owner || "", ts: nowMs }); rep[username] = 95; dirty = true; }
+      } else if (pct < 90 && prev !== undefined) { delete rep[username]; dirty = true; }
     } else {
       if (u.expire === null || u.expire === undefined || u.expire === "" || u.expire === 0) continue;
       const ets = pgExpireTs(u.expire);
@@ -9054,14 +9059,13 @@ function pgDiffReported(kind, users, reported, trig, nowMs) {
       const d = (ets - nowMs) / 86400000;
       const prev = rep[username];
       if (d <= 0) {
-        if (prev !== -1) { urg.push({ username, kind, value: Math.floor(d * 10) / 10, bucket: 0, ownerName: u.owner || "", ts: nowMs }); rep[username] = -1; dirty = true; }
-      } else if (d <= trig) {
-        const b = Math.floor(d);
-        if (prev === undefined || prev !== b) { fresh.push({ username, kind, value: Math.floor(d * 10) / 10, bucket: b, ownerName: u.owner || "", ts: nowMs }); rep[username] = b; dirty = true; }
-      } else if (d > trig + 1 && prev !== undefined) { delete rep[username]; dirty = true; }
+        if (prev !== -1) { rep[username] = -1; dirty = true; }
+      } else if (d <= 1) {
+        if (prev === undefined || prev !== 1) { fresh.push({ username, kind, value: Math.floor(d * 10) / 10, bucket: 1, ownerName: u.owner || "", ts: nowMs }); rep[username] = 1; dirty = true; }
+      } else if (d > 2 && prev !== undefined) { delete rep[username]; dirty = true; }
     }
   }
-  return { fresh, urg, dirty, reported: rep };
+  return { fresh, dirty, reported: rep };
 }
 function pgRenewBotKb(renewbot) {
   return renewbot ? [[{ text: "🤖 استارت " + renewbot, url: "https://t.me/" + renewbot }]] : [];
@@ -9069,7 +9073,7 @@ function pgRenewBotKb(renewbot) {
 function pgRenewBotLine(renewbot) {
   return renewbot ? `\n\n📦 پیام‌های اتمام حجم را هم در ربات ${renewbot} می‌گیری — اون را هم استارت بزن:` : "";
 }
-// بافر کوتاه‌مدت هشدارهای فوری (۱۰۰٪ / ۰ روز) در KV: وبهوک‌های جدا (هر کاربر
+// بافر کوتاه‌مدت هشدارهای ۹۵٪ / ۱روزه در KV: وبهوک‌های جدا (هر کاربر
 // یک ریکوئست) حداکثر پنجرهٔ زیر نگه داشته می‌شوند تا یک پیام جمعی بروند —
 // وگرنه هر وبهوک یک پیام جدا می‌شود. فلاش با کرون هر دقیقه + فرصت‌طلبانه.
 const PG_URG_WIN_MS = 3 * 60000;
@@ -9250,6 +9254,18 @@ async function handlePgHook(token, payload, env, botToken) {
     let anyJob = false;
     const seenRun = new Set();
     const markKeys = [];
+    // حافظه مشترک باند با دایجست (pgdr): اگر دایجست همین باند را پوشش داده، وبهوک سکوت می‌کند
+    // تا یک عبور از آستانه فقط یک پیام بدهد (و برعکس: وبهوک هم باند را claim می‌کند پایین‌تر).
+    let repUbU = {}, repUbD = {}, repUbDirtyU = false, repUbDirtyD = false;
+    let stUbU = null, stUbD = null;
+    try {
+      const su = await kv.get(`pgdr:${panel.id}:usage`, "json");
+      if (su && typeof su === "object") { stUbU = su; if (su.reported && typeof su.reported === "object") repUbU = su.reported; }
+    } catch (e) {}
+    try {
+      const sd = await kv.get(`pgdr:${panel.id}:days`, "json");
+      if (sd && typeof sd === "object") { stUbD = sd; if (sd.reported && typeof sd.reported === "object") repUbD = sd.reported; }
+    } catch (e) {}
     // enrich فقط برای موارد فوریِ نیازمند داده (دایجستی‌ها با همان دیتای ایونت کافی‌اند؛ پنل شلوغ نمی‌شود)
     const needEnrich = events.some((e) => {
       if (!e || !e.username || (e.expireTs != null && e.status)) return false;
@@ -9283,6 +9299,10 @@ async function handlePgHook(token, payload, env, botToken) {
         if (!pgIsUrgent(j.kind, j.value)) continue;
         const rk = panel.id + ":" + ev.username + ":" + j.kind;
         if (seenRun.has(rk)) continue;
+        // باند قبلاً توسط دایجست پوشش داده شده؟ (rep مشترک) — سکوت
+        const band = j.kind === "usage" ? 95 : 1;
+        const rep = j.kind === "usage" ? repUbU : repUbD;
+        if (rep && rep[ev.username] === band) continue;
         if (!(await pgGate(panel.id, ev.username, j.kind, j.bucket))) continue;
         seenRun.add(rk);
         batch.push(j);
@@ -9291,6 +9311,9 @@ async function handlePgHook(token, payload, env, botToken) {
       anyJob = true;
       for (const j of batch) {
         markKeys.push({ panelId: panel.id, username: ev.username, kind: j.kind, bucket: j.bucket });
+        // claim باند در rep مشترک تا دایجست بعدی همین را دوباره نفرستد
+        if (j.kind === "usage") { repUbU[ev.username] = 95; repUbDirtyU = true; }
+        else { repUbD[ev.username] = 1; repUbDirtyD = true; }
       }
       // گیرنده‌ها: ادمین اصلی همیشه + ادمین لینک‌شده (از telegram_id پنل یا جدول لینک)
       const to = new Set(await pgRecipients(kv, env, adminId, panel.id, ev.owner, ev.ownerTg));
@@ -9317,6 +9340,19 @@ async function handlePgHook(token, payload, env, botToken) {
           if (m && m.panelId && m.username && m.kind) await pgGateMark(m.panelId, m.username, m.kind, m.bucket);
         } catch (e) {}
       }
+      // ذخیره claim باندها در state مشترک با دایجست
+      try {
+        if (repUbDirtyU) {
+          const o = stUbU && typeof stUbU === "object" ? stUbU : { reported: {}, lastSent: 0, lastCount: 0 };
+          o.reported = repUbU;
+          await kv.put(`pgdr:${panel.id}:usage`, JSON.stringify(o));
+        }
+        if (repUbDirtyD) {
+          const o = stUbD && typeof stUbD === "object" ? stUbD : { reported: {}, lastSent: 0, lastCount: 0 };
+          o.reported = repUbD;
+          await kv.put(`pgdr:${panel.id}:days`, JSON.stringify(o));
+        }
+      } catch (e) {}
     }
   } catch (e) {
     try { logE("PGHOOK", String((e && e.message) || e).slice(0, 200)); } catch (x) {}
@@ -9324,7 +9360,7 @@ async function handlePgHook(token, payload, env, botToken) {
 }
 // دایجست پولی هشدارهای پنل: هر اجرا لیست کاربرهای هر پنل را می‌گیرد و با reported دفعه قبل مقایسه می‌کند.
 // هزینه ثابت است (۱ read + حداکثر ۱ state-write + ۱ lastKey-write در هر اجرا با محتوای تازه)؛ مستقل از تعداد کاربر.
-// kind: "usage" (ساعتی) یا "days" (روزانه). بحران‌های تازه (۱۰۰٪ / ۰ روز) فوری هم ارسال می‌شوند.
+// kind: "usage" (ساعتی) یا "days" (روزانه). فقط باند ۹۵٪ / ۱روزه گزارش می‌شود؛ اتمام حجم و تاریخ‌گذشته ساکت‌اند.
 async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa, valFa) {
   const kv = env.BOT_KV;
   if (!kv || !botToken) return;
@@ -9355,18 +9391,16 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
       if (r.dirty) {
         try { await kv.put(skey, JSON.stringify({ reported: st.reported, lastSent: st.lastSent || 0, lastCount: st.lastCount || 0 })); } catch (e) {}
       }
-      // بحران‌های تازه: فوری (نادر) — به بافر ۳ دقیقه‌ای می‌روند تا یک پیام جمعی شوند
-      const ubItems = [];
-      for (const u of r.urg) {
-        const to = new Set(await pgRecipients(kv, env, adminId, panel.id, u.ownerName || "", null));
-        await qAlert(kv, "pghook");
-        ubItems.push({ username: u.username, kind, value: u.value, expireTs: null, status: "", owner: u.ownerName || "", to: Array.from(to) });
-      }
-      if (ubItems.length) await pgUbPush(kv, panel.id, ubItems);
+      // مسیر فوری دایجست حذف شد: ۹۵٪/۱روزه فقط همین‌جا (لیست ساعتی) می‌آید؛
+      // مسیر فوری وبهوک جداگانه با rep مشترک deduplicate می‌شود (پایین).
       if (!r.fresh.length) continue;
       total += r.fresh.length;
       perPanel[panel.id] = r.fresh.length;
       for (let i = 0; i < r.fresh.length; i++) qAlert(kv, "pghook");
+      // مارک گیت تا وبهوک‌های بعدی همین باند ۴۵ دقیقه ساکت بمانند (فرمت مشترک با pgGateMark وبهوک)
+      for (const u of r.fresh) {
+        try { await kv.put(`pgq:${panel.id}:${u.username}:${kind}`, Date.now() + "." + u.bucket, { expirationTtl: 7 * 86400 }); } catch (e) {}
+      }
       const line = (u) => "• " + u.username + " (" + valFa(u) + ")";
       const owners = {};
       for (const u of r.fresh) {
