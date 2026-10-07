@@ -2363,7 +2363,7 @@ function helpKeyboard() {
       { text: "🏢 دیتاسنترها", callback_data: "hg:prov" },
     ],
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
-    [[{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
+    [{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }],
 
     // 🎛 پاسارگارد
     sec("— 🎛 پاسارگارد —"),
@@ -2414,7 +2414,7 @@ function settingsHomeText() {
 function settingsHomeKb() {
   return [
     [
-      [[{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
+      [{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }],
       { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
     [
@@ -16401,7 +16401,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         const txt = srvStatsText(s, st);
         await edit(txt, [
           [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
-          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
+          [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
@@ -17054,7 +17054,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getAgentBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
         return edit("⚠️ «چک هاست» از طریق «🖥 ایجنت سرور» انجام می‌شود و ایجنت هنوز ثبت نشده است.\n\nاز «🖥 راهنمای نصب ایجنت» نصبش کن، سپس دوباره تست کن.", [
-          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
+          [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }],
           [{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
@@ -17426,7 +17426,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const cfg0 = await getHostFilterCfg(kv);
       if (cfg0.provider === "checkhost" && !(await getAgentBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
         return edit("⚠️ «بررسی دسترسی خارج» از طریق «🖥 ایجنت سرور» انجام می‌شود و ایجنت هنوز ثبت نشده است.\n\nاز «🖥 راهنمای نصب ایجنت» نصبش کن، سپس دوباره تست کن.", [
-          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
+          [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }],
           [{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
