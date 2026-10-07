@@ -2414,7 +2414,7 @@ function settingsHomeText() {
 function settingsHomeKb() {
   return [
     [
-      [{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }],
+      { text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" },
       { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
     [
