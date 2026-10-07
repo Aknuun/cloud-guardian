@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.30";
+const BOT_VERSION = "2.0.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,20 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.0.0": [
+    "🖥️ معماری جدید ایجنت سرور: همه کارهای سنگین روی سرور مشتری (جایگزین رله) + اجرای هاست‌فیلتر فاز ۳ روی ایجنت",
+    "📩 هشدار حجم/انقضا تکی برای هر کاربر با دو دکمه (🔄 تمدید با ربات · 🖥️ تمدید با پنل)؛ heartbeat، حالت اضطراری خودکار و دکمه آپدیت ایجنت",
+    "🎉 جهش به ۲٫۰: شامل همه بهبودهای 1.9.31 تا 1.9.33",
+  ],
+  "1.9.33": [
+    "📩 هشدار حجم/انقضا دوباره دونه‌ای شد: هر کاربر پیام جدا با دو دکمه (🔄 تمدید با ربات · 🖥 تمدید با پنل)؛ دایجست جمعی حذف شد (گیت ضداسپم سر جاش است)",
+  ],
+  "1.9.32": [
+    "🖥 اجرای هاست‌فیلتر روی سرور (فاز ۳): رانر ایجنت همان کد ورکر را اجرا می‌کند؛ UI از ایجنت می‌خواند؛ نصب تازه‌ها با guardian-register",
+  ],
+  "1.9.31": [
+    "🖥 ایجنت سرور (guardian-agent.js تک‌فایل): همه کارهای سنگین دائم روی سرور مشتری + جایگزین رله؛ heartbeat، حالت اضطراری خودکار ورکر، دکمه آپدیت ایجنت و اعلان شبانه در منوی نسخه‌ها",
+  ],
   "1.9.30": [
     "📥 وارد کردن از دیتاسنترها دیگر گیر نمی‌کند: خواندن موازی هر ۳ پرووایدر + ریجن‌های موازی آروان + کش ریجن",
   ],
@@ -1392,6 +1406,34 @@ export default {
 
     // 📊 تله‌متری: پینگ ساعتی نصب‌ها (مشخصات نصب + وضعیت سهمیه).
     // اولین پینگ هر نصب (event=install یا آیدی جدید) بلافاصله به سازنده خبر داده می‌شود.
+    // 🖥 ایجنت سرور: heartbeat + رویداد (حالت عادی همه کارها روی سرور است؛ ورکر فقط گیرنده)
+    if (request.method === "POST" && url.pathname === "/guardian") {
+      let b = {};
+      try { b = await request.json(); } catch (e) {}
+      const r = await handleGuardianIngest(env, b || {}).catch(() => ({ ok: false, error: "internal" }));
+      return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "GET" && url.pathname === "/guardian") {
+      return new Response(JSON.stringify({ ok: true, service: "guardian-ingest", version: BOT_VERSION }), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "GET" && url.pathname === "/guardian/mode") {
+      const tok = String((url.searchParams && url.searchParams.get("token")) || request.headers.get("x-guardian-token") || "");
+      const r = await handleGuardianMode(env, tok).catch(() => ({ ok: false, error: "internal" }));
+      return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "POST" && url.pathname === "/guardian/sync") {
+      let b = {};
+      try { b = await request.json(); } catch (e) {}
+      const r = await handleGuardianSync(env, b || {}).catch(() => ({ ok: false, error: "internal" }));
+      return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
+    }
+    if (request.method === "POST" && url.pathname === "/guardian/kvbatch") {
+      let b = {};
+      try { b = await request.json(); } catch (e) {}
+      const r = await handleGuardianKvBatch(env, b || {}).catch(() => ({ ok: false, error: "internal" }));
+      return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/telemetry") {
       let b = {};
       try {
@@ -1596,12 +1638,18 @@ export default {
           const patch = {};
           // شمارش write واقعی هر جاب: env جدا با KV شمارنده‌دار (فقط put/delete)
           const qe = (s) => ({ ...env, BOT_KV: qKvCount(env.BOT_KV, s) });
-          jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
-          if (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS) {
+          // ایجنت سرور زنده است؟ اگر بله، جاب‌های سنگین را ورکر رد می‌کند (روی سرور اجرا می‌شوند)
+          let gIdle = false;
+          try { gIdle = await guardianWorkerIdle(qKvCount(env.BOT_KV, "guardian")); } catch (e) {}
+          // اطلاع مهاجرت (یک‌بار) + چک شبانهٔ نسخهٔ ایجنت — سبک‌اند و همیشه اجرا می‌شوند
+          try { await maybeGuardianMigrationNotice(qe("guardian"), botToken, adminId); } catch (e) {}
+          try { await runGuardianNightly(qe("guardian"), botToken, adminId); } catch (e) {}
+          if (!gIdle) jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
+          if (!gIdle && (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS)) {
             patch.um = now;
             jobs.push(runUsageMonitor(qe("um"), { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
           }
-          if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
+          if (!gIdle && (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS)) {
             patch.srv = now;
             jobs.push(runSrvMonitor(qe("srv"), botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
           }
@@ -1624,11 +1672,11 @@ export default {
             jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
           }
           // دایجست پولی هشدارهای پنل: حجم ساعتی، انقضا روزانه (هزینه ثابت هر اجرا؛ ساعت خلوت ≈ صفر write)
-          if (!cs.pgdu || now - cs.pgdu >= 3600000) {
+          if (!gIdle && (!cs.pgdu || now - cs.pgdu >= 3600000)) {
             patch.pgdu = now;
             jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "usage", "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
           }
-          if (!cs.pgdd || now - cs.pgdd >= 86400000) {
+          if (!gIdle && (!cs.pgdd || now - cs.pgdd >= 86400000)) {
             patch.pgdd = now;
             jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
           }
@@ -1646,19 +1694,30 @@ export default {
       );
     } else {
       // کرون هر دقیقه: پول نود (تراز دقیقه‌ای داخل خودش؛ write فقط موقع تغییر) + هاست‌فیلتر + یادآورها
-      ctx.waitUntil(runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))));
+      // اگر ایجنت سرور زنده است، سه‌تای سنگین را ورکر رد می‌کند (روی سرور اجرا می‌شوند)؛ سبک‌ها همیشه اینجان.
       ctx.waitUntil(
-        runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
-          console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
+        (async () => {
+          let skipHeavy = false;
           try {
-            await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
-          } catch (x) {}
-        })
+            skipHeavy = !!(await runGuardianWatchdog({ ...env, BOT_KV: qKvCount(env.BOT_KV, "guardian") }, botToken, adminId)).skipHeavy;
+          } catch (e) {}
+          if (!skipHeavy) {
+            await Promise.allSettled([
+              runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))),
+              runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
+                console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
+                try {
+                  await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
+                } catch (x) {}
+              }),
+              pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))),
+              // فلاش بافر هشدارهای فوری بالا هم جزو سنگین‌هاست (حداکثر ۳ دقیقه تأخیر تا پیام جمعی)
+            ]);
+          }
+        })().catch((e) => console.error("GHEAVY", String(e)))
       );
       ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
       ctx.waitUntil(runDailySubRotate({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hfd") }).catch((e) => console.error("DAILYROT", String(e))));
-      // فلاش بافر هشدارهای فوری (حداکثر ۳ دقیقه تأخیر تا پیام جمعی)
-      ctx.waitUntil(pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))));
     }
   },
 
@@ -6881,6 +6940,511 @@ async function runRelayWatch(env) {
   if (dirty) { try { await kv.put("relay_watch", JSON.stringify(st)); } catch (e) {} }
 }
 
+// ===================== ایجنت سرور (guardian-agent) =====================
+// معماری «سرور-اول»: همهٔ جاب‌های سنگین دائم روی سرور مشتری اجرا می‌شوند
+// و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
+// همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
+// جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
+const GUARDIAN_AGENT_VERSION = "2.0.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_PING_TIMEOUT_MS = 10000;
+const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
+const GUARDIAN_PORT_DEFAULT = 8789;
+
+async function getGuardianCfg(kv) {
+  if (!kv) return null;
+  try {
+    const c = await kv.get("guardian_cfg", "json");
+    if (!c || typeof c !== "object") return null;
+    return {
+      url: String(c.url || "").replace(/\/+$/, ""),
+      token: String(c.token || ""),
+      added_at: Number(c.added_at) || 0,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function saveGuardianCfg(kv, cfg) {
+  if (!kv) return;
+  try {
+    await kv.put("guardian_cfg", JSON.stringify({ url: String((cfg && cfg.url) || ""), token: String((cfg && cfg.token) || ""), added_at: Number((cfg && cfg.added_at) || 0) || Date.now() }));
+  } catch (e) {}
+}
+
+async function getGuardianState(kv) {
+  if (!kv) return {};
+  try {
+    const st = await kv.get("guardian_state", "json");
+    return st && typeof st === "object" ? st : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function makeGuardianToken() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+async function guardianWorkerBase(kv, env) {
+  // آدرس عمومی خود ورکر برای دستور نصب (کش self_url که از ریکوئست‌ها یاد می‌گیرد، بعد env)
+  try {
+    const u = String((await kv.get("self_url", "text")) || "").replace(/\/+$/, "");
+    if (/^https:\/\/.+/i.test(u)) return u;
+  } catch (e) {}
+  try {
+    const w = String((env && env.WORKER_URL) || "").replace(/\/+$/, "");
+    if (/^https:\/\/.+/i.test(w)) return w;
+  } catch (e) {}
+  return "";
+}
+
+function guardianInstallCmd(workerBase, token) {
+  const w = workerBase || "https://YOUR-WORKER.workers.dev";
+  return (
+    "sudo GUARDIAN_TOKEN=\"" + String(token || "") + "\" WORKER_URL=\"" + w + "\" " +
+    'bash -c "$(curl -fsSL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/guardian-agent-install.sh)"'
+  );
+}
+
+async function guardianAdmins(kv, env) {
+  // مثل getAdmins ولی بدون کش حافظه (برای مسیر اضطراری که باید همیشه تازه باشد)
+  const out = [];
+  try {
+    const main = Number((env && env.ADMIN_ID) || ADMIN_ID);
+    if (main) out.push(main);
+  } catch (e) {}
+  try {
+    const l = kv ? await kv.get("admins", "json") : null;
+    if (Array.isArray(l)) for (const x of l) {
+      const n = Number(x);
+      if (n && !out.includes(n)) out.push(n);
+    }
+  } catch (e) {}
+  return out;
+}
+
+async function guardianPing(url) {
+  // پینگ فعال ایجنت (مثل relayPing): زنده‌بودن را ورکر تشخیص می‌دهد، بدون write ثابت
+  try {
+    const res = await fetch(String(url).replace(/\/+$/, "") + "/ping", { signal: AbortSignal.timeout(GUARDIAN_PING_TIMEOUT_MS) });
+    if (!res.ok) return { ok: false, error: "http_" + res.status };
+    const d = await res.json();
+    if (!d || d.ok !== true || d.agent !== "guardian-agent") return { ok: false, error: "bad_agent" };
+    return { ok: true, version: String(d.version || "") };
+  } catch (e) {
+    return { ok: false, error: String((e && e.name === "TimeoutError") || /timeout|aborted/i.test(String(e)) ? "timeout" : e).slice(0, 80) };
+  }
+}
+
+async function guardianPost(cfg, path, body, timeoutMs) {
+  if (!cfg || !cfg.url || !cfg.token) return { error: "no_agent" };
+  try {
+    const res = await fetch(String(cfg.url).replace(/\/+$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Guardian-Token": cfg.token },
+      body: JSON.stringify(body || {}),
+      signal: AbortSignal.timeout(Math.max(1000, Number(timeoutMs) || 15000)),
+    });
+    if (!res.ok) return { error: "http_" + res.status };
+    try {
+      return { ok: true, data: await res.json() };
+    } catch (e) {
+      return { error: "bad_json" };
+    }
+  } catch (e) {
+    return { error: "fetch_fail" };
+  }
+}
+
+async function handleGuardianIngest(env, b) {
+  // گیرندهٔ heartbeat و رویداد ایجنت (POST /guardian)
+  const kv = env.BOT_KV;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  if (!kv || !b || typeof b !== "object") return { ok: false, error: "bad_request" };
+  const token = String(b.token || "");
+  if (!token) return { ok: false, error: "no_token" };
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  if (!cfg || !cfg.token || token !== cfg.token) return { ok: false, error: "bad_token" };
+  const action = String(b.action || "");
+  if (action === "heartbeat") {
+    const ver = String(b.version || "").slice(0, 20);
+    let st = {};
+    try { st = await getGuardianState(kv); } catch (e) {}
+    // ثبت خودکار آدرس ایجنت در اولین heartbeat (نصب با توکنِ ازپیش‌ساختهٔ ربات)
+    const pub = String(b.public_url || "").replace(/\/+$/, "").slice(0, 200);
+    if (!cfg.url && pub && /^https?:\/\/.+/i.test(pub)) {
+      cfg.url = pub;
+      try { await saveGuardianCfg(kv, cfg); } catch (e) {}
+    }
+    // write فقط موقع تغییر نسخه (نه هر دقیقه — سهمیهٔ write رایگان ۱۰۰۰/روز است)
+    if (ver && ver !== st.agent_version) {
+      try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: ver })); } catch (e) {}
+    }
+    return { ok: true, mode: "server", version: BOT_VERSION };
+  }
+  if (action === "event") {
+    // لولهٔ عمومی رویداد→ادمین (جاب‌های فاز ۳ از همین استفاده می‌کنند)
+    const title = String(b.title || "").slice(0, 200);
+    const text = String(b.text || "").slice(0, 3000);
+    if (!title || !text) return { ok: false, error: "bad_event" };
+    const admins = await guardianAdmins(kv, env);
+    for (const a of admins) {
+      try { await sendMessage(botToken, a, title + "\n\n" + text); } catch (e) {}
+    }
+    return { ok: true };
+  }
+  return { ok: false, error: "bad_action" };
+}
+
+async function runGuardianWatchdog(env, botToken, adminId) {
+  // واچ‌داگ دقیقه‌ای: ایجنت زنده است؟ اگر بله ورکر برای جاب‌های سنگین بیکار می‌ماند.
+  // خروجی: { skipHeavy } — بدون ایجنت ثبت‌شده همیشه false (رفتار قبلی بدون تغییر).
+  const idle = { skipHeavy: false, mode: "worker" };
+  const kv = env.BOT_KV;
+  if (!kv) return idle;
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  if (!cfg || !cfg.token) return idle;
+  if (!cfg.url) return { skipHeavy: false, mode: "worker", pending: true }; // توکن ساخته شده ولی هنوز نصب نشده
+  let st = {};
+  try { st = await getGuardianState(kv); } catch (e) {}
+  if (!st || typeof st !== "object") st = {};
+  const now = Date.now();
+  let ping = { ok: false, error: "no_ping" };
+  try { ping = await guardianPing(cfg.url); } catch (e) { ping = { ok: false, error: "ping_throw" }; }
+  if (ping.ok) {
+    if (ping.version && ping.version !== st.agent_version) {
+      try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: String(ping.version) })); } catch (e) {}
+      st.agent_version = String(ping.version);
+    }
+    if (st.mode !== "server" || st.emergency_sent) {
+      const wasEmergency = !!st.emergency_sent;
+      try { await kv.put("guardian_state", JSON.stringify({ ...st, mode: "server", emergency_sent: 0, emergency_at: 0 })); } catch (e) {}
+      if (wasEmergency) {
+        try { qAlert(kv, "guardian"); } catch (e) {}
+        const admins = await guardianAdmins(kv, env);
+        const msg = "🟢 سرور برگشت — حالت عادی\n\nایجنت سرور دوباره جواب داد؛ همهٔ کارها به سرور منتقل شد و ورکر به حالت آماده‌باش برگشت.";
+        for (const a of admins) {
+          try { await sendMessage(botToken, a, msg, [[{ text: "🏠 خانه", callback_data: "menu" }]]); } catch (e) {}
+        }
+      }
+    }
+    return { skipHeavy: true, mode: "server" };
+  }
+  // ایجنت جواب نداد → حالت اضطراری (یک‌بار پیام تا ریکاوری)
+  if (!st.emergency_sent) {
+    try { await kv.put("guardian_state", JSON.stringify({ ...st, mode: "worker", emergency_sent: now, emergency_at: now })); } catch (e) {}
+    try { qAlert(kv, "guardian"); } catch (e) {}
+    const admins = await guardianAdmins(kv, env);
+    const wb = await guardianWorkerBase(kv, env);
+    const cmd = guardianInstallCmd(wb, cfg.token);
+    const msg = [
+      "⚠️ حالت اضطراری: سرور جواب نداد",
+      "",
+      "ایجنت روی سرور در دسترس نیست؛ تا برگشتن سرور، همهٔ کارها موقتاً روی ورکر انجام می‌شود.",
+      "",
+      "🖥 نصب سرور جایگزین — این دستور را روی سرور جدید بزن:",
+      "",
+      cmd,
+    ].join("\n");
+    for (const a of admins) {
+      try { await sendMessage(botToken, a, msg, [[{ text: "🖥 نصب ایجنت روی سرور", callback_data: "guardian:install" }]]); } catch (e) {}
+    }
+  } else if (st.mode !== "worker") {
+    try { await kv.put("guardian_state", JSON.stringify({ ...st, mode: "worker" })); } catch (e) {}
+  }
+  return idle;
+}
+
+async function guardianWorkerIdle(kv) {
+  // true یعنی ایجنت زنده است و ورکر باید جاب‌های سنگین را رد کند (خوانش صرف، بدون write)
+  try {
+    const cfg = await getGuardianCfg(kv);
+    if (!cfg || !cfg.url || !cfg.token) return false;
+    const st = await getGuardianState(kv);
+    return st.mode === "server";
+  } catch (e) {
+    return false;
+  }
+}
+
+async function maybeGuardianMigrationNotice(env, botToken, adminId) {
+  // اطلاع‌رسانی یک‌باره به مشتری‌های قبلی: برای رفع سقف‌ها، این دستور را روی سرور بزن
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  let seen = "";
+  try { seen = String((await kv.get("guardian_seen_ver", "text")) || ""); } catch (e) {}
+  if (seen === String(BOT_VERSION)) return;
+  try { await kv.put("guardian_seen_ver", String(BOT_VERSION)); } catch (e) {}
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  if (cfg && cfg.token) return; // ایجنت دارد یا قبلاً خبر رفته و توکن ساخته شده
+  const tok = makeGuardianToken();
+  try { await kv.put("guardian_cfg", JSON.stringify({ url: "", token: tok, added_at: Date.now() })); } catch (e) {}
+  const admins = await guardianAdmins(kv, env);
+  if (!admins.length) return;
+  const wb = await guardianWorkerBase(kv, env);
+  const cmd = guardianInstallCmd(wb, tok);
+  const msg = [
+    "🖥 خبر مهم نسخهٔ v" + BOT_VERSION,
+    "",
+    "از این نسخه، همهٔ کارهای سنگین (چک هاست، پول نود، مانیتور حجم) روی «سرور خودت» انجام می‌شود تا ورکر به سقف نوشتن (۱۰۰۰/روز) و CPU کلادفلر نخورد.",
+    "",
+    "کافی است این دستور را روی سرور بزنی (توکن یکتای تو داخلش هست):",
+    "",
+    cmd,
+    "",
+    "اگر روی سرور دیگری نصب کردی و توکن فرق کرد، از «🔄 نسخه‌ها ← 🖥 نصب ایجنت» دکمهٔ «🔑 ثبت توکن» را بزن.",
+  ].join("\n");
+  for (const a of admins) {
+    try {
+      await sendMessage(botToken, a, msg, [
+        [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }],
+        [{ text: "🏠 خانه", callback_data: "menu" }],
+      ]);
+    } catch (e) {}
+  }
+}
+
+async function runGuardianNightly(env, botToken, adminId) {
+  // هر شب یک‌بار: اگر نسخهٔ ایجنت روی سرور قدیمی است، به ربات خبر بده (یک‌بار برای هر نسخه)
+  const kv = env.BOT_KV;
+  if (!kv) return;
+  const today = new Date().toISOString().slice(0, 10);
+  let rec = null;
+  try { rec = await kv.get("guardian_nightly", "json"); } catch (e) {}
+  if (rec && rec.date === today) return;
+  try { await kv.put("guardian_nightly", JSON.stringify({ date: today })); } catch (e) {}
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  if (!cfg || !cfg.url || !cfg.token) return;
+  let st = {};
+  try { st = await getGuardianState(kv); } catch (e) {}
+  const aver = String(st.agent_version || "");
+  let latest = "";
+  try {
+    const items = ((await selfCachedReleases(kv)).items) || [];
+    latest = selfLatestTag(items.map((x) => x.tag)) || "";
+  } catch (e) {}
+  if (!latest) return;
+  if (aver && aver === latest.replace(/^v/, "")) return; // به‌روز است
+  let notified = "";
+  try { notified = String((await kv.get("guardian_nightly_ver", "text")) || ""); } catch (e) {}
+  if (notified === latest) return;
+  try { await kv.put("guardian_nightly_ver", latest); } catch (e) {}
+  const admins = await guardianAdmins(kv, env);
+  const msg = [
+    "🔄 آپدیت ایجنت سرور",
+    "",
+    "نسخهٔ ایجنت روی سرور: " + (aver ? "v" + aver : "نامشخص"),
+    "آخرین نسخه: " + latest,
+    "",
+    "با دکمهٔ زیر، ایجنت از راه دور آپدیت می‌شود.",
+  ].join("\n");
+  for (const a of admins) {
+    try { await sendMessage(botToken, a, msg, [[{ text: "⬆️ آپدیت ایجنت", callback_data: "guardian:update" }]]); } catch (e) {}
+  }
+}
+
+// ===================== اجرای جاب هاست‌فیلتر روی ایجنت (فاز ۳) =====================
+// قانون مالکیت کلیدها (تک‌منبع، بدون مسابقه):
+//  • کانفیگ (host_filter_cfg): منبع ورکر است؛ ایجنت هر ران pull می‌کند و اگر عوض شد pushback.
+//  • ران‌تایم (زیر): فقط روی دیسک ایجنت؛ UI ورکر با hfStateGet از ایجنت می‌خواند (fallback به KV).
+//  • بقیه: خوانش sync + نوشتن journal و pushback دسته‌ای (نادر).
+const GUARDIAN_SYNC_KEYS = ["accounts", "panels", "admins", "host_filter_cfg"];
+// pushback فقط همین کلیدها (سد در برابر باگ/نفوذ: ایجنت هرگز نمی‌تواند کلید دیگری را بازنویسی کند)
+const GUARDIAN_PUSH_KEYS = ["host_filter_cfg"];
+const GUARDIAN_RUNTIME_KEYS = [
+  "hosts_cache",
+  "hf_progress",
+  "host_filter_log",
+  "host_filter_state",
+  "host_filter_ip_notice",
+  "host_filter_crash",
+  "dnscache:",
+  "ipinfo:",
+];
+
+function guardianIsRuntimeKey(key) {
+  const k = String(key || "");
+  for (const p of GUARDIAN_RUNTIME_KEYS) {
+    if (p.endsWith(":") ? k.startsWith(p) : k === p) return true;
+  }
+  return false;
+}
+
+async function guardianCheckToken(kv, token) {
+  try {
+    const cfg = await getGuardianCfg(kv);
+    return cfg && cfg.token && token && token === cfg.token ? cfg : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function handleGuardianMode(env, token) {
+  // لiveness ارزان برای ایجنت قبل از هر ران (خوانش صرف، بدون write)
+  const cfg = await guardianCheckToken(env.BOT_KV, String(token || ""));
+  if (!cfg) return { ok: false, error: "bad_token" };
+  let st = {};
+  try { st = await getGuardianState(env.BOT_KV); } catch (e) {}
+  return { ok: true, mode: st.mode === "server" ? "server" : "worker", version: BOT_VERSION };
+}
+
+async function handleGuardianSync(env, body) {
+  // pull کانفیگ توسط ایجنت اول هر ران (allowlist صریح؛ مقادیر خام متنی)
+  const kv = env.BOT_KV;
+  if (!kv || !body || typeof body !== "object") return { ok: false, error: "bad_request" };
+  const cfg = await guardianCheckToken(kv, String(body.token || ""));
+  if (!cfg) return { ok: false, error: "bad_token" };
+  const want = Array.isArray(body.keys) && body.keys.length ? body.keys : GUARDIAN_SYNC_KEYS;
+  const out = {};
+  for (const k of want) {
+    const key = String(k || "").slice(0, 128);
+    if (!key || !GUARDIAN_SYNC_KEYS.includes(key)) continue;
+    try {
+      const v = await kv.get(key); // متن خام (هر دو طرف یکسان ذخیره/پارس می‌کنند)
+      out[key] = v === null || v === undefined ? null : String(v);
+    } catch (e) {
+      out[key] = null;
+    }
+  }
+  return {
+    ok: true,
+    keys: out,
+    bot_token: String(env.BOT_TOKEN || BOT_TOKEN || ""),
+    admin_id: Number(env.ADMIN_ID || ADMIN_ID) || 0,
+    version: BOT_VERSION,
+  };
+}
+
+async function handleGuardianKvBatch(env, body) {
+  // pushback تغییرات غیرران‌تایم آخر ران (معمولاً فقط host_filter_cfg؛ با گارد حجم/تعداد)
+  const kv = env.BOT_KV;
+  if (!kv || !body || typeof body !== "object") return { ok: false, error: "bad_request" };
+  const cfg = await guardianCheckToken(kv, String(body.token || ""));
+  if (!cfg) return { ok: false, error: "bad_token" };
+  const puts = Array.isArray(body.puts) ? body.puts.slice(0, 100) : [];
+  const ck = qKvCount(kv, "guardian");
+  let wrote = 0;
+  let conflicts = 0;
+  for (const p of puts) {
+    try {
+      const key = String((p && p.key) || "").slice(0, 256);
+      // allowlist صریح (F1) + ران‌تایم هرگز از این مسیر برنمی‌گردد
+      if (!key || !GUARDIAN_PUSH_KEYS.includes(key) || guardianIsRuntimeKey(key)) continue;
+      if (!p || p.value === null || p.value === undefined) {
+        await ck.delete(key);
+        wrote++;
+        continue;
+      }
+      const val = String(p.value);
+      if (val.length > 512 * 1024) continue;
+      // گارد تعارض (F5): اگر ورکر از زمان شروع ران ایجنت، همین کلید را عوض کرده
+      // (مثلاً حالت اضطراری وسط ران)، push ایجنت نادیده گرفته می‌شود تا state اضطراری نپرد
+      if (p.expect !== undefined && p.expect !== null) {
+        let cur = null;
+        try { cur = await kv.get(key); } catch (e) {}
+        const curText = cur === null || cur === undefined ? null : String(cur);
+        if (curText !== String(p.expect)) { conflicts++; continue; }
+      }
+      const opts = p && p.opts && typeof p.opts === "object" && Number(p.opts.expirationTtl) > 0 ? { expirationTtl: Math.min(30 * 86400, Number(p.opts.expirationTtl)) } : undefined;
+      if (opts) await ck.put(key, val, opts);
+      else await ck.put(key, val);
+      wrote++;
+    } catch (e) {}
+  }
+  return { ok: true, wrote, conflicts };
+}
+
+async function hfStateGet(kv, key, type) {
+  // خوانش کلید ران‌تایم: اول ایجنت (اگر حالت server)، بعد KV ورکر (اضطراری/بدون ایجنت).
+  // کش ۲۰ثانیه‌ای حافظه: رندر یک صفحه چند خوانش می‌زند؛ بدون کش هر کدام ۸ ثانیه منتظر ایجنت کند می‌ماند.
+  const memK = "hfs:" + String(key);
+  try {
+    const hit = memGet(memK);
+    if (hit !== undefined) return hit;
+  } catch (e) {}
+  try {
+    const cfg = await getGuardianCfg(kv);
+    if (cfg && cfg.url && cfg.token) {
+      const st = await getGuardianState(kv);
+      if (st.mode === "server") {
+        const r = await guardianPost(cfg, "/state?key=" + encodeURIComponent(String(key)), {}, 8000);
+        if (r.ok && r.data && r.data.ok && r.data.found) {
+          const val = type === "json" ? r.data.value : JSON.stringify(r.data.value);
+          try { memSet(memK, val, 20000); } catch (e) {}
+          return val;
+        }
+      }
+    }
+  } catch (e) {}
+  try {
+    const fb = await kv.get(key, type);
+    try { memSet(memK, fb, 20000); } catch (e) {}
+    return fb;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function pokeGuardianJob(env, name, args) {
+  // تلنگر آتش‌وبگذار به ایجنت (مثل hfcheck): جواب را منتظر نمی‌مانیم؛ ایجنت تا آخرش می‌رود
+  try {
+    const kv = env.BOT_KV;
+    const cfg = await getGuardianCfg(kv);
+    if (!cfg || !cfg.url) return false;
+    const st = await getGuardianState(kv);
+    if (st.mode !== "server") return false;
+    await guardianPost(cfg, "/job", { job: String(name), args: args || {} }, 8000);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function hfRemoteCall(env, name, args, localFn, timeoutMs) {
+  // اکشن‌های تک (revert/restore/snapshot/force): اگر ایجنت فعال است همان‌جا، وگرنه همین‌جا.
+  // استثنا: busy یعنی ایجنت همین حالا دارد اجرا می‌کند — fallback محلی ممنوع (هم‌پوشانی).
+  try {
+    const kv = env.BOT_KV;
+    const cfg = await getGuardianCfg(kv);
+    if (cfg && cfg.url) {
+      const st = await getGuardianState(kv);
+      if (st.mode === "server") {
+        const r = await guardianPost(cfg, "/job", { job: String(name), args: args || {} }, Math.max(10000, Number(timeoutMs) || 120000));
+        if (r.ok && r.data && r.data.ok) return r.data.result;
+        if (r.ok && r.data && r.data.error === "busy") return { error: "busy" };
+      }
+    }
+  } catch (e) {}
+  return localFn();
+}
+
+function hfBusyMsg() {
+  return "⏳ یک بررسی در حال اجراست؛ نتیجه‌اش خودش می‌آید. کمی بعد دوباره بزن.";
+}
+
+async function guardianUpdateSrc(kv) {
+  // src پین‌شده به آخرین تگ (نه main — ورژن بعد از آپدیت باید همان چیزی باشد که nightly دیده)
+  let tag = "";
+  try {
+    const live = await selfLiveTags(kv);
+    const cached = (((await selfCachedReleases(kv)) || {}).items) || [];
+    tag = selfLatestTag([...(Array.isArray(live) ? live : []), ...cached.map((x) => x.tag)]) || "";
+  } catch (e) {}
+  const base = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/" + (tag || "main");
+  return { tag, src: base + "/guardian-agent.js" };
+}
+
+async function runHostFilterMaybeRemote(env, opts = {}) {
+  return hfRemoteCall(env, "hostfilter", { force: !!(opts && opts.force) }, () => runHostFilter(env, opts), 600000);
+}
+
 // POST به رله با fallback خودکار به رلهٔ پیش‌فرض (وقتی حالت custom نیست)
 async function relayPost(kv, env, path, body, timeoutMs) {
   const cands = await relayCandidates(kv, env);
@@ -9346,13 +9910,26 @@ async function handlePgHook(token, payload, env, botToken) {
         to.add(ev.ownerTg);
       }
       await qAlert(kv, "pghook");
-      // بافر ۳ دقیقه‌ای KV: وبهوک‌های جداگانهٔ همین پنل یک پیام جمعی می‌شوند
-      // (به‌جای یک پیام به‌ازای هر کاربر). گیت pgGate بالا ضداسپم را نگه می‌دارد.
-      await pgUbPush(kv, panel.id, batch.map((j) => ({
-        username: ev.username, kind: j.kind, value: j.value,
-        expireTs: ev.expireTs || null, status: ev.status || "",
-        owner: ev.owner || "", to: Array.from(to),
-      })));
+      // دونه‌ای مثل قبل: هر کاربر همان لحظه پیام جدا با دو دکمه می‌گیرد.
+      // گیت ضداسپم (pgGate) و claim مشترک (rep) بالا دست‌نخورده مانده‌اند.
+      {
+        const renewbot = pgPanelBot(cfg, panel.id);
+        const dashpath = pgDashOf(cfg, panel.id);
+        for (const id of to) {
+          let okStart = false;
+          try { okStart = await pgStarted(kv, id); } catch (e) {}
+          if (!okStart) continue;
+          for (const j of batch) {
+            try {
+              await pgSendAlert(botToken, id, panel, {
+                username: ev.username, kind: j.kind, value: j.value,
+                expireTs: ev.expireTs || null, status: ev.status || "",
+                owner: ev.owner || "", renewbot, dashpath,
+              }, false);
+            } catch (e) {}
+          }
+        }
+      }
       if (!to.size) {
         try { logE("PGHOOK_NORECIP", panel.id + " :: " + ev.username); } catch (e) {}
       }
@@ -9426,17 +10003,25 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
       for (const u of r.fresh) {
         try { await kv.put(`pgq:${panel.id}:${u.username}:${kind}`, Date.now() + "." + u.bucket, { expirationTtl: 7 * 86400 }); } catch (e) {}
       }
-      const line = (u) => "• " + u.username + " (" + valFa(u) + ")";
       const owners = {};
       for (const u of r.fresh) {
         const ok = u.ownerName || "";
         (owners[ok] = owners[ok] || []).push(u);
       }
+      // دونه‌ای مثل قبل: هر کاربر پیام جدا با دو دکمه (تمدید با ربات/پنل) می‌گیرد
+      const renewbot = pgPanelBot(cfg, panel.id);
+      const dashpath = pgDashOf(cfg, panel.id);
+      const sendOne = async (id, u) => {
+        try {
+          await pgSendAlert(botToken, id, panel, {
+            username: u.username, kind, value: u.value,
+            expireTs: null, status: "",
+            owner: u.ownerName || "", renewbot, dashpath,
+          }, false);
+        } catch (e) {}
+      };
       if (!cfg.silent_me && (await pgStarted(kv, adminId))) {
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(r.fresh.length) + " مورد)";
-        for (const ch of chunkText(txt + "\n" + r.fresh.map(line).join("\n"))) {
-          try { await sendMessage(botToken, adminId, ch); } catch (e) {}
-        }
+        for (const u of r.fresh) await sendOne(adminId, u);
       }
       for (const on of Object.keys(owners)) {
         if (!on) continue;
@@ -9447,11 +10032,8 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
         }
         if (!started.length) continue;
         const arr = owners[on];
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(arr.length) + " مورد)";
         for (const id of started) {
-          for (const ch of chunkText(txt + "\n" + arr.map(line).join("\n"))) {
-            try { await sendMessage(botToken, id, ch); } catch (e) {}
-          }
+          for (const u of arr) await sendOne(id, u);
         }
       }
     }
@@ -9479,7 +10061,7 @@ async function renderPgHookHome(edit, kv, env, adminId) {
   }
   lines.push("وضعیت: " + (cfg.enabled ? "▶️ فعال" : "⏸ غیرفعال (پیام نمی‌آید)"));
   lines.push("📅 آستانه‌ها در خود پنل تنظیم می‌شوند (پیشنهاد: روز ۱، حجم ۹۰٪).");
-  lines.push("📦 ارسال جمعی پولی: حجم ساعتی یک‌جا، انقضا روزی یک‌بار (کرون خودش از پنل می‌خواند)؛ فقط بحران امروزی (۰ روز / ۱۰۰٪) فوری می‌آید.");
+  lines.push("📩 هشدار تکی: هر کاربر جدا با دو دکمه (🔄 تمدید با ربات · 🖥 تمدید با پنل)؛ حجم ساعتی، انقضا روزی یک‌بار (کرون خودش از پنل می‌خواند).");
   lines.push("🖥 پنل‌های متصل: " + Object.keys(cfg.panels).length + " از " + panels.length);
   lines.push("");
   lines.push("روش: در تنظیمات webhook هر پنل، آدرس اختصاصی‌اش را بگذار تا وقتی کاربری به آستانه رسید، پنل خودش خبر بده. ادمین اصلی همه را می‌گیرد؛ هر لینک‌شده‌ای (ادمین یا نه) فقط کاربرهای خودش را می‌گیرد (باید استارت زده باشد).");
@@ -11740,6 +12322,20 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
+  if (type === "guardian_token") {
+    // ثبت دستی توکن ایجنت (وقتی نصاب روی سرور، خودش توکن ساخته است)
+    await kv.delete(`pend:${chatId}`);
+    const tok = String(txt || "").trim();
+    if (!/^[A-Za-z0-9_-]{16,128}$/.test(tok)) {
+      return send("❌ توکن نامعتبر است (۱۶ تا ۱۲۸ کاراکتر حروف/عدد). دوباره بفرست یا از «🖥 نصب ایجنت» دستور آماده را بگیر.", [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]]);
+    }
+    let cur = null;
+    try { cur = await getGuardianCfg(kv); } catch (e) {}
+    try { await saveGuardianCfg(kv, { url: (cur && cur.url) || "", token: tok, added_at: Date.now() }); } catch (e) {}
+    await send("✅ توکن ایجنت ثبت شد. اگر آدرس ایجنت هنوز ثبت نشده، با اولین heartbeat خودکار ثبت می‌شود؛ وضعیت را از «🔄 نسخه‌ها» ببین.", [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    return;
+  }
+
   if (type === "srv_sub_pw") {
     // رمز یکی برای همهٔ سرورهای انتخاب‌شده از ساب‌دامنه («-» یعنی بدون رمز)
     await kv.delete(`pend:${chatId}`);
@@ -13599,6 +14195,19 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         }
         const vLatest = selfLatestTag(vItems.map((x) => x.tag));
         if (vLatest) vKb.push([{ text: "⬆️ آپدیت به نسخه آخر (" + vLatest + ")", callback_data: "verlatest" }]);
+        // 🖥 ایجنت سرور: وضعیت + دکمه‌های نصب/آپدیت/ثبت توکن
+        let vGCfg = null, vGSt = {};
+        try { vGCfg = await getGuardianCfg(kv); } catch (e) {}
+        try { vGSt = await getGuardianState(kv); } catch (e) {}
+        if (vGCfg && vGCfg.url) {
+          const vAlive = vGSt.mode === "server";
+          vLines.push("", "🖥 ایجنت سرور: " + (vAlive ? "🟢 فعال" : "🔴 قطع (ورکر اضطراری کار می‌کند)") + (vGSt.agent_version ? " · v" + vGSt.agent_version : ""));
+          vKb.push([{ text: "⬆️ آپدیت ایجنت", callback_data: "guardian:update" }]);
+          vKb.push([{ text: "🖥 نصب مجدد / سرور جایگزین", callback_data: "guardian:install" }]);
+        } else {
+          vLines.push("", "🖥 ایجنت سرور: ⚪ نصب نشده (کارها روی ورکر است؛ برای رفع سقف کلادفلر نصب کن)");
+          vKb.push([{ text: "🖥 نصب ایجنت روی سرور", callback_data: "guardian:install" }]);
+        }
         vKb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
         await edit(vLines.join("\n").slice(0, 3500), vKb);
       }
@@ -13648,6 +14257,55 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await edit("✅ به نسخه آخر آپدیت شد: " + vDec.tag + "\n\n🕐 انتشار نسخهٔ جدید روی کلادفلر تا ~۱ دقیقه طول می‌کشد؛ اگر صفحهٔ نسخه‌ها هنوز قدیمی نشان داد کمی صبر کن و دوباره بازش کن.", vBack2);
       } else {
         await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + (vr2.detail ? ": " + vr2.detail : "") + ").", vBack2);
+      }
+    } else if (data === "guardian:install") {
+      // راهنمای نصب ایجنت روی سرور (توکن یکتا از قبل ساخته و ذخیره می‌شود تا heartbeat معتبر باشد)
+      const gBack = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      let gCfg = null;
+      try { gCfg = await getGuardianCfg(kv); } catch (e) {}
+      if (!gCfg || !gCfg.token) {
+        gCfg = { url: (gCfg && gCfg.url) || "", token: makeGuardianToken(), added_at: Date.now() };
+        try { await saveGuardianCfg(kv, gCfg); } catch (e) {}
+      }
+      let wb = "";
+      try { wb = await guardianWorkerBase(kv, env); } catch (e) {}
+      const cmd = guardianInstallCmd(wb, gCfg.token);
+      await edit(
+        [
+          "🖥 نصب ایجنت روی سرور",
+          "",
+          "این دستور را روی سرور بزن (با دسترسی root):",
+          "",
+          cmd,
+          "",
+          wb ? "✅ آدرس ورکر خودکار گذاشته شد." : "⚠️ به‌جای YOUR-WORKER آدرس ورکرت را بگذار (همانی که ربات رویش نصب است).",
+          "اگر روی سرور دیگری نصب کردی و توکن فرق کرد، دکمهٔ «🔑 ثبت توکن» را بزن.",
+        ].join("\n").slice(0, 3500),
+        [[{ text: "🔑 ثبت توکن ایجنت", callback_data: "guardian:token" }], ...gBack]
+      );
+    } else if (data === "guardian:token") {
+      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "guardian_token" }), { expirationTtl: 600 });
+      await edit("🔑 توکنی که نصاب روی سرور چاپ کرد را بفرست (همان GUARDIAN_TOKEN).", [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]]);
+    } else if (data === "guardian:update") {
+      // آپدیت از راه دور ایجنت (خودآپدیت + ری‌استارت با systemd)
+      const gBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      let gCfg2 = null;
+      try { gCfg2 = await getGuardianCfg(kv); } catch (e) {}
+      if (!gCfg2 || !gCfg2.url) {
+        await edit("⚪ ایجنت نصب نشده. اول از دکمهٔ نصب، ایجنت را روی سرور نصب کن.", gBack2);
+      } else {
+        await edit("⏳ در حال بررسی آخرین نسخه…");
+        let upSrc = { tag: "", src: "" };
+        try { upSrc = await guardianUpdateSrc(kv); } catch (e) {}
+        await edit("⏳ در حال فرستادن دستور آپدیت به ایجنت" + (upSrc.tag ? " (" + upSrc.tag + ")" : "") + "…");
+        const r = await guardianPost(gCfg2, "/update", { src: upSrc.src }, 60000);
+        if (r.ok) {
+          await edit("✅ دستور آپدیت فرستاده شد" + (upSrc.tag ? " (" + upSrc.tag + ")" : "") + "؛ ایجنت تا ~۳۰ ثانیه دیگر با نسخهٔ جدید برمی‌گردد (وضعیت را از همین صفحه ببین).", gBack2);
+        } else {
+          let wb2 = "";
+          try { wb2 = await guardianWorkerBase(kv, env); } catch (e) {}
+          await edit("❌ ایجنت جواب نداد (" + String(r.error || "unknown") + "). اگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + guardianInstallCmd(wb2, gCfg2.token), gBack2);
+        }
       }
     } else if (data === "hubstats") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
@@ -16999,7 +17657,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       let hfN = Number(cfg.last_domains) || 0;
       if (!hfN) {
         try {
-          const hc = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+          const hc = await hfStateGet(kv, "hosts_cache", "json");
           hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
         } catch (e) {}
       }
@@ -17047,7 +17705,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       await saveHostFilterCfg(kv, fCfg);
       try {
-        const fr = await runHostFilter(env, { force: true });
+        const fr = await runHostFilterMaybeRemote(env, { force: true });
+        if (fr && fr.error === "busy") return edit(hfBusyMsg(), fBack);
         const fFresh = await getHostFilterCfg(kv);
         if (fFresh && fFresh.manual_request && String((fFresh.manual_request.only || "")) === fKey) {
           fFresh.manual_request = null;
@@ -17083,7 +17742,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         let fNA = Number(fcA.last_domains) || 0;
         if (!fNA) {
           try {
-            const hcA = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+            const hcA = await hfStateGet(kv, "hosts_cache", "json");
             fNA = (Array.isArray(hcA) ? hcA.length : 0) * 2;
           } catch (e) {}
         }
@@ -17092,7 +17751,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       await saveHostFilterCfg(kv, fcA);
       try {
-        const frA = await runHostFilter(env, { force: true });
+        const frA = await runHostFilterMaybeRemote(env, { force: true });
+        if (frA && frA.error === "busy") return edit(hfBusyMsg(), fBackA);
         try {
           const fFreshA = await getHostFilterCfg(kv);
           if (fFreshA && fFreshA.manual_request && String((fFreshA.manual_request.ts || "")) === fTsA) {
@@ -17124,13 +17784,15 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       let hfN = Number(cfg.last_domains) || 0;
       if (!hfN) {
         try {
-          const hc = await kvGetCached(kv, "hosts_cache", "json", 3600000);
+          const hc = await hfStateGet(kv, "hosts_cache", "json");
           hfN = (Array.isArray(hc) ? hc.length : 0) * 2;
         } catch (e) {}
       }
       const hfMins = hfEstimateMin(hfN);
       cfg.manual_watch = { by: chatId, since: Date.now(), deadline: Date.now() + (hfMins + 2) * 60000, reported: false };
       await saveHostFilterCfg(kv, cfg);
+      // اگر ایجنت فعال است، همین حالا بیدارش کن (کرون ورکر رد می‌کند)؛ وگرنه کرون خودش برمی‌دارد
+      try { await pokeGuardianJob(env, "hostfilter", {}); } catch (e) {}
       const hfScope = hfN ? " (" + hfN + " دامنه، حدود " + hfMins + " دقیقه)" : "";
       await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfforeign") {
@@ -17146,7 +17808,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const txt = await hfForeignScan(kv, env);
       await edit(txt, [[{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfhist") {
-      const log = await kv.get("host_filter_log", "json");
+      const log = await hfStateGet(kv, "host_filter_log", "json");
       const lines = ["📜 تاریخچهٔ تعویض خودکار", ""];
       if (!Array.isArray(log) || !log.length) {
         lines.push("📭 هنوز رویدادی ثبت نشده.");
@@ -17221,8 +17883,12 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await renderHostFilterBackups(edit, kv);
     } else if (data === "hfbknow") {
       await edit("⏳ در حال گرفتن بکاپ از هاست‌ها…");
-      const b = await hfSnapshot(kv, env, "دستی");
-      await edit("✅ بکاپ «" + ndFmtTs(b.ts) + "» با " + b.count + " هاست ساخته شد.", [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      const b = await hfRemoteCall(env, "hfsnapshot", { label: "دستی" }, () => hfSnapshot(kv, env, "دستی"));
+      if (b && b.error === "busy") {
+        await edit(hfBusyMsg(), [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      } else {
+        await edit("✅ بکاپ «" + ndFmtTs(b.ts) + "» با " + b.count + " هاست ساخته شد.", [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      }
     } else if (data.startsWith("hfbkr:")) {
       const id = data.slice(6);
       await edit("⚠️ بازگردانی این بکاپ، مقادیر address/sni/host همهٔ هاست‌ها را به آن زمان برمی‌گرداند. مطمئنی؟", [
@@ -17232,8 +17898,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("hfbkrd:")) {
       const id = data.slice(7);
       await edit("⏳ در حال بازگردانی بکاپ…");
-      const r = await hfRestoreBackup(kv, env, id);
-      if (r.error) {
+      const r = await hfRemoteCall(env, "hfrestore", { id }, () => hfRestoreBackup(kv, env, id));
+      if (r.error === "busy") {
+        await edit(hfBusyMsg(), [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      } else if (r.error) {
         await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
         await edit("✅ بازگردانی انجام شد.\nموفق: " + r.ok + " — ناموفق: " + r.fail, [[{ text: "🔙 بازگشت", callback_data: "hfbk" }, { text: "🏠 خانه", callback_data: "menu" }]]);
@@ -17247,8 +17915,10 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const key = data.slice(6);
       const parts = key.split(":");
       await edit("⏳ در حال بازگردانی…");
-      const r = await hostFilterRevert(kv, env, parts[0], parts[1]);
-      if (r.error) {
+      const r = await hfRemoteCall(env, "hfrevert", { panel: parts[0], host: parts[1] }, () => hostFilterRevert(kv, env, parts[0], parts[1]));
+      if (r.error === "busy") {
+        await edit(hfBusyMsg(), [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      } else if (r.error) {
         await edit("❌ بازگردانی ناموفق: " + escHtml(String(r.error)), [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
       } else {
         await edit("✅ به دامنهٔ قبلی برگشت.", [[{ text: "🧭 تعویض خودکار هاست فیلتر", callback_data: "hf" }]]);
@@ -23638,7 +24308,8 @@ async function runHostFilter(env, opts = {}) {
 
 async function renderHostFilterHome(edit, kv, env) {
   const cfg = await getHostFilterCfg(kv);
-  const states = await getHostStateAll(kv);
+  const statesRaw = await hfStateGet(kv, "host_filter_state", "json");
+  const states = statesRaw && typeof statesRaw === "object" ? statesRaw : {};
   const backups = await getHfBackups(kv);
   const count = Object.keys(states).length;
   const lines = ["🧭 تعویض خودکار هاست فیلتر", ""];
@@ -23961,7 +24632,7 @@ async function renderDailyRotSet(edit, kv, env, pid, hid) {
 }
 async function renderDailyRotLog(edit, kv, chatId) {
   let log = [];
-  try { log = (await kv.get("host_filter_log", "json")) || []; } catch (e) { log = []; }
+  try { log = (await hfStateGet(kv, "host_filter_log", "json")) || []; } catch (e) { log = []; }
   const scope = await hfdScopeGet(kv, chatId);
   const rows = (Array.isArray(log) ? log : [])
     .filter((e) => e && (e.kind === "dailyrot" || e.kind === "dailyrot_revert") && (!scope || String(e.panel_id) === String(scope)))

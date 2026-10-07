@@ -159,6 +159,13 @@ t() {
     en:rl_fw)                  printf '%s' "The port must be open externally:" ;;
     en:rl_register_q)          printf '%s' "Auto-register the relay in the bot? (creates an A record on your Cloudflare zone) [y/N] " ;;
 
+    en:gd_title)               printf '%s' "Setting up the guardian agent (server-side offload)" ;;
+    en:gd_token)               printf '%s' "Agent token:" ;;
+    en:gd_oneliner)            printf '%s' "Run this ONE line on the customer server (as root):" ;;
+    en:gd_register_q)          printf '%s' "Register the agent token in the bot now? [y/N] " ;;
+    en:gd_registered)          printf '%s' "Agent token registered in the bot." ;;
+    en:gd_manual)              printf '%s' "Skipped — register later with: python3 deploy-tool.py guardian-register --token ..." ;;
+
     en:st_title)               printf '%s' "Cloud Guardian status" ;;
     en:ck_title)               printf '%s' "Checking Cloudflare token permissions" ;;
 
@@ -167,6 +174,7 @@ t() {
     en:cmd_update)             printf '%s' "Update" ;;
     en:cmd_uninstall)          printf '%s' "Uninstall" ;;
     en:cmd_relay)              printf '%s' "SSH relay" ;;
+    en:cmd_guardian)           printf '%s' "Guardian agent (server offload)" ;;
     en:cmd_status)             printf '%s' "Status" ;;
     en:cmd_check)              printf '%s' "Check token" ;;
     en:cmd_help)               printf '%s' "Help" ;;
@@ -751,6 +759,9 @@ do_install() {
   tg_send_text "$BOT" "${ADMIN%%,*}" "$(t done_tg_msg)"
   trigger_start "$url/tg" "${ADMIN%%,*}"
 
+  # ایجنت سرور: قلب تپندهٔ نصب تازه — بدون آن همهٔ کارها روی ورکر می‌ماند و سقف‌ها برمی‌گردند
+  do_guardian_agent "$url"
+
   printf '\n'
   printf "${GREEN}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
   printf "${GREEN}${BOLD}  │${RST}  🎉 ${GREEN}${BOLD}%s${RST}\n" "$(t done_title)"
@@ -886,6 +897,39 @@ do_relay() {
   printf '\n'
 }
 
+do_guardian_agent() {
+  # نصب تازه و مستقل: توکن می‌سازد، دستور یک‌خطی سرور مشتری را چاپ می‌کند و
+  # (با تأیید) توکن را در KV ورکر ثبت می‌کند تا heartbeat ایجنت معتبر باشد.
+  # آرگومان اول اختیاری: آدرس عمومی ورکر (در do_install موجود است).
+  local WORKER_URL_IN="${1:-}"
+  printf "\n${MAG}${BOLD}🖥️  %s${RST}\n" "$(t gd_title)"; hr
+  local TOK="${GUARDIAN_TOKEN:-}"
+  [ -n "$TOK" ] || TOK="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
+  local WURL="$WORKER_URL_IN"
+  [ -n "$WURL" ] || WURL="https://YOUR-WORKER.workers.dev"
+  printf '\n'
+  printf "  • %s\n" "$(t gd_oneliner)"
+  printf "    ${YELLOW}${BOLD}sudo GUARDIAN_TOKEN=\"%s\" WORKER_URL=\"%s\" bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/guardian-agent-install.sh)\"${RST}\n" "$TOK" "$WURL"
+  printf "  • %s ${YELLOW}${BOLD}%s${RST}\n" "$(t gd_token)" "$TOK"
+  printf '\n'
+  local reg="n"
+  if [ -f "$CFG" ] && [ -n "$CFG_TOKEN" ]; then
+    if [ -t 0 ]; then
+      read -rp "  🔗 $(t gd_register_q)" reg || reg="n"
+    fi
+    if [[ "${reg,,}" == "y" ]]; then
+      ( cd "$DIR" && python3 deploy-tool.py guardian-register --token "$TOK" ) \
+        && ok "$(t gd_registered)" \
+        || warn "$(t w_relay_reg)"
+    else
+      printf "  • %s\n" "$(t gd_manual)"
+    fi
+  else
+    printf "  • %s\n" "$(t gd_manual)"
+  fi
+  printf '\n'
+}
+
 # ============================================================
 # status / check
 # ============================================================
@@ -1007,6 +1051,7 @@ usage() {
   printf "  ${GREEN}update${RST}       %s\n" "$(t cmd_update)"
   printf "  ${GREEN}uninstall${RST}    %s\n" "$(t cmd_uninstall)"
   printf "  ${GREEN}relay${RST}        %s\n" "$(t cmd_relay)"
+  printf "  ${GREEN}guardian${RST}     %s\n" "$(t cmd_guardian)"
   printf "  ${GREEN}status${RST}       %s\n" "$(t cmd_status)"
   printf "  ${GREEN}check${RST}        %s\n" "$(t cmd_check)"
   printf "  ${GREEN}help${RST}         %s\n" "$(t cmd_help)"
@@ -1030,9 +1075,10 @@ main_menu() {
     printf "    ${GREEN}2)${RST} %s\n" "$(t cmd_update)"
     printf "    ${GREEN}3)${RST} %s\n" "$(t cmd_uninstall)"
     printf "    ${GREEN}4)${RST} %s\n" "$(t cmd_relay)"
-    printf "    ${GREEN}5)${RST} %s\n" "$(t cmd_status)"
-    printf "    ${GREEN}6)${RST} %s\n" "$(t cmd_check)"
-    printf "    ${GREEN}7)${RST} %s\n" "$(t cmd_help)"
+    printf "    ${GREEN}5)${RST} %s\n" "$(t cmd_guardian)"
+    printf "    ${GREEN}6)${RST} %s\n" "$(t cmd_status)"
+    printf "    ${GREEN}7)${RST} %s\n" "$(t cmd_check)"
+    printf "    ${GREEN}8)${RST} %s\n" "$(t cmd_help)"
     printf "    ${RED}0)${RST} %s\n\n" "$(t menu_exit)"
     local c
     read -rp "  $(t menu_choose)" c || { printf '\n'; exit 0; }
@@ -1041,9 +1087,10 @@ main_menu() {
       2) do_update ;;
       3) do_uninstall ;;
       4) do_relay ;;
-      5) do_status ;;
-      6) do_check ;;
-      7) usage ;;
+      5) do_guardian_agent ;;
+      6) do_status ;;
+      7) do_check ;;
+      8) usage ;;
       0|q|exit|خروج) printf '\n'; exit 0 ;;
       *) err "$(t menu_invalid)"; continue ;;
     esac
@@ -1073,6 +1120,7 @@ case "$cmd" in
   update|u|deploy)     do_update ;;
   uninstall|remove|rm) do_uninstall "$@" ;;
   relay|r)             do_relay "$@" ;;
+  guardian|g)          do_guardian_agent "$@" ;;
   status|s)            do_status ;;
   check|c)             do_check ;;
   help|-h|--help)      usage ;;

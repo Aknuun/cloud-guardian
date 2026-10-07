@@ -84,6 +84,8 @@ _S = {
     "deleted_kv":      ("✅ حذف شد از KV: %s", "✅ Deleted from KV: %s"),
     "relay_no_token":  ("⚠️ توکن رله داده نشده؛ فقط آدرس ذخیره شد.", "⚠️ No relay token given; only the URL was saved."),
     "relay_registered":("✅ رله در ربات ثبت شد: %s", "✅ Relay registered in the bot: %s"),
+    "guardian_no_token":  ("⚠️ توکن ایجنت داده نشده.", "⚠️ No agent token given."),
+    "guardian_registered":("✅ توکن ایجنت در ربات ثبت شد.", "✅ Agent token registered in the bot."),
     "zones_fail":      ("❌ گرفتن زون‌ها ناموفق: %s", "❌ Failed to fetch zones: %s"),
     "no_active_zone":  ("❌ هیچ زون فعالی پیدا نشد.", "❌ No active zone found."),
     "domain_not_found":("❌ دامنه پیدا نشد در اکانت: %s", "❌ Domain not found in the account: %s"),
@@ -806,6 +808,21 @@ def cmd_del_kv(cfg, tok, key):
     return 0
 
 
+def cmd_guardian_register(cfg, tok, token, url="", dry_run=False):
+    # ثبت توکن ایجنت سرور در KV ورکر (آدرس بعداً با اولین heartbeat خودکار پر می‌شود)
+    if not token:
+        print(T("guardian_no_token"), file=sys.stderr)
+        return 1
+    val = json.dumps({"url": (url or "").rstrip("/"), "token": token, "added_at": int(time.time() * 1000)})
+    if dry_run:
+        print(f"[dry-run] KV: guardian_cfg.url={url or '(pending)'} , token=***")
+        return 0
+    rc = cmd_set_kv(cfg, tok, "guardian_cfg", val)
+    if rc == 0:
+        print(T("guardian_registered"))
+    return rc
+
+
 def cmd_relay_register(cfg, tok, address, token, domain="", port=8788, dry_run=False):
     if address.startswith("http://") or address.startswith("https://"):
         url = address.rstrip("/")
@@ -903,6 +920,10 @@ def build_parser():
     r.add_argument("--domain", default="", help="zone domain to create rel.<domain> (optional)")
     r.add_argument("--port", type=int, default=8788, help="relay port (default 8788)")
     r.add_argument("--dry-run", action="store_true", help="print only, no changes")
+    g = sub.add_parser("guardian-register", help="register the guardian agent token in the bot")
+    g.add_argument("--token", default=os.environ.get("GUARDIAN_TOKEN", ""), help="agent token (32 hex chars)")
+    g.add_argument("--url", default="", help="agent public URL (optional; auto-filled on first heartbeat)")
+    g.add_argument("--dry-run", action="store_true", help="print only, no changes")
     return p
 
 
@@ -940,6 +961,8 @@ def main():
         sys.exit(cmd_del_kv(cfg, tok, args.key))
     elif cmd == "relay-register":
         sys.exit(cmd_relay_register(cfg, tok, args.address, args.token, args.domain, args.port, args.dry_run))
+    elif cmd == "guardian-register":
+        sys.exit(cmd_guardian_register(cfg, tok, args.token, args.url, args.dry_run))
     else:
         parser.print_help()
         sys.exit(1)
