@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.0.2";
+const BOT_VERSION = "2.0.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.0.3": [
+    "🖥️ فیکس قطع دائمی ایجنت روی سرورهای IPv6 (آدرس بدون براکت): نرمال‌سازی خودکار در heartbeat و ping + براکت خودکار در نصاب",
+  ],
   "2.0.2": [
     "🖥️ خروجی نصاب ایجنت کاملا انگلیسی شد (کپی تمیز در ترمینال) + چاپ رنگی توکن در آخر",
     "🔑 دکمه ثبت توکن ایجنت به پیام خبر مهم اضافه شد",
@@ -7033,10 +7036,29 @@ async function guardianAdmins(kv, env) {
   return out;
 }
 
+function guardianNormUrl(u) {
+  // Bare-IPv6 agent URLs (e.g. http://2a01:...:8789 from installer auto-detect)
+  // are rejected by fetch; wrap the host in brackets.
+  let t = String(u || "").replace(/\/+$/, "").slice(0, 200);
+  if (!t) return "";
+  try { new URL(t); return t; } catch (e) {}
+  const m = /^(https?:\/\/)(.+)$/i.exec(t);
+  if (!m) return t;
+  let rest = m[2];
+  let port = "";
+  const ncolon = (rest.match(/:/g) || []).length;
+  const pm = /:(\d{1,5})$/.exec(rest);
+  if (pm && ncolon >= 3) { port = pm[0]; rest = rest.slice(0, -port.length); }
+  if (rest.indexOf(":") === -1 || rest[0] === "[") return t;
+  const fixed = m[1] + "[" + rest + "]" + port;
+  try { new URL(fixed); return fixed; } catch (e2) { return t; }
+}
+
 async function guardianPing(url) {
   // پینگ فعال ایجنت (مثل relayPing): زنده‌بودن را ورکر تشخیص می‌دهد، بدون write ثابت
   try {
-    const res = await fetch(String(url).replace(/\/+$/, "") + "/ping", { signal: AbortSignal.timeout(GUARDIAN_PING_TIMEOUT_MS) });
+    const base = guardianNormUrl(url).replace(/\/+$/, "");
+    const res = await fetch(base + "/ping", { signal: AbortSignal.timeout(GUARDIAN_PING_TIMEOUT_MS) });
     if (!res.ok) return { ok: false, error: "http_" + res.status };
     const d = await res.json();
     if (!d || d.ok !== true || d.agent !== "guardian-agent") return { ok: false, error: "bad_agent" };
@@ -7049,7 +7071,8 @@ async function guardianPing(url) {
 async function guardianPost(cfg, path, body, timeoutMs) {
   if (!cfg || !cfg.url || !cfg.token) return { error: "no_agent" };
   try {
-    const res = await fetch(String(cfg.url).replace(/\/+$/, "") + path, {
+    const base = guardianNormUrl(cfg.url).replace(/\/+$/, "");
+    const res = await fetch(base + path, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Guardian-Token": cfg.token },
       body: JSON.stringify(body || {}),
@@ -7082,8 +7105,8 @@ async function handleGuardianIngest(env, b) {
     let st = {};
     try { st = await getGuardianState(kv); } catch (e) {}
     // ثبت خودکار آدرس ایجنت در اولین heartbeat (نصب با توکنِ ازپیش‌ساختهٔ ربات)
-    const pub = String(b.public_url || "").replace(/\/+$/, "").slice(0, 200);
-    if (!cfg.url && pub && /^https?:\/\/.+/i.test(pub)) {
+    const pub = guardianNormUrl(b.public_url);
+    if (pub && /^https?:\/\/.+/i.test(pub) && pub !== cfg.url) {
       cfg.url = pub;
       try { await saveGuardianCfg(kv, cfg); } catch (e) {}
     }

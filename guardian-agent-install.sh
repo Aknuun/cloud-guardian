@@ -126,7 +126,14 @@ if [ -z "$PUBLIC_URL" ]; then
   # پیش‌فرض خودکار از آی‌پی عمومی (برای ثبت خودکار آدرس در ورکر با اولین heartbeat؛
   # اگر سرور پشت NAT/فایروال است، دستی در $CONF_FILE درستش کن)
   _pip="$(curl -fsSL --max-time 10 https://ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
-  if [ -n "$_pip" ]; then PUBLIC_URL="http://${_pip}:${PORT}"; fi
+  if [ -n "$_pip" ]; then
+    # Bare IPv6 is invalid in URLs (worker fetch fails); wrap it in brackets
+    case "$_pip" in
+      \[*\]) ;;
+      *:* ) _pip="[$_pip]" ;;
+    esac
+    PUBLIC_URL="http://${_pip}:${PORT}"
+  fi
 fi
 {
   echo "# ساخته‌شده توسط guardian-agent-install.sh — دستی ویرایش نکن (600)"
