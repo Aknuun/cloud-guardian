@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.26";
+const BOT_VERSION = "1.9.27";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.27": [
+    "🔇 خطای خوش‌خیم «message is not modified» دیگر خطا نیست (دابل‌تپ و رفرش تکراری)",
+  ],
   "1.9.26": [
     "🚨 هشدار نود تکی شد: گیت مشترک ۱۰ دقیقه‌ای برای پول/وبهook/چند مانیتور + وصل‌شدن همیشه اعلام می‌شود",
   ],
@@ -4257,6 +4260,11 @@ function tgClipCp(s, n) {
   const arr = Array.from(str);
   return arr.length > n ? arr.slice(0, n).join("") : str;
 }
+// خطای خوش‌خیم «محتوا عوض نشده» تلگرام (۴۰۰) — خالص برای تست
+function tgNotModified(data) {
+  return !!data && data.ok !== true && Number(data.error_code) === 400 &&
+    /message is not modified/i.test(String(data.description || ""));
+}
 async function tg(botToken, method, body) {
   try {
     applyBtnStyles(body);
@@ -4273,6 +4281,11 @@ async function tg(botToken, method, body) {
     signal: withTimeout(30000),
   });
   const data = await res.json();
+  if (tgNotModified(data)) {
+    // بازرسم محتوای یکسان (دابل‌تپ، رفرش تکراری، مسابقهٔ دو هندلر): از نظر
+    // تلگرام 400 است ولی از نظر ما no-op موفق است — نباید خطا شود.
+    return { ok: true, result: null, not_modified: true };
+  }
   if (!data.ok) {
     const err = new Error(`TG_${method}: ${data.error_code} ${data.description}`);
     err.tgCode = data.error_code;
