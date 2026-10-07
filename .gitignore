@@ -1,4 +1,6 @@
 # تنظیمات محلی — هرگز در مخزن قرار نگیرد
 config.json
 deploy.json
-*.log__pycache__/
+*.log
+__pycache__/
+
