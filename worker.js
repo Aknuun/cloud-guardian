@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.1.2";
+const BOT_VERSION = "2.1.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.1.3": [
+    "🖥 تشخیص زنده‌بودن ایجنت با heartbeat تازه (بدون نیاز به ping): تا وقتی ایجنت هر دقیقه گزارش می‌دهد همیشه سبز است",
+  ],
   "2.1.2": [
     "🖥 فیکس جنگ بازنویسی آدرس ایجنت: heartbeat دیگر آدرس ثبت‌شده را عوض نمی‌کند (فقط وقتی خالی است ثبت می‌شود) تا واچ‌داگ پایدار سبز بماند",
   ],
@@ -6992,9 +6995,14 @@ async function handleGuardianIngest(env, b) {
       cfg.url = pub;
       try { await saveGuardianCfg(kv, cfg); } catch (e) {}
     }
-    // write فقط موقع تغییر نسخه (نه هر دقیقه — سهمیهٔ write رایگان ۱۰۰۰/روز است)
-    if (ver && ver !== st.agent_version) {
-      try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: ver })); } catch (e) {}
+    // write فقط موقع تغییر نسخه یا مُهر تازگی heartbeat (حداکثر هر ۵ دقیقه —
+    // سهمیهٔ write رایگان ۱۰۰۰/روز است). واچ‌داگ با last_hb تازه، بدون ping، سبز می‌ماند.
+    const nowHb = Date.now();
+    let hbDirty = false;
+    if (ver && ver !== st.agent_version) { st.agent_version = ver; hbDirty = true; }
+    if (!st.last_hb || nowHb - st.last_hb >= 300000) { st.last_hb = nowHb; hbDirty = true; }
+    if (hbDirty) {
+      try { await kv.put("guardian_state", JSON.stringify(st)); } catch (e) {}
     }
     return { ok: true, mode: "server", version: BOT_VERSION };
   }
@@ -7026,8 +7034,14 @@ async function runGuardianWatchdog(env, botToken, adminId) {
   try { st = await getGuardianState(kv); } catch (e) {}
   if (!st || typeof st !== "object") st = {};
   const now = Date.now();
+  // heartbeat تازه (کمتر از ۶ دقیقه) = ایجنت زنده است؛ بدون ping سبز بمان.
+  // این مسیر ضد فایروال/نوسان است: فقط وقتی heartbeat قطع باشد ping زده می‌شود.
+  const hbFresh = !!(st.last_hb && now - st.last_hb < 360000);
   let ping = { ok: false, error: "no_ping" };
-  try { ping = await guardianPing(cfg.url); } catch (e) { ping = { ok: false, error: "ping_throw" }; }
+  if (hbFresh) ping = { ok: true, via: "heartbeat" };
+  if (!hbFresh) {
+    try { ping = await guardianPing(cfg.url); } catch (e) { ping = { ok: false, error: "ping_throw" }; }
+  }
   if (ping.ok) {
     if (ping.version && ping.version !== st.agent_version) {
       try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: String(ping.version) })); } catch (e) {}
