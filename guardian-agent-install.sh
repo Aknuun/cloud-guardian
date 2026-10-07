@@ -20,6 +20,9 @@
 # =====================================================================
 set -u
 
+# colors for terminal output (disabled when piped)
+if [ -t 1 ]; then TCOL='\033[1;33m'; RST='\033[0m'; else TCOL=''; RST=''; fi
+
 REPO_RAW="${AGENT_SRC_URL:-https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/guardian-agent.js}"
 # رانر همیشه از همان پایهٔ ایجنت می‌آید (AGENT_SRC_URL سفارشی هم پوشش داده می‌شود)
 RUNNER_RAW="${REPO_RAW%/*}/guardian-runner.js"
@@ -36,9 +39,9 @@ TOKEN_IN="${GUARDIAN_TOKEN:-}"
 info() { echo "[guardian] $*"; }
 fail() { echo "[guardian] ❌ $*" >&2; exit 1; }
 
-[ "$(id -u)" = "0" ] || fail "با root اجرا کن (sudo)."
-command -v systemctl >/dev/null 2>&1 || fail "systemd پیدا نشد (فقط Ubuntu/Debian با systemd)."
-command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl ca-certificates; } || fail "نصب curl ناموفق بود."
+[ "$(id -u)" = "0" ] || fail "Run as root (use sudo)."
+command -v systemctl >/dev/null 2>&1 || fail "systemd not found (Ubuntu/Debian with systemd only)."
+command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl ca-certificates; } || fail "Failed to install curl."
 
 # ---- Node ≥ 18 (مثل نصاب رله) ----
 need_node=0
@@ -49,11 +52,11 @@ else
   need_node=1
 fi
 if [ "$need_node" = "1" ]; then
-  info "نصب Node.js 22 ..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1 || fail "مخزن NodeSource اضافه نشد."
-  apt-get install -y -qq nodejs || fail "نصب nodejs ناموفق بود."
+  info "Installing Node.js 22 ..."
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null 2>&1 || fail "Failed to add NodeSource repository."
+  apt-get install -y -qq nodejs || fail "Failed to install nodejs."
 fi
-node --version || fail "node در دسترس نیست."
+node --version || fail "node is not available."
 NODE_BIN="$(command -v node)"
 
 # ---- پورت: اگر چیزی غیر از خودمان رویش است، با پیام تمیز بایست ----
@@ -62,7 +65,7 @@ if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then _port_open=1; fi
 if [ "$_port_open" = "1" ]; then
   _pp="$(curl -fsSL --max-time 5 "http://127.0.0.1:${PORT}/ping" 2>/dev/null || true)"
   if ! echo "$_pp" | grep -q '"agent":"guardian-agent"'; then
-    fail "پورت $PORT اشغال است (سرویس دیگری). با PORT=... پورت دیگری بده."
+    fail "Port $PORT is busy (another service). Pass a different one with PORT=..."
   fi
 fi
 
@@ -79,7 +82,7 @@ if [ -z "$TOKEN" ]; then
   else TOKEN="$(tr -dc 'a-f0-9' </dev/urandom | head -c 32)"; fi
   TOKEN_SRC="generated"
 fi
-[ "${#TOKEN}" -ge 16 ] || fail "توکن نامعتبر است (حداقل ۱۶ کاراکتر)."
+[ "${#TOKEN}" -ge 16 ] || fail "Invalid token (minimum 16 chars)."
 
 # ---- دانلود فایل ایجنت (با fallback مثل نصاب رله) ----
 mkdir -p "$INSTALL_DIR" "$CONF_DIR" "$STATE_DIR"
@@ -95,8 +98,8 @@ for url in "$REPO_RAW" \
     fi
   fi
 done
-[ "$got" = "1" ] || fail "دانلود guardian-agent.js ناموفق بود."
-node --check "$INSTALL_DIR/guardian-agent.js" || fail "فایل ایجنت خراب است."
+[ "$got" = "1" ] || fail "Failed to download guardian-agent.js."
+node --check "$INSTALL_DIR/guardian-agent.js" || fail "Agent file is corrupt."
 # رانر اجرای جاب‌ها (اختیاری ولی توصیه‌شده؛ بدون آن فقط heartbeat/exec کار می‌کند)
 _rgot=0
 for _rurl in "$RUNNER_RAW" \
@@ -110,9 +113,9 @@ for _rurl in "$RUNNER_RAW" \
   fi
 done
 if [ "$_rgot" = "1" ]; then
-  node --check "$INSTALL_DIR/guardian-runner.js" || { rm -f "$INSTALL_DIR/guardian-runner.js"; info "⚠️ رانر خراب بود، بدون رانر ادامه می‌دهم."; }
+  node --check "$INSTALL_DIR/guardian-runner.js" || { rm -f "$INSTALL_DIR/guardian-runner.js"; info "Runner file corrupt, continuing without runner."; }
 else
-  info "⚠️ دانلود رانر ناموفق بود — بدون رانر ادامه می‌دهم (heartbeat/exec سالم است)."
+  info "Runner download failed, continuing without runner (heartbeat/exec still work)."
 fi
 
 # ---- کانفیگ ----
@@ -165,7 +168,7 @@ for _try in 1 2 3 4 5; do
   if echo "$ping" | grep -q '"ok":true'; then break; fi
   sleep 2
 done
-echo "$ping" | grep -q '"ok":true' || fail "سرویس بالا نیامد — لاگ: journalctl -u guardian-agent -n 50"
+echo "$ping" | grep -q '"ok":true' || fail "Service did not start - logs: journalctl -u guardian-agent -n 50"
 ver="$(echo "$ping" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)"
 
 # ---- heartbeat آزمایشی (اگر WORKER_URL داده شده) ----
@@ -173,24 +176,28 @@ if [ -n "$WORKER_URL" ]; then
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST "$WORKER_URL/guardian" \
     -H 'Content-Type: application/json' \
     -d "{\"token\":\"$TOKEN\",\"action\":\"heartbeat\",\"version\":\"$ver\",\"ts\":$(date +%s)000,\"public_url\":\"$PUBLIC_URL\"}" || true)"
-  if [ "$code" = "200" ]; then info "heartbeat به ورکر رسید ✅"
-  else info "⚠️ ورکر جواب نداد (http=$code) — آدرس WORKER_URL یا توکن را چک کن؛ ایجنت محلی سالم است."; fi
+  if [ "$code" = "200" ]; then info "heartbeat reached the worker"
+  else info "Worker did not answer (http=$code) - check WORKER_URL and token; local agent is healthy."; fi
 else
-  info "⚠️ ‏WORKER_URL خالی است — heartbeat غیرفعال؛ در فایل $CONF_FILE بگذار و سرویس را ری‌استارت کن."
+  info "WORKER_URL is empty - heartbeat disabled; set it in $CONF_FILE and restart the service."
 fi
 
 PUBIP="$(curl -fsSL --max-time 10 https://ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
 echo "======================================================================"
-echo " ✅ ایجنت نگهبان نصب شد — نسخه $ver"
-echo " پورت      : $PORT"
-echo " توکن ($TOKEN_SRC): $TOKEN"
+echo " Guardian agent installed - version $ver"
+echo " Port         : $PORT"
+echo " Token source : $TOKEN_SRC"
 if [ "$TOKEN_SRC" = "generated" ]; then
-  echo " در ربات: «🖥 سرورها ← 🖥 نصب ایجنت روی سرور ← 🔑 ثبت توکن ایجنت» و همین توکن را بده."
+  echo " Next: register this token in the bot: Servers -> Install agent on server -> Register agent token."
 fi
-echo " تست محلی  : curl http://127.0.0.1:${PORT}/ping"
+echo " Local test   : curl http://127.0.0.1:${PORT}/ping"
 if [ -z "$PUBLIC_URL" ]; then
-  echo " ⚠️ PUBLIC_URL خالی است — ورکر آدرس ایجنت را نمی‌داند و جاب‌ها روی ورکر می‌مانند؛ در $CONF_FILE بگذار و سرویس را ری‌استارت کن."
+  echo " WARNING: PUBLIC_URL is empty - the worker does not know the agent address; jobs stay on the worker. Set it in $CONF_FILE and restart the service."
 fi
-[ -n "$PUBIP" ] && echo " آدرس عمومی: http://${PUBIP}:${PORT}  (اگر فایروال بسته است پورت $PORT را باز کن)"
-echo " لاگ        : journalctl -u guardian-agent -f"
+[ -n "$PUBIP" ] && echo " Public URL   : http://${PUBIP}:${PORT}  (if the firewall is closed, open port $PORT)"
+echo " Log          : journalctl -u guardian-agent -f"
 echo "======================================================================"
+
+echo ""
+echo -e "${TCOL}AGENT TOKEN: ${TOKEN}${RST}"
+echo "If this token differs from the one stored in the bot, register it: Versions -> Install agent -> Register agent token."
