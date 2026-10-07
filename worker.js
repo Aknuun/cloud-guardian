@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.27";
+const BOT_VERSION = "1.9.28";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "1.9.28": [
+    "🐞 فیکس دکمه غیرفعال‌سازی: کش حافظه با رشته مسموم می‌شد و تنظیمات ریست/دکمه مرده به نظر می‌رسید",
+  ],
   "1.9.27": [
     "🔇 خطای خوش‌خیم «message is not modified» دیگر خطا نیست (دابل‌تپ و رفرش تکراری)",
   ],
@@ -21976,11 +21979,17 @@ async function getHostFilterCfg(kv) {
 
 async function saveHostFilterCfg(kv, cfg) {
   const json = JSON.stringify(cfg);
-  // فقط اگر تغییر کرده بنویس (کاهش write روزانه)
+  // فقط اگر تغییر کرده بنویس (کاهش write روزانه). مقایسه روی رشتهٔ JSON تا
+  // هم شیء و هم رشتهٔ کش‌شده درست هندل شود؛ خود memSet را به kvPutCached
+  // می‌سپاریم چون شیءِ parseشده کش می‌کند (رشتهٔ خام، خواندن بعدی را مسموم
+  // می‌کرد: getHostFilterCfg رشته را {} می‌دید و همه‌چیز ریست می‌شد).
   const prev = memGet("kv:host_filter_cfg");
-  if (prev !== undefined && prev === json) return;
+  if (prev !== undefined) {
+    try {
+      if (JSON.stringify(prev) === json) return;
+    } catch (e) {}
+  }
   await kvPutCached(kv, "host_filter_cfg", json, undefined, 30000);
-  memSet("kv:host_filter_cfg", json);
 }
 
 async function getHostStateAll(kv) {
