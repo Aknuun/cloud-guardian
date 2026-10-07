@@ -59,12 +59,14 @@
 
 ---
 
-## رله (SSH)
+## ایجنت سرور (SSH و مانیتور)
 
-سروری ندارید که SSH را اجرا کند؟ رله را روی یک VPS نصب کنید:
+اتصال SSH و مانیتور سرورها از طریق ایجنت روی سرور خودتان انجام می‌شود (رله جداگانه حذف شده است).
+
+نصب با یک دستور (توکن را از ربات بگیرید):
 
 ```bash
-sudo bash -c "$(curl -sL -H 'Accept: application/vnd.github.raw' 'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main')"
+sudo GUARDIAN_TOKEN="..." WORKER_URL="https://....workers.dev" bash -c "$(curl -fsSL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/guardian-agent-install.sh)"
 ```
 
-سپس در ربات: «ℹ️ راهنما ← 🌐 راهنمای رله» — فقط آیپی را بفرستید؛ ربات خودش `rel.دامنه → آیپی` را میسازد.
+بعد توکن را در ربات ثبت کنید.

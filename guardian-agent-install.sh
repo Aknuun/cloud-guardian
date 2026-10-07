@@ -59,6 +59,10 @@ fi
 node --version || fail "node is not available."
 NODE_BIN="$(command -v node)"
 
+# ---- SSH client for proxy jobs (exec/stats on managed servers) ----
+command -v ssh >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq openssh-client; } || fail "Failed to install openssh-client."
+command -v sshpass >/dev/null 2>&1 || { apt-get install -y -qq sshpass; } || fail "Failed to install sshpass."
+
 # ---- پورت: اگر چیزی غیر از خودمان رویش است، با پیام تمیز بایست ----
 _port_open=0
 if (echo > /dev/tcp/127.0.0.1/"${PORT}") 2>/dev/null; then _port_open=1; fi

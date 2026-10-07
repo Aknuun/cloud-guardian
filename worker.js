@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.0.3";
+const BOT_VERSION = "2.1.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.1.0": [
+    "🖥️ رله SSH کاملا با ایجنت ادغام شد: اجرای SSH، آمار سرور و پروکسی HTTP از ایجنت عبور می‌کند؛ رله جداگانه و رایگان حذف شد",
+    "⚠️ اگر ایجنت نداری از نسخه‌ها نصبش کن؛ ایجنت قدیمی: apt install -y openssh-client sshpass",
+  ],
   "2.0.3": [
     "🖥️ فیکس قطع دائمی ایجنت روی سرورهای IPv6 (آدرس بدون براکت): نرمال‌سازی خودکار در heartbeat و ping + براکت خودکار در نصاب",
   ],
@@ -1678,8 +1682,6 @@ export default {
           if (!cs.hubwatch || now - cs.hubwatch >= 60 * 60000) {
             patch.hubwatch = now;
             jobs.push(runHubWatch(qe("hubwatch")).catch((e) => console.error("HUBWATCH", String(e))));
-            // واچ‌داگ رله سوار همین تیک ساعتی است (خوانش KV و سهمیه اضافه ندارد)
-            jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
           }
           // دایجست پولی هشدارهای پنل: حجم ساعتی، انقضا روزانه (هزینه ثابت هر اجرا؛ ساعت خلوت ≈ صفر write)
           if (!gIdle && (!cs.pgdu || now - cs.pgdu >= 3600000)) {
@@ -2207,7 +2209,7 @@ function helpText() {
     "ℹ️ راهنما\n\n" +
     "روی هر بخش بزن تا راهنمای همان بخش را ببینی.\n" +
     "برای «جست‌وجوی سریع» (فرستادن آی‌پی/ساب‌دامنه در چت) دکمهٔ «⚡ جای‌گذاری سریع» را بزن.\n" +
-    "مدیریت رله داخل «🌐 راهنمای رله» است."
+    "مدیریت سرورها از طریق ایجنت سرور انجام می‌شود"
   );
 }
 
@@ -2302,21 +2304,6 @@ const HELP_GUIDE = {
   fmail:
     "✉️ ایمیل دامنه\n\n" +
     "catch-all دامنه را به ورکر وصل کن؛ ایمیل‌ها یا در صندوق ربات می‌آیند یا به آدرس مقصد فوروارد می‌شوند.",
-  relay:
-    "🌐 رلهٔ SSH\n\n" +
-    "🔎 رله چیست؟\n" +
-    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس همهٔ اتصال‌های SSH (سرورها، مانیتور سرورها، چک‌هاست و API آروان) از روی یک «رله» روی یک VPS عبور می‌کنند.\n\n" +
-    "🧩 حالت‌ها\n" +
-    "• 🔀 خودکار (پیش‌فرض): اگر رلهٔ شخصی داشته باشی از آن، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.\n" +
-    "• 🌐 پیش‌فرض رایگان: فقط رلهٔ رایگان (بدون نصب).\n" +
-    "• 🔧 شخصی: فقط رلهٔ خودت.\n\n" +
-    "⚙️ مدیریت (دکمه‌های پایین همین صفحه)\n" +
-    "• 🔧 تنظیم مجدد رله: آدرس و توکن رلهٔ خودت را ثبت یا عوض کن.\n" +
-    "• 🌐 انتخاب رله پیش‌فرض: رلهٔ رایگان را فعال کن.\n\n" +
-    "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
-    code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') + "\n\n" +
-    "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.\n" +
-    "• رلهٔ پیش‌فرض با دامنه است؛ اگر سرورش جابه‌جا شود فقط DNS عوض می‌شود و تو قطع نمی‌شوی.",
   arvan:
     "🇮🇷 آروان کلاد\n\n" +
     "با کلید ماشین‌یوزر (npanel → Settings → IAM → Machine users) و تعریف قانون دسترسی:\n\n" +
@@ -2343,12 +2330,6 @@ const HELP_GUIDE = {
 // دکمه‌های پایین هر راهنما؛ برای بخش «رله» دکمه‌های مدیریت رله (قرمز) هم اضافه می‌شود.
 function helpGuideKb(key) {
   const kb = [];
-  if (key === "relay") {
-    kb.push([
-      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
-      { text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" },
-    ]);
-  }
   kb.push([
     { text: "🔙 راهنما", callback_data: "help" },
     { text: "🏠 خانه", callback_data: "menu" },
@@ -2375,14 +2356,14 @@ function helpKeyboard() {
     ],
     [{ text: "🗂 عملیات گروهی", callback_data: "hg:bulk" }],
 
-    // 🖥 سرور، رله و دیتاسنتر
-    sec("— 🖥 سرور، رله و دیتاسنتر —"),
+    // 🖥️ سرور و دیتاسنتر
+    sec("— 🖥️ سرور و دیتاسنتر —"),
     [
       { text: "🖥 سرورها و مانیتورینگ", callback_data: "hg:srv" },
       { text: "🏢 دیتاسنترها", callback_data: "hg:prov" },
     ],
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
-    [{ text: "🌐 راهنمای رله", callback_data: "hg:relay" }],
+    [[{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
 
     // 🎛 پاسارگارد
     sec("— 🎛 پاسارگارد —"),
@@ -2433,7 +2414,7 @@ function settingsHomeText() {
 function settingsHomeKb() {
   return [
     [
-      { text: "🌐 تنظیم رله", callback_data: "settingsrelay", style: "primary" },
+      [[{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
       { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
     ],
     [
@@ -3664,7 +3645,7 @@ function qAlert(kv, cat) {
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش
 // پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
-const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
+const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
   return {
@@ -3689,7 +3670,7 @@ async function qwDayMap(kv) {
 }
 const Q_ALERT_FA = {
   pghook: "هشدار انقضا/حجم", um: "بدمصرف", srvmon: "مانیتور سرور",
-  rem: "یادآور", relay: "رله", quota: "سهمیه", ssl: "گواهی SSL", domexp: "انقضای دامنه",
+  rem: "یادآور", quota: "سهمیه", ssl: "گواهی SSL", domexp: "انقضای دامنه",
 };
 // پیش‌بینی پایان روز (UTC؛ مثل روز آنالیتیکس)
 function qProj(cur) {
@@ -3756,7 +3737,7 @@ function qKvLine(em, label, v, lim) {
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", hfd: "🔁 چرخش روزانه ساب", um: "مانیتور مصرف", srv: "مانیتور سرور",
   node10: "پول نود (۱۰دقیقه‌ای)", selfup: "آپدیت خودکار",
-  ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب", relaywatch: "واچ‌داگ رله",
+  ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
   rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه", meter: "⚙️ سیستم شمارش",
   pghook: "📥 وبهوک هشدار", ndhook: "📥 وبهوک نود", mail: "📧 ایمیل",
@@ -4144,7 +4125,7 @@ async function renderQuotaMenu(edit, kv, env) {
   lines.push("", "📊 مصرف امروز به تفکیک (write واقعی):");
   await qwFlushNow(kv);
   const wmap = await qwDayMap(kv);
-  const order = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+  const order = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
   const extra = Object.keys(wmap).filter((k) => QW_CRON.has(k) && !order.includes(k)).sort();
   let anyRun = false, totW = 0;
   for (const j of [...order, ...extra]) {
@@ -6803,159 +6784,51 @@ async function selfupBackoff(kv, minMin, maxMin) {
   } catch (e) {}
 }
 
-// ===================== سرورها (SSH از طریق رلهٔ واحد) =====================
-// همهٔ اتصال‌های SSH از طریق رلهٔ واحد srv-relay (روی VPS کاربر) انجام می‌شود؛
-// کلادفلر ورکر به پورت ۲۲ دسترسی ندارد و اتصال باید از یک سرور واسط عبور کند.
-// اگر SRV_RELAY_URL تنظیم نشده باشد، پیام راهنمای نصب رله نمایش داده می‌شود.
-const SRV_RELAY_HINT =
-  "⚠️ این بخش به یک رلهٔ SSH نیاز دارد که روی یک VPS اجرا شود (کلادفلر به پورت ۲۲ دسترسی ندارد).\n\n" +
-  "🌐 ساده‌ترین راه: دکمهٔ «رلهٔ رایگان پیش‌فرض» — بدون نصب، وصل می‌شوی (رلهٔ مالک ربات که با دامنه است و قطع نمی‌شود).\n\n" +
-  "🛠 یا نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):\n" +
-  code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"') +
-  "\n\nبعد از نصب، با دکمهٔ «🔧 تنظیم رله» آدرس و توکن را ثبت کن — اگر آدرس را با آی‌پی بفرستی، ربات خودش یک ساب‌دامهٔ rel برایش می‌سازد.";
+// ===================== سرورها (SSH از طریق ایجنت) =====================
+// همهٔ اتصال‌های SSH (سرورها، مانیتور، چک‌هاست و API آروان) از طریق «🖥 ایجنت سرور»
+// روی سرور خودت انجام می‌شود؛ رلهٔ جداگانه حذف شده است. اگر ایجنت ثبت نشده باشد،
+// پیام راهنمای نصب نمایش داده می‌شود.
+const SRV_AGENT_HINT =
+  "⚠️ این بخش به «🖥 ایجنت سرور» نیاز دارد: اتصال SSH و مانیتور سرورها از طریق ایجنت روی سرور خودت انجام می‌شود (کلادفلر به پورت ۲۲ دسترسی ندارد).\n\n" +
+  "از «🖥 راهنمای نصب ایجنت» با یک دستور نصبش کن، بعد با «🔑 ثبت توکن» توکن را ثبت کن.";
 const SRV_DEFAULTS = { cpuPct: 90, memPct: 90, diskPct: 90, enabled: true, cooldownMin: 60 };
 const SRV_MON_MIN_MS = 60 * 60000; // پیش‌فرض ۶۰ دقیقه — کاهش مصرف KV
 const SRV_KB_LIMIT = 512; // سقف حجم پن Pending برای هر چت
-
-// کلیدهای KV تنظیمات رلهٔ SSH — توسط خود کاربر از ربات ثبت می‌شود
-const RELAY_URL_KEY = "srv_relay_url";
-const RELAY_TOKEN_KEY = "srv_relay_token";
-// حالت رله: auto (شخصی اگر هست، وگرنه پیش‌فرض + fallback خودکار) | custom (فقط شخصی) | default (فقط پیش‌فرض رایگان)
-const RELAY_MODE_KEY = "srv_relay_mode";
-// رلهٔ پیش‌فرض رایگان (مالک ربات) — با دامنه است تا جابه‌جایی سرور فقط با تغییر DNS انجام شود
-// و مشتری‌ها قطع نشوند. توکن را روی رله ثابت نگه دار؛ چرخش توکن فقط با ریلیز جدید.
-const DEFAULT_RELAY_URL = "http://rel.app9.ir:8788";
-const DEFAULT_RELAY_TOKEN = "guardian-public";
-
-// تنظیمات مؤثر رله: اول KV (ثبت‌شده توسط کاربر)، در غیر این صورت متغیرهای محیطی ورکر
-async function getSrvRelayCfg(kv, env) {
-  const mode = await getRelayMode(kv);
-  if (mode === "default") return getDefaultRelayCfg(env);
-  const kUrl = kv ? await kvGetCached(kv, RELAY_URL_KEY, "text", 15000) : null;
-  const kTok = kv ? await kvGetCached(kv, RELAY_TOKEN_KEY, "text", 15000) : null;
-  const custom = {
-    url: (kUrl || (env && env.SRV_RELAY_URL ? String(env.SRV_RELAY_URL) : "")).replace(/\/+$/, ""),
-    token: kTok || (env && env.SRV_RELAY_TOKEN ? String(env.SRV_RELAY_TOKEN) : ""),
-  };
-  if (mode === "custom") return custom;
-  // auto: شخصی اگر ثبت شده، وگرنه پیش‌فرض رایگان
-  if (custom.url) return custom;
-  return getDefaultRelayCfg(env);
+// آدرس مؤثر ایجنت (پیکربندی‌شده): خالی یعنی ایجنت ثبت نشده و باید راهنمای نصب را نشان داد
+async function getAgentBase(kv, env) {
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  return (cfg && cfg.url && cfg.token ? cfg.url : "") || "";
 }
 
-function getDefaultRelayCfg(env) {
-  return {
-    url: ((env && env.DEFAULT_RELAY_URL ? String(env.DEFAULT_RELAY_URL) : DEFAULT_RELAY_URL) || "").replace(/\/+$/, ""),
-    token: (env && env.DEFAULT_RELAY_TOKEN ? String(env.DEFAULT_RELAY_TOKEN) : DEFAULT_RELAY_TOKEN) || "",
-  };
-}
-
-async function getRelayMode(kv) {
+// فراخوانی ایجنت: خودِ JSON ایجنت برمی‌گردد تا قرارداد پاسخ‌ها
+// ({code,out,...} برای exec/stats و {status,body} برای http) عوض نشود.
+// خطای حمل‌ونقل: {error:...} — مثل no_agent (ثبت نشده) یا fetch_fail (قطع).
+async function agentPost(kv, env, path, body, timeoutMs) {
+  let cfg = null;
+  try { cfg = await getGuardianCfg(kv); } catch (e) {}
+  if (!cfg || !cfg.url || !cfg.token) return { error: "no_agent" };
+  const tMs = Math.max(1000, Number(timeoutMs) || 15000);
   try {
-    const m = kv ? await kvGetCached(kv, RELAY_MODE_KEY, "text", 15000) : null;
-    if (m === "custom" || m === "default" || m === "auto") return m;
-  } catch (e) {}
-  return "auto";
+    const res = await fetch(guardianNormUrl(cfg.url).replace(/\/+$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Guardian-Token": cfg.token },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(tMs),
+    });
+    if (!res.ok) return { error: "http_" + res.status };
+    try { return await res.json(); } catch (e) { return { error: "bad_json" }; }
+  } catch (e) { return { error: "fetch_fail" }; }
 }
 
-async function setRelayMode(kv, mode) {
-  if (!kv) return;
-  try {
-    await kv.put(RELAY_MODE_KEY, mode);
-  } catch (e) {}
-}
-// Auto-switch to the default relay on 403 (custom relay rejected) — caller retries once.
-async function srvAutoDefaultRelay(kv, env, err) {
-  try {
-    if (!err || !/403/.test(String(err))) return false;
-    const mode = await getRelayMode(kv);
-    if (mode === "default") return false;
-    const def = getDefaultRelayCfg(env);
-    if (!def.url) return false;
-    await setRelayMode(kv, "default");
-    return true;
-  } catch (e) { return false; }
-}
 
-// ليست کاندیداها برای fallback: [فعال، پیش‌فرض] — در حالت custom فقط فعال
-async function relayCandidates(kv, env) {
-  const mode = await getRelayMode(kv);
-  const active = await getSrvRelayCfg(kv, env);
-  const def = getDefaultRelayCfg(env);
-  const same = !!active.url && !!def.url && active.url === def.url;
-  const list = [];
-  if (active.url) list.push({ ...active, isDefault: same });
-  if (mode !== "custom" && def.url && !same) list.push({ ...def, isDefault: true });
-  return list;
-}
-
-async function relayPing(url, token) {
-  try {
-    const r = await fetch(String(url).replace(/\/+$/, "") + "/ping", { signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return { ok: false, status: r.status };
-    const j = await r.json().catch(() => ({}));
-    return { ok: true, rev: j.rev };
-  } catch (e) {
-    return { ok: false, error: String((e && e.message) || e).slice(0, 120) };
-  }
-}
-
-const RELAY_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار هشدار قطعی (ریکاوری همیشه خبر داده می‌شود)
-
-// واچ‌داگ رله: قطعی رله‌های مورداستفاده را به ادمین‌ها هشدار می‌دهد + وصل‌شدن مجدد را خبر می‌دهد
-async function runRelayWatch(env) {
-  const kv = env.BOT_KV;
-  if (!kv) return;
-  const botToken = env.BOT_TOKEN || BOT_TOKEN;
-  let cands = [];
-  try { cands = await relayCandidates(kv, env); } catch (e) { return; }
-  if (!cands.length) return;
-  let st = {};
-  try { st = (await kv.get("relay_watch", "json")) || {}; } catch (e) {}
-  if (!st || typeof st !== "object") st = {};
-  let admins = [];
-  try { admins = await getAdmins(kv, env); } catch (e) {}
-  if (!admins.length) return;
-  const now = Date.now();
-  let dirty = false;
-  for (const c of cands) {
-    if (!c.url) continue;
-    const key = (c.isDefault ? "default:" : "custom:") + c.url;
-    const label = c.isDefault ? "رلهٔ رایگان پیش‌فرض" : "رلهٔ شخصی";
-    let r;
-    try { r = await relayPing(c.url, c.token); } catch (e) { r = { ok: false, error: "ping_throw" }; }
-    const prev = st[key] || {};
-    if (!r.ok) {
-      const err = String(r.error || ("http_" + r.status) || "unknown").slice(0, 120);
-      if (!prev.down) { st[key] = { down: now, err, notified: 0 }; dirty = true; }
-      else if (st[key].err !== err) { st[key].err = err; dirty = true; }
-      const lastN = Number((st[key] || {}).notified) || 0;
-      if (!lastN || now - lastN >= RELAY_ALERT_COOLDOWN_MS) {
-        st[key].notified = now; dirty = true;
-        await qAlert(kv, "relay");
-        const msg = `🔴 قطع ارتباط رله\n\n${label}\n${code(c.url)}\n❌ ${code(err)}\n\nSSH، آمار سرور و بررسی چک‌هاست مختل می‌شود.`;
-        for (const a of admins) {
-          try { await sendMessage(botToken, a, msg, [[{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]); } catch (e) {}
-        }
-      }
-    } else if (prev.down) {
-      delete st[key]; dirty = true;
-      await qAlert(kv, "relay");
-      const msg = `🟢 رله وصل شد\n\n${label}\n${code(c.url)}`;
-      for (const a of admins) {
-        try { await sendMessage(botToken, a, msg, [[{ text: "🏠 خانه", callback_data: "menu" }]]); } catch (e) {}
-      }
-    }
-  }
-  if (dirty) { try { await kv.put("relay_watch", JSON.stringify(st)); } catch (e) {} }
-}
 
 // ===================== ایجنت سرور (guardian-agent) =====================
 // معماری «سرور-اول»: همهٔ جاب‌های سنگین دائم روی سرور مشتری اجرا می‌شوند
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.0.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.1.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7055,7 +6928,7 @@ function guardianNormUrl(u) {
 }
 
 async function guardianPing(url) {
-  // پینگ فعال ایجنت (مثل relayPing): زنده‌بودن را ورکر تشخیص می‌دهد، بدون write ثابت
+  // پینگ فعال ایجنت: زنده‌بودن را ورکر تشخیص می‌دهد، بدون write ثابت
   try {
     const base = guardianNormUrl(url).replace(/\/+$/, "");
     const res = await fetch(base + "/ping", { signal: AbortSignal.timeout(GUARDIAN_PING_TIMEOUT_MS) });
@@ -7476,162 +7349,10 @@ async function runHostFilterMaybeRemote(env, opts = {}) {
   return hfRemoteCall(env, "hostfilter", { force: !!(opts && opts.force) }, () => runHostFilter(env, opts), 600000);
 }
 
-// POST به رله با fallback خودکار به رلهٔ پیش‌فرض (وقتی حالت custom نیست)
-async function relayPost(kv, env, path, body, timeoutMs) {
-  const cands = await relayCandidates(kv, env);
-  if (!cands.length) return { error: "no_relay" };
-  let last = { error: "relay_fetch" };
-  for (const c of cands) {
-    try {
-      const res = await fetch(c.url + path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-SRV-Token": c.token || "" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!res.ok) {
-        last = { error: `relay_http_${res.status}` };
-        // خطای سرور/محدودیت/توکن → امتحان گزینهٔ بعدی؛ خطای دیگر همان را برگردان
-        if (res.status >= 500 || res.status === 429 || res.status === 403) continue;
-        return last;
-      }
-      return await res.json();
-    } catch (e) {
-      last = { error: "relay_fetch" };
-    }
-  }
-  return last;
-}
-
-async function getRelayBase(kv, env) {
-  return (await getSrvRelayCfg(kv, env)).url;
-}
-
-// مقصد دکمهٔ «بازگشت» در جریان رله — تا از هر جا وارد شدی، برگشت به همان‌جا برگردد
-const RELAY_HOME_CB = "hg:relay";
-async function setRelayBack(kv, chatId, cb) {
-  if (!kv || !chatId) return;
-  try {
-    await kv.put(`relayback:${chatId}`, String(cb || "help"), { expirationTtl: 7200 });
-  } catch (e) {}
-}
-async function getRelayBack(kv, chatId) {
-  try {
-    const b = kv && chatId ? await kv.get(`relayback:${chatId}`) : null;
-    return b || "help";
-  } catch (e) {
-    return "help";
-  }
-}
-function relayBackButton(back) {
-  if (back === "srv") return { text: "🔙 بازگشت", callback_data: "srv" };
-  if (back === "help" || !back) return { text: "🔙 بازگشت", callback_data: "help" };
-  if (back === RELAY_HOME_CB) return { text: "🔙 بازگشت", callback_data: RELAY_HOME_CB };
-  return { text: "🔙 بازگشت", callback_data: back };
-}
-
-// صفحهٔ خانهٔ رله: وضعیت + مدیریت (تنظیم مجدد / پیش‌فرض / حذف)
-async function renderRelayHome(render, kv, env, back) {
-  const mode = await getRelayMode(kv);
-  const active = await getSrvRelayCfg(kv, env);
-  const def = getDefaultRelayCfg(env);
-  const fromKv = !!(await kvGetCached(kv, RELAY_URL_KEY, "text", 5000));
-  const modeFa = mode === "custom" ? "🔧 شخصی" : mode === "default" ? "🌐 پیش‌فرض رایگان" : "🔀 خودکار";
-  let defStat = "🔴 در دسترس نیست";
-  try {
-    const p = await relayPing(def.url, def.token);
-    defStat = p.ok ? "🟢 در دسترس" : "🔴 در دسترس نیست";
-  } catch (e) {}
-  const lines = [
-    "🌐 رلهٔ SSH",
-    "",
-    "🔎 چرا لازم است؟",
-    "کلادفلر به پورت ۲۲ دسترسی ندارد؛ پس اتصال‌های SSH (سرورها، مانیتور سرورها، چک‌هاست و API آروان) از رله عبور می‌کنند.",
-    "",
-    "🧩 وضعیت فعلی",
-    "• حالت: " + modeFa,
-    "• " + (active.url ? "✅ رلهٔ فعال: " + code(active.url) : "❌ رلهٔ فعالی نیست.") + (fromKv && mode !== "default" ? " (شخصی)" : ""),
-    "• 🌐 رلهٔ رایگان پیش‌فرض: " + defStat,
-    ...(active.url && /^http:\/\//i.test(active.url)
-      ? ["⚠️ اتصال به رله با http است؛ رمز/کلید SSH رمزنگاری‌نشده منتقل می‌شود (https امن‌تر است)."]
-      : []),
-    // 🛡 توکن پیش‌فرض عمومی روی رلهٔ شخصی = هرکی آدرس را بداند می‌تواند وصل شود
-    ...(mode === "custom" && active.token === DEFAULT_RELAY_TOKEN
-      ? ["", "⚠️ توکن رله‌ات همان پیش‌فرض عمومی است؛ با «🔧 تنظیم مجدد رله» یک توکن اختصاصی و محرمانه بگذار."]
-      : []),
-    "",
-    "⚙️ مدیریت",
-    "• 🔧 تنظیم مجدد رله — ثبت یا تغییر رلهٔ شخصی",
-    "• 🌐 انتخاب رله پیش‌فرض — استفاده از رلهٔ رایگان",
-    "",
-    "💡 حالت خودکار: اگر رلهٔ شخصی ثبت کرده باشی از همان استفاده می‌شود، وگرنه (یا اگر قطع باشد) خودکار از رلهٔ رایگان استفاده می‌شود تا قطع نشوی.",
-    "",
-    "🛠 نصب رلهٔ شخصی روی هر سرور لینوکسی (Ubuntu/Debian):",
-    code('sudo bash -c "$(curl -sL -H \'Accept: application/vnd.github.raw\' \'https://api.github.com/repos/Aknuun/cloud-guardian-relay/contents/srv-relay-install.sh?ref=main\')"'),
-    "",
-    "• رله هیچ رمزی ذخیره نمی‌کند؛ فقط در حافظهٔ همان درخواست استفاده می‌شود.",
-  ];
-  const kb = [
-    // مدیریت رله: پیش‌فرض (سبز) / تنظیم مجدد (آبی)
-    [
-      { text: "🌐 انتخاب رله پیش‌فرض", callback_data: "srvusedefault", style: "success" },
-      { text: "🔧 تنظیم مجدد رله", callback_data: "srvrelayset", style: "primary" },
-    ],
-    // بازگشت سریع به حالت خودکار (وقتی روی حالت دیگری هستی)
-    mode === "auto" ? [] : [{ text: "🔀 بازگشت به حالت خودکار", callback_data: "srvmodeauto", style: "primary" }],
-    [relayBackButton(back)],
-  ].filter((r) => r.length);
-  await render(lines.join("\n"), kb);
-}
-
-// اگر آدرس رله با آی‌پی ارسال شود، ورکر کلادفلر نمی‌تواند مستقیم وصل شود (خطای 1003)؛
-// این تابع خودکار یک ساب‌دامهٔ `rel.<اولین دامنهٔ فعال>` می‌سازد و آی‌پی را روی آن می‌گذارد.
-async function ensureRelaySubdomain(ip, port, kv, env) {
-  try {
-    const accounts = await getAccounts(kv, env);
-    if (!accounts.length) return null;
-    const zones = (await getAllZones(accounts, kv)).filter((z) => z.status === "active").sort((a, b) => a.name.localeCompare(b.name));
-    if (!zones.length) return null;
-    const zone = zones[0];
-    const name = `rel.${zone.name}`;
-    const token = accounts[zone._acc].token;
-    const headers = { Authorization: "Bearer " + token };
-    const list = await fetch(`${CF_API}/zones/${zone.id}/dns_records?type=A&name=${encodeURIComponent(name)}`, { headers, signal: withTimeout() });
-    const lj = await list.json();
-    const rec = lj.success && lj.result && lj.result[0] ? lj.result[0] : null;
-    if (!rec) {
-      const cr = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "A", name, content: ip, ttl: 120, proxied: false }),
-        signal: withTimeout(),
-      });
-      const cj = await cr.json();
-      if (!cj.success) return null;
-    } else if (rec.content !== ip || rec.proxied) {
-      const ur = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${rec.id}`, {
-        method: "PUT",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "A", name, content: ip, ttl: 120, proxied: false }),
-        signal: withTimeout(),
-      });
-      const uj = await ur.json();
-      if (!uj.success) return null;
-    }
-    if (kv) {
-      try { await invalidateCache(kv, zone.id); } catch (e) {}
-    }
-    return { url: `http://${name}:${port || 8788}`, domain: name, ip };
-  } catch (e) {
-    console.error("RELAY_SUB_ERR", String(e));
-    return null;
-  }
-}
-
-// فراخوانی رله برای اجرای دستور SSH (با fallback خودکار به رلهٔ پیش‌فرض)
-async function srvRelayExec(kv, env, s, command, timeoutMs) {
+// اجرای دستور SSH روی سرور از طریق ایجنت
+async function srvAgentExec(kv, env, s, command, timeoutMs) {
   const tmo = (timeoutMs || 50000) + 10000;
-  return relayPost(kv, env, "/exec", { host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined, command, timeoutMs: timeoutMs || undefined }, tmo);
+  return agentPost(kv, env, "/exec", { host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined, command, timeoutMs: timeoutMs || undefined }, tmo);
 }
 
 // برگشت فلو نصب/پروویژن به همان‌جایی که از آن آمدی (hz/ln/srv) — TTL یک ساعت
@@ -7647,38 +7368,25 @@ async function srvGetBack(kv, chatId, idx, fb) {
   } catch (e) {}
   return fb;
 }
-// فراخوانی رله برای آمار منابع (با fallback خودکار به رلهٔ پیش‌فرض)
-async function srvRelayStats(kv, env, s) {
-  return relayPost(kv, env, "/stats", { host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined }, 35000);
+// آمار منابع سرور از طریق ایجنت
+async function srvAgentStats(kv, env, s) {
+  return agentPost(kv, env, "/stats", { host: s.host, port: Number(s.port) || 22, user: s.user || "root", password: s.password || undefined, key: s.key || undefined, keyPass: s.keyPass || undefined }, 35000);
 }
 
 // پروکسی HTTP از طریق رله (endpoint /http) — برای سرویس‌هایی که ورکر از
 // آی‌پی کلادفلر به آن‌ها دسترسی ندارد (مثل check-host که درخواست‌های کلادفلر را ۴۰۳ می‌کند).
 // با fallback خودکار به رلهٔ پیش‌فرض (وقتی حالت custom نیست).
 // خروجی: { status, body, parsed } یا null در هر خطا.
-async function relayProxyFetch(kv, env, method, url, headers, timeoutMs) {
-  const cands = await relayCandidates(kv, env);
-  if (!cands.length) return null;
+// پروکسی HTTP از طریق ایجنت (endpoint /http) — برای سرویس‌هایی که ورکر از
+// آی‌پی کلادفلر به آن‌ها دسترسی ندارد (مثل check-host که درخواست‌های کلادفلر را ۴۰۳ می‌کند).
+// خروجی: { status, body, parsed } یا null در هر خطا.
+async function agentProxyFetch(kv, env, method, url, headers, timeoutMs) {
   const tMs = Math.min(Math.max(Number(timeoutMs) || 30000, 3000), 120000);
-  for (const c of cands) {
-    try {
-      const res = await fetch(c.url + "/http", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-SRV-Token": c.token || "" },
-        body: JSON.stringify({ method: String(method || "GET").toUpperCase(), url, headers: headers || {}, timeoutMs: tMs }),
-        signal: AbortSignal.timeout(tMs + 12000),
-      });
-      if (!res.ok) continue;
-      const j = await res.json();
-      if (!j || !j.status || j.status < 200 || j.status >= 300) continue;
-      let parsed = null;
-      try {
-        parsed = JSON.parse(String(j.body || ""));
-      } catch (e) {}
-      return { status: j.status, body: String(j.body || ""), parsed };
-    } catch (e) {}
-  }
-  return null;
+  const r = await agentPost(kv, env, "/http", { method: String(method || "GET").toUpperCase(), url, headers: headers || {}, timeoutMs: tMs }, tMs + 12000);
+  if (!r || r.error || !r.status || r.status < 200 || r.status >= 300) return null;
+  let parsed = null;
+  try { parsed = JSON.parse(String(r.body || "")); } catch (e) {}
+  return { status: r.status, body: String(r.body || ""), parsed };
 }
 
 async function getServersList(kv) {
@@ -7974,7 +7682,7 @@ async function srvPrepServer(kv, env, edit, idx, s) {
   let ready = false;
   const max = 10;
   for (let attempt = 1; attempt <= max; attempt++) {
-    const t = await srvRelayExec(kv, env, { ...s, _idx: idx }, "echo PG_READY", 15000);
+    const t = await srvAgentExec(kv, env, { ...s, _idx: idx }, "echo PG_READY", 15000);
     if (t && !t.error && String(t.out || "").includes("PG_READY")) { ready = true; break; }
     if (attempt < max) {
       await edit(base + `\n\n⏳ در انتظار بالا آمدن سرور… (تلاش ${attempt}/${max})`);
@@ -7983,7 +7691,7 @@ async function srvPrepServer(kv, env, edit, idx, s) {
   }
   let pwNote = "";
   if (ready && pw1 && pw1 !== s.password) {
-    const ch = await srvRelayExec(kv, env, { ...s, _idx: idx }, `echo ${shQuote("root:" + pw1)} | chpasswd`, 20000);
+    const ch = await srvAgentExec(kv, env, { ...s, _idx: idx }, `echo ${shQuote("root:" + pw1)} | chpasswd`, 20000);
     if (ch && !ch.error) {
       const l2 = await getServersList(kv);
       if (l2[idx]) { l2[idx].password = pw1; await saveServersList(kv, l2); }
@@ -8230,16 +7938,11 @@ async function runSrvMonitor(env, botToken, manual, opts) {
     { text: "\u2699\uFE0F CPU", callback_data: "noop", style: "plain" },
     { text: "\u{1F9E0} RAM", callback_data: "noop", style: "plain" },
   ]);
-  let relayFixed = false;
-  let relayErr = false;
+  let agentErr = false;
   for (let si = 0; si < list.length; si++) {
     const s = list[si];
-    let st = await srvRelayStats(kv, env, s);
-    if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) {
-      relayFixed = true;
-      st = await srvRelayStats(kv, env, s);
-    }
-    if (/^(no_relay|relay_)/.test(String((st && st.error) || ""))) relayErr = true;
+    let st = await srvAgentStats(kv, env, s);
+    if (/^(no_agent|fetch_fail|http_|bad_json)/.test(String((st && st.error) || ""))) agentErr = true;
     const shortIp = String(s.host || s.name || "").slice(0, 16);
     if (st.error) {
       alerts.push(`🔴 ${code(s.name)} — خطای اتصال SSH (${code(String(st.error))})`);
@@ -8282,10 +7985,9 @@ async function runSrvMonitor(env, botToken, manual, opts) {
   let msg = "📊 گزارش مانیتور سرورها\n\n";
   if (alerts.length) msg += alerts.join("\n") + "\n";
   if (!alerts.length && manual) msg += "✅ همهٔ سرورها سالم هستند.";
-  if (relayFixed) msg += "\n🔄 رله پیش‌فرض فعال شد (رله قبلی 403 داد).";
   const kb = srvRows;
   kb.push([{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]);
-  if (relayErr || relayFixed) kb.push([{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]);
+  if (agentErr) kb.push([{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]);
   kb.push([{ text: "🏠 خانه", callback_data: "menu" }]);
   for (const a of admins) {
     try { await qAlert(kv, "srvmon"); await sendMessage(botToken, a, msg, kb); } catch (e) {}
@@ -12380,74 +12082,6 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     return;
   }
 
-  if (type === "srv_relay_set") {
-    // ثبت/تغییر رلهٔ SSH توسط خود کاربر: آدرس → توکن → تست اتصال
-    if (pending.step === "url") {
-      let u = String(txt || "").trim().replace(/\/+$/, "");
-      if (!/^https?:\/\/.+/i.test(u)) {
-        return send("❌ آدرس باید با http:// یا https:// شروع شود. دوباره بفرستید:\n(مثلاً http://آی‌پی‌سرور:8788)");
-      }
-      // اگر آدرس با آی‌پی فرستاده شد (ورکر به آی‌پی وصل نمی‌شود)، خودکار ساب‌دامه می‌سازیم
-      const ipM = /^https?:\/\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::(\d+))?([\/?#]|$)/i.exec(u);
-      if (ipM) {
-        const sub = await ensureRelaySubdomain(ipM[1], Number(ipM[2]) || 8788, kv, env);
-        if (!sub) {
-          return send("⚠️ آدرس را با آی‌پی فرستادید ولی برای ساخت خودکار ساب‌دامه دسترسی‌ای به دامنهٔ فعال نداریم.\n\nیا یک آدرس دامنه بفرستید (مثل http://relay.example.com:8788)، یا دسترسی DNS حساب کلادفلر را بررسی کنید.", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-        }
-        u = sub.url;
-        await send(`✅ چون آدرس با آی‌پی بود، خودکار این رکورد را ساختم:\n${code(sub.domain)} → ${code(sub.ip)} (بدون پروکسی)\nاز این آدرس استفاده می‌شود: ${code(u)}`);
-      }
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "token", url: u, back: pending.back }), { expirationTtl: 900 });
-      return send("🔑 توکن رله را بفرستید (همان X-SRV-Token که بعد از نصب رله در خروجی نمایش داده می‌شود):");
-    }
-    if (pending.step === "token") {
-      const back = pending.back || (await getRelayBack(kv, chatId));
-      const u = String(pending.url || "").replace(/\/+$/, "");
-      // پاک‌سازی کاراکترهای نامرئی (مثل ZWNJ/علامت RTL-LTR) که موقع کپی به توکن می‌چسبند
-      let tok = String(txt || "").replace(/[\u200B-\u200D\u200E\u200F\u061C\uFEFF\u2060-\u206F\u00AD]/g, "").trim();
-      if (tok.length < 8) return send("❌ توکن رله خیلی کوتاه است. دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
-      // ۱) اول بررسی سادگیِ دسترسی به رله با /ping (بدون توکن)
-      let ping;
-      try {
-        ping = await fetch(u + "/ping", { signal: AbortSignal.timeout(10000) });
-      } catch (e) {
-        return send("❌ اتصال به رله برقرار نشد: " + String(e && e.message ? e.message : e).slice(0, 140) + "\n\nآدرس رله و بازبودن پورت 8788 روی فایروال سرور را بررسی کنید.", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-      }
-      if (!ping.ok) {
-        let pb = "";
-        try { pb = String((await ping.text()) || "").slice(0, 120); } catch (e2) {}
-        return send(`❌ رله دسترسی‌پذیر نیست (پاسخ ${ping.status}). ${pb}`, [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-      }
-      // ۲) تست اعتبار توکن روی /stats (با host ساختگی؛ پاسخ 200 یعنی توکن درست است)
-      let res;
-      try {
-        res = await fetch(u + "/stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-SRV-Token": tok },
-          body: JSON.stringify({ host: "relay-selftest.invalid", port: 22, user: "root" }),
-          signal: AbortSignal.timeout(20000),
-        });
-      } catch (e) {
-        return send("❌ اتصال به رله در حین تست توکن قطع شد: " + String(e && e.message ? e.message : e).slice(0, 140), [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-      }
-      if (res.status === 403) {
-        let isRelay = false;
-        try { isRelay = /forbidden/i.test(String((await res.text()) || "")); } catch (e3) {}
-        if (isRelay) {
-          return send("❌ توکن رله صحیح نیست (رلهٔ این سرور کد 403 داد). دوباره بفرستید:", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
-        }
-        return send("❌ رله کد 403 برگرداند اما نتوانستیم مطمئن شویم این پاسخ از خودِ رله است (شاید مسیر بین ورکر و رله مسدود شده). دوباره تلاش کنید:", [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-      }
-      if (!res.ok) {
-        return send(`❌ رله پاسخ درست نداد (HTTP ${res.status}). آدرس را بررسی کنید.`, [[{ text: "🔧 دوباره", callback_data: "srvrelayset" }]]);
-      }
-      await kvPutCached(kv, RELAY_URL_KEY, u);
-      await kvPutCached(kv, RELAY_TOKEN_KEY, tok);
-      await setRelayMode(kv, "custom");
-      await send(`✅ رلهٔ شخصی ثبت شد و اتصال با موفقیت تست شد (حالت: شخصی).\n🌐 ${code(u)}`);
-      return renderRelayHome(send, kv, env, back);
-    }
-  }
 
   if (type === "srv_pw_add") {
     await kv.delete(`pend:${chatId}`);
@@ -14426,10 +14060,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await kv.put("hub_ann", JSON.stringify(arr), { expirationTtl: 90 * 86400 });
       } catch (e) {}
       await edit("📩 پیام همگانی حذف شد (از این به بعد پخش نمی‌شود).", [[{ text: "📢 پیام همگانی", callback_data: "hubann" }]]);
-    } else if (data === "settingsrelay") {
-      // تنظیم رله از داخل «تنظیمات و راهنما» — بازگشت به همان صفحه
-      await setRelayBack(kv, chatId, "settings");
-      await renderRelayHome(edit, kv, env, "settings");
     } else if (data === "contactcreator") {
       // contactcreator: شروع ارسال پیام به سازنده
       const nm = [cb.from && cb.from.first_name, cb.from && cb.from.last_name].filter(Boolean).join(" ");
@@ -14495,13 +14125,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("hg:")) {
       // hg:<key>: نمایش راهنمای همان بخش (cf/prov/arvan/...)
       const hk = data.slice(3);
-      if (hk === "relay") {
-        // راهنمای رله = صفحهٔ خانهٔ رله (وضعیت + مدیریت)؛ بازگشت به راهنما
-        await setRelayBack(kv, chatId, "help");
-        await renderRelayHome(edit, kv, env, "help");
-      } else {
         await edit(HELP_GUIDE[hk] || "ℹ️ راهنمای این بخش موجود نیست.", helpGuideKb(hk));
-      }
     } else if (data === "admins_menu") {
       // admins_menu: لیست ادمین‌ها (فقط ادمین اصلی)
       if (!isMain) return edit("❌ فقط ادمین اصلی می‌تواند ادمین‌ها را مدیریت کند.");
@@ -16443,7 +16067,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       L.push("");
       await qwFlushNow(kv);
       const wmap0 = await qwDayMap(kv);
-      const order0 = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "relaywatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+      const order0 = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
       const extra0 = Object.keys(wmap0).filter((k) => QW_CRON.has(k) && !order0.includes(k)).sort();
       let any0 = false, tot0 = 0;
       for (const j of [...order0, ...extra0]) {
@@ -16553,32 +16177,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data === "srv") {
       // بخش سرورها: مدیریت سرورهای لینوکسی از طریق رله
       await renderServersHome(edit, kv, env);
-    } else if (data === "srvrelayhelp") {
-      // صفحهٔ رله — برگشت به همان‌جایی که کاربر از آن وارد شد
-      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
-    } else if (data === "srvusedefault") {
-      // استفاده از رلهٔ رایگان پیش‌فرض (بعد از تست اتصال)
-      const back = await getRelayBack(kv, chatId);
-      const def = getDefaultRelayCfg(env);
-      if (!def.url) return edit("❌ رلهٔ پیش‌فرض تنظیم نشده است.", [[relayBackButton(back)]]);
-      await edit("⏳ در حال تست رلهٔ رایگان…");
-      const p = await relayPing(def.url, def.token);
-      if (!p.ok) {
-        return edit(`❌ رلهٔ رایگان در دسترس نیست${p.status ? " (HTTP " + p.status + ")" : ""}.\nبعداً دوباره تلاش کن یا رلهٔ شخصی تنظیم کن.`, [
-          [{ text: "🔧 رله شخصی", callback_data: "srvrelayset" }],
-          [relayBackButton(back)],
-        ]);
-      }
-      await setRelayMode(kv, "default");
-      await renderRelayHome(edit, kv, env, back);
-    } else if (data === "srvmodeauto") {
-      await setRelayMode(kv, "auto");
-      await renderRelayHome(edit, kv, env, await getRelayBack(kv, chatId));
-    } else if (data === "srvrelayset") {
-      // ثبت/تغییر رله توسط خود کاربر: آدرس → توکن → تست اتصال
-      const back = await getRelayBack(kv, chatId);
-      await kv.put(`pend:${chatId}`, JSON.stringify({ type: "srv_relay_set", step: "url", back }), { expirationTtl: 900 });
-      await edit("🔧 تنظیم رله\n\n🌐 آدرس رله را بفرستید؛ همان آی‌پی سرور کافی است (مثل http://آی‌پی‌سرور:8788).\nاگر با آی‌پی بفرستید، خودم یک ساب‌دامه برایش می‌سازم و دیگر خطای 403 آی‌پی را نمی‌گیرید.", [[{ text: "⬅️ انصراف", callback_data: "srvrelayhelp" }]]);
     } else if (data === "srvimport") {
       // وارد کردن سرورهای هتزنر/لینود/آروان به لیست سرورها
       await edit("⏳ در حال خواندن سرورها از دیتاسنترها…");
@@ -16780,7 +16378,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       const srvBack = await srvGetBack(kv, chatId, i, `srvopen:${i}`);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getAgentBase(kv, env))) return edit(SRV_AGENT_HINT, [[{ text: "🔙 بازگشت", callback_data: srvBack }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]]);
       const prep = await srvPrepServer(kv, env, edit, i, s);
       if (!prep.ready) {
         return edit(`⚠️ سرور هنوز به SSH پاسخ نداد. کمی بعد دوباره تلاش کن.${prep.pwNote}`, [
@@ -16796,15 +16394,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const list = await getServersList(kv);
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
-      if (!(await getRelayBase(kv, env))) return edit(SRV_RELAY_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }], [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }]]);
+      if (!(await getAgentBase(kv, env))) return edit(SRV_AGENT_HINT, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }], [{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]]);
       await edit("⏳ در حال جمع‌آوری آمار…");
-      let st = await srvRelayStats(kv, env, s);
-      if (st.error && (await srvAutoDefaultRelay(kv, env, st.error))) st = await srvRelayStats(kv, env, s);
+      let st = await srvAgentStats(kv, env, s);
       if (!st || st.error) {
         const txt = srvStatsText(s, st);
         await edit(txt, [
           [{ text: "🔄 بروزرسانی", callback_data: `srvstats:${i}` }, { text: "⚙️ آستانه‌ها", callback_data: "srvmon" }],
-          [{ text: "🌐 رله پیش‌فرض", callback_data: "srvusedefault" }, { text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
           [{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       } else {
@@ -16846,7 +16443,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.");
       await edit("⏳ در حال ریبوت…");
-      const r = await srvRelayExec(kv, env, s, "sudo reboot || reboot", 15000);
+      const r = await srvAgentExec(kv, env, s, "sudo reboot || reboot", 15000);
       await edit(r.error ? `❌ خطا: ${r.error}` : `✅ دستور ریبوت ارسال شد.`, [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
     } else if (data.startsWith("srvupd:")) {
       const i = Number(data.slice(7));
@@ -16862,7 +16459,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.");
       await edit("⏳ شروع آپدیت…");
-      const r = await srvRelayExec(kv, env, s, "export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -y && sudo apt-get upgrade -y", 300000);
+      const r = await srvAgentExec(kv, env, s, "export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -y && sudo apt-get upgrade -y", 300000);
       if (r.error) return edit(`❌ خطا: ${r.error}`, [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
       const out = String(r.out || "").slice(-1200);
       // اگر مهلت اجرا تمام شد، نتیجه را قلابی «موفق» نشان نده
@@ -16876,7 +16473,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit("⏳ در حال خواندن مشخصات…");
-      const r = await srvRelayExec(kv, env, s, "uname -a; echo ---; lsb_release -a 2>/dev/null || cat /etc/os-release | head -3; echo ---; systemd-detect-virt 2>/dev/null; echo ---; ip -4 addr show | grep inet | grep -v 127.0.0.1", 30000);
+      const r = await srvAgentExec(kv, env, s, "uname -a; echo ---; lsb_release -a 2>/dev/null || cat /etc/os-release | head -3; echo ---; systemd-detect-virt 2>/dev/null; echo ---; ip -4 addr show | grep inet | grep -v 127.0.0.1", 30000);
       const out = String(r.out || "—").trim();
       await edit(`ℹ️ مشخصات سیستم «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvdisk:")) {
@@ -16885,7 +16482,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const s = list[i];
       if (!s) return edit("❌ سرور پیدا نشد.", [[{ text: "🖥 سرورها و مانیتورینگ", callback_data: "srv" }]]);
       await edit("⏳ در حال خواندن دیسک…");
-      const r = await srvRelayExec(kv, env, s, "df -h; echo ---; lsblk", 30000);
+      const r = await srvAgentExec(kv, env, s, "df -h; echo ---; lsblk", 30000);
       const out = String(r.out || "—").trim();
       await edit(`💾 دیسک‌های «${escHtml(s.name)}»:\n\n` + code(out.slice(-2500)), [[{ text: "🔙 بازگشت", callback_data: `srvopen:${i}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("srvedit:")) {
@@ -17455,10 +17052,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
     } else if (data.startsWith("hfchk:")) {
       const parts = data.split(":");
       const cfg0 = await getHostFilterCfg(kv);
-      if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
-        return edit("⚠️ «چک هاست» هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن، سپس دوباره تست کن.", [
-          [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
-          [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+      if (cfg0.provider === "checkhost" && !(await getAgentBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
+        return edit("⚠️ «چک هاست» از طریق «🖥 ایجنت سرور» انجام می‌شود و ایجنت هنوز ثبت نشده است.\n\nاز «🖥 راهنمای نصب ایجنت» نصبش کن، سپس دوباره تست کن.", [
+          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
           [{ text: "🔙 بازگشت", callback_data: "hflist" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
@@ -17828,10 +17424,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit("⏳ بررسی کامل همهٔ دامنه‌های هاست‌ها تا کمتر از یک دقیقه دیگر شروع می‌شود و نتیجه" + hfScope + " برایتان ارسال خواهد شد.", [[{ text: "🔙 بازگشت", callback_data: "hf" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data === "hfforeign") {
       const cfg0 = await getHostFilterCfg(kv);
-      if (cfg0.provider === "checkhost" && !(await getRelayBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
-        return edit("⚠️ بررسی دسترسی خارج هم از طریق رله انجام می‌شود و رله هنوز ثبت نشده است.\n\nابتدا از «ℹ️ راهنما ← 🌐 راهنمای رله» رله را ثبت کن.", [
-          [{ text: "🌐 رله رایگان پیش‌فرض", callback_data: "srvusedefault" }],
-          [{ text: "🔧 تنظیم رله", callback_data: "srvrelayset" }],
+      if (cfg0.provider === "checkhost" && !(await getAgentBase(kv, env)) && !(env && env.HF_RELAY_URL)) {
+        return edit("⚠️ «بررسی دسترسی خارج» از طریق «🖥 ایجنت سرور» انجام می‌شود و ایجنت هنوز ثبت نشده است.\n\nاز «🖥 راهنمای نصب ایجنت» نصبش کن، سپس دوباره تست کن.", [
+          [[{ text: "🖥 راهنمای نصب ایجنت", callback_data: "guardian:install" }]],
           [{ text: "🔙 بازگشت", callback_data: "hfset" }, { text: "🏠 خانه", callback_data: "menu" }],
         ]);
       }
@@ -18803,39 +18398,16 @@ function arvanHdr(token) {
 
 async function arvanFetch(token, path, opts = {}, timeoutMs = 30000, kv, env, base) {
   const root = base || ARVAN_API;
-  // اول رلهٔ فعال، بعد رلهٔ پیش‌فرض (وقتی حالت custom نیست) — آخرش مستقیم
+  // اول ایجنت (پروکسی /http)، آخرش مستقیم
   try {
     if (kv && env) {
-      for (const rl of await relayCandidates(kv, env)) {
-        if (!rl.url) continue;
-        try {
-          const rprox = await fetch(rl.url.replace(/\/+$/, "") + "/http", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-SRV-Token": rl.token || "" },
-            body: JSON.stringify({
-              method: opts.method || "GET",
-              url: root + path,
-              headers: arvanHdr(token),
-              body: opts.body || null,
-              timeoutMs,
-            }),
-            signal: AbortSignal.timeout(Math.min(timeoutMs + 15000, 90000)),
-          });
-          if (rprox.ok) {
-            const j = await rprox.json().catch(() => ({}));
-            if (!j.error) {
-              try {
-                return JSON.parse(j.body || "{}");
-              } catch {
-                return {};
-              }
-            }
-          }
-        } catch (e) {}
+      const aprox = await agentProxyFetch(kv, env, opts.method || "GET", root + path, arvanHdr(token), opts.body || null, timeoutMs);
+      if (aprox && !aprox.error) {
+        try { return JSON.parse(aprox.body || "{}"); } catch { return {}; }
       }
     }
   } catch (e) {
-    console.error("ARVAN_RELAY_ERR", String(e));
+    console.error("ARVAN_AGENT_ERR", String(e));
   }
   const res = await fetch(root + path, { ...opts, headers: arvanHdr(token), signal: AbortSignal.timeout(timeoutMs) });
   const text = await res.text();
@@ -22818,18 +22390,18 @@ async function checkHostPing(target, citySel, env, kv) {
   const nodes = IR_CHECK_NODES.concat(FOREIGN_CHECK_NODES).filter((n) => cities.includes(n.city));
   if (!nodes.length) return { error: "no_city" };
 
-  // ردیف اول: رلهٔ ثبت‌شده (پروکسی /http) — check-host درخواست‌های IP کلادفلر را ۴۰۳ می‌کند
-  if (await getRelayBase(kv, env)) {
+  // ردیف اول: ایجنت (پروکسی /http) — check-host درخواست‌های IP کلادفلر را ۴۰۳ می‌کند
+  if (await getAgentBase(kv, env)) {
     const qs = nodes.map((n) => `&node=${encodeURIComponent(n.id)}`).join("");
     const hdrs = { accept: "application/json", "user-agent": "Mozilla/5.0" };
-    const first = await relayProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-ping?host=${encodeURIComponent(target)}${qs}`, hdrs, 45000);
+    const first = await agentProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-ping?host=${encodeURIComponent(target)}${qs}`, hdrs, 45000);
     const p0 = first && first.parsed;
-    if (!(p0 && p0.ok === 1 && p0.request_id)) return { error: "relay_api" };
+    if (!(p0 && p0.ok === 1 && p0.request_id)) return { error: "agent_api" };
     const rid = p0.request_id;
     let out = null;
     for (let attempt = 0; attempt < 4; attempt++) {
       await sleep(attempt === 0 ? 6000 : 3500);
-      const rr = await relayProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-result/${rid}`, hdrs, 15000);
+      const rr = await agentProxyFetch(kv, env, "GET", `${CHECK_HOST_API}/check-result/${rid}`, hdrs, 15000);
       if (!rr || !rr.parsed || typeof rr.parsed !== "object") continue;
       const collected = {};
       let pending = false;

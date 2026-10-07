@@ -82,8 +82,6 @@ _S = {
     "kv_not_found":    ("❌ KV namespace پیدا نشد.", "❌ KV namespace not found."),
     "saved_kv":        ("✅ ذخیره شد در KV: %s", "✅ Saved to KV: %s"),
     "deleted_kv":      ("✅ حذف شد از KV: %s", "✅ Deleted from KV: %s"),
-    "relay_no_token":  ("⚠️ توکن رله داده نشده؛ فقط آدرس ذخیره شد.", "⚠️ No relay token given; only the URL was saved."),
-    "relay_registered":("✅ رله در ربات ثبت شد: %s", "✅ Relay registered in the bot: %s"),
     "guardian_no_token":  ("⚠️ توکن ایجنت داده نشده.", "⚠️ No agent token given."),
     "guardian_registered":("✅ توکن ایجنت در ربات ثبت شد.", "✅ Agent token registered in the bot."),
     "zones_fail":      ("❌ گرفتن زون‌ها ناموفق: %s", "❌ Failed to fetch zones: %s"),
@@ -823,79 +821,6 @@ def cmd_guardian_register(cfg, tok, token, url="", dry_run=False):
     return rc
 
 
-def cmd_relay_register(cfg, tok, address, token, domain="", port=8788, dry_run=False):
-    if address.startswith("http://") or address.startswith("https://"):
-        url = address.rstrip("/")
-        if dry_run:
-            print(f"[dry-run] KV: srv_relay_url={url} , srv_relay_token=***")
-            return 0
-        rc = cmd_set_kv(cfg, tok, "srv_relay_url", url)
-        if token:
-            rc |= cmd_set_kv(cfg, tok, "srv_relay_token", token)
-        else:
-            print("⚠️ " + T("relay_no_token"))
-        print(T("relay_registered", url))
-        return rc
-
-    ip = address
-    st, out = req(tok, "GET", f"{API}/zones?per_page=50")
-    res, err = json_ok(st, out)
-    if err:
-        print(T("zones_fail", str(err)[:150]), file=sys.stderr)
-        return 1
-    zones = [z for z in (res or []) if z.get("status") == "active" and z.get("name")]
-    zones.sort(key=lambda z: z["name"])
-    if not zones:
-        print(T("no_active_zone"), file=sys.stderr)
-        return 1
-    zone = None
-    if domain:
-        for z in zones:
-            if domain == z["name"] or domain.endswith("." + z["name"]):
-                zone = z
-                break
-        if not zone:
-            print(T("domain_not_found", domain), file=sys.stderr)
-            return 1
-    else:
-        zone = zones[0]
-    rec_name = f"rel.{zone['name']}"
-
-    if dry_run:
-        print(f"[dry-run] A {rec_name} → {ip} (proxied=false, ttl=120)")
-        print(f"[dry-run] KV: srv_relay_url=http://{rec_name}:{port} , srv_relay_token=***")
-        return 0
-
-    st, out = req(tok, "GET", f"{API}/zones/{zone['id']}/dns_records?type=A&name={urllib.parse.quote(rec_name)}")
-    res, err = json_ok(st, out)
-    rec = (res or [None])[0] if (res and not err) else None
-    if rec and rec.get("content") == ip and not rec.get("proxied"):
-        print(T("rec_ok", rec_name))
-    elif rec:
-        body = json.dumps({"type": "A", "name": rec_name, "content": ip, "ttl": 120, "proxied": False}).encode("utf-8")
-        st, out = req(tok, "PUT", f"{API}/zones/{zone['id']}/dns_records/{rec['id']}", body, "application/json")
-        _, err = json_ok(st, out)
-        if err:
-            print(T("rec_update_fail", str(err)[:150]), file=sys.stderr)
-            return 1
-        print(T("rec_updated", rec_name))
-    else:
-        body = json.dumps({"type": "A", "name": rec_name, "content": ip, "ttl": 120, "proxied": False}).encode("utf-8")
-        st, out = req(tok, "POST", f"{API}/zones/{zone['id']}/dns_records", body, "application/json")
-        _, err = json_ok(st, out)
-        if err:
-            print(T("rec_create_fail", str(err)[:150]), file=sys.stderr)
-            return 1
-        print(T("rec_created", rec_name))
-
-    url = f"http://{rec_name}:{port}"
-    rc = cmd_set_kv(cfg, tok, "srv_relay_url", url)
-    if token:
-        rc |= cmd_set_kv(cfg, tok, "srv_relay_token", token)
-    else:
-        print("⚠️ " + T("relay_no_token"))
-    print(T("relay_registered", url))
-    return rc
 
 
 def build_parser():
@@ -914,12 +839,6 @@ def build_parser():
     s.add_argument("value")
     d = sub.add_parser("del-kv", help="delete a key from the bot KV")
     d.add_argument("key")
-    r = sub.add_parser("relay-register", help="register the relay in the bot (address + token)")
-    r.add_argument("address", help="relay server URL or IP")
-    r.add_argument("--token", default=os.environ.get("SRV_RELAY_TOKEN", ""), help="relay token")
-    r.add_argument("--domain", default="", help="zone domain to create rel.<domain> (optional)")
-    r.add_argument("--port", type=int, default=8788, help="relay port (default 8788)")
-    r.add_argument("--dry-run", action="store_true", help="print only, no changes")
     g = sub.add_parser("guardian-register", help="register the guardian agent token in the bot")
     g.add_argument("--token", default=os.environ.get("GUARDIAN_TOKEN", ""), help="agent token (32 hex chars)")
     g.add_argument("--url", default="", help="agent public URL (optional; auto-filled on first heartbeat)")
@@ -959,8 +878,6 @@ def main():
         sys.exit(cmd_set_kv(cfg, tok, args.key, args.value))
     elif cmd == "del-kv":
         sys.exit(cmd_del_kv(cfg, tok, args.key))
-    elif cmd == "relay-register":
-        sys.exit(cmd_relay_register(cfg, tok, args.address, args.token, args.domain, args.port, args.dry_run))
     elif cmd == "guardian-register":
         sys.exit(cmd_guardian_register(cfg, tok, args.token, args.url, args.dry_run))
     else:

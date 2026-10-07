@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # Cloud Guardian — installer & manager  (bilingual: فارسی / English)
-#   new-install | update | uninstall | relay | status | check | help
+#   new-install | update | uninstall | status | check | help
 #   (install/i kept as aliases of new-install)
 #
 # one-liner:
@@ -11,7 +11,6 @@
 set -euo pipefail
 
 REPO="Aknuun/cloud-guardian"
-RELAY_REPO="Aknuun/cloud-guardian-relay"
 BRANCH="main"
 DIR="${HOME}/.cloud-guardian"
 CFG="${DIR}/config.json"
@@ -62,7 +61,6 @@ t() {
     en:e_update_fix_auth)      printf '%s' "Fix: the token is invalid or lacks permissions. Make a new token with the 8 required permissions and run install again." ;;
     en:e_update_fix_retry)     printf '%s' "Fix: probably a temporary Cloudflare API error. Run update again in a minute; if it persists, run: python3 deploy-tool.py check" ;;
     en:e_unknown)              printf '%s' "Unknown command:" ;;
-    en:e_root)                 printf '%s' "Relay install needs root:" ;;
     en:e_systemd)              printf '%s' "systemd is required." ;;
 
     en:w_empty)                printf '%s' "Token is empty." ;;
@@ -71,8 +69,6 @@ t() {
     en:w_kv_delete)            printf '%s' "Failed to delete KV:" ;;
     en:w_partial)              printf '%s' "Some uninstall steps failed." ;;
     en:w_subdomain)            printf '%s' "workers.dev subdomain not found; set the webhook manually." ;;
-    en:w_manual_relay)         printf '%s' "No config.json; register the relay manually from the bot («🖥 Servers ← 🔧 Set relay»)." ;;
-    en:w_relay_reg)            printf '%s' "Auto-register failed; do it manually from «🖥 Servers ← 🔧 Set relay»." ;;
 
     en:ok_token)               printf '%s' "Token is valid." ;;
     en:ok_using_token)         printf '%s' "Using the stored/environment token." ;;
@@ -84,7 +80,6 @@ t() {
     en:ok_uninstalled)         printf '%s' "Uninstall complete." ;;
     en:ok_cron_removed)        printf '%s' "Auto-update cron removed." ;;
     en:ok_files_removed)       printf '%s' "Local files removed." ;;
-    en:ok_relay_installed)     printf '%s' "Relay installed/updated on this server." ;;
     en:w_rename_retry)          printf '%s' "Webhook still failing — redeploying under a fresh worker name and retrying automatically:" ;;
     en:w_old_del_fail)          printf '%s' "Could not delete superseded worker (delete it manually to avoid duplicate crons):" ;;
     en:usage_profile)          printf '%s' "Isolated profile for extra bots on one account (--profile NAME | --dir PATH)." ;;
@@ -115,7 +110,6 @@ t() {
     en:bot_prompt)             printf '%s' "Bot token: " ;;
     en:admin_hint)             printf '%s' "Get your numeric ID from @userinfobot." ;;
     en:admin_prompt)           printf '%s' "Admin IDs (comma-separated, first is primary): " ;;
-    en:relay_ask)              printf '%s' "Install the SSH relay on this server? (for server monitoring/SSH) [y/N] " ;;
     en:done_title)             printf '%s' "Install complete — Cloud Guardian is live" ;;
     en:done_worker)            printf '%s' "Worker:" ;;
     en:done_bot)               printf '%s' "Open Telegram, message this bot and press /start:" ;;
@@ -150,14 +144,6 @@ t() {
     en:un_files_q)             printf '%s' "Delete the local files too? [Y/n] " ;;
     en:un_files_kept)          printf '%s' "Files kept:" ;;
 
-    en:rl_title)               printf '%s' "Installing SSH relay (srv-relay)" ;;
-    en:rl_download)            printf '%s' "Downloading the relay installer from the repo…" ;;
-    en:rl_download_fail)       printf '%s' "Failed to download the relay installer." ;;
-    en:rl_installing)          printf '%s' "Running relay installer (port %s)…" ;;
-    en:rl_addr)                printf '%s' "Relay URL:" ;;
-    en:rl_token)               printf '%s' "Relay token:" ;;
-    en:rl_fw)                  printf '%s' "The port must be open externally:" ;;
-    en:rl_register_q)          printf '%s' "Auto-register the relay in the bot? (creates an A record on your Cloudflare zone) [y/N] " ;;
 
     en:gd_title)               printf '%s' "Setting up the guardian agent (server-side offload)" ;;
     en:gd_token)               printf '%s' "Agent token:" ;;
@@ -165,6 +151,7 @@ t() {
     en:gd_register_q)          printf '%s' "Register the agent token in the bot now? [y/N] " ;;
     en:gd_registered)          printf '%s' "Agent token registered in the bot." ;;
     en:gd_manual)              printf '%s' "Skipped — register later with: python3 deploy-tool.py guardian-register --token ..." ;;
+    en:w_guardian_reg)      printf '%s' "Auto-register failed; do it manually with: python3 deploy-tool.py guardian-register --token ..." ;;
 
     en:st_title)               printf '%s' "Cloud Guardian status" ;;
     en:ck_title)               printf '%s' "Checking Cloudflare token permissions" ;;
@@ -173,7 +160,6 @@ t() {
     en:cmd_install)            printf '%s' "New install (fresh install from scratch)" ;;
     en:cmd_update)             printf '%s' "Update" ;;
     en:cmd_uninstall)          printf '%s' "Uninstall" ;;
-    en:cmd_relay)              printf '%s' "SSH relay" ;;
     en:cmd_guardian)           printf '%s' "Guardian agent (server offload)" ;;
     en:cmd_status)             printf '%s' "Status" ;;
     en:cmd_check)              printf '%s' "Check token" ;;
@@ -536,7 +522,7 @@ delete_worker_script() {
 # ============================================================
 do_install() {
   local arg
-  for arg in "$@"; do case "$arg" in --no-relay) NO_RELAY=1 ;; --force|-y) FORCE=1 ;; esac; done
+  for arg in "$@"; do case "$arg" in --force|-y) FORCE=1 ;; esac; done
 
   # NEW INSTALL contract: always a fresh install from scratch.
   # It never auto-updates, never reuses the old flow — existing config
@@ -855,47 +841,8 @@ do_uninstall() {
 }
 
 # ============================================================
-# relay
+# guardian agent
 # ============================================================
-do_relay() {
-  printf "\n${MAG}${BOLD}🖥️  %s${RST}\n" "$(t rl_title)"; hr
-  need_tools
-  if [ "$(id -u)" -ne 0 ]; then err "$(t e_root)  sudo bash install.sh relay"; exit 1; fi
-  command -v systemctl >/dev/null 2>&1 || { err "$(t e_systemd)"; exit 1; }
-  load_cfg
-
-  local PORT="${RELAY_PORT:-8788}"
-  local TOK="${SRV_RELAY_TOKEN:-}"
-  [ -n "$TOK" ] || TOK="$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
-  local PUBIP; PUBIP="$(public_ip)"
-  [ -n "$PUBIP" ] || PUBIP="<server-public-ip>"
-
-  b "$(t rl_download)"
-  local TMP; TMP="$(mktemp)"
-  gh_raw "$RELAY_REPO" "srv-relay-install.sh" > "$TMP"
-  if ! grep -q "srv-relay" "$TMP" 2>/dev/null; then err "$(t rl_download_fail)"; rm -f "$TMP"; exit 1; fi
-  printf "$(t rl_installing)\n" "$PORT"
-  SRV_RELAY_TOKEN="$TOK" SRV_RELAY_PORT="$PORT" bash "$TMP"
-  rm -f "$TMP"
-  ok "$(t ok_relay_installed)"
-
-  printf '\n'
-  printf "  • %s %s\n" "$(t rl_addr)" "$(link "http://$PUBIP:$PORT")"
-  printf "  • %s ${YELLOW}${BOLD}%s${RST}\n" "$(t rl_token)" "$TOK"
-  printf "  • %s ${BOLD}sudo ufw allow %s/tcp${RST}\n" "$(t rl_fw)" "$PORT"
-
-  if [ -f "$CFG" ] && [ -n "$CFG_TOKEN" ]; then
-    printf '\n'
-    read -rp "  🔗 $(t rl_register_q)" a
-    if [[ "${a,,}" == "y" ]]; then
-      ( cd "$DIR" && SRV_RELAY_TOKEN="$TOK" python3 deploy-tool.py relay-register "$PUBIP" --token "$TOK" --port "$PORT" ) \
-        || warn "$(t w_relay_reg)"
-    fi
-  else
-    warn "$(t w_manual_relay)"
-  fi
-  printf '\n'
-}
 
 do_guardian_agent() {
   # نصب تازه و مستقل: توکن می‌سازد، دستور یک‌خطی سرور مشتری را چاپ می‌کند و
@@ -920,7 +867,7 @@ do_guardian_agent() {
     if [[ "${reg,,}" == "y" ]]; then
       ( cd "$DIR" && python3 deploy-tool.py guardian-register --token "$TOK" ) \
         && ok "$(t gd_registered)" \
-        || warn "$(t w_relay_reg)"
+        || warn "$(t w_guardian_reg)"
     else
       printf "  • %s\n" "$(t gd_manual)"
     fi
@@ -1050,7 +997,6 @@ usage() {
   printf "  ${GREEN}new-install${RST}  %s\n" "$(t cmd_install)"
   printf "  ${GREEN}update${RST}       %s\n" "$(t cmd_update)"
   printf "  ${GREEN}uninstall${RST}    %s\n" "$(t cmd_uninstall)"
-  printf "  ${GREEN}relay${RST}        %s\n" "$(t cmd_relay)"
   printf "  ${GREEN}guardian${RST}     %s\n" "$(t cmd_guardian)"
   printf "  ${GREEN}status${RST}       %s\n" "$(t cmd_status)"
   printf "  ${GREEN}check${RST}        %s\n" "$(t cmd_check)"
@@ -1074,11 +1020,10 @@ main_menu() {
     printf "    ${GREEN}1)${RST} %s\n" "$(t cmd_install)"
     printf "    ${GREEN}2)${RST} %s\n" "$(t cmd_update)"
     printf "    ${GREEN}3)${RST} %s\n" "$(t cmd_uninstall)"
-    printf "    ${GREEN}4)${RST} %s\n" "$(t cmd_relay)"
-    printf "    ${GREEN}5)${RST} %s\n" "$(t cmd_guardian)"
-    printf "    ${GREEN}6)${RST} %s\n" "$(t cmd_status)"
-    printf "    ${GREEN}7)${RST} %s\n" "$(t cmd_check)"
-    printf "    ${GREEN}8)${RST} %s\n" "$(t cmd_help)"
+    printf "    ${GREEN}4)${RST} %s\n" "$(t cmd_guardian)"
+    printf "    ${GREEN}5)${RST} %s\n" "$(t cmd_status)"
+    printf "    ${GREEN}6)${RST} %s\n" "$(t cmd_check)"
+    printf "    ${GREEN}7)${RST} %s\n" "$(t cmd_help)"
     printf "    ${RED}0)${RST} %s\n\n" "$(t menu_exit)"
     local c
     read -rp "  $(t menu_choose)" c || { printf '\n'; exit 0; }
@@ -1086,11 +1031,10 @@ main_menu() {
       1) do_install ;;
       2) do_update ;;
       3) do_uninstall ;;
-      4) do_relay ;;
-      5) do_guardian_agent ;;
-      6) do_status ;;
-      7) do_check ;;
-      8) usage ;;
+      4) do_guardian_agent ;;
+      5) do_status ;;
+      6) do_check ;;
+      7) usage ;;
       0|q|exit|خروج) printf '\n'; exit 0 ;;
       *) err "$(t menu_invalid)"; continue ;;
     esac
@@ -1119,7 +1063,6 @@ case "$cmd" in
   new-install|new|fresh|install|i) do_install "$@" ;;
   update|u|deploy)     do_update ;;
   uninstall|remove|rm) do_uninstall "$@" ;;
-  relay|r)             do_relay "$@" ;;
   guardian|g)          do_guardian_agent "$@" ;;
   status|s)            do_status ;;
   check|c)             do_check ;;
