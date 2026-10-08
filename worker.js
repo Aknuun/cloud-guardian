@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.1.3";
+const BOT_VERSION = "2.2.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.2.0": [
+    "🖥 چندایجنتی: نصب ایجنت روی سرور جدید، ایجنت قبلی را خراب نمی‌کند؛ وضعیت همه ایجنت‌ها در «🔄 نسخه‌ها» دیده می‌شود (دکمه «➕ سرور جدید»)",
+  ],
   "2.1.3": [
     "🖥 تشخیص زنده‌بودن ایجنت با heartbeat تازه (بدون نیاز به ping): تا وقتی ایجنت هر دقیقه گزارش می‌دهد همیشه سبز است",
   ],
@@ -7004,6 +7007,25 @@ async function handleGuardianIngest(env, b) {
     if (hbDirty) {
       try { await kv.put("guardian_state", JSON.stringify(st)); } catch (e) {}
     }
+    // رجیستری چندایجنتی (2.2.0): هر توکن یک ورودی مستقل دارد؛ نصب جدید، ایجنت قبلی را خراب نمی‌کند.
+    // write فقط موقع تغییر یا حداکثر هر ۱۵ دقیقه (سهمیه). وضعیت هر ایجنت در منوی نسخه‌ها نمایش داده می‌شود.
+    try {
+      const regsH = (await kv.get("guardian_agents", "json")) || {};
+      const tkH = String(token || "");
+      if (regsH && typeof regsH === "object" && tkH) {
+        const prevH = regsH[tkH] && typeof regsH[tkH] === "object" ? regsH[tkH] : {};
+        const entH = { ...prevH };
+        let hdH = false;
+        if (!entH.added_at) { entH.added_at = nowHb; hdH = true; }
+        if (!entH.url && pub && /^https?:\/\/.+/i.test(pub)) { entH.url = pub; hdH = true; }
+        if (ver && ver !== entH.agent_version) { entH.agent_version = ver; hdH = true; }
+        if (!entH.last_hb || nowHb - entH.last_hb >= 900000) { entH.last_hb = nowHb; hdH = true; }
+        if (hdH) {
+          regsH[tkH] = entH;
+          try { await kv.put("guardian_agents", JSON.stringify(regsH)); } catch (e) {}
+        }
+      }
+    } catch (e) {}
     return { ok: true, mode: "server", version: BOT_VERSION };
   }
   if (action === "event") {
@@ -12079,7 +12101,9 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
   }
 
   if (type === "guardian_token") {
-    // ثبت دستی توکن ایجنت (وقتی نصاب روی سرور، خودش توکن ساخته است)
+    // ثبت دستی توکن ایجنت (وقتی نصاب روی سرور، خودش توکن ساخته است).
+    // چندایجنتی (2.2.0): به رجیستری اضافه می‌شود و ایجنت قبلی خراب نمی‌شود؛
+    // فقط اگر هنوز ایجنت primary ثبت نشده، همین توکن primary هم می‌شود.
     await kv.delete(`pend:${chatId}`);
     const tok = String(txt || "").trim();
     if (!/^[A-Za-z0-9_-]{16,128}$/.test(tok)) {
@@ -12087,8 +12111,19 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
     }
     let cur = null;
     try { cur = await getGuardianCfg(kv); } catch (e) {}
-    try { await saveGuardianCfg(kv, { url: (cur && cur.url) || "", token: tok, added_at: Date.now() }); } catch (e) {}
-    await send("✅ توکن ایجنت ثبت شد. اگر آدرس ایجنت هنوز ثبت نشده، با اولین heartbeat خودکار ثبت می‌شود؛ وضعیت را از «🔄 نسخه‌ها» ببین.", [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    try {
+      const regs1 = (await kv.get("guardian_agents", "json")) || {};
+      if (regs1 && typeof regs1 === "object" && !regs1[tok]) {
+        regs1[tok] = { url: "", added_at: Date.now() };
+        await kv.put("guardian_agents", JSON.stringify(regs1));
+      }
+    } catch (e) {}
+    if (!cur || !cur.token) {
+      try { await saveGuardianCfg(kv, { url: (cur && cur.url) || "", token: tok, added_at: Date.now() }); } catch (e) {}
+      await send("✅ توکن ایجنت ثبت شد (ایجنت اصلی). اگر آدرس ایجنت هنوز ثبت نشده، با اولین heartbeat خودکار ثبت می‌شود؛ وضعیت را از «🔄 نسخه‌ها» ببین.", [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else {
+      await send("✅ توکن ایجنت ثبت شد (به‌عنوان ایجنت دوم؛ ایجنت اصلی دست نخورد). با اولین heartbeat آدرسش خودکار ثبت می‌شود؛ وضعیت همه را از «🔄 نسخه‌ها» ببین.", [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
+    }
     return;
   }
 
@@ -13896,6 +13931,25 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           vLines.push("", "🖥 ایجنت سرور: ⚪ نصب نشده (کارها روی ورکر است؛ برای رفع سقف کلادفلر نصب کن)");
           vKb.push([{ text: "🖥 نصب ایجنت روی سرور", callback_data: "guardian:install" }]);
         }
+        // ایجنت‌های دوم به بعد (رجیستری چندایجنتی 2.2.0): فقط نمایش وضعیت، بدون هشدار
+        try {
+          const gRegs = await kv.get("guardian_agents", "json");
+          if (gRegs && typeof gRegs === "object") {
+            const pTok = (vGCfg && vGCfg.token) || "";
+            const nowV = Date.now();
+            for (const tk of Object.keys(gRegs)) {
+              if (!tk || tk === pTok) continue;
+              const e2 = gRegs[tk] || {};
+              const host = String(e2.url || "").replace(/^https?:\/\//, "").split(/[/:]/)[0].replace(/^\[|\]$/g, "") || ("…" + String(tk).slice(-6));
+              if (!e2.url) {
+                vLines.push("", "🖥 ایجنت " + host + ": ⏳ در انتظار اولین heartbeat");
+              } else {
+                const fresh2 = e2.last_hb && nowV - e2.last_hb < 1200000;
+                vLines.push("", "🖥 ایجنت " + host + ": " + (fresh2 ? "🟢 فعال" : "🔴 قطع") + (e2.agent_version ? " · v" + e2.agent_version : ""));
+              }
+            }
+          }
+        } catch (e) {}
         vKb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
         await edit(vLines.join("\n").slice(0, 3500), vKb);
       }
@@ -13969,11 +14023,37 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           wb ? "✅ آدرس ورکر خودکار گذاشته شد." : "⚠️ به‌جای YOUR-WORKER آدرس ورکرت را بگذار (همانی که ربات رویش نصب است).",
           "اگر روی سرور دیگری نصب کردی و توکن فرق کرد، دکمهٔ «🔑 ثبت توکن» را بزن.",
         ].join("\n").slice(0, 3500),
-        [[{ text: "🔑 ثبت توکن ایجنت", callback_data: "guardian:token" }], ...gBack]
+        [[{ text: "🔑 ثبت توکن ایجنت", callback_data: "guardian:token" }], [{ text: "➕ سرور جدید (توکن تازه)", callback_data: "guardian:install_new" }], ...gBack]
       );
     } else if (data === "guardian:token") {
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "guardian_token" }), { expirationTtl: 600 });
       await edit("🔑 توکنی که نصاب روی سرور چاپ کرد را بفرست (همان GUARDIAN_TOKEN).", [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]]);
+    } else if (data === "guardian:install_new") {
+      // نصب روی سرور جدید: توکن تازه می‌سازد و در رجیستری ثبت می‌کند؛ ایجنت فعلی دست نمی‌خورد
+      const gBackN = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      const ntok = makeGuardianToken();
+      try {
+        const regs0 = (await kv.get("guardian_agents", "json")) || {};
+        if (regs0 && typeof regs0 === "object" && !regs0[ntok]) {
+          regs0[ntok] = { url: "", added_at: Date.now() };
+          await kv.put("guardian_agents", JSON.stringify(regs0));
+        }
+      } catch (e) {}
+      let wbN = "";
+      try { wbN = await guardianWorkerBase(kv, env); } catch (e) {}
+      const cmdN = code(guardianInstallCmd(wbN, ntok));
+      await edit(
+        [
+          "🖥 نصب ایجنت روی سرور جدید",
+          "",
+          "این دستور را روی سرور جدید بزن (با دسترسی root) — توکنش یکتاست و با ایجنت قبلی قاطی نمی‌شود:",
+          "",
+          cmdN,
+          "",
+          "بعد از نصب، همین‌جا در «🔄 نسخه‌ها» وضعیتش را ببین (اول ⏳ بعد 🟢).",
+        ].join("\n").slice(0, 3500),
+        gBackN
+      );
     } else if (data === "guardian:update") {
       // آپدیت از راه دور ایجنت (خودآپدیت + ری‌استارت با systemd)
       const gBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
