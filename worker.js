@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.3.0";
+const BOT_VERSION = "2.3.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.3.1": [
+    "🛡 فیکس اسپم write پول نود: state نود حداکثر هر ۵ دقیقه ذخیره می‌شود (هشدار فوری همچنان لحظه‌ای) — مصرف روزانه خیلی کمتر",
+  ],
   "2.3.0": [
     "🖥 فاز ۴ ایجنت: پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، مانیتور SSL و انقضای دامنه هم روی سرور اجرا می‌شوند (write ورکر خیلی کمتر)؛ ورکر فقط fallback اضطراری",
     "🗓 whois دامنه‌های .ir هم روی ایجنت کار می‌کند (shim سوکت TCP) + بررسی دستی سرورها از راه دور",
@@ -6863,7 +6866,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.3.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.3.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -8662,6 +8665,7 @@ async function runNodePoll(env, opts) {
       const panelName = (panel && panel.name) || m.name;
       const poll = ndApplyPoll(st.nodes, list, now);
       let stDirty = poll.hasNew;
+      let sentAlert = false;
       for (const ev of poll.events) {
         if ((m.excluded || []).includes(ev.name)) continue;
         stDirty = true; // قطع/وصل — وضعیت همیشه ذخیره می‌شود، ولی هشدار سقف ۳۰دقیقه‌ای دارد
@@ -8678,12 +8682,20 @@ async function runNodePoll(env, opts) {
           for (const a of admins) await sendPanelMsg(botToken, a, msg, kv, dir === "down");
           poll.next[name].last_alert = now;
           poll.next[name].last_dir = dir;
+          sentAlert = true;
         }
       }
       for (const name of Object.keys(poll.next)) st.nodes[name] = poll.next[name];
+      // ضد اسپم write: state نود حداکثر هر ۵ دقیقه ذخیره می‌شود (نه با هر نوسان).
+      // تصمیم هشدار همین ران با حافظه گرفته می‌شود و dedup با ndq (TTL جدا) حفظ می‌ماند،
+      // پس تعویق save هشداری گم نمی‌کند؛ fallback هم حداکثر ۵ دقیقه کهنه می‌بیند.
+      // استثنا: اگر همین ران هشدار فرستادیم، فوری ذخیره می‌کنیم تا last_alert گم نشود.
       if (stDirty) {
-        st.ts = now;
-        await saveNodeState(kv, m.id, st);
+        const lastSaveMs = (st0 && st0.ts ? Date.parse(st0.ts) : 0) || 0;
+        if (sentAlert || Date.now() - lastSaveMs >= 5 * 60000) {
+          st.ts = now;
+          await saveNodeState(kv, m.id, st);
+        }
       }
     }
   } catch (e) {
