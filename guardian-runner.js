@@ -18,9 +18,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "2.0.0";
+const RUNNER_VERSION = "2.3.0";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
-const SYNC_KEYS = ["accounts", "panels", "admins", "host_filter_cfg"];
+// فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
+const SYNC_KEYS = [
+  "accounts", "panels", "admins", "host_filter_cfg",
+  "node_monitors", "usage_monitor_cfg", "srv_mon_cfg", "servers",
+  "pghook_cfg", "ssl_monitor", "dom_expiry", "dom_expiry_cfg",
+];
 const RUNTIME_EXACT = new Set([
   "hosts_cache",
   "hf_progress",
@@ -28,11 +33,15 @@ const RUNTIME_EXACT = new Set([
   "host_filter_state",
   "host_filter_ip_notice",
   "host_filter_crash",
+  // شمارنده‌های متریک ورکر: روی ایجنت فقط محلی می‌مانند و هرگز push نمی‌شوند
+  // (وگرنه aggregate روزانهٔ ورکر را بازنویسی و خراب می‌کنند)
+  "qw:",
+  "qal:",
 ]);
 function isRuntimeKey(key) {
   const k = String(key || "");
   if (RUNTIME_EXACT.has(k)) return true;
-  return k.startsWith("dnscache:") || k.startsWith("ipinfo:");
+  return k.startsWith("dnscache:") || k.startsWith("ipinfo:") || k.startsWith("qw:") || k.startsWith("qal:");
 }
 
 // ---------- HTTP کوچک به ورکر ----------
@@ -125,8 +134,82 @@ class FileKV {
   }
 }
 
+// ---------- shim سوکت TCP برای whois (فاز ۴: مانیتور انقضای دامنه) ----------
+// باندل ورکر whois را با cloudflare:sockets می‌زند که روی Node نیست.
+// این connect سازگار با همان سطحِ استفاده‌شده در whoisQuery است
+// (writable.getWriter/write/releaseLock + readable.getReader/read/cancel + close)
+// و روی node:net سوار است. RDAP (دامنه‌های غیر ir.) همان fetch است و نیازی به shim ندارد.
+function createTcpConnect() {
+  const net = require("node:net");
+  return ({ hostname, port }) => {
+    const sock = net.createConnection({ host: String(hostname), port: Number(port) || 43 });
+    const queue = [];
+    const waiters = [];
+    let ended = false;
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      while (waiters.length) {
+        const w = waiters.shift();
+        try { w({ done: true, value: undefined }); } catch (e) {}
+      }
+    };
+    sock.on("data", (c) => {
+      const u8 = new Uint8Array(c);
+      if (waiters.length) {
+        const w = waiters.shift();
+        try { w({ done: false, value: u8 }); } catch (e) {}
+      } else {
+        queue.push(u8);
+      }
+    });
+    sock.on("end", finish);
+    sock.on("error", finish);
+    sock.on("close", finish);
+    let writerReleased = false;
+    return {
+      writable: {
+        getWriter: () => ({
+          write: async (chunk) => {
+            if (writerReleased) throw new Error("writer released");
+            await new Promise((resolve, reject) => {
+              try {
+                sock.write(Buffer.from(chunk), (e) => (e ? reject(e) : resolve()));
+              } catch (e) {
+                reject(e);
+              }
+            });
+          },
+          releaseLock: () => { writerReleased = true; },
+        }),
+      },
+      readable: {
+        getReader: () => ({
+          read: () => new Promise((resolve) => {
+            if (queue.length) return resolve({ done: false, value: queue.shift() });
+            if (ended) return resolve({ done: true, value: undefined });
+            const to = setTimeout(() => {
+              const i = waiters.indexOf(done);
+              if (i >= 0) waiters.splice(i, 1);
+              resolve({ done: true, value: undefined });
+            }, 15000);
+            // سقف ۱۵ ثانیه برای هر read (حلقهٔ whoisQuery خودش ددلاین ۱۲ ثانیه‌ای دارد؛
+            // این فقط برای وقتی است که سرور نه جواب بدهد نه وصل را ببندد)
+            if (to.unref) to.unref();
+            function done(r) { clearTimeout(to); resolve(r); }
+            waiters.push(done);
+          }),
+          cancel: async () => { try { sock.destroy(); } catch (e) {} finish(); },
+        }),
+      },
+      close: async () => { try { sock.destroy(); } catch (e) {} finish(); },
+    };
+  };
+}
+
 // ---------- رانر ----------
 function createRunner(opts) {
+  const log = (...a) => { try { console.error("[runner]", ...a); } catch (e) {} };
   const workerUrl = String((opts && opts.workerUrl) || "").replace(/\/+$/, "");
   const token = String((opts && opts.token) || "");
   const stateDir = String((opts && opts.stateDir) || "/var/lib/guardian-agent");
@@ -179,14 +262,16 @@ function createRunner(opts) {
       }
       if (!ok) throw new Error("bundle_download_failed");
     }
-    // پچ ۱: سوکت کلادفلر فقط برای whois انقضاست (منتقل نشده) → خطای صریح به‌جای رفتار ضمنی
+    // پچ ۱: سوکت کلادفلر روی Node نیست → shim سازگار با node:net (تزریق از رانر).
+    // فقط whois انقضای دامنه (.ir روی پورت ۴۳) از آن استفاده می‌کند؛ بقیه fetch است.
     if (!src.includes('from "cloudflare:sockets"')) throw new Error("bundle_shape_changed");
+    globalThis.__SOCKET_CONNECT = globalThis.__SOCKET_CONNECT || createTcpConnect();
     const patched = src.replace(
       'import { connect } from "cloudflare:sockets";',
-      'const connect = () => { throw new Error("no sockets on agent (whois not offloaded)"); };'
+      'const connect = (...args) => globalThis.__SOCKET_CONNECT(...args);'
     );
-    // پچ ۲: جدول صریح jobهای مجاز (allowlist — تنها همین چهار تابع از راه دور صدا زده می‌شوند)
-    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot };\n";
+    // پچ ۲: جدول صریح jobهای مجاز فاز ۳ + ۴ — تنها همین تابع‌ها از راه دور صدا زده می‌شوند
+    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor };\n";
     // فایل اجرای یکتا (کش import گره‌گیر نشود) + پاک‌سازی اجراهای قبلی
     try {
       for (const f of fs.readdirSync(bundleDir)) {
@@ -195,6 +280,11 @@ function createRunner(opts) {
     } catch (e) {}
     const runFile = path.join(bundleDir, `run-${tagSafe}-${Date.now().toString(36)}.mjs`);
     fs.writeFileSync(runFile, bundleSrc);
+    // گارد crypto: باندل ورکر از crypto سراسری استفاده می‌کند (makeToken و...).
+    // اگر محیط Node آن را نداشته باشد (دیده‌شده در لاگ Oct 8)، از node:crypto می‌گیریم تا ران با ReferenceError نمیرد.
+    try {
+      if (typeof globalThis.crypto === "undefined") globalThis.crypto = require("node:crypto").webcrypto;
+    } catch (e) {}
     await import(pathToFileURL(runFile).href);
     if (!globalThis.__HFJOBS || typeof globalThis.__HFJOBS.runHostFilter !== "function") {
       throw new Error("bundle_jobs_missing");
@@ -248,7 +338,16 @@ function createRunner(opts) {
     return r.data.mode;
   }
 
-  async function runHostFilterJob(jobOpts) {
+  // ارقام فارسی برای متن پیام‌های دایجست (معادل faNum ورکر — باندل در دسترس رانر نیست)
+  function faD(s) {
+    return String(s).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
+  }
+
+  // اجرای generیک یک جاب روی باندل ورکر: mode-check + sync + FileKV + push journal.
+  // همهٔ جاب‌های فاز ۴ از همین مسیر می‌گذرند (تایمر ایجنت و /job ورکر).
+  async function runRemoteJob(name, args) {
+    const fn = ACTIONS[name];
+    if (!fn) return { ok: false, error: "bad_job" };
     const mode = await checkServerMode();
     if (mode !== "server") return { skipped: "not_server_mode", mode };
     const { botToken, adminId, texts } = await syncKeys();
@@ -258,11 +357,17 @@ function createRunner(opts) {
     // seed خوانده‌شده با ژورنال ران قاطی نمی‌شود: فایل‌ها مشترک‌اند، ژورنال جداست
     const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl };
     const jobs = await ensureBundle();
-    const opts = jobOpts && jobOpts.force ? { force: true } : {};
-    const result = await jobs.runHostFilter(env, opts);
+    const result = await fn(jobs, env, args || {});
     let pushed = { wrote: 0, conflicts: 0 };
     try { pushed = await pushJournal(journal, texts); } catch (e) { /* نتیجه ران معتبر است؛ push بعدی sync می‌کند */ }
-    return { ...result, _pushed: pushed.wrote || 0, _conflicts: pushed.conflicts || 0 };
+    return { ...(result && typeof result === "object" ? result : { result }), _pushed: pushed.wrote || 0, _conflicts: pushed.conflicts || 0 };
+  }
+
+  async function runHostFilterJob(jobOpts) {
+    const r = await runRemoteJob("hostfilter", jobOpts && jobOpts.force ? { force: true } : {});
+    if (r && r.skipped) return r;
+    if (r && r.checked !== undefined) log(`hostfilter run: checked=${r.checked} changed=${r.changed} pushed=${r._pushed}`);
+    return r;
   }
 
   const ACTIONS = {
@@ -270,24 +375,27 @@ function createRunner(opts) {
     hfrevert: (jobs, env, a) => jobs.hostFilterRevert(env.BOT_KV, env, String(a.panel || ""), String(a.host || "")),
     hfrestore: (jobs, env, a) => jobs.hfRestoreBackup(env.BOT_KV, env, String(a.id || "")),
     hfsnapshot: (jobs, env, a) => jobs.hfSnapshot(env.BOT_KV, env, String((a && a.label) || "دستی")),
+    // فاز ۴ — هر ۵ گروه منتقل‌شده (امضای واقعی توابع ورکر؛ env باندل همان FileKV است)
+    nodepoll: (jobs, env, a) => jobs.runNodePoll(env, a && a.force ? { force: true } : {}),
+    umon: (jobs, env) => jobs.runUsageMonitor(env, {}),
+    srvmon: (jobs, env) => jobs.runSrvMonitor(env, env.BOT_TOKEN, false, {}),
+    pgdigest_usage: (jobs, env) =>
+      jobs.runPgDigest(env, env.BOT_TOKEN, env.ADMIN_ID, "usage", "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faD(u.bucket) + "٪"),
+    pgdigest_days: (jobs, env) =>
+      jobs.runPgDigest(env, env.BOT_TOKEN, env.ADMIN_ID, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faD(u.bucket) + " روز"),
+    sslmon: (jobs, env) => jobs.runSslMonitor(env),
+    domexpmon: (jobs, env) => jobs.runDomExpiryMonitor(env),
   };
 
   async function callAction(name, args) {
     if (!ACTIONS[name]) return { ok: false, error: "bad_job" };
-    const mode = await checkServerMode();
-    if (mode !== "server") return { ok: false, error: "not_server_mode" };
-    const { botToken, adminId, texts } = await syncKeys();
-    if (!botToken) throw new Error("no_bot_token");
-    const journal = [];
-    const runKv = new FileKV(kvDir, journal);
-    const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl };
-    const jobs = await ensureBundle();
-    const result = await ACTIONS[name](jobs, env, args || {});
-    try { await pushJournal(journal, texts); } catch (e) {}
-    return { ok: true, result: result === undefined ? null : result };
+    const r = await runRemoteJob(name, args || {});
+    if (r && (r.skipped || r.error)) return { ok: false, error: String((r && (r.skipped || r.error)) || "failed") };
+    const { _pushed, _conflicts, ...rest } = r || {};
+    return { ok: true, result: rest && Object.keys(rest).length ? rest : null };
   }
 
-  return { runHostFilterJob, callAction, isRuntimeKey, FileKV, RUNNER_VERSION };
+  return { runHostFilterJob, runRemoteJob, callAction, isRuntimeKey, FileKV, RUNNER_VERSION };
 }
 
-module.exports = { createRunner, isRuntimeKey, FileKV, RUNNER_VERSION };
+module.exports = { createRunner, createTcpConnect, isRuntimeKey, FileKV, RUNNER_VERSION };

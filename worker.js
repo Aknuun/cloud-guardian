@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.2.0";
+const BOT_VERSION = "2.3.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.3.0": [
+    "🖥 فاز ۴ ایجنت: پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، مانیتور SSL و انقضای دامنه هم روی سرور اجرا می‌شوند (write ورکر خیلی کمتر)؛ ورکر فقط fallback اضطراری",
+    "🗓 whois دامنه‌های .ir هم روی ایجنت کار می‌کند (shim سوکت TCP) + بررسی دستی سرورها از راه دور",
+    "📊 شمارش کامل write در «☁️ سهمیه»: وب‌هوک، ایجنت، لینک‌ها و همه مسیرها بخش جدا دارند («سایر» فقط تاخیر فلاش می‌ماند)",
+    "🛡 ضد نوسان واچ‌داگ: اضطراری فقط بعد از ۳ شکست پشت‌سرهم (تک‌blip پیام نمی‌دهد)؛ گارد crypto ایجنت",
+  ],
   "2.2.0": [
     "🖥 چندایجنتی: نصب ایجنت روی سرور جدید، ایجنت قبلی را خراب نمی‌کند؛ وضعیت همه ایجنت‌ها در «🔄 نسخه‌ها» دیده می‌شود (دکمه «➕ سرور جدید»)",
   ],
@@ -1582,13 +1588,13 @@ export default {
         return new Response("⛔ لینک نامعتبر است.", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
       }
       if (url.pathname === "/qresume") {
-        await quotaResume(env, botToken);
+        await quotaResume({ ...env, BOT_KV: qKvCount(env.BOT_KV, "qg") }, botToken);
         return new Response("✅ ربات روشن شد. به تلگرام برگرد و /start بزن.", {
           headers: { "content-type": "text/plain; charset=utf-8" },
         });
       }
       const h = Number(url.searchParams.get("h") || "6");
-      await quotaPauseCron(env, h > 0 ? Math.min(h, 720) : 0);
+      await quotaPauseCron({ ...env, BOT_KV: qKvCount(env.BOT_KV, "qg") }, h > 0 ? Math.min(h, 720) : 0);
       return new Response(
         h > 0
           ? `✅ کرون‌جاب‌ها برای ${h} ساعت خاموش شدند. برای برگشت از لینک «روشن‌کردن فوری ربات» استفاده کن.`
@@ -1607,7 +1613,7 @@ export default {
     }
 
     // self_url را قبل از پردازش آپدیت کش کن تا پیام اول هم reply_url معتبر داشته باشد
-    if (kv) await cacheSelfUrl(kv, url.origin);
+    if (kv) await cacheSelfUrl(qKvCount(kv, "web"), url.origin);
 
     // 🔐 آپدیت واقعی تلگرام update_id دارد؛ هدر secret را چک کن (ضد جعل)
     if (payload && typeof payload === "object" && "update_id" in payload) {
@@ -1616,16 +1622,16 @@ export default {
         secret = kv ? (await kv.get("tg_secret", "text")) || "" : "";
       } catch (e) {}
       if (!secret) {
-        if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+        if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
       } else {
         const got = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
         if (got !== secret) {
-          if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+          if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
           return ok();
         }
       }
     }
-    if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+    if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
 
     // شکار موقت خطاهای ۵۰۰ (۱.۸.۹۱): نمونه‌برداری، بعد از تشخیص حذف می‌شود
     ctx.waitUntil(
@@ -1647,12 +1653,17 @@ export default {
       }
       // پایان خاموشی موقت: زمان‌بندهای اصلی کرون را برگردان
       qcfg.cronPausedUntil = 0;
-      ctx.waitUntil(saveQuotaCfg(env.BOT_KV, qcfg));
-      ctx.waitUntil(quotaRestoreSchedules(env, env.BOT_KV).catch(() => {}));
+      ctx.waitUntil(saveQuotaCfg(qKvCount(env.BOT_KV, "qg"), qcfg));
+      ctx.waitUntil(quotaRestoreSchedules(env, qKvCount(env.BOT_KV, "qg")).catch(() => {}));
     }
     if (cron === "0 9 * * *") {
-      ctx.waitUntil(runSslMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "ssl") }).catch((e) => console.error("SSLM", String(e))));
-      ctx.waitUntil(runDomExpiryMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "domexp") }).catch((e) => console.error("DOMEXP", String(e))));
+      // فاز ۴: اگر ایجنت زنده است SSL و انقضای دامنه روی سرور اجرا می‌شوند (تایمر روزانه ایجنت)؛ ورکر رد می‌کند
+      let gIdle9 = false;
+      try { gIdle9 = await guardianWorkerIdle(qKvCount(env.BOT_KV, "guardian")); } catch (e) {}
+      if (!gIdle9) {
+        ctx.waitUntil(runSslMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "ssl") }).catch((e) => console.error("SSLM", String(e))));
+        ctx.waitUntil(runDomExpiryMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "domexp") }).catch((e) => console.error("DOMEXP", String(e))));
+      }
     } else if (cron === "*/10 * * * *") {
       // همهٔ کارهای دوره‌ای در یک بلوک؛ زمان‌بندی‌شان در یک کلید (cron_state) ذخیره می‌شود
       ctx.waitUntil(
@@ -1800,7 +1811,9 @@ export default {
 };
 
 async function processUpdate(payload, env, botToken, adminId) {
-  let kv = env.BOT_KV;
+  // شمارش write پیام‌ها/دکمه‌ها (بخش web)؛ دکمه‌ها داخل handleCallback با b: جایگزین می‌شود (تک‌شمارش)
+  let kv = qKvCount(env.BOT_KV, "web");
+  env = { ...env, BOT_KV: kv };
   // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
   await ensureBotCommands(env, botToken, kv).catch(() => {});
 
@@ -3657,15 +3670,23 @@ function qAlert(kv, cat) {
 // ---- شمارش write واقعی به تفکیک بخش (دکمه/کرون) ----
 // فقط put/delete شمرده می‌شود (get/list نه). تجمیعی در حافظه + فلاش هر ۶۰ دقیقه یا با ۲۵ شمارش
 // پس خودش write اضافه‌ای ندارد (جز همان ۱ write فلاش که ثبت می‌شود). فلاش با kv خام انجام می‌شود (بدون بازگشت).
-const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail"]);
+const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp", "cron", "cmd", "meter", "pghook", "ndhook", "mail", "guardian", "web", "contact", "hubdm"]);
+// خامِ wrapperها: برای معنای «جایگزینی» — wrapِ دوباره همان KV، بخش جدید را می‌شمارد
+// و فقط یک‌بار (نه دو بار). بدون این، wrap تودرتو (مثلاً web روی دکمه) هر write را دو بار می‌شمرد.
+const QW_RAW = new WeakMap();
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
-  return {
+  try {
+    if (QW_RAW.has(kv)) kv = QW_RAW.get(kv); // بازکردن wrapper قبلی تا شمارش تکراری نشود
+  } catch (e) {}
+  const w = {
     get: (k, t) => kv.get(k, t),
     list: (o) => kv.list(o),
     put: (k, v, o) => { try { qCountSync(kv, (d) => "qw:" + d, "w", sec); } catch (e) {} return kv.put(k, v, o); },
     delete: (k) => { try { qCountSync(kv, (d) => "qw:" + d, "w", sec); } catch (e) {} return kv.delete(k); },
   };
+  try { QW_RAW.set(w, kv); } catch (e) {}
+  return w;
 }
 // بخش‌بندی کال‌بک دکمه‌ها: پیشوند قبل از «:» (حتماً b: تا با اسم کرون‌ها قاطی نشود)
 function qwBtnSec(data) {
@@ -3748,11 +3769,13 @@ function qKvLine(em, label, v, lim) {
 }
 const Q_JOB_FA = {
   hf: "تعویض خودکار هاست", hfd: "🔁 چرخش روزانه ساب", um: "مانیتور مصرف", srv: "مانیتور سرور",
-  node10: "پول نود (۱۰دقیقه‌ای)", selfup: "آپدیت خودکار",
+  node10: "پول نود (۱۰دقیقه‌ای)", node1: "پول نود (هر دقیقه)", selfup: "آپدیت خودکار",
   ann: "پیام همگانی", tm: "تله‌متری", hubwatch: "واچ‌داگ هاب",
   qg: "گارد سهمیه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها",
   rem: "یادآورها", ssl: "مانیتور SSL", domexp: "انقضای دامنه", meter: "⚙️ سیستم شمارش",
   pghook: "📥 وبهوک هشدار", ndhook: "📥 وبهوک نود", mail: "📧 ایمیل",
+  guardian: "🖥 ایجنت سرور", web: "🤖 وب‌هوک تلگرام",
+  contact: "📞 ارتباط با سازنده", hubdm: "📩 پیام‌های سازنده",
 };
 
 // ساخت متن هشدارهای عبور از سهمیه (درخواست ورکر + KV)
@@ -4137,7 +4160,7 @@ async function renderQuotaMenu(edit, kv, env) {
   lines.push("", "📊 مصرف امروز به تفکیک (write واقعی):");
   await qwFlushNow(kv);
   const wmap = await qwDayMap(kv);
-  const order = ["hf", "hfd", "um", "srv", "node10", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
+  const order = ["hf", "hfd", "um", "srv", "node10", "node1", "guardian", "web", "nodeadd", "selfup", "ann", "tm", "hubwatch", "qg", "tgsec", "secsweep", "rem", "ssl", "domexp"];
   const extra = Object.keys(wmap).filter((k) => QW_CRON.has(k) && !order.includes(k)).sort();
   let anyRun = false, totW = 0;
   for (const j of [...order, ...extra]) {
@@ -6840,7 +6863,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.1.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.3.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -6975,8 +6998,8 @@ async function guardianPost(cfg, path, body, timeoutMs) {
 }
 
 async function handleGuardianIngest(env, b) {
-  // گیرندهٔ heartbeat و رویداد ایجنت (POST /guardian)
-  const kv = env.BOT_KV;
+  // گیرندهٔ heartbeat و رویداد ایجنت (POST /guardian) — writeها زیر بخش guardian شمرده می‌شود
+  const kv = qKvCount(env.BOT_KV, "guardian");
   const botToken = env.BOT_TOKEN || BOT_TOKEN;
   if (!kv || !b || typeof b !== "object") return { ok: false, error: "bad_request" };
   const token = String(b.token || "");
@@ -7065,6 +7088,11 @@ async function runGuardianWatchdog(env, botToken, adminId) {
     try { ping = await guardianPing(cfg.url); } catch (e) { ping = { ok: false, error: "ping_throw" }; }
   }
   if (ping.ok) {
+    // موفقیت، شمارش شکست را صفر می‌کند (فقط اگر چیزی برای صفر کردن هست تا write اضافه ندهیم)
+    if (Number(st.fail_streak) > 0) {
+      try { await kv.put("guardian_state", JSON.stringify({ ...st, fail_streak: 0 })); } catch (e) {}
+      st.fail_streak = 0;
+    }
     if (ping.version && ping.version !== st.agent_version) {
       try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: String(ping.version) })); } catch (e) {}
       st.agent_version = String(ping.version);
@@ -7083,9 +7111,18 @@ async function runGuardianWatchdog(env, botToken, adminId) {
     }
     return { skipHeavy: true, mode: "server" };
   }
-  // ایجنت جواب نداد → حالت اضطراری (یک‌بار پیام تا ریکاوری)
+  // ایجنت جواب نداد → شمارش شکست‌های پشت‌سرهم (ضد نوسان).
+  // تک‌blip اعلام اضطراری نمی‌کند: فقط وقتی ۳ بار پشت‌سرهم fail شد (حدود ۳ دقیقه
+  // قطعی واقعی) حالت اضطراری + پیام می‌آید. تا قبلش حالت قبلی حفظ می‌شود تا
+  // جاب‌ها بین سرور و ورکر تندتند جابه‌جا نشوند. برگشت همچنان با اولین موفقیت فوری است.
+  const streak = (Number(st.fail_streak) || 0) + 1;
+  if (streak < 3) {
+    try { await kv.put("guardian_state", JSON.stringify({ ...st, fail_streak: streak })); } catch (e) {}
+    const stillServer = st.mode === "server";
+    return { skipHeavy: stillServer, mode: stillServer ? "server" : "worker" };
+  }
   if (!st.emergency_sent) {
-    try { await kv.put("guardian_state", JSON.stringify({ ...st, mode: "worker", emergency_sent: now, emergency_at: now })); } catch (e) {}
+    try { await kv.put("guardian_state", JSON.stringify({ ...st, mode: "worker", emergency_sent: now, emergency_at: now, fail_streak: streak })); } catch (e) {}
     try { qAlert(kv, "guardian"); } catch (e) {}
     const admins = await guardianAdmins(kv, env);
     const wb = await guardianWorkerBase(kv, env);
@@ -7199,14 +7236,39 @@ async function runGuardianNightly(env, botToken, adminId) {
   }
 }
 
-// ===================== اجرای جاب هاست‌فیلتر روی ایجنت (فاز ۳) =====================
+// ===================== اجرای جاب‌ها روی ایجنت (فاز ۳ + ۴) =====================
 // قانون مالکیت کلیدها (تک‌منبع، بدون مسابقه):
-//  • کانفیگ (host_filter_cfg): منبع ورکر است؛ ایجنت هر ران pull می‌کند و اگر عوض شد pushback.
+//  • کانفیگ (SYNC): منبع ورکر است؛ ایجنت هر ران pull می‌کند و اگر عوض شد pushback.
 //  • ران‌تایم (زیر): فقط روی دیسک ایجنت؛ UI ورکر با hfStateGet از ایجنت می‌خواند (fallback به KV).
 //  • بقیه: خوانش sync + نوشتن journal و pushback دسته‌ای (نادر).
-const GUARDIAN_SYNC_KEYS = ["accounts", "panels", "admins", "host_filter_cfg"];
-// pushback فقط همین کلیدها (سد در برابر باگ/نفوذ: ایجنت هرگز نمی‌تواند کلید دیگری را بازنویسی کند)
+// فاز ۴: علاوه بر هاست‌فیلتر، پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل،
+// مانیتور SSL و انقضای دامنه هم روی ایجنت اجرا می‌شوند (ورکر فقط fallback اضطراری).
+const GUARDIAN_SYNC_KEYS = [
+  "accounts", "panels", "admins", "host_filter_cfg",
+  // فاز ۴ — کانفیگ جاب‌های منتقل‌شده (خوانش sync اول هر ران)
+  "node_monitors", "usage_monitor_cfg", "srv_mon_cfg", "servers",
+  "pghook_cfg", "ssl_monitor", "dom_expiry", "dom_expiry_cfg",
+];
+// pushback مجاز ایجنت: exact + پیشوند. سد در برابر باگ/نفوذ: ایجنت هرگز نمی‌تواند
+// کلید دیگری را بازنویسی کند (مثل توکن‌ها، پنل‌ها، لیست سرورها).
 const GUARDIAN_PUSH_KEYS = ["host_filter_cfg"];
+const GUARDIAN_PUSH_PREFIXES = [
+  "ndst:", "ndq:", // وضعیت نودها + گیت ضدتکرار هشدار
+  "pgdr:", "pgq:", "pgdlast:", // وضعیت دایجست پنل + dedup
+  "um_last_run", "um_report_ts", "um_alert", // گاردها و لاگ مانیتور مصرف
+  "srv_mon_last", "srv_cool:", // گارد و cooldown مانیتور سرور
+  "dom_expiry", // به‌روزرسانی last-check انقضای دامنه
+  "stick:", // پین پیام‌های هشداری که ایجنت می‌فرستد (مدیریت بعدی روی ورکر)
+];
+function guardianCanPush(key) {
+  const k = String(key || "");
+  if (!k) return false;
+  if (GUARDIAN_PUSH_KEYS.includes(k)) return true;
+  for (const p of GUARDIAN_PUSH_PREFIXES) {
+    if (k === p || k.startsWith(p)) return true;
+  }
+  return false;
+}
 const GUARDIAN_RUNTIME_KEYS = [
   "hosts_cache",
   "hf_progress",
@@ -7284,8 +7346,8 @@ async function handleGuardianKvBatch(env, body) {
   for (const p of puts) {
     try {
       const key = String((p && p.key) || "").slice(0, 256);
-      // allowlist صریح (F1) + ران‌تایم هرگز از این مسیر برنمی‌گردد
-      if (!key || !GUARDIAN_PUSH_KEYS.includes(key) || guardianIsRuntimeKey(key)) continue;
+      // allowlist صریح (F1: exact + پیشوند فاز ۴) + ران‌تایم هرگز از این مسیر برنمی‌گردد
+      if (!key || !guardianCanPush(key) || guardianIsRuntimeKey(key)) continue;
       if (!p || p.value === null || p.value === undefined) {
         await ck.delete(key);
         wrote++;
@@ -16627,7 +16689,11 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await edit(`⚙️ ${labels[field] || "مقدار"} جدید را بفرستید:`, [[{ text: "⬅️ انصراف", callback_data: "srvmon" }]]);
     } else if (data === "srvmonrun") {
       await edit("⏳ در حال بررسی همهٔ سرورها…", [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]);
-      await runSrvMonitor(env, botToken, true);
+      // فاز ۴: اگر ایجنت فعال است بررسی دستی هم همان‌جا (نتیجه با همان پیام‌های هشدار می‌آید)
+      const srr = await hfRemoteCall(env, "srvmon", {}, () => runSrvMonitor(env, botToken, true), 180000);
+      if (srr && srr.error === "busy") {
+        try { await sendMessage(botToken, chatId, hfBusyMsg(), [[{ text: "📊 مانیتور سرورها", callback_data: "srvmon" }]]); } catch (e) {}
+      }
     } else if (data === "um") {
       // نمایش صفحهٔ تنظیمات مانیتور مصرف با مقادیر فعلی
       const cfg = await getUmCfg(kv);

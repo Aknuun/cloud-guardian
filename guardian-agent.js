@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "2.1.0";
+const AGENT_VERSION = "2.3.0";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;
@@ -656,6 +656,36 @@ function start() {
       });
     } catch (e) {
       log("hostfilter job register failed:", String(e));
+    }
+    // فاز ۴: پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه.
+    // همه از قفل تکی runHfExclusive می‌گذرند (هیچ دو رانی هم‌زمان نیست) و خودِ رانر
+    // mode را چک می‌کند (اگر ورکر به حالت worker برگشته باشد ران skip می‌شود تا هم‌پوشانی نشود).
+    // گیت‌های درشت‌دانه (ساعتی/روزانه) با state محلی است تا ورکر cron_state را کثیف نکنیم.
+    const phase4 = [
+      ["nodepoll", 60 * 1000, 0, "nodepoll"],
+      ["umon", 5 * 60 * 1000, 0, "umon"],
+      ["srvmon", 5 * 60 * 1000, 0, "srvmon"],
+      ["pgdigest_usage", 10 * 60 * 1000, 55 * 60 * 1000, "pgdigest_usage"],
+      ["pgdigest_days", 60 * 60 * 1000, 20 * 3600000, "pgdigest_days"],
+      ["sslmon", 60 * 60 * 1000, 20 * 3600000, "sslmon"],
+      ["domexpmon", 60 * 60 * 1000, 20 * 3600000, "domexpmon"],
+    ];
+    for (const [job, intervalMs, gateMs, action] of phase4) {
+      try {
+        registerJob(job, intervalMs, async () => {
+          if (gateMs > 0) {
+            const lk = `agent-last-${job}`;
+            const last = Number(stateGet(lk, 0)) || 0;
+            if (Date.now() - last < gateMs) return;
+            statePut(lk, Date.now());
+          }
+          const r = await runHfExclusive(() => RUNNER.runRemoteJob(action, {}), true);
+          if (r && (r.error === "busy" || r.skipped)) return;
+          if (r && (r._pushed || r._conflicts)) log(`${job} run: pushed=${r._pushed} conflicts=${r._conflicts}`);
+        });
+      } catch (e) {
+        log(`${job} job register failed:`, String(e));
+      }
     }
   } else if (!RUNNER) {
     log("running without runner (heartbeat + exec only)");
