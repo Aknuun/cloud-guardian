@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.2";
+const BOT_VERSION = "2.4.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.3": [
+    "🐛 فیکس گیرکردن همه دستورها زیر سقف سهمیه: پاک‌سازی pend قدیمی best-effort شد (قبلاً هر پیام با خطای سهمیه می‌مرد)",
+  ],
   "2.4.2": [
     "🌐 دستورهای DNS بدون KV: ‎/dns‎ ‎/dnsadd‎ ‎/dnsdel‎ — بدون نشست و بدون حتی یک write (زیر سقف سهمیه هم کار می‌کنند)؛ اول ایجنت بعد محلی",
     "📖 کش‌ها دیگر هیچ‌وقت خطا نمی‌دهند (best-effort) پس همهٔ صفحه‌های خواندنی زیر سقف سهمیه باز می‌مانند",
@@ -1937,7 +1940,8 @@ async function processUpdate(payload, env, botToken, adminId) {
       return;
     }
 
-    if (pending) await kv.delete(`pend:${chatId}`);
+    // best-effort (2.4.3): زیر سقف سهمیه، پاک‌نشدن pend جلوی دستور را نمی‌گیرد
+    if (pending) { try { await kv.delete(`pend:${chatId}`); } catch (e) {} }
 
     if (!text.startsWith("/") && (isIpLike(text) || isNameLike(text))) {
       const qa = await kv.get(`qa:${chatId}`, "json");
@@ -6938,7 +6942,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.2"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.3"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
