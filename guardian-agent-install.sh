@@ -15,8 +15,8 @@
 #   sudo WORKER_URL="https://....workers.dev" \
 #     bash -c "$(curl -fsSL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/guardian-agent-install.sh)"
 #
-# متغیرهای اختیاری: PORT (پیش‌فرض 8789) · PUBLIC_URL (آدرس عمومی همین
-# سرور برای ثبت خودکار در ورکر) · AGENT_SRC_URL (منبع دانلود فایل ایجنت)
+# متغیرهای اختیاری: PORT (پیش‌فرض 8789، فقط محلی) · AGENT_SRC_URL (منبع دانلود فایل ایجنت)
+# مدل 3.0: نه آدرس عمومی لازم است نه پورت باز — ایجنت خودش به ورکر وصل می‌شود.
 # =====================================================================
 set -u
 
@@ -123,21 +123,13 @@ else
 fi
 
 # ---- کانفیگ ----
+# مدل 3.0: ایجنت فقط بیرون‌زنگ می‌زند (heartbeat به ورکر)؛ ورکر هیچ‌وقت به ایجنت وصل نمی‌شود.
+# پس نه آدرس عمومی لازم است، نه باز بودن پورت در فایروال. PUBLIC_URL فقط برای نمایش/دیباگ نگه داشته می‌شود.
 if [ -z "$WORKER_URL" ] && [ -f "$CONF_FILE" ]; then
   WORKER_URL="$(grep -E '^WORKER_URL=' "$CONF_FILE" | cut -d= -f2- | tr -d '"' | tr -d ' \r\n')"
 fi
-if [ -z "$PUBLIC_URL" ]; then
-  # پیش‌فرض خودکار از آی‌پی عمومی (برای ثبت خودکار آدرس در ورکر با اولین heartbeat؛
-  # اگر سرور پشت NAT/فایروال است، دستی در $CONF_FILE درستش کن)
-  _pip="$(curl -fsSL --max-time 10 https://ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
-  if [ -n "$_pip" ]; then
-    # Bare IPv6 is invalid in URLs (worker fetch fails); wrap it in brackets
-    case "$_pip" in
-      \[*\]) ;;
-      *:* ) _pip="[$_pip]" ;;
-    esac
-    PUBLIC_URL="http://${_pip}:${PORT}"
-  fi
+if [ -z "$PUBLIC_URL" ] && [ -f "$CONF_FILE" ]; then
+  PUBLIC_URL="$(grep -E '^PUBLIC_URL=' "$CONF_FILE" | cut -d= -f2- | tr -d '"' | tr -d ' \r\n')"
 fi
 {
   echo "# ساخته‌شده توسط guardian-agent-install.sh — دستی ویرایش نکن (600)"
@@ -193,19 +185,16 @@ else
   info "WORKER_URL is empty - heartbeat disabled; set it in $CONF_FILE and restart the service."
 fi
 
-PUBIP="$(curl -fsSL --max-time 10 https://ifconfig.io 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
 echo "======================================================================"
 echo " Guardian agent installed - version $ver"
-echo " Port         : $PORT"
+echo " Port         : $PORT (local only - no firewall rule needed)"
 echo " Token source : $TOKEN_SRC"
 if [ "$TOKEN_SRC" = "generated" ]; then
-  echo " Next: register this token in the bot: Servers -> Install agent on server -> Register agent token."
+  echo " Next: register this token in the bot: Versions -> Install agent -> Register agent token."
 fi
 echo " Local test   : curl http://127.0.0.1:${PORT}/ping"
-if [ -z "$PUBLIC_URL" ]; then
-  echo " WARNING: PUBLIC_URL is empty - the worker does not know the agent address; jobs stay on the worker. Set it in $CONF_FILE and restart the service."
-fi
-[ -n "$PUBIP" ] && echo " Public URL   : http://${PUBIP}:${PORT}  (if the firewall is closed, open port $PORT)"
+echo " The agent calls the worker itself (outbound HTTPS); within a minute"
+echo " the bot shows it as connected - no public IP or open port needed."
 echo " Log          : journalctl -u guardian-agent -f"
 echo "======================================================================"
 

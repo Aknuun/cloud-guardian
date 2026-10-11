@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "2.4.7";
+const AGENT_VERSION = "3.0.0";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;
@@ -177,7 +177,107 @@ function postWorker(body, timeoutMs) {
 async function sendHeartbeat() {
   if (!TOKEN) { log("heartbeat skipped: GUARDIAN_TOKEN not set"); return; }
   const r = await postWorker({ token: TOKEN, action: "heartbeat", version: AGENT_VERSION, ts: Date.now(), public_url: PUBLIC_URL });
-  if (!r.ok || !(r.data && r.data.ok)) log("heartbeat failed:", r.error || JSON.stringify(r.data).slice(0, 200));
+  if (!r.ok || !(r.data && r.data.ok)) {
+    log("heartbeat failed:", r.error || JSON.stringify(r.data).slice(0, 200));
+    return;
+  }
+  // مدل 3.0: دستورهای صف ورکر (update/ping/job) — همان‌جا اجرا و نتیجه POST می‌شود.
+  // ورکر inbound لازم ندارد؛ ایجنت قدیمی فیلد cmds را نادیده می‌گیرد (سازگار).
+  const cmds = r.data && Array.isArray(r.data.cmds) ? r.data.cmds.slice(0, 3) : [];
+  for (const c of cmds) {
+    try { await execAgentCmd(c); } catch (e) { log("cmd failed:", String(e && e.message ? e.message : e).slice(0, 150)); }
+  }
+}
+
+// دستورهای اجرا شده در این پروسس (جلوگیری از اجرای تکراری وقتی دو heartbeat هم‌پوشانی دارند؛
+// نتیجه هم نگه داشته می‌شود تا دوباره POST شود. با ری‌استارت پاک می‌شود — دستور ۱۰ دقیقه بعد منقضی است.)
+const EXECUTED = new Map();
+function cmdDone(id) {
+  try {
+    if (EXECUTED.has(id)) return EXECUTED.get(id);
+  } catch (e) {}
+  return null;
+}
+function cmdMark(id, result) {
+  try {
+    EXECUTED.set(id, result === undefined ? null : result);
+    while (EXECUTED.size > 20) {
+      const first = EXECUTED.keys().next();
+      if (first && !first.done) EXECUTED.delete(first.value); else break;
+    }
+  } catch (e) {}
+}
+
+async function postResult(cmd, result) {
+  // نتیجهٔ اجرای دستور صف — ورکر با اولین نتیجه مصرفش می‌کند (تکراری نادیده گرفته می‌شود)
+  try {
+    const data = result && typeof result === "object" ? result : { result };
+    await postWorker({
+      token: TOKEN, action: "result", cmd_id: String(cmd.id || ""),
+      ok: !(result && result.error),
+      data: { ...data, _type: String(cmd.type || ""), _by: Number(cmd.by) || 0 },
+    });
+  } catch (e) {
+    log("result post failed:", String(e && e.message ? e.message : e).slice(0, 150));
+  }
+}
+
+async function execAgentCmd(cmd) {
+  if (!cmd || !cmd.id) return;
+  const id = String(cmd.id).slice(0, 40);
+  const type = String(cmd.type || "").slice(0, 20);
+  const prev = cmdDone(id);
+  if (prev !== null && prev !== undefined) {
+    // قبلاً اجرا شده (هم‌پوشانی heartbeat) — فقط نتیجه را دوباره بفرست
+    await postResult(cmd, prev);
+    return;
+  }
+  cmdMark(id, { pending: true });
+  const args = (cmd.args && typeof cmd.args === "object") ? cmd.args : {};
+  if (type === "update") {
+    const src = String(args.src || AGENT_SRC_URL).slice(0, 500);
+    log(`queue update -> ${src.slice(0, 80)}`);
+    const r = await doSelfUpdate(src);
+    cmdMark(id, r);
+    await postResult(cmd, r);
+    if (r && r.ok) {
+      log("queue update done, restarting");
+      setTimeout(() => process.exit(0), 1500);
+    }
+    return;
+  }
+  if (type === "ping") {
+    // تست اتصال درخواستی از ربات: مدرک زنده‌بودن + اطلاعات برای منوی نسخه‌ها
+    let uptimeS = 0;
+    try { uptimeS = Math.floor(process.uptime()); } catch (e) {}
+    const r = { agent_time: Date.now(), version: AGENT_VERSION, jobs: Object.keys(JOBS), runner: !!RUNNER, uptime_s: uptimeS };
+    cmdMark(id, r);
+    await postResult(cmd, r);
+    return;
+  }
+  if (type === "job") {
+    if (!RUNNER) {
+      const r = { error: "no_runner" };
+      cmdMark(id, r);
+      await postResult(cmd, r);
+      return;
+    }
+    const name = String(args.job || "").slice(0, 40);
+    const t0 = Date.now();
+    try {
+      // درخواستی از خود ورکر است — چک mode لازم نیست (ورکر آگاهانه خواسته) ولی قفل تکی سر جایش است
+      const out = await runHfExclusive(() => RUNNER.runRemoteJob(name, args.args || {}, { force: true }));
+      const r = { secs: Math.round((Date.now() - t0) / 1000), ...(out && typeof out === "object" ? out : { result: out }) };
+      cmdMark(id, r);
+      await postResult(cmd, r);
+    } catch (e) {
+      const r = { error: String((e && e.message) || e).slice(0, 200) };
+      cmdMark(id, r);
+      await postResult(cmd, r);
+    }
+    return;
+  }
+  log("unknown queue cmd:", type);
 }
 async function pushEvent(ev) {
   // رویداد تغییر از جاب‌ها: { kind, title, text } — ورکر فقط پیام تلگرام می‌فرستد
@@ -579,37 +679,49 @@ async function handleHttpProxy(body, res) {
   }
 }
 
+async function doSelfUpdate(src) {
+  // هستهٔ خودآپدیت (هم مسیر HTTP هم صف 3.0): دانلود + اعتبارسنجی + جایگزینی اتمی.
+  // ری‌استارت با caller است (HTTP خودش exit می‌کند؛ صف بعد از POST نتیجه).
+  const s = String(src || AGENT_SRC_URL).slice(0, 500);
+  if (!/^https?:\/\//.test(s)) return { error: "bad_src" };
+  const runnerSrc = s.includes("guardian-agent.js") ? s.replace("guardian-agent.js", "guardian-runner.js") : "";
+  try {
+    const code = await fetchText(s);
+    if (!code || code.length < 5000 || !code.includes("guardian-agent") || !code.includes("AGENT_VERSION")) {
+      log("self-update rejected: bad agent payload");
+      return { error: "bad_payload" };
+    }
+    await selfReplace(__filename, code, "agent");
+    if (runnerSrc) {
+      try {
+        const rcode = await fetchText(runnerSrc);
+        if (rcode && rcode.length > 5000 && rcode.includes("guardian-runner")) {
+          await selfReplace(path.join(path.dirname(__filename), "guardian-runner.js"), rcode, "runner");
+        } else {
+          log("runner update rejected: bad payload");
+        }
+      } catch (e) {
+        log("runner update failed:", String(e && e.message ? e.message : e).slice(0, 200));
+      }
+    }
+    log(`self-update done (${AGENT_VERSION} -> new)`);
+    return { ok: true, from: AGENT_VERSION };
+  } catch (e) {
+    log("self-update failed:", String(e));
+    return { error: String((e && e.message) || e).slice(0, 200) };
+  }
+}
+
 async function handleUpdate(body, res) {
   const src = String(body.src || AGENT_SRC_URL).slice(0, 500);
   if (!/^https?:\/\//.test(src)) return sendJson(res, 400, { ok: false, error: "bad_src" });
-  // رانر همیشه هم‌نسخه با ایجنت آپدیت می‌شود (ورکر src را به تگ پین می‌کند)
-  const runnerSrc = src.includes("guardian-agent.js") ? src.replace("guardian-agent.js", "guardian-runner.js") : "";
   sendJson(res, 200, { ok: true, updating: true, from: AGENT_VERSION });
   // دانلود + اعتبارسنجی + جایگزینی اتمی + خروج (systemd دوباره بالا می‌آورد)
   setImmediate(async () => {
-    try {
-      const code = await fetchText(src);
-      if (!code || code.length < 5000 || !code.includes("guardian-agent") || !code.includes("AGENT_VERSION")) {
-        log("self-update rejected: bad agent payload");
-        return;
-      }
-      await selfReplace(__filename, code, "agent");
-      if (runnerSrc) {
-        try {
-          const rcode = await fetchText(runnerSrc);
-          if (rcode && rcode.length > 5000 && rcode.includes("guardian-runner")) {
-            await selfReplace(path.join(path.dirname(__filename), "guardian-runner.js"), rcode, "runner");
-          } else {
-            log("runner update rejected: bad payload");
-          }
-        } catch (e) {
-          log("runner update failed:", String(e && e.message ? e.message : e).slice(0, 200));
-        }
-      }
-      log(`self-update done (${AGENT_VERSION} -> new), restarting`);
+    const r = await doSelfUpdate(src);
+    if (r && r.ok) {
+      log("restarting");
       setTimeout(() => process.exit(0), 500);
-    } catch (e) {
-      log("self-update failed:", String(e));
     }
   });
 }
@@ -706,4 +818,4 @@ process.on("SIGINT", () => { log("SIGINT, exiting"); process.exit(0); });
 if (require.main === module) start();
 
 // برای تست واحد (node guardian-agent.js سرور را بالا می‌آورد؛ require فقط توابع می‌دهد)
-module.exports = { AGENT_VERSION, registerJob, stateGet, statePut, start, readRuntimeKey, runHfExclusive, handleUpdate };
+module.exports = { AGENT_VERSION, registerJob, stateGet, statePut, start, readRuntimeKey, runHfExclusive, handleUpdate, execAgentCmd, doSelfUpdate };
