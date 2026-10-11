@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.5";
+const BOT_VERSION = "2.4.6";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.6": [
+    "🖥 اجرای تلگرام روی سرور: دستورهای بدون state (‎/dns‎ ‎/dnsadd‎ ‎/dnsdel‎ ‎/version‎ ‎/help‎) کلاً روی ایجنت اجرا و جواب داده می‌شوند (مثل مدل polling ربات‌های سروری)؛ اعتبار ادمین و گارد ضدحلقه سر جایش است",
+  ],
   "2.4.5": [
     "🖥 ایجنت مثل ورکر شد: اکشن‌های stateless (زون/رکورد/purge/DNS) دیگر منتظر mode=server نمی‌مانند و حتی زیر سقف سهمیه از ایجنت جواب می‌دهند",
   ],
@@ -1938,6 +1941,17 @@ async function processUpdate(payload, env, botToken, adminId) {
           ? "m:" + cmd.slice(1).replace(/[^a-z0-9_]/g, "").slice(0, 24)
           : "m:text"
     );
+
+    // اجرای هیبرید روی سرور (2.4.6): این دستورها هیچ state مشترکی لازم ندارند
+    // (متن ساده + API مستقیم) پس کل آپدیت را ایجنت اجرا و جواب می‌دهد؛ ورکر تکرار نمی‌کند.
+    // عمداً فقط همین‌هاست: هر چیزی که دکمهٔ نشست‌دار می‌سازد باید روی ورکر بماند
+    // (نشست ایجنت روی FileKV برای ورکر نامرئی است و دکمه‌ها می‌مردند).
+    // گارد ضدحلقه: روی خود ایجنت (env.AGENT) این شاخه هرگز اجرا نمی‌شود.
+    if (!env.AGENT && text.startsWith("/") && ["/dns", "/dnsadd", "/dnsdel", "/version", "/help"].includes(cmd)) {
+      const delegated = await guardianJobFetch(kv, "tgbot", { update: payload }, 45000, true);
+      if (delegated && delegated.replied) return;
+      // ایجنت در دسترس نیست → همین‌جا محلی ادامه می‌دهیم (fallback همیشگی)
+    }
 
     if (pending && !text.startsWith("/")) {
       await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
@@ -6948,7 +6962,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.5"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.6"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;

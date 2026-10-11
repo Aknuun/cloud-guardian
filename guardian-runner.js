@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "2.4.5";
+const RUNNER_VERSION = "2.4.6";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
 // فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
 const SYNC_KEYS = [
@@ -272,7 +272,7 @@ function createRunner(opts) {
       'const connect = (...args) => globalThis.__SOCKET_CONNECT(...args);'
     );
     // پچ ۲: جدول صریح jobهای مجاز فاز ۳ + ۴ و هیبرید CF (2.4.0) — تنها همین تابع‌ها از راه دور صدا زده می‌شوند
-    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor, getAccounts, getAllZones, getZoneById, getRecords, cfPurgeCache, cfDnsList, cfDnsUpsert, cfDnsDelete };\n";
+    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor, getAccounts, getAllZones, getZoneById, getRecords, cfPurgeCache, cfDnsList, cfDnsUpsert, cfDnsDelete, processUpdate };\n";
     // فایل اجرای یکتا (کش import گره‌گیر نشود) + پاک‌سازی اجراهای قبلی
     try {
       for (const f of fs.readdirSync(bundleDir)) {
@@ -320,8 +320,24 @@ function createRunner(opts) {
         try { fs.writeFileSync(path.join(kvDir, encodeURIComponent(k).slice(0, 200) + ".json"), JSON.stringify({ v: String(v), exp: 0 })); } catch (e) {}
       }
     }
-    return { botToken: String(r.data.bot_token || ""), adminId: Number(r.data.admin_id) || 0,
-      texts: r.data.keys || {} };
+    // ماندگاری اعتبار ربات (2.4.6): اگر ورکر روزی کاملاً از دسترس خارج شد، ایجنت با همین‌ها مستقل می‌ماند
+    const bt = String(r.data.bot_token || "");
+    const aid = Number(r.data.admin_id) || 0;
+    try {
+      if (bt) fs.writeFileSync(path.join(stateDir, "bot_token"), bt);
+      if (aid) fs.writeFileSync(path.join(stateDir, "admin_id"), String(aid));
+    } catch (e) {}
+    return { botToken: bt, adminId: aid, texts: r.data.keys || {} };
+  }
+
+  function cachedCreds() {
+    // fallback وقتی sync ناموفق است (ورکر down): آخرین اعتبار ذخیره‌شده
+    try {
+      const bt = fs.readFileSync(path.join(stateDir, "bot_token"), "utf8").trim();
+      const aid = Number(fs.readFileSync(path.join(stateDir, "admin_id"), "utf8").trim()) || 0;
+      if (bt) return { botToken: bt, adminId: aid };
+    } catch (e) {}
+    return null;
   }
 
   async function pushJournal(journal, expectMap) {
@@ -347,7 +363,7 @@ function createRunner(opts) {
   // اکشن‌های stateless (2.4.5): خوانش CF و DNS مستقیم — هیچ state مشترکی ندارند
   // پس بدون چک mode هم اجرا می‌شوند (مثل خود ورکر). بقیه (stateful) همچنان گیت می‌خورند
   // تا دو طرف هم‌زمان state را ننویسند.
-  const STATELESS = new Set(["cf_zones", "cf_records", "cf_purge", "cf_dns_list", "cf_dns_upsert", "cf_dns_delete"]);
+  const STATELESS = new Set(["cf_zones", "cf_records", "cf_purge", "cf_dns_list", "cf_dns_upsert", "cf_dns_delete", "tgbot"]);
 
   // اجرای generیک یک جاب روی باندل ورکر: mode-check + sync + FileKV + push journal.
   // همهٔ جاب‌های فاز ۴ و هیبرید CF از همین مسیر می‌گذرند (تایمر ایجنت و /job ورکر).
@@ -363,6 +379,8 @@ function createRunner(opts) {
       botToken = s.botToken; adminId = s.adminId; texts = s.texts;
     } catch (e) {
       if (!stateless) throw e;
+      const cc = cachedCreds();
+      if (cc) { botToken = cc.botToken; adminId = cc.adminId; }
     }
     if (!stateless) {
       const mode = await checkServerMode();
@@ -372,7 +390,8 @@ function createRunner(opts) {
     const journal = [];
     const runKv = new FileKV(kvDir, journal);
     // seed خوانده‌شده با ژورنال ران قاطی نمی‌شود: فایل‌ها مشترک‌اند، ژورنال جداست
-    const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl };
+    // AGENT=1 یعنی روی ایجنت هستیم (گارد ضدحلقهٔ tgbot در باندل)
+    const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl, AGENT: "1" };
     const jobs = await ensureBundle();
     const result = await fn(jobs, env, args || {});
     let pushed = { wrote: 0, conflicts: 0 };
@@ -422,6 +441,15 @@ function createRunner(opts) {
     cf_dns_list: (jobs, env, a) => jobs.cfDnsList(env, a || {}),
     cf_dns_upsert: (jobs, env, a) => jobs.cfDnsUpsert(env, a || {}),
     cf_dns_delete: (jobs, env, a) => jobs.cfDnsDelete(env, a || {}),
+    // اجرای کامل یک آپدیت تلگرام روی سرور (2.4.6): ورکر فقط متن‌های SAFE را می‌فرستد؛
+    // ایجنت با FileKV + API مستقیم جواب می‌دهد و {replied:true} برمی‌گرداند تا ورکر محلی تکرار نکند.
+    // گیت ادمین داخل خود processUpdate است (دفاع در عمق).
+    tgbot: async (jobs, env, a) => {
+      const upd = (a && a.update) || null;
+      if (!upd || typeof upd !== "object") throw new Error("bad_update");
+      await jobs.processUpdate(upd, env, env.BOT_TOKEN, env.ADMIN_ID);
+      return { replied: true };
+    },
   };
 
   async function callAction(name, args) {
