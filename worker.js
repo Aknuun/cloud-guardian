@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "3.0.0";
+const BOT_VERSION = "3.0.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "3.0.1": [
+    "🛡 فیکس اصلی سهمیه: استمپ زنده‌بودن از ۵۷۶ نوشتن در روز به ۹۶ رفت + cron_state با فلاش ۳۰دقیقه‌ای (۱۴۴→۴۸). بار ثابت ورکر: ۱۴۴ نوشته از ۱۰۰۰ (قبلاً ۷۲۰)",
+    "🖥 لایو‌نس = استمپ heartbeat تازه یا ping موفق؛ ایجنت پشت فایروال هم درست تشخیص داده می‌شود",
+  ],
   "3.0.0": [
     "🖥 مدل اتصال جدید: ایجنت خودش به ربات وصل می‌شود (outbound) — نه فایروال لازم است نه IP عمومی نه آدرس ثبت‌شده",
     "📨 دستورها (آپدیت، تست، جاب) در صف heartbeat اجرا می‌شوند؛ نتیجه‌اش با پیام جدا می‌آید",
@@ -1766,7 +1770,17 @@ export default {
           }
           jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
           await Promise.allSettled(jobs);
-          if (Object.keys(patch).length) await saveCronState(qKvCount(ckv, "cron"), { ...cs, ...patch });
+          // 3.0.1: cron_state را حداکثر هر ۳۰ دقیقه فلاش می‌کنیم (قبلاً هر تیک ۱۰دقیقه‌ای
+          // = ۱۴۴ نوشتن در روز). همهٔ جاب‌های زمان‌بندشده idempotent هستند و در تیک بعدی
+          // دوباره محافظت می‌شوند، پس تأخیر فلاش فقط هزینهٔ یک ران اضافی است نه خرابی.
+          try {
+            Object.assign(_cronPending, patch);
+            if (Object.keys(_cronPending).length && (!_cronLastFlush || now - _cronLastFlush >= 1800000)) {
+              await saveCronState(qKvCount(ckv, "cron"), { ...cs, ..._cronPending });
+              _cronPending = {};
+              _cronLastFlush = now;
+            }
+          } catch (e) {}
         })().catch((e) => dbgLogErr(env, e, "sched10"))
       );
     } else {
@@ -2762,6 +2776,11 @@ async function getAdmins(kv, env) {
 
 // زمان‌بندی کرون‌های دوره‌ای در یک کلید واحد (کاهش شدید تعداد نوشتن‌های KV)
 // فیلدها: um (مانیتور مصرف) · srv (مانیتور سرور) · node (ثبت نود) · selfup (آپدیت خودکار)
+// بافر فلاش تنکرون cron_state (3.0.1): کاهش نوشتن KV از ۱۴۴ به حداکثر ۴۸ در روز.
+// فقط در حافظه همان ایزوله؛ با ری‌استارت ورکر خالی می‌شود (بدون عارضه، جاب‌ها دوباره محافظت می‌شوند).
+let _cronPending = {};
+let _cronLastFlush = 0;
+
 async function getCronState(kv) {
   if (!kv) return {};
   try {
@@ -6996,7 +7015,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "3.0.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "3.0.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7313,8 +7332,16 @@ async function handleGuardianIngest(env, b) {
     if (!ent.added_at) { ent.added_at = nowHb; entDirty = true; }
     if (!ent.url && pub && /^https?:\/\/.+/i.test(pub)) { ent.url = pub; entDirty = true; }
     if (ver && ver !== ent.agent_version) { ent.agent_version = ver; entDirty = true; }
-    if (!ent.last_hb || nowHb - ent.last_hb >= 300000) { ent.last_hb = nowHb; entDirty = true; }
-    // primary: منطق قبلی عیناً (آدرس فقط وقتی خالی است + state + سازگاری)
+    // 3.0.1: استمپ zنده‌بودن دیگر هر ۵ دقیقه (۵۷۶ نوشتن/روز) نیست؛ هر ۱۵ دقیقه و فقط در رجیستری.
+    // لایو‌نس = استمپ تازه OR ping موفق (ورکر→ایجنت اگر فایروال بسته باشد از استمپ استفاده می‌کند).
+    if (pub && ent.url !== pub && (Number(ent.url_at) || 0) < nowHb - 1800000) {
+      ent.url = pub;
+      ent.url_at = nowHb;
+      entDirty = true;
+    }
+    if (ver && ver !== ent.agent_version) { ent.agent_version = ver; entDirty = true; }
+    if (!ent.last_hb || nowHb - ent.last_hb >= 900000) { ent.last_hb = nowHb; entDirty = true; }
+    // primary: compatibility only — no periodic last_hb write
     if (who.kind === "primary") {
       let st = {};
       try { st = await getGuardianState(kv); } catch (e) {}
@@ -7322,10 +7349,7 @@ async function handleGuardianIngest(env, b) {
         cfg.url = pub;
         try { await saveGuardianCfg(kv, cfg); } catch (e) {}
       }
-      let hbDirty = false;
-      if (ver && ver !== st.agent_version) { st.agent_version = ver; hbDirty = true; }
-      if (!st.last_hb || nowHb - st.last_hb >= 300000) { st.last_hb = nowHb; hbDirty = true; }
-      if (hbDirty) {
+      if (ver && ver !== st.agent_version) {
         try { await kv.put("guardian_state", JSON.stringify(st)); } catch (e) {}
       }
     }
@@ -7363,9 +7387,46 @@ async function handleGuardianIngest(env, b) {
   return { ok: false, error: "bad_action" };
 }
 
+async function guardianAgentAlive(kv, cfg, token) {
+  // لایو‌نس بدون نوشتن: استمپ heartbeat تازه (هر ۱۵ دقیقه نوشته می‌شود) یا ping موفق.
+  // استمپ یعنی «ایجان بیرون‌زنگ زده» (نیازی به فایروال نیست)؛ ping یعنی همین حالا جواب می‌دهد.
+  const now = Date.now();
+  const t = token ? String(token) : "";
+  let stamp = 0;
+  let urls = [];
+  try {
+    const regs = await kv.get("guardian_agents", "json");
+    if (regs && typeof regs === "object") {
+      const keys = t ? [t] : Object.keys(regs);
+      for (const k of keys) {
+        const e = regs[k];
+        if (!e) continue;
+        const hb = Number(e.last_hb) || 0;
+        if (t && hb > stamp) stamp = hb;
+        if (!t) {
+          // برای primary: آخرین استمپ همهٔ ایجنت‌ها = تازه‌ترین
+          if (hb > stamp) stamp = hb;
+        }
+        const u = String(e.url || "");
+        if (u && !urls.includes(u)) urls.push(u);
+      }
+    }
+  } catch (e) {}
+  if (!t && cfg && cfg.url && !urls.includes(cfg.url)) urls.unshift(cfg.url);
+  const stampOk = stamp > 0 && now - stamp < 900000;
+  if (stampOk) return { ok: true, via: "stamp", version: "" };
+  if (urls.length) {
+    for (const u of urls.slice(0, 3)) {
+      const p = await guardianPing(u);
+      if (p.ok) return { ok: true, via: "ping", version: p.version };
+    }
+  }
+  return { ok: false, via: "none", stampAge: stamp ? now - stamp : -1 };
+}
+
 async function runGuardianWatchdog(env, botToken, adminId) {
-  // واچ‌داگ دقیقه‌ای مدل 3.0: زنده‌بودن فقط با تازگی heartbeat (outbound polling).
-  // ورکر هیچ‌وقت به ایجنت وصل نمی‌شود: نه ping، نه فایروال، نه IP عمومی لازم است.
+  // واچ‌داگ دقیقه‌ای 3.0.1: زنده‌بودن = استمپ heartbeat (هر ۱۵ دقیقه) یا ping — بدون نوشتن اضافه.
+  // قبلاً هر ۵ دقیقه دو تا استمپ نوشته می‌شد = ۵۷۶ نوشتن در روز که سهمیه را می‌سوزاند.
   // خروجی: { skipHeavy } — بدون ایجنت ثبت‌شده همیشه false (رفتار قبلی بدون تغییر).
   const idle = { skipHeavy: false, mode: "worker" };
   const kv = env.BOT_KV;
@@ -7377,26 +7438,17 @@ async function runGuardianWatchdog(env, botToken, adminId) {
   try { st = await getGuardianState(kv); } catch (e) {}
   if (!st || typeof st !== "object") st = {};
   const now = Date.now();
-  // نصب‌نشده = هیچ heartbeat‌ای تا حالا نرسیده (نه state نه رجیستری)
-  if (!st.last_hb) {
-    try {
-      const regs = await kv.get("guardian_agents", "json");
-      let anyHb = false;
-      if (regs && typeof regs === "object") {
-        for (const k of Object.keys(regs)) {
-          if (regs[k] && Number(regs[k].last_hb) > 0) { anyHb = true; break; }
-        }
-      }
-      if (!anyHb) return { skipHeavy: false, mode: "worker", pending: true };
-    } catch (e) {}
-  }
-  // heartbeat تازه (کمتر از ۶ دقیقه) = ایجنت زنده است.
-  const hbFresh = !!(st.last_hb && now - st.last_hb < 360000);
-  if (hbFresh) {
-    // موفقیت، شمارش شکست را صفر می‌کند (فقط اگر چیزی برای صفر کردن هست تا write اضافه ندهیم)
+  const live = await guardianAgentAlive(kv, cfg);
+  if (live.via === "none" && !st.agent_version) return { skipHeavy: false, mode: "worker", pending: true };
+  if (live.ok) {
+    // موفقیت: شمارش شکست را صفر می‌کند (write فقط وقتی واقعاً چیزی برای صفر کردن هست)
     if (Number(st.fail_streak) > 0) {
       try { await kv.put("guardian_state", JSON.stringify({ ...st, fail_streak: 0 })); } catch (e) {}
       st.fail_streak = 0;
+    }
+    if (live.version && live.version !== st.agent_version) {
+      try { await kv.put("guardian_state", JSON.stringify({ ...st, agent_version: live.version })); } catch (e) {}
+      st.agent_version = live.version;
     }
     if (st.mode !== "server" || st.emergency_sent) {
       const wasEmergency = !!st.emergency_sent;
@@ -7606,13 +7658,9 @@ async function handleGuardianMode(env, token) {
   const who = await guardianResolve(kv, String(token || ""));
   if (!who) return { ok: false, error: "bad_token" };
   if (who.kind !== "primary") {
-    let fresh = false;
-    try {
-      const regs = await kv.get("guardian_agents", "json");
-      const ent = regs && regs[String(token || "")];
-      fresh = !!(ent && ent.last_hb && Date.now() - Number(ent.last_hb) < 360000);
-    } catch (e) {}
-    return { ok: true, mode: fresh ? "server" : "worker", version: BOT_VERSION };
+    // چندایجنتی 3.0.1: لiveness از ping همان توکن (بدون write)
+    const live = await guardianAgentAlive(kv, null, String(token || ""));
+    return { ok: true, mode: live.ok ? "server" : "worker", version: BOT_VERSION };
   }
   let st = {};
   try { st = await getGuardianState(env.BOT_KV); } catch (e) {}
@@ -14476,8 +14524,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           return `${faD(Math.floor(m / 60))} ساعت پیش`;
         };
         if (vGCfg && vGCfg.token) {
-          const vAlive = vGSt.mode === "server";
-          const hbAge = vGSt.last_hb ? Date.now() - Number(vGSt.last_hb) : -1;
+          // 3.0.1: لiveness با ping زنده (هیچ نوشتنی نیست) — دیگر استمپ heartbeat نداریم
+          const vLive = await guardianAgentAlive(kv, vGCfg);
+          const vAlive = vLive.ok || vGSt.mode === "server";
           let qDepth = 0;
           try {
             const gr0 = await kv.get("guardian_agents", "json");
@@ -14489,9 +14538,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
             const tp = await kv.get(`guardian_ping:${String(vGCfg.token).slice(0, 64)}`, "json");
             if (tp && tp.at) testLine = ` · تست: ${agoFa(Date.now() - Number(tp.at))}`;
           } catch (e) {}
-          vLines.push("", "🖥 ایجنت سرور: " + (vAlive ? "🟢 فعال" : "🔴 قطع (ورکر اضطراری کار می‌کند)") + (vGSt.agent_version ? " · v" + vGSt.agent_version : "") + ` · heartbeat: ${agoFa(hbAge)}` + (qDepth ? ` · ⏳ ${faD(qDepth)} دستور در صف` : "") + testLine);
+          vLines.push("", "🖥 ایجنت سرور: " + (vLive.ok ? "🟢 فعال" : vAlive ? "🟡 ناشناس (ping نشد)" : "🔴 قطع (ورکر اضطراری کار می‌کند)") + (vGSt.agent_version ? " · v" + vGSt.agent_version : "") + (vLive.ok ? " · پاسخ‌دهنده" : "") + (qDepth ? ` · ⏳ ${faD(qDepth)} دستور در صف` : "") + testLine);
           const uh = gUnknownHint();
-          if (!vAlive && uh) {
+          if (!vLive.ok && uh) {
             vLines.push(`💡 یک ایجنت با توکن اشتباه (${uh.prefix}…، ${faD(uh.n)} بار) تلاش کرد — احتمالاً توکن دستور نصب با توکن ربات فرق دارد. دستور نصب تازه از دکمه زیر بگیر.`);
           }
           vKb.push([{ text: "⬆️ آپدیت ایجنت", callback_data: "guardian:update" }]);
@@ -14506,19 +14555,20 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           const gRegs = await kv.get("guardian_agents", "json");
           if (gRegs && typeof gRegs === "object") {
             const pTok = (vGCfg && vGCfg.token) || "";
-            const nowV = Date.now();
-            for (const tk of Object.keys(gRegs)) {
-              if (!tk || tk === pTok) continue;
-              const e2 = gRegs[tk] || {};
-              const host = String(e2.url || "").replace(/^https?:\/\//, "").split(/[/:]/)[0].replace(/^\[|\]$/g, "") || ("…" + String(tk).slice(-6));
-              const hb2 = e2.last_hb ? nowV - Number(e2.last_hb) : -1;
-              const q2 = e2.cmds && Array.isArray(e2.cmds) ? e2.cmds.filter((c) => c && nowV - Number(c.at || 0) < 600000).length : 0;
-              if (!e2.last_hb) {
-                vLines.push("", "🖥 ایجنت " + host + ": ⏳ در انتظار اولین heartbeat (دستور نصب را روی سرور بزن)");
-              } else {
-                const fresh2 = hb2 >= 0 && hb2 < 360000;
-                vLines.push("", "🖥 ایجنت " + host + ": " + (fresh2 ? "🟢 فعال" : "🔴 قطع") + (e2.agent_version ? " · v" + e2.agent_version : "") + ` · ${agoFa(hb2)}` + (q2 ? ` · ⏳ ${faD(q2)} دستور` : ""));
-              }
+            const secs = Object.keys(gRegs).filter((tk) => tk && tk !== pTok);
+            if (secs.length) {
+              // 3.0.1: وضعیت هر ایجنت دوم با ping موازی (بدون نوشتن) — کند نیست
+              const pings = await Promise.all(secs.map((tk) => guardianAgentAlive(kv, null, tk)));
+              secs.forEach((tk, i) => {
+                const e2 = gRegs[tk] || {};
+                const host = String(e2.url || "").replace(/^https?:\/\//, "").split(/[/:]/)[0].replace(/^\[|\]$/g, "") || ("…" + String(tk).slice(-6));
+                const q2 = e2.cmds && Array.isArray(e2.cmds) ? e2.cmds.filter((c) => c && Date.now() - Number(c.at || 0) < 600000).length : 0;
+                if (!e2.url) {
+                  vLines.push("", "🖥 ایجنت " + host + ": ⏳ در انتظار اولین heartbeat (دستور نصب را روی سرور بزن)");
+                } else {
+                  vLines.push("", "🖥 ایجنت " + host + ": " + (pings[i].ok ? "🟢 فعال" : "🔴 قطع") + (e2.agent_version ? " · v" + e2.agent_version : "") + (q2 ? ` · ⏳ ${faD(q2)} دستور` : ""));
+                }
+              });
             }
           }
         } catch (e) {}
