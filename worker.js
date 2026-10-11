@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.1";
+const BOT_VERSION = "2.4.2";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.2": [
+    "🌐 دستورهای DNS بدون KV: ‎/dns‎ ‎/dnsadd‎ ‎/dnsdel‎ — بدون نشست و بدون حتی یک write (زیر سقف سهمیه هم کار می‌کنند)؛ اول ایجنت بعد محلی",
+    "📖 کش‌ها دیگر هیچ‌وقت خطا نمی‌دهند (best-effort) پس همهٔ صفحه‌های خواندنی زیر سقف سهمیه باز می‌مانند",
+  ],
   "2.4.1": [
     "💬 خطاهای سهمیه/محدودیت کلادفلر حالا فارسی و واضح به کاربر گفته می‌شود (به‌جای متن خام انگلیسی)",
   ],
@@ -1255,7 +1259,10 @@ async function kvGetCached(kv, key, type, ttl = MEM_TTL) {
 
 async function kvPutCached(kv, key, value, opts, ttl = MEM_TTL) {
   if (!kv) return;
-  await kv.put(key, value, opts);
+  // best-effort (2.4.2): کش هیچ‌وقت caller را نمی‌اندازد — زیر سقف سهمیه، خوانش‌ها با mem ادامه می‌دهند
+  try {
+    await kv.put(key, value, opts);
+  } catch (e) {}
   try {
     memSet("kv:" + key, JSON.parse(value), ttl);
   } catch {
@@ -1266,7 +1273,9 @@ async function kvPutCached(kv, key, value, opts, ttl = MEM_TTL) {
 async function kvDeleteCached(kv, key) {
   if (!kv) return;
   memDel("kv:" + key);
-  await kv.delete(key);
+  try {
+    await kv.delete(key);
+  } catch (e) {}
 }
 
 function grid2(buttons) {
@@ -2103,6 +2112,33 @@ async function processUpdate(payload, env, botToken, adminId) {
       await handleToggleProxy(args, accounts, send, kv);
     } else if (cmd === "/delete") {
       await handleDelete(args, accounts, send, kv);
+    } else if (cmd === "/dns") {
+      // لیست رکوردها بدون حتی یک write (کار می‌کند حتی زیر سقف سهمیه)؛ اول ایجنت، بعد محلی
+      if (!args[1]) return send("⚠️ استفاده: /dns <دامنه>\nمثال: /dns example.com");
+      const r = await guardianJobFetch(kv, "cf_dns_list", { zone: args[1] }, 30000)
+        || await cfDnsList(env, { zone: args[1] });
+      if (!r || !r.ok) return send("❌ دامنه پیدا نشد یا خطا در خواندن رکوردها.");
+      const lines = [`🌐 رکوردهای ${r.zone.name} (${r.records.length} مورد):`, ""];
+      for (const x of r.records.slice(0, 40)) lines.push(`${x.type} ${code(x.name)} → ${code(x.content)}${x.proxied ? " ☁️" : ""}`);
+      if (r.records.length > 40) lines.push(`… و ${r.records.length - 40} مورد دیگر`);
+      await send(lines.join("\n").slice(0, 3500), [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (cmd === "/dnsadd") {
+      // ساخت/به‌روزرسانی رکورد در یک پیام (بدون نشست و بدون write)
+      if (!args[1] || !args[2] || !args[3] || !args[4]) {
+        return send("⚠️ استفاده: /dnsadd <دامنه> <نوع> <نام> <مقدار>\nمثال: /dnsadd example.com A www 1.2.3.4\n(اگر رکورد باشد به‌روز می‌شود)");
+      }
+      const p = { zone: args[1], type: args[2], name: args[3], content: args.slice(4).join(" ") };
+      const r = await guardianJobFetch(kv, "cf_dns_upsert", p, 30000) || await cfDnsUpsert(env, p);
+      if (!r || !r.ok) return send("❌ انجام نشد (" + String((r && r.error) || "unknown") + "). دامنه/نوع/نام را بررسی کن.");
+      await send(`✅ رکورد ${r.updated ? "به‌روز" : "ساخته"} شد:\n${r.record.type}-${code(r.record.name)} → ${code(String(r.record.content))}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (cmd === "/dnsdel") {
+      if (!args[1] || !args[2] || !args[3]) {
+        return send("⚠️ استفاده: /dnsdel <دامنه> <نوع> <نام>\nمثال: /dnsdel example.com A www");
+      }
+      const p = { zone: args[1], type: args[2], name: args[3] };
+      const r = await guardianJobFetch(kv, "cf_dns_delete", p, 30000) || await cfDnsDelete(env, p);
+      if (!r || !r.ok) return send("❌ انجام نشد (" + String((r && r.error) || "unknown") + ").");
+      await send(`🗑 رکورد حذف شد:\n${r.record.type}-${code(r.record.name)}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else {
       await send("❓ دستور ناشناخته. از منو استفاده کنید.", mainMenuKeyboard());
     }
@@ -6902,7 +6938,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.2"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -11270,6 +11306,88 @@ async function findRecord(zone, type, name, accounts) {
   const data = await res.json();
   if (!data.success || !data.result || data.result.length === 0) return null;
   return data.result[0];
+}
+
+// ===================== DNS بدون KV (2.4.2) =====================
+// هستهٔ مشترک ورکر و ایجنت: صفر write (حتی کش هم نمی‌نویسد) تا زیر سقف سهمیه هم کار کند.
+// ورودی‌ها صریح‌اند (نام زون/رکورد) و نیازی به نشست KV ندارند؛ خروجی خلاصه و آمادهٔ نمایش است.
+function cfSlimRecords(recs) {
+  return (Array.isArray(recs) ? recs : []).slice(0, 100).map((r) => ({
+    id: r.id, type: r.type, name: r.name, content: String(r.content || "").slice(0, 300),
+    ttl: r.ttl, proxied: !!r.proxied,
+  }));
+}
+
+async function cfDnsList(env, p) {
+  try {
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String((p && p.zone) || ""), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const recs = await getRecords(zone, accounts, null);
+    return { ok: true, zone: { id: zone.id, name: zone.name }, records: cfSlimRecords(recs) };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
+}
+
+async function cfDnsUpsert(env, p) {
+  try {
+    const typeUp = String((p && p.type) || "").toUpperCase();
+    const name = String((p && p.name) || "");
+    const content = String((p && p.content) || "");
+    if (!p || !p.zone || !typeUp || !name || !content) return { ok: false, error: "bad_args" };
+    if (!ADD_RECORD_TYPES.includes(typeUp)) return { ok: false, error: "bad_type" };
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String(p.zone), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const fullName = normalizeName(name, zone.name);
+    const tok = accounts[zone._acc].token;
+    const old = await findRecord(zone, typeUp, name, accounts);
+    let rec = null;
+    if (old) {
+      const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${old.id}`, {
+        method: "PUT", headers: hdr(tok),
+        body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: 1, proxied: !!old.proxied }),
+        signal: withTimeout(20000),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !(d && d.success)) return { ok: false, error: "update_failed" };
+      rec = d.result;
+    } else {
+      const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+        method: "POST", headers: hdr(tok),
+        body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: 1, proxied: false }),
+        signal: withTimeout(20000),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !(d && d.success)) return { ok: false, error: "create_failed" };
+      rec = d.result;
+    }
+    return { ok: true, updated: !!old, record: { id: rec.id, type: rec.type, name: rec.name, content: rec.content, proxied: !!rec.proxied } };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
+}
+
+async function cfDnsDelete(env, p) {
+  try {
+    const typeUp = String((p && p.type) || "").toUpperCase();
+    const name = String((p && p.name) || "");
+    if (!p || !p.zone || !typeUp || !name) return { ok: false, error: "bad_args" };
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String(p.zone), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const old = await findRecord(zone, typeUp, name, accounts);
+    if (!old) return { ok: false, error: "not_found" };
+    const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${old.id}`, {
+      method: "DELETE", headers: hdr(accounts[zone._acc].token), signal: withTimeout(20000),
+    });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !(d && d.success)) return { ok: false, error: "delete_failed" };
+    return { ok: true, record: { id: old.id, type: old.type, name: old.name } };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
 }
 
 async function handleEdit(args, accounts, send, kv) {

@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "2.4.1";
+const RUNNER_VERSION = "2.4.2";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
 // فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
 const SYNC_KEYS = [
@@ -272,7 +272,7 @@ function createRunner(opts) {
       'const connect = (...args) => globalThis.__SOCKET_CONNECT(...args);'
     );
     // پچ ۲: جدول صریح jobهای مجاز فاز ۳ + ۴ و هیبرید CF (2.4.0) — تنها همین تابع‌ها از راه دور صدا زده می‌شوند
-    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor, getAccounts, getAllZones, getZoneById, getRecords, cfPurgeCache };\n";
+    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor, getAccounts, getAllZones, getZoneById, getRecords, cfPurgeCache, cfDnsList, cfDnsUpsert, cfDnsDelete };\n";
     // فایل اجرای یکتا (کش import گره‌گیر نشود) + پاک‌سازی اجراهای قبلی
     try {
       for (const f of fs.readdirSync(bundleDir)) {
@@ -403,6 +403,10 @@ function createRunner(opts) {
       return jobs.getRecords(zone, accounts, env.BOT_KV);
     },
     cf_purge: (jobs, env, a) => jobs.cfPurgeCache(env, Number((a && a.acc) || 0), String((a && a.zone_id) || "")),
+    // DNS بدون KV (2.4.2): آرگومان صریح، صفر write — حتی زیر سقف سهمیه کار می‌کند
+    cf_dns_list: (jobs, env, a) => jobs.cfDnsList(env, a || {}),
+    cf_dns_upsert: (jobs, env, a) => jobs.cfDnsUpsert(env, a || {}),
+    cf_dns_delete: (jobs, env, a) => jobs.cfDnsDelete(env, a || {}),
   };
 
   async function callAction(name, args) {
