@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.3.1";
+const BOT_VERSION = "2.4.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.0": [
+    "🖥 هیبرید Cloudflare: لیست زون/رکورد و purge کش اول روی سرور اجرا می‌شود (ورکر fallback)؛ کار با کلادفلر بدون ورکر هم ممکن است",
+    "📦 کش‌های CF ایجنت کاملاً محلی شدند (push بیهوده صفر)",
+  ],
   "2.3.1": [
     "🛡 فیکس اسپم write پول نود: state نود حداکثر هر ۵ دقیقه ذخیره می‌شود (هشدار فوری همچنان لحظه‌ای) — مصرف روزانه خیلی کمتر",
   ],
@@ -4477,6 +4481,15 @@ async function getAllZones(accounts, kv) {
     const cached = await kvGetCached(kv, "cache:zones", "json", 3600000);
     if (Array.isArray(cached)) return cached;
   }
+  // هیبرید (2.4.0): روی miss کش، اول از ایجنت بپرس (کش FileKV خودش را دارد)؛
+  // خروجی اعتبارسنجی می‌شود و کش ورکر هم مثل مسیر محلی به‌روز می‌شود.
+  if (kv) {
+    const remote = await guardianJobFetch(kv, "cf_zones", {}, 25000);
+    if (Array.isArray(remote)) {
+      if (remote.length) await kvPutCached(kv, "cache:zones", JSON.stringify(remote), { expirationTtl: 3600 }, 3600000);
+      return remote;
+    }
+  }
   const out = [];
   for (let i = 0; i < accounts.length; i++) {
     const acc = accounts[i];
@@ -4520,6 +4533,14 @@ async function getRecords(zone, accounts, kv) {
   if (kv) {
     const cached = await kvGetCached(kv, cacheKey, "json", 3600000);
     if (Array.isArray(cached)) return cached;
+  }
+  // هیبرید (2.4.0): مثل getAllZones — اول ایجنت (با zone_id و ایندکس اکانت خودش resolve می‌کند)
+  if (kv && zone && zone.id !== undefined) {
+    const remote = await guardianJobFetch(kv, "cf_records", { zone_id: String(zone.id), acc: Number(zone._acc) || 0 }, 25000);
+    if (Array.isArray(remote)) {
+      if (remote.length) await kvPutCached(kv, cacheKey, JSON.stringify(remote), { expirationTtl: 3600 }, 3600000);
+      return remote;
+    }
   }
   const records = [];
   let page = 1;
@@ -6866,7 +6887,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.3.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7418,6 +7439,45 @@ async function pokeGuardianJob(env, name, args) {
     return true;
   } catch (e) {
     return false;
+  }
+}
+
+// ===================== هیبرید Cloudflare (2.4.0) =====================
+// guardianJobFetch: اجرای یک جاب داده‌ای روی ایجنت و برگرداندن نتیجه.
+// فقط kv لازم دارد (نه env) تا همهٔ callerها — حتی renderهای بدون env — پوشش داده شوند.
+// null یعنی «ایجنت در دسترس نیست» و caller باید محلی ادامه دهد (fallback همیشه محلی است).
+// نکتهٔ امنیتی: ایجنت همان توکن‌های CF را دارد که با sync گرفته (مثل رمز پنل‌ها)؛
+// allowlist اکشن‌ها در رانر + اعتبارسنجی شکل خروجی این‌جا، سطح حمله را بسته نگه می‌دارد.
+async function guardianJobFetch(kv, action, args, timeoutMs) {
+  try {
+    if (!kv) return null;
+    const cfg = await getGuardianCfg(kv);
+    if (!cfg || !cfg.url || !cfg.token) return null;
+    const st = await getGuardianState(kv);
+    if (!st || st.mode !== "server") return null;
+    const r = await guardianPost(cfg, "/job", { job: String(action), args: args || {} }, Math.max(10000, Number(timeoutMs) || 20000));
+    if (r.ok && r.data && r.data.ok) return r.data.result === undefined ? null : r.data.result;
+  } catch (e) {}
+  return null;
+}
+
+// purge everything یک زون با توکن همان اکانت (روی ورکر و ایجنت یکسان کار می‌کند؛
+// ایجنت آن را از طریق اکشن cf_purge صدا می‌زند).
+async function cfPurgeCache(env, accIndex, zoneId) {
+  try {
+    const kv = env.BOT_KV;
+    const accounts = await getAccounts(kv, env);
+    const acc = accounts[Number(accIndex) || 0];
+    if (!acc || !acc.token || !zoneId) return { ok: false, error: "bad_args" };
+    const res = await fetch(`${CF_API}/zones/${zoneId}/purge_cache`, {
+      method: "POST", headers: hdr(acc.token),
+      body: JSON.stringify({ purge_everything: true }), signal: withTimeout(20000),
+    });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !(d && d.success)) return { ok: false, error: "purge_failed" };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: "purge_failed" };
   }
 }
 
@@ -14637,6 +14697,13 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const token = data.slice(7);
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.");
+      // هیبرید (2.4.0): اول ایجنت، بعد مسیر محلی
+      const pr = await guardianJobFetch(kv, "cf_purge", { acc: Number(session.acc) || 0, zone_id: String(session.zone_id || "") }, 30000);
+      if (pr && pr.ok) {
+        return edit(`✅ کش ${session.zone_name} به طور کامل پاک شد.`, [
+          [{ text: "🔙 بازگشت", callback_data: `zset:${token}` }, { text: "🏠 خانه", callback_data: "menu" }],
+        ]);
+      }
       const res = await fetch(`${CF_API}/zones/${session.zone_id}/purge_cache`, {
         method: "POST",
         headers: hdr(accounts[session.acc].token),

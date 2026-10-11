@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "2.3.1";
+const AGENT_VERSION = "2.4.0";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;

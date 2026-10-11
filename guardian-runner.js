@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "2.3.1";
+const RUNNER_VERSION = "2.4.0";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
 // فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
 const SYNC_KEYS = [
@@ -41,7 +41,8 @@ const RUNTIME_EXACT = new Set([
 function isRuntimeKey(key) {
   const k = String(key || "");
   if (RUNTIME_EXACT.has(k)) return true;
-  return k.startsWith("dnscache:") || k.startsWith("ipinfo:") || k.startsWith("qw:") || k.startsWith("qal:");
+  // کش‌های CF (زون/رکورد) فقط محلی‌اند؛ push آن‌ها write بیهوده است (ورکر کش خودش را دارد)
+  return k.startsWith("dnscache:") || k.startsWith("ipinfo:") || k.startsWith("qw:") || k.startsWith("qal:") || k.startsWith("cache:");
 }
 
 // ---------- HTTP کوچک به ورکر ----------
@@ -270,8 +271,8 @@ function createRunner(opts) {
       'import { connect } from "cloudflare:sockets";',
       'const connect = (...args) => globalThis.__SOCKET_CONNECT(...args);'
     );
-    // پچ ۲: جدول صریح jobهای مجاز فاز ۳ + ۴ — تنها همین تابع‌ها از راه دور صدا زده می‌شوند
-    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor };\n";
+    // پچ ۲: جدول صریح jobهای مجاز فاز ۳ + ۴ و هیبرید CF (2.4.0) — تنها همین تابع‌ها از راه دور صدا زده می‌شوند
+    const bundleSrc = patched + "\nglobalThis.__HFJOBS = { runHostFilter, hostFilterRevert, hfRestoreBackup, hfSnapshot, runNodePoll, runUsageMonitor, runSrvMonitor, runPgDigest, runSslMonitor, runDomExpiryMonitor, getAccounts, getAllZones, getZoneById, getRecords, cfPurgeCache };\n";
     // فایل اجرای یکتا (کش import گره‌گیر نشود) + پاک‌سازی اجراهای قبلی
     try {
       for (const f of fs.readdirSync(bundleDir)) {
@@ -344,7 +345,8 @@ function createRunner(opts) {
   }
 
   // اجرای generیک یک جاب روی باندل ورکر: mode-check + sync + FileKV + push journal.
-  // همهٔ جاب‌های فاز ۴ از همین مسیر می‌گذرند (تایمر ایجنت و /job ورکر).
+  // همهٔ جاب‌های فاز ۴ و هیبرید CF از همین مسیر می‌گذرند (تایمر ایجنت و /job ورکر).
+  // خروجی آرایه سالم می‌ماند (object spread آرایه را خراب می‌کند) تا اعتبارسنج ورکر کار کند.
   async function runRemoteJob(name, args) {
     const fn = ACTIONS[name];
     if (!fn) return { ok: false, error: "bad_job" };
@@ -360,7 +362,10 @@ function createRunner(opts) {
     const result = await fn(jobs, env, args || {});
     let pushed = { wrote: 0, conflicts: 0 };
     try { pushed = await pushJournal(journal, texts); } catch (e) { /* نتیجه ران معتبر است؛ push بعدی sync می‌کند */ }
-    return { ...(result && typeof result === "object" ? result : { result }), _pushed: pushed.wrote || 0, _conflicts: pushed.conflicts || 0 };
+    const base = Array.isArray(result)
+      ? { result }
+      : { ...(result && typeof result === "object" ? result : { result }) };
+    return { ...base, _pushed: pushed.wrote || 0, _conflicts: pushed.conflicts || 0 };
   }
 
   async function runHostFilterJob(jobOpts) {
@@ -385,14 +390,35 @@ function createRunner(opts) {
       jobs.runPgDigest(env, env.BOT_TOKEN, env.ADMIN_ID, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faD(u.bucket) + " روز"),
     sslmon: (jobs, env) => jobs.runSslMonitor(env),
     domexpmon: (jobs, env) => jobs.runDomExpiryMonitor(env),
+    // هیبرید Cloudflare (2.4.0): خوانش زون/رکورد و purge — توکن‌ها از همان sync می‌آیند؛
+    // خروجی در ورکر اعتبارسنجی می‌شود. کش FileKV محلی است (push نمی‌شود).
+    cf_zones: async (jobs, env) => {
+      const accounts = await jobs.getAccounts(env.BOT_KV, env);
+      return jobs.getAllZones(accounts, env.BOT_KV);
+    },
+    cf_records: async (jobs, env, a) => {
+      const accounts = await jobs.getAccounts(env.BOT_KV, env);
+      const zone = await jobs.getZoneById(String((a && a.zone_id) || ""), Number((a && a.acc) || 0), accounts);
+      if (!zone || !zone.id) throw new Error("zone_not_found");
+      return jobs.getRecords(zone, accounts, env.BOT_KV);
+    },
+    cf_purge: (jobs, env, a) => jobs.cfPurgeCache(env, Number((a && a.acc) || 0), String((a && a.zone_id) || "")),
   };
 
   async function callAction(name, args) {
     if (!ACTIONS[name]) return { ok: false, error: "bad_job" };
-    const r = await runRemoteJob(name, args || {});
+    let r;
+    try {
+      r = await runRemoteJob(name, args || {});
+    } catch (e) {
+      return { ok: false, error: String((e && e.message) || e).slice(0, 120) };
+    }
     if (r && (r.skipped || r.error)) return { ok: false, error: String((r && (r.skipped || r.error)) || "failed") };
     const { _pushed, _conflicts, ...rest } = r || {};
-    return { ok: true, result: rest && Object.keys(rest).length ? rest : null };
+    // خروجی آرایه‌ای (cf_zones/cf_records) از envelope بیرون می‌آید؛ آبجکت‌ها همان فیلدها
+    const keys = Object.keys(rest);
+    const final = keys.length === 1 && keys[0] === "result" ? rest.result : rest;
+    return { ok: true, result: final === undefined ? null : final };
   }
 
   return { runHostFilterJob, runRemoteJob, callAction, isRuntimeKey, FileKV, RUNNER_VERSION };
