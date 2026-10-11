@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.3";
+const BOT_VERSION = "2.4.4";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.4": [
+    "📋 لیست زون/رکورد زیر سقف سهمیه هم باز می‌شود (read-only صادقانه + راهنمای دستور مستقیم)؛ نشست‌ها best-effort شدند",
+  ],
   "2.4.3": [
     "🐛 فیکس گیرکردن همه دستورها زیر سقف سهمیه: پاک‌سازی pend قدیمی best-effort شد (قبلاً هر پیام با خطای سهمیه می‌مرد)",
   ],
@@ -6942,7 +6945,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.3"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.4"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -10213,7 +10216,8 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
   const pages = Math.ceil(zones.length / ZONE_PAGE_SIZE);
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
-  if (chatId) await kv.put(`zctx:${chatId}`, JSON.stringify({ filter: flt, page }), { expirationTtl: 86400 });
+  // best-effort (2.4.4): زیر سقف سهمیه، ذخیره‌نشدن context جلوی لیست را نمی‌گیرد (دکمه برگشت به zones می‌رود)
+  if (chatId) { try { await kv.put(`zctx:${chatId}`, JSON.stringify({ filter: flt, page }), { expirationTtl: 86400 }); } catch (e) {} }
 
   const slice = zones.slice(page * ZONE_PAGE_SIZE, page * ZONE_PAGE_SIZE + ZONE_PAGE_SIZE);
 
@@ -10280,12 +10284,22 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
 
 async function showRecords(zone, page, accounts, send, kv) {
   const records = await getRecords(zone, accounts, kv);
-  const token = makeToken();
-  await kv.put(
-    `s:${token}`,
-    JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: zone._acc, page: page || 0, zback: "zones" }),
-    { expirationTtl: 86400 }
-  );
+  // نشست best-effort (2.4.4): اگر ذخیره نشد (سهمیه)، لیست read-only با راهنمای دستور مستقیم
+  let token = null;
+  try {
+    token = makeToken();
+    await kv.put(
+      `s:${token}`,
+      JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: zone._acc, page: page || 0, zback: "zones" }),
+      { expirationTtl: 86400 }
+    );
+  } catch (e) {
+    token = null;
+  }
+  if (!token) {
+    await sendRecordsReadOnly(send, zone, records);
+    return;
+  }
 
   if (records.length === 0) {
     // addz: افزودن رکورد به دامنه | zset: تنظیمات دامنه (SSL و...) | zones: بازگشت
@@ -10299,6 +10313,17 @@ async function showRecords(zone, page, accounts, send, kv) {
   }
 
   await renderRecords(zone, records, token, page, send, undefined, "zones");
+}
+
+// لیست read-only رکوردها برای وقتی نشست KV ذخیره نمی‌شود (سهمیه) — بدون هیچ write
+async function sendRecordsReadOnly(send, zone, records) {
+  const lines = [`🌐 رکوردهای ${zone.name} (${records.length} مورد):`, ""];
+  for (const x of records.slice(0, 40)) {
+    lines.push(`${x.type} ${code(x.name)} → ${code(String(x.content)).slice(0, 120)}${x.proxied ? " ☁️" : ""}`);
+  }
+  if (records.length > 40) lines.push(`… و ${records.length - 40} مورد دیگر`);
+  lines.push("", "⚠️ نشست ذخیره نشد (سهمیه تمام شده) — دکمه‌ها تا ریست ساعت ۰۳:۳۰ کار نمی‌کنند.", "برای تغییر رکورد از دستور مستقیم استفاده کن: /dnsadd ، /dnsdel");
+  await send(lines.join("\n").slice(0, 3500), [[{ text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function renderRecords(zone, records, token, page, send, selected, backCb) {
@@ -15130,12 +15155,22 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zone = await getZoneById(zoneId, accIndex, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
-      const token = makeToken();
       const zctx = (await kv.get(`zctx:${chatId}`, "json")) || null;
       const zback = zctx && zctx.filter !== undefined ? `zf:${zctx.filter}:${Number(zctx.page) || 0}` : "zones";
-      await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, page: 0, zback }), {
-        expirationTtl: 86400,
-      });
+      // نشست best-effort (2.4.4): اگر ذخیره نشد، لیست read-only (دکمه‌های وابسته به نشست تا ریست کار نمی‌کنند)
+      let token = null;
+      try {
+        token = makeToken();
+        await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, page: 0, zback }), {
+          expirationTtl: 86400,
+        });
+      } catch (e) {
+        token = null;
+      }
+      if (!token) {
+        await sendRecordsReadOnly(edit, zone, records);
+        return;
+      }
       if (records.length === 0) {
         const kb = [
           [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
@@ -15153,7 +15188,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const session = await kv.get(`s:${token}`, "json");
       if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو. دوباره /zones را بزنید.");
       session.page = page;
-      await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 });
+      try { await kv.put(`s:${token}`, JSON.stringify(session), { expirationTtl: 86400 }); } catch (e) {}
       const zone = await getZoneById(session.zone_id, session.acc, accounts);
       const records = await getRecords(zone, accounts, kv);
       await renderRecords(zone, records, token, page, edit, undefined, session.zback);
