@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.0";
+const BOT_VERSION = "2.4.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.1": [
+    "💬 خطاهای سهمیه/محدودیت کلادفلر حالا فارسی و واضح به کاربر گفته می‌شود (به‌جای متن خام انگلیسی)",
+  ],
   "2.4.0": [
     "🖥 هیبرید Cloudflare: لیست زون/رکورد و purge کش اول روی سرور اجرا می‌شود (ورکر fallback)؛ کار با کلادفلر بدون ورکر هم ممکن است",
     "📦 کش‌های CF ایجنت کاملاً محلی شدند (push بیهوده صفر)",
@@ -1840,7 +1843,7 @@ async function processUpdate(payload, env, botToken, adminId) {
             await kv.put("errnotice_ts", String(Date.now()), { expirationTtl: 3600 });
             const cbm = payload.callback_query;
             const where = String((cbm && cbm.data) || "?").slice(0, 60);
-            await sendMessage(botToken, adminId, `❌ خطای داخلی موقع اجرای «${where}».\n\nاگر تکرار شد بگو کدوم دکمه بود.`, [
+            await sendMessage(botToken, adminId, quotaErrText(e) || `❌ خطای داخلی موقع اجرای «${where}».\n\nاگر تکرار شد بگو کدوم دکمه بود.`, [
               [{ text: "🏠 خانه", callback_data: "menu" }],
             ]);
             logE("CB_CRASH", where + " :: " + e);
@@ -2108,7 +2111,7 @@ async function processUpdate(payload, env, botToken, adminId) {
     try {
       await tg(botToken, "sendMessage", {
         chat_id: adminId,
-        text: "❌ خطای داخلی:\n" + String(err && err.message ? err.message : err).substring(0, 3000),
+        text: quotaErrText(err) || ("❌ خطای داخلی:\n" + String(err && err.message ? err.message : err).substring(0, 500)),
       });
     } catch (e) {
       console.error("SEND_ERROR", String(e));
@@ -3759,6 +3762,18 @@ async function qSectionModel(kv, env, acc) {
   M.share = { cron: totU ? cronU / totU : 0, web: totU ? webU / totU : 0, alert: totU ? alertU / totU : 0 };
   M.units = { cron: Math.round(cronU), web: Math.round(webU), alert: Math.round(alertU) };
   return M;
+}
+// خطای سهمیه/محدودیت کلادفلر به زبان کاربر (به‌جای متن خام انگلیسی در پیام‌ها).
+// null یعنی خطای عادی (متن خام کوتاه‌شده نمایش داده می‌شود).
+function quotaErrText(e) {
+  const m = String((e && e.message) || e || "");
+  if (/limit exceeded|quota|10048/i.test(m)) {
+    return "✍️ سهمیهٔ نوشتن امروز کلادفلر تموم شده (۱۰۰۰ در روز).\n\n🕒 ساعت ۰۳:۳۰ نیمه‌شب به‌وقت تهران صفر می‌شود و همه‌چیز خودش برمی‌گردد.\nتا آن موقع خواندن و دکمه‌ها کار می‌کنند ولی چیزی ذخیره نمی‌شود.";
+  }
+  if (/too many requests|429/i.test(m)) {
+    return "⏳ کلادفلر موقتاً محدودت کرده؛ یک دقیقهٔ دیگر دوباره امتحان کن.";
+  }
+  return null;
 }
 // سهم KV یک بخش از کل اندازه‌گیری‌شده (تخمین تسهیمی)
 function qKvShare(M, sec) {
@@ -6887,7 +6902,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
