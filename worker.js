@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "3.0.1";
+const BOT_VERSION = "3.0.2";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "3.0.2": [
+    "📡 تست اتصال و آپدیت ایجنت بدون هیچ نوشتن KV: اول مسیر مستقیم ورکر→ایجنت، صف heartbeat فقط fallback",
+    "🩺 پاسخ /ping ایجنت آپ‌تایم و زمان ایجنت را هم دارد (برای صفحهٔ تست)",
+  ],
   "3.0.1": [
     "🛡 فیکس اصلی سهمیه: استمپ زنده‌بودن از ۵۷۶ نوشتن در روز به ۹۶ رفت + cron_state با فلاش ۳۰دقیقه‌ای (۱۴۴→۴۸). بار ثابت ورکر: ۱۴۴ نوشته از ۱۰۰۰ (قبلاً ۷۲۰)",
     "🖥 لایو‌نس = استمپ heartbeat تازه یا ping موفق؛ ایجنت پشت فایروال هم درست تشخیص داده می‌شود",
@@ -7015,7 +7019,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "3.0.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "3.0.2"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7422,6 +7426,32 @@ async function guardianAgentAlive(kv, cfg, token) {
     }
   }
   return { ok: false, via: "none", stampAge: stamp ? now - stamp : -1 };
+}
+
+// صدور دستور به ایجنت: مستقیم OR صف (3.0.2).
+// «ping» با GET ساده انجام می‌شود (پاسخ ۳.۰.۱ هم بدون احراز کار می‌کند).
+// آپدیت/جاب با POST و هدر توکن. خروجی: { ok, via: "direct"|"queue", data?, error? }
+async function guardianCmd(kv, cfg, type, args, timeoutMs) {
+  if (cfg && cfg.url) {
+    const tmo = Math.max(1000, Number(timeoutMs) || 30000);
+    if (type === "ping") {
+      try {
+        const res = await fetch(guardianNormUrl(cfg.url).replace(/\/+$/, "") + "/ping", { signal: AbortSignal.timeout(tmo) });
+        if (res.ok) {
+          const d = await res.json().catch(() => null);
+          if (d && d.ok === true) return { ok: true, via: "direct", data: d };
+        }
+      } catch (e) {}
+    } else {
+      const path = type === "update" ? "/update" : "/job";
+      const r = await guardianPost(cfg, path, type === "update" ? { src: (args && args.src) || "" } : { job: (args && args.job) || "", args: (args && args.args) || {} }, tmo);
+      if (r.ok && r.data && r.data.ok !== false) return { ok: true, via: "direct", data: r.data };
+      if (r.ok && r.data && r.data.ok === false) return { ok: false, via: "direct", error: String(r.data.error || "failed") };
+    }
+  }
+  // fallback: صف heartbeat (بدون inbound ولی با نوشتن KV)
+  const okQ = await guardianEnqueue(kv, cfg && cfg.token, type, args || {});
+  return okQ ? { ok: true, via: "queue" } : { ok: false, via: "none", error: "no_direct_and_kv_capped" };
 }
 
 async function runGuardianWatchdog(env, botToken, adminId) {
@@ -14689,33 +14719,51 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         await edit("⏳ در حال بررسی آخرین نسخه…");
         let upSrc = { tag: "", src: "" };
         try { upSrc = await guardianUpdateSrc(kv); } catch (e) {}
-        const queued = await guardianEnqueue(kv, gCfg2.token, "update", { src: upSrc.src || "" }, chatId);
-        if (queued) {
-          await edit(`📨 دستور آپدیت${upSrc.tag ? " (" + upSrc.tag + ")" : ""} در صف ایجنت گذاشته شد؛ تا ~۱ دقیقه دیگر اعمال و نتیجه‌اش همین‌جا پیام می‌آید.`, gBack2);
+        // 3.0.2: مستقیم اول (صفر KV)؛ اگر نشد صف heartbeat
+        const r = await guardianCmd(kv, gCfg2, "update", { src: upSrc.src || "" }, 60000);
+        if (r.ok && r.via === "direct") {
+          await edit(`✅ دستور آپدیت${upSrc.tag ? " (" + upSrc.tag + ")" : ""} مستقیم فرستاده شد؛ ایجنت تا ~۳۰ ثانیه دیگر با نسخهٔ جدید برمی‌گردد (وضعیت را از همین صفحه ببین).`, gBack2);
+        } else if (r.ok && r.via === "queue") {
+          await edit(`📨 اتصال مستقیم نشد؛ دستور آپدیت${upSrc.tag ? " (" + upSrc.tag + ")" : ""} در صف گذاشته شد و تا ~۱ دقیقه اعمال می‌شود.`, gBack2);
         } else {
-          // fallback: تلاش مستقیم (وقتی ایجنت در دسترس مستقیم است)
-          await edit("⏳ در حال فرستادن دستور آپدیت به ایجنت" + (upSrc.tag ? " (" + upSrc.tag + ")" : "") + "…");
-          const r = await guardianPost(gCfg2, "/update", { src: upSrc.src }, 60000);
-          if (r.ok) {
-            await edit("✅ دستور آپدیت فرستاده شد" + (upSrc.tag ? " (" + upSrc.tag + ")" : "") + "؛ ایجنت تا ~۳۰ ثانیه دیگر با نسخهٔ جدید برمی‌گردد (وضعیت را از همین صفحه ببین).", gBack2);
-          } else {
-            let wb2 = "";
-            try { wb2 = await guardianWorkerBase(kv, env); } catch (e) {}
-            await edit("❌ ایجنت جواب نداد (" + String(r.error || "unknown") + "). اگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + code(guardianInstallCmd(wb2, gCfg2.token)), gBack2);
-          }
+          let wb2 = "";
+          try { wb2 = await guardianWorkerBase(kv, env); } catch (e) {}
+          await edit("❌ ایجنت جواب نداد.\n\n• اتصال مستقیم: پورت ۸۷۸۹ از دید Cloudflare باز است؟ آدرس ثبت‌شده درست است؟\n• صف: سهمیهٔ KV تمام است (تا ریست ۰۳:۳۰).\n\nاگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + code(guardianInstallCmd(wb2, gCfg2.token)), gBack2);
         }
       }
     } else if (data === "guardian:test") {
-      // تست اتصال مدل 3.0: پینگ از طریق صف (نتیجه تا ~۱ دقیقه دیگر در همین منو دیده می‌شود)
+      // تست اتصال 3.0.2: مستقیم از ایجنت /ping (صفر KV). صف فقط اگر inbound بسته باشد.
       const gBackT = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
       let gCfgT = null;
       try { gCfgT = await getGuardianCfg(kv); } catch (e) {}
       if (!gCfgT || !gCfgT.token) {
         await edit("⚪ ایجنت نصب نشده.", gBackT);
-      } else if (await guardianEnqueue(kv, gCfgT.token, "ping", {}, chatId)) {
-        await edit("📨 تست اتصال فرستاده شد؛ ایجنت تا ~۱ دقیقه دیگر جواب می‌دهد. همین صفحه را دوباره باز کن تا نتیجه را ببینی.", gBackT);
+      } else if (!gCfgT.url) {
+        await edit("⛔ آدرس ایجنت ثبت نشده. یک بار heartbeat با آدرس عمومی بفرست (نسخهٔ نصاب ۳.۰ به بعد خودکار است) یا دکمهٔ نصب مجدد را بزن.", gBackT);
       } else {
-        await edit("❌ نتوانستم دستور را در صف بگذارم (سهمیه KV؟). کمی بعد دوباره بزن.", gBackT);
+        await edit("📡 در حال تست اتصال مستقیم…", gBackT);
+        const r = await guardianCmd(kv, gCfgT, "ping", {}, 20000);
+        if (r.ok && r.via === "direct") {
+          const d = r.data || {};
+          const up = d.uptime_s ? faD(Math.floor(Number(d.uptime_s) / 3600)) + " ساعت" : "نامشخص";
+          const jobs = Array.isArray(d.jobs) ? d.jobs.length : 0;
+          await edit(
+            [
+              "✅ ایجنت مستقیم جواب داد (بدون هیچ نوشتنی در KV)",
+              "",
+              `نسخه: v${escHtml(String(d.version || gCfgT && gCfgT.agent_version || "?"))}`,
+              `آپ‌تایم: ${up} · جاب‌ها: ${faD(jobs)}`,
+              `زمان ایجنت: ${new Date(Number(d.agent_time) || Date.now()).toISOString().slice(11, 19)}`,
+              "",
+              "اگر این پیام را می‌بینی، وبهوک و دستورها بدون سهمیه هم بین ورکر و سرور رد شدند.",
+            ].join("\n").slice(0, 3500),
+            gBackT
+          );
+        } else if (r.ok && r.via === "queue") {
+          await edit("📨 اتصال مستقیم برقرار نشد (پورت ۸۷۸۹ از دید Cloudflare بسته است؟). دستور تست در صف گذاشته شد؛ ایجنت تا ~۱ دقیقه دیگر با heartbeat جواب می‌دهد — نتیجه در همین صفحه نمایش داده می‌شود.", gBackT);
+        } else {
+          await edit("❌ هیچ‌کدام از دو مسیر کار نکرد:\n• اتصال مستقیم: پورت ۸۷۸۹ را برای Cloudflare باز کن (یا IP عمومی سرور عوض شده → نصب مجدد)\n• صف heartbeat: سهمیهٔ KV تمام است؛ تا ریست ۰۳:۳۰ صبر کن\n\nجزئیات: " + String(r.error || "unknown"), gBackT);
+        }
       }
     } else if (data === "hubstats") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);

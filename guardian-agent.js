@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "3.0.1";
+const AGENT_VERSION = "3.0.2";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;
@@ -384,8 +384,14 @@ function authed(req, body) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", "http://localhost");
-    if (req.method === "GET" && url.pathname === "/ping") {
-      return sendJson(res, 200, { ok: true, agent: "guardian-agent", version: AGENT_VERSION, exec: true, jobs: Object.keys(JOBS), runner: !!RUNNER });
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/ping") {
+      let uptimeS = 0;
+      try { uptimeS = Math.floor(process.uptime()); } catch (e) {}
+      return sendJson(res, 200, {
+        ok: true, agent: "guardian-agent", version: AGENT_VERSION, exec: true,
+        jobs: Object.keys(JOBS), runner: !!RUNNER,
+        uptime_s: uptimeS, agent_time: Date.now(),
+      });
     }
     if ((req.method === "POST" || req.method === "GET") && url.pathname === "/state") {
       // خوانش کلید ران‌تایم برای UI ورکر (agent-first؛ fallback ورکر همان KV خودش است)
