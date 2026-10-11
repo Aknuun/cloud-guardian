@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "2.4.4";
+const RUNNER_VERSION = "2.4.5";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
 // فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
 const SYNC_KEYS = [
@@ -344,16 +344,31 @@ function createRunner(opts) {
     return String(s).replace(/[0-9]/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
   }
 
+  // اکشن‌های stateless (2.4.5): خوانش CF و DNS مستقیم — هیچ state مشترکی ندارند
+  // پس بدون چک mode هم اجرا می‌شوند (مثل خود ورکر). بقیه (stateful) همچنان گیت می‌خورند
+  // تا دو طرف هم‌زمان state را ننویسند.
+  const STATELESS = new Set(["cf_zones", "cf_records", "cf_purge", "cf_dns_list", "cf_dns_upsert", "cf_dns_delete"]);
+
   // اجرای generیک یک جاب روی باندل ورکر: mode-check + sync + FileKV + push journal.
   // همهٔ جاب‌های فاز ۴ و هیبرید CF از همین مسیر می‌گذرند (تایمر ایجنت و /job ورکر).
   // خروجی آرایه سالم می‌ماند (object spread آرایه را خراب می‌کند) تا اعتبارسنج ورکر کار کند.
   async function runRemoteJob(name, args) {
     const fn = ACTIONS[name];
     if (!fn) return { ok: false, error: "bad_job" };
-    const mode = await checkServerMode();
-    if (mode !== "server") return { skipped: "not_server_mode", mode };
-    const { botToken, adminId, texts } = await syncKeys();
-    if (!botToken) throw new Error("no_bot_token");
+    const stateless = STATELESS.has(name);
+    // stateless با کش محلی هم ادامه می‌دهد (sync فقط best-effort است؛ توکن ربات لازم ندارد)
+    let botToken = "", adminId = 0, texts = {};
+    try {
+      const s = await syncKeys();
+      botToken = s.botToken; adminId = s.adminId; texts = s.texts;
+    } catch (e) {
+      if (!stateless) throw e;
+    }
+    if (!stateless) {
+      const mode = await checkServerMode();
+      if (mode !== "server") return { skipped: "not_server_mode", mode };
+      if (!botToken) throw new Error("no_bot_token");
+    }
     const journal = [];
     const runKv = new FileKV(kvDir, journal);
     // seed خوانده‌شده با ژورنال ران قاطی نمی‌شود: فایل‌ها مشترک‌اند، ژورنال جداست
