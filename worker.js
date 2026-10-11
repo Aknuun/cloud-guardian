@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "2.4.6";
+const BOT_VERSION = "2.4.7";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "2.4.7": [
+    "🔘 دکمه‌های زون/رکورد/منتخب‌ها روی ایجنت اجرا می‌شوند با نشست FileKV (مثل state محلی ربات‌های سروری)؛ ایمیل و بقیه روی ورکر ماندند تا state دوپاره نشود",
+    "⭐ منتخب‌های ساخته‌شده روی ایجنت بعد از ریست سهمیه به ورکر برمی‌گردند",
+  ],
   "2.4.6": [
     "🖥 اجرای تلگرام روی سرور: دستورهای بدون state (‎/dns‎ ‎/dnsadd‎ ‎/dnsdel‎ ‎/version‎ ‎/help‎) کلاً روی ایجنت اجرا و جواب داده می‌شوند (مثل مدل polling ربات‌های سروری)؛ اعتبار ادمین و گارد ضدحلقه سر جایش است",
   ],
@@ -3758,6 +3762,29 @@ function qKvCount(kv, sec) {
   try { QW_RAW.set(w, kv); } catch (e) {}
   return w;
 }
+// پیشوندهای درخت زون/رکورد/منتخب که روی ایجنت اجرا می‌شوند (2.4.7).
+// معیار: سورس حقیقت یا کلادفلر است (DNS/SSL/purge) یا نشست محلی (FileKV) کافی است.
+// بقیه (ایمیل، سرور، پنل، یادآور، ترافیک، مدیریت) روی ورکر می‌مانند.
+const CB_AGENT_PRE = [
+  "z:", "zf:", "p:", "rback:", "addz:", "arz:", "zset:", "zssl:", "zsec:", "zperf:",
+  "ztog:", "zval:", "zvset:", "zd:", "zpurge:", "zdev:", "zsearch:", "zsf:",
+  "sel", "selmode:", "seldone:", "bulkdel:", "bulkedit:", "bulkdne:", "bulktype:", "bulkdely:",
+  "fav", "rtraf:",
+];
+const CB_AGENT_EXACT = new Set(["zones", "favs"]);
+function cbAgentForward(data) {
+  const d = String(data || "");
+  if (!d || d === "menu" || d === "noop" || d === "back") return false;
+  // استثنا: ایمیل و کانفیگ هشدار ترافیک state دائمی در KV دارند — تک‌خانه روی ورکر می‌مانند
+  // تا دوپاره نشوند (در عوض زیر سقف، پیام صادقانه سهمیه می‌گیرند).
+  if (d.startsWith("zmail") || d.startsWith("ztraf")) return false;
+  if (CB_AGENT_EXACT.has(d)) return true;
+  for (const p of CB_AGENT_PRE) {
+    if (d.startsWith(p)) return true;
+  }
+  return false;
+}
+
 // بخش‌بندی کال‌بک دکمه‌ها: پیشوند قبل از «:» (حتماً b: تا با اسم کرون‌ها قاطی نشود)
 function qwBtnSec(data) {
   const p = String(data || "").split(":")[0] || "?";
@@ -6962,7 +6989,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "2.4.6"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "2.4.7"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7358,6 +7385,7 @@ const GUARDIAN_PUSH_PREFIXES = [
   "srv_mon_last", "srv_cool:", // گارد و cooldown مانیتور سرور
   "dom_expiry", // به‌روزرسانی last-check انقضای دامنه
   "stick:", // پین پیام‌های هشداری که ایجنت می‌فرستد (مدیریت بعدی روی ورکر)
+  "favs:", // منتخب‌های کاربر (2.4.7: تنها state دائمی که ایجنت می‌نویسد و باید برگردد)
 ];
 function guardianCanPush(key) {
   const k = String(key || "");
@@ -14146,6 +14174,20 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       }
       await kv.put(lk, String(Date.now()), { expirationTtl: 60 });
     } catch (e) {}
+  }
+  // درخت زون/رکورد روی ایجنت (2.4.7): نشست روی FileKV (مثل state محلی ربات‌های سروری).
+  // فقط خانواده‌ای که سورس حقیقت‌شان کلادفلر یا نشست محلی است؛ ایمیل/سرور/پنل/یادآور روی ورکر می‌ماند.
+  // گیت ادمین بالا انجام شده و داخل ایجنت هم تکرار می‌شود (دفاع در عمق).
+  if (cbAgentForward(data)) {
+    try {
+      const slim = { ...cb };
+      try {
+        if (slim.message && slim.message.reply_markup) delete slim.message.reply_markup;
+      } catch (e) {}
+      const delegated = await guardianJobFetch(kv, "tgbot", { update: { callback_query: slim } }, 45000, true);
+      if (delegated && delegated.replied) return;
+    } catch (e) {}
+    // ایجنت در دسترس نیست → همین‌جا محلی ادامه می‌دهیم (fallback همیشگی)
   }
   // 🔙 برگشت سراسری: به صفحه‌ای که این پیام از آن آمد (نه حدس ثابت)
   if (data === "back") {
