@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.0.0";
+const BOT_VERSION = "4.0.1";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.0.1": [
+    "🌐 اتصال دامنه‌ای: از «🔄 نسخه‌ها ← 🌐 اتصال با دامنه» یک ساب‌دامنه پشت کلادفلر ساخته می‌شود (پروکسی روشن) و ایجنت روی پورت ۸۰۸۰ با TLS جواب می‌دهد — بدون باز کردن پورت و بدون خطای اتصال IP",
+    "🔁 همهٔ مسیرهای ورکر→ایجنت (ping، تست، آپدیت، forward آپدیت‌ها) دامنه را بر IP اولویت می‌دهند",
+    "🖥 دستور domain صف: ایجنت خودش PORT و PUBLIC_URL را در agent.conf می‌نویسد و ری‌استارت می‌شود",
+  ],
   "4.0.0": [
     "🖥 ایجنت = backend: با اتصال ایجنت، همهٔ آپدیت‌ها (پیام و دکمه) روی سرور اجرا و با state محلی آن جواب داده می‌شوند؛ ورکر فقط وقتی سرور در دسترس نباشد محلی کار می‌کند (fallback با KV)",
     "🔑 خواندن از راه دور: کلیدهای per-user مثل «منتخب‌ها» اگر روی ایجنت نبود، از KV خوانده و کش می‌شوند؛ تغییرات با kvbatch برمی‌گردند",
@@ -1995,7 +2000,7 @@ async function forwardOrHandle(payload, env, botToken, adminId) {
       if (!denied && (await fwdReachable(kv, env))) {
         let cfg = null;
         try { cfg = await getGuardianCfg(kv); } catch (e) {}
-        if (cfg && cfg.url) {
+        if (cfg && guardianCfgUrl(cfg)) {
           const upd = payload;
           if (cb && upd.callback_query && upd.callback_query.message && upd.callback_query.message.reply_markup) {
             upd.callback_query = { ...upd.callback_query, message: { ...upd.callback_query.message } };
@@ -7191,7 +7196,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "4.0.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "4.0.1"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7432,6 +7437,12 @@ function guardianNormUrl(u) {
   try { new URL(fixed); return fixed; } catch (e2) { return t; }
 }
 
+// آدرس فعلی ایجنت (4.0.1): اگر حالت دامنه‌ای ست شده باشد، دامنه بر IP اولویت دارد
+function guardianCfgUrl(cfg) {
+  if (!cfg) return "";
+  return String(cfg.dom || cfg.url || "");
+}
+
 async function guardianPing(url) {
   // پینگ فعال ایجنت: زنده‌بودن را ورکر تشخیص می‌دهد، بدون write ثابت
   try {
@@ -7447,9 +7458,12 @@ async function guardianPing(url) {
 }
 
 async function guardianPost(cfg, path, body, timeoutMs) {
-  if (!cfg || !cfg.url || !cfg.token) return { error: "no_agent" };
+  if (!cfg || !cfg.token) return { error: "no_agent" };
+  // دامنه بر IP اولویت دارد (از دید ورکر پایدارتر): cfg.dom اگر ست شده باشد
+  const target = String((cfg && cfg.dom) || (cfg && cfg.url) || "");
+  if (!target) return { error: "no_agent" };
   try {
-    const base = guardianNormUrl(cfg.url).replace(/\/+$/, "");
+    const base = guardianNormUrl(target).replace(/\/+$/, "");
     const res = await fetch(base + path, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Guardian-Token": cfg.token },
@@ -7565,8 +7579,9 @@ async function handleGuardianIngest(env, b) {
 }
 
 async function guardianAgentAlive(kv, cfg, token) {
-  // لایو‌نس بدون نوشتن: استمپ heartbeat تازه (هر ۱۵ دقیقه نوشته می‌شود) یا ping موفق.
-  // استمپ یعنی «ایجان بیرون‌زنگ زده» (نیازی به فایروال نیست)؛ ping یعنی همین حالا جواب می‌دهد.
+  // لایو‌نس بدون نوشتن: استمپ heartbeat تازه یا ping موفق.
+  // استمپ یعنی «ایجنت بیرون‌زنگ زده» (نیازی به فایروال نیست)؛ ping یعنی همین حالا جواب می‌دهد.
+  // دامنه (اگر تنظیم شده) بر IP اولویت دارد: از دید ورکر پایدارتر است.
   const now = Date.now();
   const t = token ? String(token) : "";
   let stamp = 0;
@@ -7579,18 +7594,16 @@ async function guardianAgentAlive(kv, cfg, token) {
         const e = regs[k];
         if (!e) continue;
         const hb = Number(e.last_hb) || 0;
-        if (t && hb > stamp) stamp = hb;
-        if (!t) {
-          // برای primary: آخرین استمپ همهٔ ایجنت‌ها = تازه‌ترین
-          if (hb > stamp) stamp = hb;
-        }
-        const u = String(e.url || "");
+        if (t ? hb > stamp : hb > stamp) stamp = hb;
+        const u = String(e.dom || "") || String(e.url || "");
         if (u && !urls.includes(u)) urls.push(u);
       }
     }
   } catch (e) {}
-  if (!t && cfg && cfg.url && !urls.includes(cfg.url)) urls.unshift(cfg.url);
-  // 4.0: استمپ هر ۳۰ دقیقه نوشته می‌شود، پس پنجرهٔ تازگی ۹۰ دقیقه است (نه ۱۵)
+  if (!t && cfg) {
+    const u = String(cfg.dom || "") || String(cfg.url || "");
+    if (u) urls.unshift(u);
+  }
   const stampOk = stamp > 0 && now - stamp < 5400000;
   if (stampOk) return { ok: true, via: "stamp", version: "" };
   if (urls.length) {
@@ -14743,6 +14756,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           }
           vKb.push([{ text: "⬆️ آپدیت ایجنت", callback_data: "guardian:update" }]);
           vKb.push([{ text: "📡 تست اتصال", callback_data: "guardian:test" }]);
+          vKb.push([{ text: vGCfg.dom ? "🌐 تغییر دامنه" : "🌐 اتصال با دامنه", callback_data: "guardian:domain" }]);
           vKb.push([{ text: "🖥 نصب مجدد / سرور جایگزین", callback_data: "guardian:install" }]);
         } else {
           vLines.push("", "🖥 ایجنت سرور: ⚪ نصب نشده (کارها روی ورکر است؛ برای رفع سقف کلادفلر نصب کن)");
@@ -14832,6 +14846,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       let wb = "";
       try { wb = await guardianWorkerBase(kv, env); } catch (e) {}
       const cmd = code(guardianInstallCmd(wb, gCfg.token));
+      const gDomLine = gCfg.dom
+        ? `🌐 این ایجنت روی دامنه ${code(gCfg.dom)} جواب می‌دهد (پایدارتر از IP).`
+        : "💡 برای اتصال پایدارتر، بعد از نصب دکمهٔ «🌐 اتصال با دامنه» را بزن (بدون باز کردن پورت).";
       await edit(
         [
           "🖥 نصب ایجنت روی سرور",
@@ -14843,6 +14860,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           wb ? "✅ آدرس ورکر خودکار گذاشته شد." : "⚠️ به‌جای YOUR-WORKER آدرس ورکرت را بگذار (همانی که ربات رویش نصب است).",
           "بعد از اجرا تا ~۱ دقیقه صبر کن؛ ربات خودش پیام «✅ ایجنت وصل شد» می‌دهد.",
           "اگر روی سرور دیگری نصب کردی و توکن فرق کرد، دکمهٔ «🔑 ثبت توکن» را بزن.",
+          gDomLine,
         ].join("\n").slice(0, 3500),
         [[{ text: "🔑 ثبت توکن ایجنت", callback_data: "guardian:token" }], [{ text: "➕ سرور جدید (توکن تازه)", callback_data: "guardian:install_new" }], ...gBack]
       );
@@ -14899,6 +14917,124 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
           await edit("❌ ایجنت جواب نداد.\n\n• اتصال مستقیم: پورت ۸۷۸۹ از دید Cloudflare باز است؟ آدرس ثبت‌شده درست است؟\n• صف: سهمیهٔ KV تمام است (تا ریست ۰۳:۳۰).\n\nاگر سرور عوض شده، با این دستور دستی آپدیت/نصب کن:\n\n" + code(guardianInstallCmd(wb2, gCfg2.token)), gBack2);
         }
       }
+    } else if (data === "guardian:domain") {
+      // اتصال دامنه‌ای (4.0.1): یک ساب‌دامنه پشت کلادفلر می‌سازیم تا ورکر بدون خطا به ایجنت وصل شود
+      const gBackD = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      let gCfgD = null;
+      try { gCfgD = await getGuardianCfg(kv); } catch (e) {}
+      if (!gCfgD || !gCfgD.token) {
+        await edit("⚪ ایجنت نصب نشده.", gBackD);
+      } else {
+        await edit("⏳ در حال خواندن دامنه‌های کلادفلر…", gBackD);
+        let zones = [];
+        try {
+          const accounts = await getAccounts(kv, env);
+          zones = await getAllZones(accounts, kv);
+        } catch (e) {}
+        if (!zones.length) {
+          await edit("❌ هیچ دامنه‌ای در اکانت‌های کلادفلر پیدا نشد. اول یک دامنه به اکانت اضافه کن.", gBackD);
+        } else {
+          const kb = [];
+          for (let i = 0; i < zones.length; i += 2) {
+            const row = [];
+            for (let j = i; j < Math.min(i + 2, zones.length); j++) {
+              const z = zones[j];
+              row.push({ text: `${z.status === "active" ? "🟢" : "⚪"} ${z.name}`, callback_data: `gdom:${z._acc}:${z.id}` });
+            }
+            kb.push(row);
+          }
+          await edit(
+            [
+              "🌐 اتصال ایجنت با دامنه",
+              "",
+              "کلادفلر بدون دامنه به آیپی وصل نمی‌شود؛ یک ساب‌دامنه می‌سازیم (پروکسی روشن) و ایجنت روی پورت ۸۰۸۰ جواب می‌دهد.",
+              "",
+              "یک دامنه را انتخاب کن (نام ساب‌دامنه خودکار ساخته می‌شود: agent۱، agent۲ …):",
+            ].join("\n").slice(0, 3500),
+            [...kb, gBackD]
+          );
+        }
+      }
+    } else if (data.startsWith("gdom:")) {
+      const [, accS, zoneId] = data.split(":");
+      const gBackD2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
+      let zones = [];
+      try {
+        const accounts = await getAccounts(kv, env);
+        zones = await getAllZones(accounts, kv);
+      } catch (e) {}
+      const zone = zones.find((z) => String(z.id) === zoneId) || null;
+      if (!zone) return edit("❌ دامنه پیدا نشد.", gBackD2);
+      // آیپی ایجنت از آدرس ثبت‌شده (یا از heartbeat)
+      let ip = "";
+      try {
+        const gCfg = await getGuardianCfg(kv);
+        ip = String(guardianCfgUrl(gCfg) || "").replace(/^https?:\/\//, "").split(/[/:\]]/)[0];
+      } catch (e) {}
+      if (!ip || ip.indexOf(".") === -1) {
+        await edit("❌ آیپب عمومی ایجنت را نمی‌دانم (آدرس ثبت‌شده معتبر نیست). یک بار دستور نصب را دوباره روی سرور بزن تا آدرس ثبت شود.", gBackD2);
+        return;
+      }
+      await edit("⏳ در حال ساخت رکورد و تنظیم ایجنت…", gBackD2);
+      try {
+        const accounts = await getAccounts(kv, env);
+        const tok = accounts[Number(zone._acc) || 0].token;
+        // نام آزاد: agent1، agent2 …
+        let name = "agent";
+        for (let n = 1; n <= 20; n++) {
+          const cand = "agent" + n;
+          const chk = await fetch(`${CF_API}/zones/${zone.id}/dns_records?type=A&name=${cand}.${zone.name}`, { headers: hdr(tok), signal: withTimeout(20000) });
+          const cd = await chk.json().catch(() => null);
+          if (cd && cd.success && (!cd.result || cd.result.length === 0)) { name = cand; break; }
+          name = cand;
+        }
+        const full = name + "." + zone.name;
+        const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+          method: "POST", headers: hdr(tok),
+          body: JSON.stringify({ type: "A", name: full, content: ip, ttl: 1, proxied: true }),
+          signal: withTimeout(25000),
+        });
+        const d = await res.json().catch(() => null);
+        if (!res.ok || !(d && d.success)) {
+          return edit("❌ ساخت رکورد ناموفق بود: " + cfErrText(d || {}), gBackD2);
+        }
+        // ثبت در رجیستری + ارسال دستور به ایجنت (مستقیم، بدون KV)
+        let gCfg2 = null;
+        try { gCfg2 = await getGuardianCfg(kv); } catch (e) {}
+        const regs = (await kv.get("guardian_agents", "json")) || {};
+        const tk = gCfg2 && gCfg2.token ? gCfg2.token : "";
+        if (regs && typeof regs === "object" && tk) {
+          const ent = regs[tk] && typeof regs[tk] === "object" ? regs[tk] : {};
+          ent.dom = "https://" + full;
+          ent.dom_at = Date.now();
+          regs[tk] = ent;
+          try { await kv.put("guardian_agents", JSON.stringify(regs)); } catch (e) {}
+        }
+        if (gCfg2) {
+          try { await saveGuardianCfg(kv, { ...gCfg2, dom: "https://" + full }); } catch (e) {}
+        }
+        const cmd = await guardianCmd(kv, { token: tk, url: guardianCfgUrl(gCfg2), dom: "https://" + full }, "domain", { domain: "https://" + full, port: 8080 }, 30000);
+        if (cmd.ok && cmd.via === "direct") {
+          await edit(
+            [
+              "✅ اتصال دامنه‌ای تنظیم شد",
+              "",
+              `دامنه: ${code("https://" + full)}`,
+              `آیپی: ${code(ip)}`,
+              "ایجنت الان روی پورت ۸۰۸۰ با TLS کلادفلر جواب می‌دهد.",
+              "",
+              "⏳ توجه: اگر SSL کلادفلر روی حالت Full/strict باشد، origin روی ۸۰۸۰ بدون گواهی جواب نمی‌دهد. در کلادفلر → SSL/TLS → Flexible را انتخاب کن (یک بار).",
+              "",
+              "ایجنت در حال ری‌استارت است و با دامنه برمی‌گردد (حدود ۳۰ ثانیه).",
+            ].join("\n").slice(0, 3500),
+            [[{ text: "📡 تست اتصال", callback_data: "guardian:test" }], ...gBackD2]
+          );
+        } else {
+          await edit("⚠️ رکورد ساخته شد ولی دستور به ایجنت نرسید (" + String(cmd.error || "unknown") + "). یک بار دکمهٔ «⬆️ آپدیت ایجنت» را بزن یا دستور نصب را دوباره اجرا کن.", gBackD2);
+        }
+      } catch (e) {
+        await edit("❌ خطا: " + String(e && e.message ? e.message : e).slice(0, 150), gBackD2);
+      }
     } else if (data === "guardian:test") {
       // تست اتصال 3.0.2: مستقیم از ایجنت /ping (صفر KV). صف فقط اگر inbound بسته باشد.
       const gBackT = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
@@ -14906,7 +15042,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       try { gCfgT = await getGuardianCfg(kv); } catch (e) {}
       if (!gCfgT || !gCfgT.token) {
         await edit("⚪ ایجنت نصب نشده.", gBackT);
-      } else if (!gCfgT.url) {
+      } else if (!guardianCfgUrl(gCfgT)) {
         await edit("⛔ آدرس ایجنت ثبت نشده. یک بار heartbeat با آدرس عمومی بفرست (نسخهٔ نصاب ۳.۰ به بعد خودکار است) یا دکمهٔ نصب مجدد را بزن.", gBackT);
       } else {
         await edit("📡 در حال تست اتصال مستقیم…", gBackT);

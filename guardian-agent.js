@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "4.0.0";
+const AGENT_VERSION = "4.0.1";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;
@@ -250,9 +250,29 @@ async function execAgentCmd(cmd) {
     // تست اتصال درخواستی از ربات: مدرک زنده‌بودن + اطلاعات برای منوی نسخه‌ها
     let uptimeS = 0;
     try { uptimeS = Math.floor(process.uptime()); } catch (e) {}
-    const r = { agent_time: Date.now(), version: AGENT_VERSION, jobs: Object.keys(JOBS), runner: !!RUNNER, uptime_s: uptimeS };
+    const r = { agent_time: Date.now(), version: AGENT_VERSION, jobs: Object.keys(JOBS), runner: !!RUNNER, uptime_s: uptimeS, public_url: PUBLIC_URL };
     cmdMark(id, r);
     await postResult(cmd, r);
+    return;
+  }
+  if (type === "domain") {
+    // مدل دامنه‌ای (4.0.1): کارگر می‌خواهد ایجنت روی ساب‌دامنه‌ای پاسخ دهد.
+    // پورت را روی ۸۰۸۰ (پروکسی‌شده توسط کلادفلر) می‌بریم و PUBLIC_URL را دامنه می‌کنیم.
+    const dom = String(args.domain || "").toLowerCase().trim();
+    if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/.test(dom)) {
+      const r = { error: "bad_domain" };
+      cmdMark(id, r);
+      await postResult(cmd, r);
+      return;
+    }
+    const port = Number(args.port) || 8080;
+    const r = await writeAgentDomain(dom, port);
+    cmdMark(id, r);
+    await postResult(cmd, r);
+    if (r.ok) {
+      log("domain mode applied: " + dom + " (port " + port + "), restarting");
+      setTimeout(() => process.exit(0), 1200);
+    }
     return;
   }
   if (type === "job") {
@@ -732,6 +752,31 @@ async function handleHttpProxy(body, res) {
     return sendJson(res, 502, { ok: false, error: "fetch_failed", detail: String(e).slice(0, 300) });
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// ---------- حالت دامنه‌ای (4.0.1): نوشتن PUBLIC_URL/PORT در agent.conf ----------
+// چون env بر conf اولویت دارد، بعد از نوشتن باید ری‌استارت شود (systemd با فایل تازه بالا می‌آید).
+const CONF_PATH = "/etc/guardian-agent/agent.conf";
+async function writeAgentDomain(dom, port) {
+  try {
+    let txt = "";
+    try { txt = fs.readFileSync(CONF_PATH, "utf8"); } catch (e) { return { error: "no_conf" }; }
+    const set = (key, val) => {
+      const re = new RegExp("^" + key + "=.*$", "m");
+      const line = key + '="' + val + '"';
+      if (re.test(txt)) txt = txt.replace(re, line);
+      else txt = txt.replace(/\s*$/, "\n") + line + "\n";
+    };
+    set("PORT", String(port));
+    set("PUBLIC_URL", dom);
+    const tmp = CONF_PATH + ".tmp";
+    fs.writeFileSync(tmp, txt);
+    fs.renameSync(tmp, CONF_PATH);
+    try { fs.chmodSync(CONF_PATH, 0o600); } catch (e) {}
+    return { ok: true, domain: dom, port: port };
+  } catch (e) {
+    return { error: String((e && e.message) || e).slice(0, 150) };
   }
 }
 
