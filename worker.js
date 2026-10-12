@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "3.0.3";
+const BOT_VERSION = "4.0.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.0.0": [
+    "🖥 ایجنت = backend: با اتصال ایجنت، همهٔ آپدیت‌ها (پیام و دکمه) روی سرور اجرا و با state محلی آن جواب داده می‌شوند؛ ورکر فقط وقتی سرور در دسترس نباشد محلی کار می‌کند (fallback با KV)",
+    "🔑 خواندن از راه دور: کلیدهای per-user مثل «منتخب‌ها» اگر روی ایجنت نبود، از KV خوانده و کش می‌شوند؛ تغییرات با kvbatch برمی‌گردند",
+    "🛡 سهمیه: با ایجنت متصل، نوشتن‌های ورکر به استمپ زنده‌بودن (هر ۳۰ دقیقه) و زمان‌بند سبک کاهش می‌یابد — عملاً صفر برای کارهای کاربر",
+    "↔️ ایمیل/ترافیک دامنه، اکانت‌های هتزنر/لینود/آروان، رله، هینگ‌های سازنده، نسخه‌ها و سهمیه روی ورکر می‌مانند (state آن‌ها KV است)",
+  ],
   "3.0.3": [
     "🛡 محافظ بودجهٔ نوشتن: اگر مصرف امروز از ۶۰٪ سقف بگذرد، جاب‌های پرهیشهٔ ورکر (هاست‌فیلتر، پول نود، مانیتورها، دایجست‌ها) خودکار کند می‌شوند و یک بار با لیست پرهسته‌ترین بخش‌ها به ادمین گزارش می‌شود",
     "🖥 رفع مبرای خرابی هنگام سقف KV: دستورات ایجنت (تست/آپدیت) دیگر هیچ نوشتنی ندارند",
@@ -1520,6 +1526,26 @@ export default {
       return new Response(JSON.stringify(r), { headers: { "Content-Type": "application/json" } });
     }
 
+    if (request.method === "POST" && url.pathname === "/guardian/kvget") {
+      // 4.0: خواندن کلید از KV برای ایجنت (read-through). فقط خواندن؛ write از ایجنت
+      // از مسیر kvbatch انجام می‌شود. توکن هر ایجنت ثبت‌شده قبول است.
+      let b = {};
+      try { b = await request.json(); } catch (e) {}
+      const who = await guardianResolve(env.BOT_KV, String(b.token || ""));
+      if (!who) return new Response(JSON.stringify({ ok: false, error: "bad_token" }), { status: 403, headers: { "Content-Type": "application/json" } });
+      const want = Array.isArray(b.keys) ? b.keys.slice(0, 20) : [];
+      const out = {};
+      for (const k of want) {
+        const key = String(k || "").slice(0, 256);
+        if (!key) continue;
+        try {
+          const v = await env.BOT_KV.get(key);
+          out[key] = v === null || v === undefined ? null : String(v);
+        } catch (e) { out[key] = null; }
+      }
+      return new Response(JSON.stringify({ ok: true, keys: out }), { headers: { "Content-Type": "application/json" } });
+    }
+
     if (request.method === "POST" && url.pathname === "/telemetry") {
       let b = {};
       try {
@@ -1688,8 +1714,10 @@ export default {
     if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
 
     // شکار موقت خطاهای ۵۰۰ (۱.۸.۹۱): نمونه‌برداری، بعد از تشخیص حذف می‌شود
+    // مدل 4.0: اگر ایجنت وصل است، همهٔ آپدیت روی سرور اجرا می‌شود (state روی FileKV).
+    // ورکر فقط وقتی مسیر سرور شکست بخورد محلی کار می‌کند (fallback با KV).
     ctx.waitUntil(
-      processUpdate(payload, env, botToken, adminId).catch((e) => dbgLogErr(env, e, "fetch"))
+      forwardOrHandle(payload, env, botToken, adminId).catch((e) => dbgLogErr(env, e, "fetch"))
     );
     return ok();
   },
@@ -1800,7 +1828,7 @@ export default {
           // دوباره محافظت می‌شوند، پس تأخیر فلاش فقط هزینهٔ یک ران اضافی است نه خرابی.
           try {
             Object.assign(_cronPending, patch);
-            if (Object.keys(_cronPending).length && (!_cronLastFlush || now - _cronLastFlush >= 1800000)) {
+            if (Object.keys(_cronPending).length && (!_cronLastFlush || now - _cronLastFlush >= 3600000)) {
               await saveCronState(qKvCount(ckv, "cron"), { ...cs, ..._cronPending });
               _cronPending = {};
               _cronLastFlush = now;
@@ -1899,6 +1927,89 @@ export default {
     }
   },
 };
+
+// ===================== مدل 4.0: ایجنت = backend، ورکر = لبهٔ بدون state =====================
+// قواعد:
+//  ۱) اگر ایجنت زنده است، هر آپدیت تلگرام (پیام یا دکمه) روی سرور اجرا می‌شود؛ state روی
+//     FileKV همان سرور است و ورکر هیچ نوشتنی نمی‌کند.
+//  ۲) خطا/تایم‌اوت ⇒ رسیدگی محلی روی ورکر با KV (رفتار قدیمی). ربات هیچ‌وقت نمی‌میرد.
+//  ۳) چند فیچر ذاتاً مال ورکرند و هرگز forward نمی‌شوند (self-update ورکر، صف/نصب ایجنت،
+//     لینک‌های سهمیه، و فیچرهای هاب که KV مرکزی دارند).
+//  ۳) چند فیچر ذاتاً مال ورکرند یا state‌شان در KV است و روی ایجنت sync نمی‌شود
+//     (نسخه‌ها/سهمیه/تنظیمات، هاب، مدیریت ایجنت، ایمیل و ترافیک دامنه، اکانت‌های
+//     هتزنر/لینود/آروان، رله، گفتگوی سازنده) — این‌ها روی ورکر می‌مانند تا دوپاره نشوند.
+//  ۴) متن‌های /start و /menu هم روی ورکر می‌مانند (منو با فلگ‌های مخصوص ورکر ساخته می‌شود).
+let _fwdReach = { at: 0, ok: false };
+const FWD_DENY_PRE = [
+  // مالِ خود ورکر
+  "verpick:", "verlatest", "guardian:", "qresume", "qcron:",
+  // صفحه‌های مبتنی بر KV ورکر
+  "vers", "quota", "settings", "menu", "back", "noop",
+  // هاب (KV مرکزی)
+  "hub",
+  // KV-threaded و sync‌نشده
+  "zmail", "ztraf", "hz", "ln", "arvan", "hg:", "relay", "promo",
+  "contactcreator", "creply:", "ccontinue:", "cclose:", "cclosec:", "annreply:",
+];
+const FWD_DENY_CMD = new Set(["/start", "/menu"]);
+
+async function fwdReachable(kv, env) {
+  // کش ۶۰ثانیه‌ای در حافظه: از استمپ heartbeat تازه یا ping (بدون نوشتن)
+  if (Date.now() - _fwdReach.at < 60000) return _fwdReach.ok;
+  let okF = false;
+  try {
+    let cfg = null;
+    try { cfg = await getGuardianCfg(kv); } catch (e) {}
+    if (cfg && cfg.token) {
+      const live = await guardianAgentAlive(kv, cfg);
+      okF = !!live.ok;
+    }
+  } catch (e) {}
+  _fwdReach = { at: Date.now(), ok: okF };
+  return okF;
+}
+
+function fwdDenied(data) {
+  const d = String(data || "");
+  if (!d) return false;
+  for (const p of FWD_DENY_PRE) {
+    if (d === p || d.startsWith(p)) return true;
+  }
+  return false;
+}
+function fwdDeniedText(text) {
+  const t = String(text || "").trim();
+  const cmd = t.split(/\s+/)[0].split("@")[0].toLowerCase();
+  return FWD_DENY_CMD.has(cmd);
+}
+
+async function forwardOrHandle(payload, env, botToken, adminId) {
+  // ۴.۰: اول ایجنت، بعد محلی
+  try {
+    const kv = env.BOT_KV;
+    if (kv && payload && typeof payload === "object") {
+      const cb = payload.callback_query;
+      const msg = payload.message;
+      const data = cb && cb.data ? String(cb.data) : "";
+      const denied = (data && fwdDenied(data)) || (msg && msg.text && fwdDeniedText(msg.text));
+      if (!denied && (await fwdReachable(kv, env))) {
+        let cfg = null;
+        try { cfg = await getGuardianCfg(kv); } catch (e) {}
+        if (cfg && cfg.url) {
+          const upd = payload;
+          if (cb && upd.callback_query && upd.callback_query.message && upd.callback_query.message.reply_markup) {
+            upd.callback_query = { ...upd.callback_query, message: { ...upd.callback_query.message } };
+            delete upd.callback_query.message.reply_markup;
+          }
+          const r = await guardianPost(cfg, "/tg/update", { update: upd, dedupe: String(upd.update_id || "") }, 45000);
+          if (r.ok && r.data && r.data.ok === true) return; // روی سرور اجرا و جواب داده شد
+          // r.error = http_* (network) یا handler_failed/404 (ایجنت قدیمی) ⇒ محلی
+        }
+      }
+    }
+  } catch (e) {}
+  await processUpdate(payload, env, botToken, adminId);
+}
 
 async function processUpdate(payload, env, botToken, adminId) {
   // شمارش write پیام‌ها/دکمه‌ها (بخش web)؛ دکمه‌ها داخل handleCallback با b: جایگزین می‌شود (تک‌شمارش)
@@ -2001,16 +2112,8 @@ async function processUpdate(payload, env, botToken, adminId) {
           : "m:text"
     );
 
-    // اجرای هیبرید روی سرور (2.4.6): این دستورها هیچ state مشترکی لازم ندارند
-    // (متن ساده + API مستقیم) پس کل آپدیت را ایجنت اجرا و جواب می‌دهد؛ ورکر تکرار نمی‌کند.
-    // عمداً فقط همین‌هاست: هر چیزی که دکمهٔ نشست‌دار می‌سازد باید روی ورکر بماند
-    // (نشست ایجنت روی FileKV برای ورکر نامرئی است و دکمه‌ها می‌مردند).
-    // گارد ضدحلقه: روی خود ایجنت (env.AGENT) این شاخه هرگز اجرا نمی‌شود.
-    if (!env.AGENT && text.startsWith("/") && ["/dns", "/dnsadd", "/dnsdel", "/version", "/help"].includes(cmd)) {
-      const delegated = await guardianJobFetch(kv, "tgbot", { update: payload }, 45000, true);
-      if (delegated && delegated.replied) return;
-      // ایجنت در دسترس نیست → همین‌جا محلی ادامه می‌دهیم (fallback همیشگی)
-    }
+    // (مدل 4.0) شاخهٔ forward پیش از رسیدن به اینجا انجام شده؛ اگر به اینجا رسیدیم یعنی
+    // fallback محلی است (ایجنت قطع/نسخهٔ قدیمی) و باید با KV همان‌جا کار کنیم.
 
     if (pending && !text.startsWith("/")) {
       await resolvePending(pending, text, chatId, accounts, send, kv, botToken, env);
@@ -3822,29 +3925,6 @@ function qKvCount(kv, sec) {
   try { QW_RAW.set(w, kv); } catch (e) {}
   return w;
 }
-// پیشوندهای درخت زون/رکورد/منتخب که روی ایجنت اجرا می‌شوند (2.4.7).
-// معیار: سورس حقیقت یا کلادفلر است (DNS/SSL/purge) یا نشست محلی (FileKV) کافی است.
-// بقیه (ایمیل، سرور، پنل، یادآور، ترافیک، مدیریت) روی ورکر می‌مانند.
-const CB_AGENT_PRE = [
-  "z:", "zf:", "p:", "rback:", "addz:", "arz:", "zset:", "zssl:", "zsec:", "zperf:",
-  "ztog:", "zval:", "zvset:", "zd:", "zpurge:", "zdev:", "zsearch:", "zsf:",
-  "sel", "selmode:", "seldone:", "bulkdel:", "bulkedit:", "bulkdne:", "bulktype:", "bulkdely:",
-  "fav", "rtraf:",
-];
-const CB_AGENT_EXACT = new Set(["zones", "favs"]);
-function cbAgentForward(data) {
-  const d = String(data || "");
-  if (!d || d === "menu" || d === "noop" || d === "back") return false;
-  // استثنا: ایمیل و کانفیگ هشدار ترافیک state دائمی در KV دارند — تک‌خانه روی ورکر می‌مانند
-  // تا دوپاره نشوند (در عوض زیر سقف، پیام صادقانه سهمیه می‌گیرند).
-  if (d.startsWith("zmail") || d.startsWith("ztraf")) return false;
-  if (CB_AGENT_EXACT.has(d)) return true;
-  for (const p of CB_AGENT_PRE) {
-    if (d.startsWith(p)) return true;
-  }
-  return false;
-}
-
 // بخش‌بندی کال‌بک دکمه‌ها: پیشوند قبل از «:» (حتماً b: تا با اسم کرون‌ها قاطی نشود)
 function qwBtnSec(data) {
   const p = String(data || "").split(":")[0] || "?";
@@ -7111,7 +7191,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "3.0.3"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "4.0.0"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
@@ -7436,7 +7516,8 @@ async function handleGuardianIngest(env, b) {
       entDirty = true;
     }
     if (ver && ver !== ent.agent_version) { ent.agent_version = ver; entDirty = true; }
-    if (!ent.last_hb || nowHb - ent.last_hb >= 900000) { ent.last_hb = nowHb; entDirty = true; }
+    // 4.0: استمپ هر ۳۰ دقیقه (۴۸/روز) — با agent-mode بقیهٔ نوشتن‌ها صفر است
+    if (!ent.last_hb || nowHb - ent.last_hb >= 1800000) { ent.last_hb = nowHb; entDirty = true; }
     // primary: compatibility only — no periodic last_hb write
     if (who.kind === "primary") {
       let st = {};
@@ -7509,7 +7590,8 @@ async function guardianAgentAlive(kv, cfg, token) {
     }
   } catch (e) {}
   if (!t && cfg && cfg.url && !urls.includes(cfg.url)) urls.unshift(cfg.url);
-  const stampOk = stamp > 0 && now - stamp < 900000;
+  // 4.0: استمپ هر ۳۰ دقیقه نوشته می‌شود، پس پنجرهٔ تازگی ۹۰ دقیقه است (نه ۱۵)
+  const stampOk = stamp > 0 && now - stamp < 5400000;
   if (stampOk) return { ok: true, via: "stamp", version: "" };
   if (urls.length) {
     for (const u of urls.slice(0, 3)) {
@@ -7734,7 +7816,12 @@ const GUARDIAN_PUSH_PREFIXES = [
   "srv_mon_last", "srv_cool:", // گارد و cooldown مانیتور سرور
   "dom_expiry", // به‌روزرسانی last-check انقضای دامنه
   "stick:", // پین پیام‌های هشداری که ایجنت می‌فرستد (مدیریت بعدی روی ورکر)
-  "favs:", // منتخب‌های کاربر (2.4.7: تنها state دائمی که ایجنت می‌نویسد و باید برگردد)
+  "favs:", // منتخب‌های کاربر (اجرای دکمه‌ها روی ایجنت)
+  // 4.0: کانفیگ‌هایی که کاربر از داخل ربات (روی ایجنت) عوض می‌کند — باید به KV برگردند
+  // تا اگر ایجنت بمرد، نسخهٔ KV تازه باشد. نوشتن فقط هنگام تغییر واقعی انجام می‌شود.
+  "admins", "panels", "accounts", "servers", "node_monitors", "usage_monitor_cfg",
+  "srv_mon_cfg", "ssl_monitor", "dom_expiry_cfg", "pghook_cfg", "host_filter_cfg",
+  "hf_adv", "reminders", "husage", "modes",
 ];
 function guardianCanPush(key) {
   const k = String(key || "");
@@ -14531,20 +14618,9 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await kv.put(lk, String(Date.now()), { expirationTtl: 60 });
     } catch (e) {}
   }
-  // درخت زون/رکورد روی ایجنت (2.4.7): نشست روی FileKV (مثل state محلی ربات‌های سروری).
-  // فقط خانواده‌ای که سورس حقیقت‌شان کلادفلر یا نشست محلی است؛ ایمیل/سرور/پنل/یادآور روی ورکر می‌ماند.
-  // گیت ادمین بالا انجام شده و داخل ایجنت هم تکرار می‌شود (دفاع در عمق).
-  if (cbAgentForward(data)) {
-    try {
-      const slim = { ...cb };
-      try {
-        if (slim.message && slim.message.reply_markup) delete slim.message.reply_markup;
-      } catch (e) {}
-      const delegated = await guardianJobFetch(kv, "tgbot", { update: { callback_query: slim } }, 45000, true);
-      if (delegated && delegated.replied) return;
-    } catch (e) {}
-    // ایجنت در دسترس نیست → همین‌جا محلی ادامه می‌دهیم (fallback همیشگی)
-  }
+  // (مدل 4.0) شاخهٔ forward پیش از رسیدن به اینجا (forwardOrHandle) انجام شده؛
+  // اگر به اینجا رسیدیم یعنی fallback محلی است.
+
   // 🔙 برگشت سراسری: به صفحه‌ای که این پیام از آن آمد (نه حدس ثابت)
   if (data === "back") {
     let hist = [];

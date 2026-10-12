@@ -34,7 +34,7 @@ const path = require("node:path");
 const { execFile, spawn } = require("node:child_process");
 const os = require("node:os");
 
-const AGENT_VERSION = "3.0.3";
+const AGENT_VERSION = "4.0.0";
 const DEFAULT_PORT = 8789;
 const HEARTBEAT_MS = 60 * 1000;
 const EXEC_TIMEOUT_MS = 120 * 1000;
@@ -333,6 +333,33 @@ function readRuntimeKey(key) {
   }
 }
 
+// ---------- اجرای آپدیت تلگرام روی ایجنت (مدل 4.0: state روی FileKV) ----------
+const DEDUP = new Map(); // key -> ts (در حافظه؛ با ری‌استارت پاک می‌شود و TTL کوتاه است)
+function isDeduped(key) {
+  const k = String(key || "");
+  if (!k) return false;
+  const t = DEDUP.get(k);
+  if (!t) return false;
+  const age = Date.now() - t;
+  if (age > 30 * 60000) { DEDUP.delete(k); return false; }
+  return true;
+}
+function markDeduped(key) {
+  const k = String(key || "");
+  if (!k) return;
+  DEDUP.set(k, Date.now());
+  while (DEDUP.size > 500) {
+    const oldest = DEDUP.keys().next();
+    if (oldest && !oldest.done) DEDUP.delete(oldest.value); else break;
+  }
+}
+
+async function handleTgUpdate(upd) {
+  // همان processUpdate ورکر، با FileKV همین سرور (sync самого تازه)
+  if (!RUNNER) return { error: "no_runner" };
+  return await RUNNER.runTgUpdate(upd);
+}
+
 async function handleJob(body, res) {
   // اجرای اکشن ورکر روی همین سرور (allowlist داخل رانر است)
   if (!RUNNER) return sendJson(res, 503, { ok: false, error: "no_runner" });
@@ -404,6 +431,29 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 403, { ok: false, error: "bad_token" });
       }
       return sendJson(res, 200, readRuntimeKey(key));
+    }
+    if (req.method === "POST" && url.pathname === "/tg/update") {
+      // مدل 4.0: همهٔ آپدیت‌های تلگرام روی ایجنت اجرا می‌شوند (state روی FileKV).
+      // ورکر فقط وقتی این مسیر شکست بخورد محلی کار می‌کند (fallback با KV).
+      const body = await readJsonBody(req);
+      if (!body) return sendJson(res, 400, { ok: false, error: "bad_json" });
+      if (!authed(req, body)) return sendJson(res, 403, { ok: false, error: "bad_token" });
+      const upd = body.update;
+      if (!upd || typeof upd !== "object") return sendJson(res, 400, { ok: false, error: "bad_update" });
+      // ضد تکرار: اگر ورکر دوباره همان update_id را فرستاد (تایم‌اوت شبکه)، دوباره اجرا نمی‌شود
+      const dedupeKey = String(body.dedupe || (upd.update_id || "")).slice(0, 64);
+      const seen = dedupeKey && isDeduped(dedupeKey);
+      if (!seen) {
+        if (dedupeKey) markDeduped(dedupeKey);
+        try {
+          const out = await handleTgUpdate(upd);
+          return sendJson(res, 200, { ok: true, handled: true, out: out === undefined ? null : out });
+        } catch (e) {
+          log("tg update failed:", String(e && e.stack ? e.stack : e).slice(0, 300));
+          return sendJson(res, 200, { ok: false, error: "handler_failed" });
+        }
+      }
+      return sendJson(res, 200, { ok: true, handled: false, deduped: true });
     }
     if (req.method === "POST" && (url.pathname === "/exec" || url.pathname === "/stats" || url.pathname === "/http" || url.pathname === "/update" || url.pathname === "/job")) {
       const body = await readJsonBody(req);
@@ -824,4 +874,4 @@ process.on("SIGINT", () => { log("SIGINT, exiting"); process.exit(0); });
 if (require.main === module) start();
 
 // برای تست واحد (node guardian-agent.js سرور را بالا می‌آورد؛ require فقط توابع می‌دهد)
-module.exports = { AGENT_VERSION, registerJob, stateGet, statePut, start, readRuntimeKey, runHfExclusive, handleUpdate, execAgentCmd, doSelfUpdate };
+module.exports = { AGENT_VERSION, registerJob, stateGet, statePut, start, readRuntimeKey, runHfExclusive, handleUpdate, execAgentCmd, doSelfUpdate, isDeduped, markDeduped };

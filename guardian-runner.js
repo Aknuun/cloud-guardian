@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-const RUNNER_VERSION = "3.0.3";
+const RUNNER_VERSION = "4.0.0";
 // کلیدهایی که ایجنت اجازهٔ pull/push آن‌ها را دارد (مکمل allowlist ورکر)
 // فاز ۴: کانفیگ پول نود، مانیتور مصرف، مانیتور سرور، دایجست پنل، SSL و انقضای دامنه
 const SYNC_KEYS = [
@@ -208,6 +208,37 @@ function createTcpConnect() {
   };
 }
 
+// ---------- FileKV با خوانش از راه دور (4.0) ----------
+// کیeهای per-user و گذرایی (منتخب‌ها، نشست‌ها، pend) روی KV ورکر زندگی می‌کنند ولی
+// state پایدار روی ایجنت است؛ پس اگر روی دیسک نبود، یک بار از ورکر خوانده و کش می‌شود.
+// نوشتن‌ها همان ژورنال‌اند و به kV برمی‌گردند. نتیجهٔ منفی ۶۰ ثانیه کش می‌شود تا
+// ازRound-Trip برای کلیدهای واقعاً خالی پره نشود.
+const _kvNeg = new Map();
+class RemoteKV extends FileKV {
+  async get(key, type) {
+    const k = String(key || "");
+    const local = await super.get(k, type);
+    if (local !== null && local !== undefined) return local;
+    const neg = _kvNeg.get(k);
+    if (neg && Date.now() - neg < 60000) return null;
+    let remote = null;
+    try {
+      const r = await workerFetch("/guardian/kvget", { token, keys: [k] }, 8000);
+      if (r.ok && r.data && r.data.ok && r.data.keys) {
+        remote = r.data.keys[k] === undefined ? null : r.data.keys[k];
+      }
+    } catch (e) {}
+    if (remote === null || remote === undefined) {
+      _kvNeg.set(k, Date.now());
+      try { while (_kvNeg.size > 500) { const f = _kvNeg.keys().next(); if (!f.done) _kvNeg.delete(f.value); else break; } } catch (e) {}
+      return null;
+    }
+    try { fs.writeFileSync(this._f(k), JSON.stringify({ v: String(remote), exp: 0 })); } catch (e) {}
+    if (type === "json") { try { return JSON.parse(String(remote)); } catch (e) { return null; } }
+    return String(remote);
+  }
+}
+
 // ---------- رانر ----------
 function createRunner(opts) {
   const log = (...a) => { try { console.error("[runner]", ...a); } catch (e) {} };
@@ -390,7 +421,7 @@ function createRunner(opts) {
       if (!botToken) throw new Error("no_bot_token");
     }
     const journal = [];
-    const runKv = new FileKV(kvDir, journal);
+    const runKv = new RemoteKV(kvDir, journal);
     // seed خوانده‌شده با ژورنال ران قاطی نمی‌شود: فایل‌ها مشترک‌اند، ژورنال جداست
     // AGENT=1 یعنی روی ایجنت هستیم (گارد ضدحلقهٔ tgbot در باندل)
     const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl, AGENT: "1" };
@@ -409,6 +440,29 @@ function createRunner(opts) {
     if (r && r.skipped) return r;
     if (r && r.checked !== undefined) log(`hostfilter run: checked=${r.checked} changed=${r.changed} pushed=${r._pushed}`);
     return r;
+  }
+
+  async function runTgUpdate(upd) {
+    // 4.0: اجرای یک آپدیت تلگرام با state محلی (FileKV). بدون گیت mode: اگر ورکر
+    // درخواست کرده یعنی راه دور، شاخهٔ ایجنت را می‌خواهد.
+    let botToken = "", adminId = 0, texts = {};
+    try {
+      const s = await syncKeys();
+      botToken = s.botToken; adminId = s.adminId; texts = s.texts;
+    } catch (e) {
+      const cc = cachedCreds();
+      if (cc) { botToken = cc.botToken; adminId = cc.adminId; }
+    }
+    if (!botToken) throw new Error("no_bot_token");
+    const journal = [];
+    const runKv = new RemoteKV(kvDir, journal);
+    // AGENT=1 گارد ضدحلقه است (باندل هرگز شاخهٔ forward را نمی‌زند)
+    const env = { BOT_KV: runKv, BOT_TOKEN: botToken, ADMIN_ID: adminId, WORKER_URL: workerUrl, AGENT: "1" };
+    const jobs = await ensureBundle();
+    const result = await jobs.processUpdate(upd, env, botToken, adminId);
+    let pushed = { wrote: 0, conflicts: 0 };
+    try { pushed = await pushJournal(journal, texts); } catch (e) { /* push بعدی sync می‌کند */ }
+    return { pushed: pushed.wrote || 0, result: result && typeof result === "object" ? result : null };
   }
 
   const ACTIONS = {
@@ -443,16 +497,20 @@ function createRunner(opts) {
     cf_dns_list: (jobs, env, a) => jobs.cfDnsList(env, a || {}),
     cf_dns_upsert: (jobs, env, a) => jobs.cfDnsUpsert(env, a || {}),
     cf_dns_delete: (jobs, env, a) => jobs.cfDnsDelete(env, a || {}),
-    // اجرای کامل یک آپدیت تلگرام روی سرور (2.4.6): ورکر فقط متن‌های SAFE را می‌فرستد؛
-    // ایجنت با FileKV + API مستقیم جواب می‌دهد و {replied:true} برمی‌گرداند تا ورکر محلی تکرار نکند.
-    // گیت ادمین داخل خود processUpdate است (دفاع در عمق).
+    // اجرای کامل یک آپدیت تلگرام روی سرور (4.0): ورکر پیش از رسیدگی محلی، آپدیت را
+    // به ایجنت می‌دهد؛ ایجنت با FileKV (منبع حقیقت) جواب می‌دهد و {handled} برمی‌گرداند
+    // تا ورکر محلی تکرار نکند. گیت ادمین داخل خود processUpdate است (دفاع در عمق).
     tgbot: async (jobs, env, a) => {
       const upd = (a && a.update) || null;
       if (!upd || typeof upd !== "object") throw new Error("bad_update");
       await jobs.processUpdate(upd, env, env.BOT_TOKEN, env.ADMIN_ID);
-      return { replied: true };
+      return { replied: true, handled: true };
     },
   };
+
+  async function runTgUpdate2(upd) {
+    return runRemoteJob("tgbot", { update: upd }, { force: true });
+  }
 
   async function callAction(name, args, opts) {
     if (!ACTIONS[name]) return { ok: false, error: "bad_job" };
@@ -470,7 +528,7 @@ function createRunner(opts) {
     return { ok: true, result: final === undefined ? null : final };
   }
 
-  return { runHostFilterJob, runRemoteJob, callAction, isRuntimeKey, FileKV, RUNNER_VERSION };
+  return { runHostFilterJob, runRemoteJob, runTgUpdate, callAction, isRuntimeKey, FileKV, RUNNER_VERSION };
 }
 
-module.exports = { createRunner, createTcpConnect, isRuntimeKey, FileKV, RUNNER_VERSION };
+module.exports = { createRunner, createTcpConnect, isRuntimeKey, FileKV, RemoteKV, RUNNER_VERSION };
