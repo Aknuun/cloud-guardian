@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "3.0.2";
+const BOT_VERSION = "3.0.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "3.0.3": [
+    "🛡 محافظ بودجهٔ نوشتن: اگر مصرف امروز از ۶۰٪ سقف بگذرد، جاب‌های پرهیشهٔ ورکر (هاست‌فیلتر، پول نود، مانیتورها، دایجست‌ها) خودکار کند می‌شوند و یک بار با لیست پرهسته‌ترین بخش‌ها به ادمین گزارش می‌شود",
+    "🖥 رفع مبرای خرابی هنگام سقف KV: دستورات ایجنت (تست/آپدیت) دیگر هیچ نوشتنی ندارند",
+  ],
   "3.0.2": [
     "📡 تست اتصال و آپدیت ایجنت بدون هیچ نوشتن KV: اول مسیر مستقیم ورکر→ایجنت، صف heartbeat فقط fallback",
     "🩺 پاسخ /ping ایجنت آپ‌تایم و زمان ایجنت را هم دارد (برای صفحهٔ تست)",
@@ -1773,6 +1777,23 @@ export default {
             jobs.push(quotaGuard(qe("qg"), botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
           }
           jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
+          // محافظ بودجهٔ نوشتن (3.0.3): اگر مصرف امروز بالاست، جاب‌های پرهزینهٔ این تیک کنسل می‌شوند
+          let wbHot = false;
+          try {
+            if (!gIdle) {
+              const wb = await writeBudget(ckv, env);
+              wbHot = writeBudgetHot(wb);
+              if (wbHot) {
+                console.log("WRITEBUDGET hot: used=" + wb.used);
+                await writeBudgetAlert(ckv, env, botToken, adminId, wb.used);
+              }
+            }
+          } catch (e) {}
+          if (wbHot) {
+            // ایجنت نداریم و سهمیه داغ است: مانیتور مصرف/سرور و دایجست‌ها را عقب بینداز
+            const bump = (k) => { if (!cs[k] || now - cs[k] >= 60000) patch[k] = now + 3600000; };
+            bump("um"); bump("srv"); bump("pgdu"); bump("pgdd");
+          }
           await Promise.allSettled(jobs);
           // 3.0.1: cron_state را حداکثر هر ۳۰ دقیقه فلاش می‌کنیم (قبلاً هر تیک ۱۰دقیقه‌ای
           // = ۱۴۴ نوشتن در روز). همهٔ جاب‌های زمان‌بندشده idempotent هستند و در تیک بعدی
@@ -1796,7 +1817,16 @@ export default {
           try {
             skipHeavy = !!(await runGuardianWatchdog({ ...env, BOT_KV: qKvCount(env.BOT_KV, "guardian") }, botToken, adminId)).skipHeavy;
           } catch (e) {}
+          // محافظ بودجهٔ نوشتن (3.0.3): سهمیه داغ + بدون ایجنت = جاب‌های سنگین کند
+          let wbHot = false;
           if (!skipHeavy) {
+            try {
+              const wb = await writeBudget(env.BOT_KV, env);
+              wbHot = writeBudgetHot(wb);
+              if (wbHot) console.log("WRITEBUDGET hot (1min): used=" + wb.used);
+            } catch (e) {}
+          }
+          if (!skipHeavy && !wbHot) {
             await Promise.allSettled([
               runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))),
               runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
@@ -4003,6 +4033,67 @@ async function ensureTgWebhook(botToken, kv, env) {
     await kv.put("tg_secret_ts", String(ok ? now : now - 23 * 3600000));
   } catch (e) {}
 }
+// ===================== محافظ بودجهٔ نوشتن (3.0.3) =====================
+// سرنخ: ربات‌هایی که ایجنت ندارند (یا نسخهٔ قدیمی هستند) روی ورکر همه‌چیز را اجرا می‌کنند
+// و نوشتن‌های KV شان شبانه از سقف ۱۰۰۰ رد می‌شود؛ نتیجه‌اش نشست‌های خراب و دکمه‌های مرده است.
+// این محافظ، بدون توجه به علت، وقتی مصرف امروز از آستانه گذرد جاب‌های پرهزینه را کند می‌کند
+// و یک بار به ادمین می‌گوید کدام بخش دارد می‌سوزاند (از دادهٔ اندازه‌گیری‌شدهٔ خودش).
+const WB_HOT = 0.6; // ۶۰٪ سقف نوشتن
+let _wbCache = { at: 0, used: -1, ok: false };
+
+async function writeBudget(kv, env, force) {
+  if (!force && Date.now() - _wbCache.at < 600000) return _wbCache;
+  let used = -1, ok = false;
+  try {
+    const acc = await getQuotaAcct(kv, env);
+    if (acc) {
+      const u = await fetchKvUsageToday(acc.tok, acc.aid);
+      if (u && Number.isFinite(Number(u.write))) { used = Number(u.write); ok = true; }
+    }
+  } catch (e) {}
+  _wbCache = { at: Date.now(), used, ok };
+  return _wbCache;
+}
+
+function writeBudgetHot(b) {
+  return !!(b && b.ok && b.used >= Math.round(1000 * WB_HOT));
+}
+
+// پیام و اطلاع‌رسانی یک‌بار در روز وقتی بودجه داغ می‌شود
+async function writeBudgetAlert(kv, env, botToken, adminId, used) {
+  try {
+    const cfg = await getQuotaCfg(kv, env);
+    const today = new Date().toISOString().slice(0, 10);
+    if (cfg.hotDay === today) return;
+    cfg.hotDay = today;
+    await saveQuotaCfg(kv, cfg);
+    const wmap = await qwDayMap(kv);
+    const top = Object.keys(wmap)
+      .map((k) => [k, Number(wmap[k]) || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const QW_FA_LOCAL = { hf: "هاست‌فیلتر", node1: "پول نود", pghook: "وبهوک پنل", um: "مانیتور مصرف", srv: "مانیتور سرور", web: "پیام/دکمه تلگرام", meter: "سیستم شمارش", hfd: "چرخش ساب", cron: "کرون", selfup: "آپدیت خودکار", tm: "تله‌متری", qg: "گارد سهمیه", ssl: "SSL", domexp: "انقضای دامنه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها", rem: "یادآور", ndhook: "وبهوک نود", mail: "ایمیل", guardian: "ایجنت" };
+    const lines = top.map(([k, v]) => `• ${QW_FA_LOCAL[k] || k}: ${faNum(v.toLocaleString("en-US"))}`);
+    await sendMessage(
+      botToken,
+      adminId,
+      [
+        `⚠️ نوشتن‌های KV امروز از ${faNum(Math.round(WB_HOT * 100))}٪ گذشت (${faNum(used.toLocaleString("en-US"))} از ۱۰۰۰).`,
+        "",
+        "برای اینکه شبانه به سقف نخوری، جاب‌های پرهزینه را خودکار کند کردم:",
+        "• هاست‌فیلتر و پول نود با نرخ کمتر اجرا می‌شوند",
+        "• مانیتور مصرف/سرور و دایجست‌ها فعلاً از سهمیهٔ شما مراقبت می‌کنند (اگر ایجنت داری همه‌شان روی سرور اجرا می‌شوند و این محدودیت روی سرور تأثیر ندارد)",
+        "",
+        "پرهسته‌ترین بخش‌ها:",
+        ...(lines.length ? lines : ["• اطلاعات جزء در دسترس نیست"]),
+        "",
+        "برای رفع کامل: 🖥 ایجنت را روی سرور نصب کن (دکمهٔ نصب در «🔄 نسخه‌ها»).",
+      ].join("\n"),
+      [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "☁️ سهمیه", callback_data: "quota" }]]
+    );
+  } catch (e) {}
+}
+
 async function getQuotaCfg(kv, env) {
   let cfg = null;
   try {
@@ -4015,6 +4106,7 @@ async function getQuotaCfg(kv, env) {
     cronPausedUntil: cfg && Number(cfg.cronPausedUntil) > 0 ? Number(cfg.cronPausedUntil) : 0,
     warnedDay: (cfg && cfg.warnedDay) || "",
     warned50Day: (cfg && cfg.warned50Day) || "",
+    hotDay: (cfg && cfg.hotDay) || "",
   };
 }
 
@@ -7019,7 +7111,7 @@ async function agentPost(kv, env, path, body, timeoutMs) {
 // و ورکر فقط UI تلگرام + گیرنده + واچ‌داگ است. اگر ایجنت جواب ندهد ورکر
 // همان دقیقه همهٔ کارها را خودش انجام می‌دهد (حالت اضطراری) تا سرور
 // جایگزین بیاید. بدون ایجنت ثبت‌شده، رفتار دقیقاً مثل قبل است.
-const GUARDIAN_AGENT_VERSION = "3.0.2"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
+const GUARDIAN_AGENT_VERSION = "3.0.3"; // هم‌نسخه با تگ ریپو؛ ایجنت همین را گزارش می‌کند
 const GUARDIAN_PING_TIMEOUT_MS = 10000;
 const GUARDIAN_ALERT_COOLDOWN_MS = 6 * 3600000; // تکرار پیام اضطراری (ریکاوری همیشه خبر داده می‌شود)
 const GUARDIAN_PORT_DEFAULT = 8789;
