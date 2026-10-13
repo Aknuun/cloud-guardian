@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.1";
+const BOT_VERSION = "4.1.2";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.2": [
+    "🖥 فیکس دکمه‌های IPv6 هتزنر: خواندن شناسه آی‌پی با شکل واقعی API (public_net.ipv4/ipv6) + بررسی خاموش‌بودن سرور قبل از هر عملیات + پیام فارسی",
+    "🗑 حذف آی‌پی: اول حذف اختصاص (با خاموشی) بعد حذف؛ حذف آی‌پی متصل دیگر خطا نمی‌دهد",
+    "🔄 دکمه تازه «جایگزینی IPv4»: ساخت IPv4 تازه در همان دیتاسنتر + حذف اختصاص قدیمی + اختصاص تازه + حذف قدیمی + روشن‌کردن سرور",
+  ],
   "4.1.1": [
     "⏳ تحمل ریت‌لیمیت کلادفلر (۱۰۴۲۹): یک retry بعد ۳۰ ثانیه + پیام فارسی + عقب‌نشینی کوتاه تا کرون خودکار دوباره تلاش کند",
   ],
@@ -6051,7 +6056,7 @@ async function hzRetry(token, path, opts = {}, tries = 4) {
 }
 
 // خاموش‌کردن سرور و صبر تا وقتی اکشن تمام و قفل باز شود (برای assign/unassign).
-async function hzEnsureOff(token, serverId, maxMs = 15000) {
+async function hzEnsureOff(token, serverId, maxMs = 30000) {
   const s0 = (await hzFetch(token, `/servers/${serverId}`)).server;
   if (s0 && s0.status !== "off") {
     await hzRetry(token, `/servers/${serverId}/actions/poweroff`, { method: "POST", body: "{}" });
@@ -20358,6 +20363,7 @@ async function showHzServerInfo(hzAccounts, i, serverId, edit, kv) {
     { text: "🔗 اختصاص IPv6", callback_data: `hzsu:${i}:${serverId}:a6` },
     { text: "❌ حذف IPv4", callback_data: `hzsu:${i}:${serverId}:u4` },
     { text: "❌ حذف IPv6", callback_data: `hzsu:${i}:${serverId}:u6` },
+    { text: "🔄 جایگزینی IPv4", callback_data: `hzsu:${i}:${serverId}:r4` },
   ]);
   kb.push([
     { text: "🔄 بروزرسانی", callback_data: `hzsi:${i}:${serverId}` },
@@ -20411,7 +20417,7 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
   }
   if (step === "a4" || step === "a6") {
     const type = step === "a4" ? "ipv4" : "ipv6";
-    if (s.public_net && s.public_net[type === "ipv4" ? "primary_ipv4" : "primary_ipv6"]) {
+    if (s.public_net && (type === "ipv4" ? s.public_net.ipv4 : s.public_net.ipv6)) {
       return edit(`⚠️ این سرور از قبل ${type} اختصاصی دارد؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const ips = await hzGetAll(acc.token, "/primary_ips");
@@ -20439,6 +20445,7 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
     snap: "ساخت اسنپ‌شات",
     u4: "حذف اختصاص IPv4",
     u6: "حذف اختصاص IPv6",
+    r4: "جایگزینی IPv4 با یکی تازه (قدیمی حذف و سرور دوباره روشن می‌شود)",
   }[step];
   if (!label) return edit("❓ عملیات ناشناخته.");
   return edit(`⚠️ مطمئنید «${label}» روی «${s.name}» انجام شود؟`, [
@@ -20472,22 +20479,71 @@ async function hzServerDo(hzAccounts, i, serverId, step, arg, edit, extra) {
   }
   if (step === "a4" || step === "a6") {
     // برای اختصاص آی‌پی اصلی، سرور باید خاموش و از قفل خارج باشد (مثل ServerManagerBot)
-    await hzEnsureOff(token, serverId);
+    if (!(await hzEnsureOff(token, serverId))) {
+      return edit("⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن (یا از کنسول هتزنر خاموشش کن).", back);
+    }
     const r = await hzRetry(token, `/primary_ips/${arg}/actions/assign`, {
       method: "POST",
       body: JSON.stringify({ assignee_id: Number(serverId), assignee_type: "server" }),
     });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
+    if (r.error) return edit("❌ خطا: " + hzErrFa(r), back);
     return edit("✅ آی‌پی اختصاص یافت.", back);
   }
   if (step === "u4" || step === "u6") {
+    const isV4 = step === "u4";
     const s = (await hzFetch(token, `/servers/${serverId}`)).server;
-    const ipId = hzPrimaryIpId(s.public_net && s.public_net[step === "u4" ? "primary_ipv4" : "primary_ipv6"]);
-    if (!ipId) return edit("❌ آی‌پی اختصاصی وجود ندارد.", back);
-    await hzEnsureOff(token, serverId);
+    if (!s) return edit("❌ سرور پیدا نشد.", back);
+    // شکل واقعی API: public_net.ipv4 / public_net.ipv6 (کلید primary_ipv4 وجود ندارد)
+    const slot = s.public_net && (isV4 ? s.public_net.ipv4 : s.public_net.ipv6);
+    const ipId = hzPrimaryIpId(slot);
+    if (!ipId) {
+      return edit(isV4 ? "ℹ️ این سرور IPv4 اختصاصی ندارد (قبلاً حذف شده)." : "ℹ️ این سرور IPv6 اختصاصی ندارد (قبلاً حذف شده).", back);
+    }
+    if (!(await hzEnsureOff(token, serverId))) {
+      return edit("⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن (یا از کنسول هتزنر خاموشش کن).", back);
+    }
     const r = await hzRetry(token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), back);
-    return edit("✅ اختصاص آی‌پی حذف شد.", back);
+    if (r.error) return edit("❌ خطا: " + hzErrFa(r), back);
+    return edit(isV4 ? "✅ اختصاص IPv4 حذف شد." : "✅ اختصاص IPv6 حذف شد. این سرور دیگر IPv6 ندارد.", back);
+  }
+  if (step === "r4") {
+    // جایگزینی IPv4 با یکی تازه: خاموش → ساخت → حذف اختصاص قدیمی → اختصاص تازه → حذف قدیمی → روشن
+    const s = (await hzFetch(token, `/servers/${serverId}`)).server;
+    if (!s) return edit("❌ سرور پیدا نشد.", back);
+    const dc = s.datacenter && s.datacenter.name;
+    if (!dc) return edit("❌ دیتاسنتر سرور مشخص نیست.", back);
+    const oldId = hzPrimaryIpId(s.public_net && s.public_net.ipv4);
+    if (!(await hzEnsureOff(token, serverId))) {
+      return edit("⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن (یا از کنسول هتزنر خاموشش کن).", back);
+    }
+    const c = await hzRetry(token, `/primary_ips`, {
+      method: "POST",
+      body: JSON.stringify({ type: "ipv4", name: `replace-${serverId}-${Date.now().toString(36)}`, datacenter: dc, auto_delete: true }),
+    });
+    const nip = c && c.primary_ip;
+    if ((c && c.error) || !nip || !nip.id) {
+      return edit("❌ ساخت IPv4 تازه ناموفق شد: " + hzErrFa(c && c.error ? c : { error: { message: "unknown" } }), back);
+    }
+    if (oldId) {
+      const u = await hzRetry(token, `/primary_ips/${oldId}/actions/unassign`, { method: "POST", body: "{}" });
+      if (u.error) {
+        return edit(`⚠️ IPv4 تازه ساخته شد (${nip.ip}) ولی حذف اختصاص قدیمی نشد: ` + hzErrFa(u) + `
+از صفحهٔ آی‌پی‌ها دستی اختصاص بده.`, back);
+      }
+    }
+    const a = await hzRetry(token, `/primary_ips/${nip.id}/actions/assign`, {
+      method: "POST",
+      body: JSON.stringify({ assignee_id: Number(serverId), assignee_type: "server" }),
+    });
+    if (a.error) {
+      return edit(`⚠️ IPv4 تازه ساخته شد (${nip.ip}) ولی اختصاص نیافت: ` + hzErrFa(a) + `
+از صفحهٔ آی‌پی‌ها دستی اختصاص بده.`, back);
+    }
+    if (oldId) {
+      try { await hzRetry(token, `/primary_ips/${oldId}`, { method: "DELETE" }); } catch (e) {}
+    }
+    try { await hzRetry(token, `/servers/${serverId}/actions/poweron`, { method: "POST", body: "{}" }); } catch (e) {}
+    return edit(`✅ جایگزینی انجام شد.\nIPv4 تازه: ${code(nip.ip)}\nقدیمی حذف شد و سرور در حال روشن شدن است.`, back);
   }
   if (step === "dsnap") {
     const r = await hzRetry(token, `/images/${arg}`, { method: "DELETE" });
@@ -20620,14 +20676,18 @@ async function hzIpPick(hzAccounts, i, ipId, step, arg, edit) {
   const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
   if (!ip) return edit("❌ آی‌پی پیدا نشد.");
   if (ip.assignee_id && String(ip.assignee_id) !== String(arg)) {
-    await hzEnsureOff(acc.token, ip.assignee_id);
+    if (!(await hzEnsureOff(acc.token, ip.assignee_id))) {
+      return edit("⚠️ سرور قبلی در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    }
   }
-  await hzEnsureOff(acc.token, arg);
+  if (!(await hzEnsureOff(acc.token, arg))) {
+    return edit("⚠️ سرور مقصد در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  }
   const r = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/assign`, {
     method: "POST",
     body: JSON.stringify({ assignee_id: Number(arg), assignee_type: "server" }),
   });
-  if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  if (r.error) return edit("❌ خطا: " + hzErrFa(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   return edit("✅ آی‌پی اختصاص یافت.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
@@ -20635,15 +20695,29 @@ async function hzIpDo(hzAccounts, i, ipId, step, edit) {
   const acc = hzAccounts[i];
   if (!acc) return edit("❌ اکانت پیدا نشد.");
   if (step === "del") {
+    // آی‌پی متصل را نمی‌شود مستقیم حذف کرد: اول حذف اختصاص (با خاموشی)، بعد حذف
+    const cur = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
+    if (!cur) return edit("❌ آی‌پی پیدا نشد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+    if (cur.assignee_id) {
+      if (!(await hzEnsureOff(acc.token, cur.assignee_id))) {
+        return edit("⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+      }
+      const u = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
+      if (u.error) return edit("❌ خطا در حذف اختصاص: " + hzErrFa(u), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    }
     const r = await hzRetry(acc.token, `/primary_ips/${ipId}`, { method: "DELETE" });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    if (r.error) return edit("❌ خطا: " + hzErrFa(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit("✅ آی‌پی حذف شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
   }
   if (step === "unassign") {
     const ip = (await hzFetch(acc.token, `/primary_ips/${ipId}`)).primary_ip;
-    if (ip && ip.assignee_id) await hzEnsureOff(acc.token, ip.assignee_id);
+    if (!ip) return edit("❌ آی‌پی پیدا نشد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+    if (!ip.assignee_id) return edit("ℹ️ این آی‌پی به جایی متصل نیست.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    if (!(await hzEnsureOff(acc.token, ip.assignee_id))) {
+      return edit("⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    }
     const r = await hzRetry(acc.token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });
-    if (r.error) return edit("❌ خطا: " + hzErr(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
+    if (r.error) return edit("❌ خطا: " + hzErrFa(r), [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
     return edit("✅ اختصاص حذف شد.", [[{ text: "🔙 بازگشت", callback_data: `hzpi:${i}:${ipId}` }, { text: "🏠 خانه", callback_data: "menu" }]]);
   }
   return edit("❓ عملیات ناشناخته.");
