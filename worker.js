@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.2";
+const BOT_VERSION = "4.1.3";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.3": [
+    "🌐 ساخت گروهی آی‌پی هتزنر: موقع وارد کردن نام بنویس `نام*تعداد` (مثلاً `web*5`، تا ۲۰ عدد)؛ همه هم‌زمان ساخته می‌شوند و نتیجه (موفق/ناموفق) گزارش می‌شود",
+  ],
   "4.1.2": [
     "🖥 فیکس دکمه‌های IPv6 هتزنر: خواندن شناسه آی‌پی با شکل واقعی API (public_net.ipv4/ipv6) + بررسی خاموش‌بودن سرور قبل از هر عملیات + پیام فارسی",
     "🗑 حذف آی‌پی: اول حذف اختصاص (با خاموشی) بعد حذف؛ حذف آی‌پی متصل دیگر خطا نمی‌دهد",
@@ -13281,12 +13284,18 @@ async function resolvePending(pending, value, chatId, accounts, send, kv, botTok
       await send("❌ لوکیشنی پیدا نشد.");
       return;
     }
+    let remark = txt.trim(), count = 1;
+    const mm = remark.match(/^(.*)\*(\d{1,2})$/);
+    if (mm && mm[1].trim()) {
+      remark = mm[1].trim();
+      count = Math.min(20, Math.max(1, Number(mm[2]) || 1));
+    }
     await kv.put(
       `pend:${chatId}`,
-      JSON.stringify({ type: "hz_ip_remark", acc: pending.acc, ip_type: pending.ip_type, remark: txt }),
+      JSON.stringify({ type: "hz_ip_remark", acc: pending.acc, ip_type: pending.ip_type, remark, count }),
       { expirationTtl: 600 }
     );
-    const kb = grid2(locs.map((l) => ({ text: `${l.city || l.name} (${l.name})`, callback_data: `hzpl:${pending.acc}:${l.name}` })));
+    const kb = grid2(locs.map((l) => ({ text: `${l.city || l.name} (${l.name})`, callback_data: `hzpl:${pending.acc}:${l.name}:${count}` })));
     kb.push([{ text: "🔙 انصراف", callback_data: `hzp:${pending.acc}:0` }]);
     await send("🌍 لوکیشن (دیتاسنتر) را انتخاب کنید:", kb);
     return;
@@ -17892,20 +17901,39 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const i = Number(parts[1]);
       const type = parts[2];
       await kv.put(`pend:${chatId}`, JSON.stringify({ type: "hz_ip_remark", acc: i, ip_type: type }), { expirationTtl: 600 });
-      await edit(`➕ ساخت آی‌پی ${type.toUpperCase()}\n\nنام (remark) آی‌پی را بفرستید:`, [[{ text: "🔙 انصراف", callback_data: `hzp:${i}:0` }]]);
+      await edit(`➕ ساخت آی‌پی ${type.toUpperCase()}\n\nنام (remark) را بفرستید. برای ساخت چندتایی: \`نام*تعداد\` (مثلاً \`web*5\`، حداکثر ۲۰):`, [[{ text: "🔙 انصراف", callback_data: `hzp:${i}:0` }]]);
     } else if (data.startsWith("hzpl:")) {
       const parts = data.split(":");
       const i = Number(parts[1]);
       const location = parts[2];
+      const count = Math.min(20, Math.max(1, Number(parts[3]) || 1));
       const pend = await kv.get(`pend:${chatId}`, "json");
       if (!pend || pend.type !== "hz_ip_remark") return edit("⏳ عملیات منقضی شده.");
       const acc = hzAccounts[i];
       if (!acc) return edit("❌ اکانت پیدا نشد.");
-      const body = { name: pend.remark, type: pend.ip_type, assignee_type: "server", location, auto_delete: pend.ip_type === "ipv4" };
-      const r = await hzFetch(acc.token, "/primary_ips", { method: "POST", body: JSON.stringify(body) });
-      if (r.error) return edit("❌ خطا: " + hzErr(r));
-      await kv.delete(`pend:${chatId}`);
-      await edit("✅ آی‌پی ساخته شد.", [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+      await edit(`⏳ در حال ساخت ${faNum(count)} آی‌پی ${String(pend.ip_type || "").toUpperCase()}…`, [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }]]);
+      const mk = (n) => {
+        const nm = count > 1 ? `${pend.remark}-${n}` : String(pend.remark);
+        const body = { name: nm, type: pend.ip_type, assignee_type: "server", location, auto_delete: pend.ip_type === "ipv4" };
+        return hzFetch(acc.token, "/primary_ips", { method: "POST", body: JSON.stringify(body) }).then((r) => ({ n, nm, r }));
+      };
+      const results = await Promise.allSettled(Array.from({ length: count }, (_, k) => mk(k + 1)));
+      await kv.delete(`pend:${chatId}`).catch(() => {});
+      const made = [];
+      const failed = [];
+      for (const s of results) {
+        if (s.status === "fulfilled" && s.value && s.value.r && s.value.r.primary_ip) made.push(s.value.r.primary_ip.ip);
+        else failed.push(s.status === "fulfilled" && s.value ? s.value.nm : "?");
+      }
+      const lines = [];
+      if (made.length) {
+        lines.push(`✅ ${faNum(made.length)} آی‌پی ساخته شد:`);
+        for (const ip of made.slice(0, 15)) lines.push(code(ip));
+        if (made.length > 15) lines.push(`… و ${faNum(made.length - 15)} تای دیگر`);
+      }
+      if (failed.length) lines.push(`\n❌ ${faNum(failed.length)} مورد ناموفق (${failed.slice(0, 5).join("، ")}) — احتمالاً سقف آی‌پی اکانت پر است.`);
+      if (!made.length && !failed.length) lines.push("❌ چیزی ساخته نشد.");
+      await edit(lines.join("\n").slice(0, 3500), [[{ text: "🌐 آی‌پی‌ها", callback_data: `hzp:${i}:0` }], [{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("hzpu:")) {
       const parts = data.split(":");
       await hzIpDispatch(hzAccounts, Number(parts[1]), parts[2], parts[3], edit, kv, chatId);
