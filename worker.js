@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.3";
+const BOT_VERSION = "4.1.4";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.4": [
+    "🗄 نشست‌ها روی رله: کلیدهای موقت (نشست، pend، قفل تپ، ...) اول روی دیسک رلهٔ شخصی می‌روند و سهمیه KV مصرف نمی‌شود؛ اگر رله قطع باشد خودکار همان KV (فقط رلهٔ شخصی، هرگز رایگان)",
+  ],
   "4.1.3": [
     "🌐 ساخت گروهی آی‌پی هتزنر: موقع وارد کردن نام بنویس `نام*تعداد` (مثلاً `web*5`، تا ۲۰ عدد)؛ همه هم‌زمان ساخته می‌شوند و نتیجه (موفق/ناموفق) گزارش می‌شود",
   ],
@@ -1763,6 +1766,8 @@ export default {
 
 async function processUpdate(payload, env, botToken, adminId) {
   let kv = env.BOT_KV;
+  // نشست‌ها اول روی رلهٔ شخصی (صفر write در KV)؛ اگر رله نبود/قطع بود همان خام
+  try { kv = await sessKv(kv, env); } catch (e) {}
   // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
   await ensureBotCommands(env, botToken, kv).catch(() => {});
 
@@ -6993,6 +6998,92 @@ async function relayCandidates(kv, env) {
   if (active.url) list.push({ ...active, isDefault: same });
   if (mode !== "custom" && def.url && !same) list.push({ ...def, isDefault: true });
   return list;
+}
+
+// ===================== نشست روی رله (صرفه‌جویی سهمیه KV) =====================
+// کلیدهای موقت نشست (sessions) پرتکرارترین writeها هستند: هر ضربه دکمه چند write.
+// وقتی رلهٔ شخصی تنظیم شده، این کلیدها اول روی دیسک رله می‌روند (صفر write در KV)؛
+// اگر رله قطع/ناموفق باشد، همان KV خودمان (fallback همیشگی). رلهٔ پیش‌فرض رایگان
+// هرگز برای نشست استفاده نمی‌شود (state کاربر دست ثالث نمی‌رود).
+const SESS_PRE = ["s:", "pend:", "zctx:", "taplck:", "qa:", "pretrytxt:", "srvback:", "relayback:", "srvsub", "stick:", "navhist:", "pgstart"];
+function sessKey(k) {
+  const s = String(k || "");
+  for (const p of SESS_PRE) {
+    if (s === p || s.startsWith(p)) return true;
+  }
+  return false;
+}
+let _sessCfg = { at: 0, cfg: null };
+let _sessDownUntil = 0;
+async function sessRelayCfg(kv, env) {
+  // فقط رلهٔ شخصی (custom) — هرگز پیش‌فرض رایگان. کش ۶۰ ثانیه‌ای در حافظه.
+  try {
+    if (Date.now() - _sessCfg.at < 60000) return _sessCfg.cfg;
+    const cands = await relayCandidates(kv, env);
+    const c = (cands || []).find((x) => x && x.url && !x.isDefault) || null;
+    _sessCfg = { at: Date.now(), cfg: c };
+    return c;
+  } catch (e) {
+    return _sessCfg.cfg;
+  }
+}
+async function sessRelayCall(cfg, path, body, timeoutMs) {
+  // null یعنی رله در دسترس نیست/ناموفق → caller به KV برمی‌گردد
+  if (!cfg || !cfg.url) return null;
+  if (Date.now() < _sessDownUntil) return null;
+  try {
+    const res = await fetch(String(cfg.url).replace(/\/+$/, "") + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-SRV-Token": cfg.token || "" },
+      body: JSON.stringify(body || {}),
+      signal: AbortSignal.timeout(Math.max(1000, Math.min(Number(timeoutMs) || 8000, 15000))),
+    });
+    if (!res.ok) throw new Error("http_" + res.status);
+    const d = await res.json().catch(() => null);
+    if (!d || d.ok !== true) throw new Error("bad_reply");
+    _sessDownUntil = 0;
+    return d;
+  } catch (e) {
+    _sessDownUntil = Date.now() + 60000; // مدارشکن ۶۰ ثانیه‌ای: ضربه‌ها معطل تایم‌اوت نمی‌شوند
+    return null;
+  }
+}
+async function sessKv(rawKv, env) {
+  // wrapper دور KV: کلیدهای نشست اول رله، بقیه مستقیم KV. اگر رله‌ای تنظیم نشده، همان خام.
+  let cfg = null;
+  try { cfg = await sessRelayCfg(rawKv, env); } catch (e) {}
+  if (!cfg) return rawKv;
+  return {
+    get: async (k, t) => {
+      if (sessKey(k)) {
+        const d = await sessRelayCall(cfg, "/kvget", { keys: [String(k)] }, 8000);
+        if (d && d.keys && Object.prototype.hasOwnProperty.call(d.keys, String(k))) {
+          const v = d.keys[String(k)];
+          if (v === null || v === undefined) return null;
+          if (t === "json") { try { return JSON.parse(String(v)); } catch (e) { return null; } }
+          return String(v);
+        }
+      }
+      return rawKv.get(k, t);
+    },
+    put: async (k, v, o) => {
+      if (sessKey(k)) {
+        let ttl = 0;
+        try { ttl = Math.max(0, Number(o && o.expirationTtl) || 0); } catch (e) {}
+        const d = await sessRelayCall(cfg, "/kvput", { key: String(k), value: v === null || v === undefined ? "" : String(v), ttlSec: ttl }, 8000);
+        if (d) return;
+      }
+      return rawKv.put(k, v, o);
+    },
+    delete: async (k) => {
+      if (sessKey(k)) {
+        const d = await sessRelayCall(cfg, "/kvdel", { key: String(k) }, 8000);
+        if (d) return;
+      }
+      return rawKv.delete(k);
+    },
+    list: (o) => rawKv.list(o),
+  };
 }
 
 async function relayPing(url, token) {
