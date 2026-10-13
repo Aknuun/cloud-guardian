@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.5";
+const BOT_VERSION = "4.1.6";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.6": [
+    "🛡 wrapper رله سخت‌تر شد: فقط مقادیر رشته‌ای روی رله، خطای منطقی رله (مثل سقف حجم) مدارشکن را نمی‌اندازد، delete از هر دو جا پاک می‌کند تا کپی کهنه جا نماند",
+  ],
   "4.1.5": [
     "🗄 سهمیهٔ KV بیشتر روی رله: علاوه بر نشست‌ها، cache/queue/گیت‌ها/صفحه‌بندی (pgq/pgdr/pgub، sr/dd/ct، inbox_idx، navhist، selfup_*، promo و...) روی رلهٔ شخصی می‌روند؛ قطع رله = fallback به KV",
   ],
@@ -7045,7 +7048,8 @@ async function sessRelayCfg(kv, env) {
   }
 }
 async function sessRelayCall(cfg, path, body, timeoutMs) {
-  // null یعنی رله در دسترس نیست/ناموفق → caller به KV برمی‌گردد
+  // null یعنی رله در دسترس نیست/خطای شبکه → caller به KV برمی‌گردد (مدارشکن).
+  // پاسخ منطقی ناموفق (HTTP200 با ok:false مثل سقف حجم) مدارشکن را نمی‌اندازد؛ فقط fallback.
   if (!cfg || !cfg.url) return null;
   if (Date.now() < _sessDownUntil) return null;
   try {
@@ -7057,8 +7061,8 @@ async function sessRelayCall(cfg, path, body, timeoutMs) {
     });
     if (!res.ok) throw new Error("http_" + res.status);
     const d = await res.json().catch(() => null);
-    if (!d || d.ok !== true) throw new Error("bad_reply");
-    _sessDownUntil = 0;
+    if (!d || typeof d !== "object") throw new Error("bad_reply");
+    if (d.ok === true) _sessDownUntil = 0;
     return d;
   } catch (e) {
     _sessDownUntil = Date.now() + 60000; // مدارشکن ۶۰ ثانیه‌ای: ضربه‌ها معطل تایم‌اوت نمی‌شوند
@@ -7072,30 +7076,34 @@ async function sessKv(rawKv, env) {
   if (!cfg) return rawKv;
   return {
     get: async (k, t) => {
-      if (sessKey(k)) {
+      if (sessKey(k) && (t === undefined || t === "text" || t === "json")) {
         const d = await sessRelayCall(cfg, "/kvget", { keys: [String(k)] }, 8000);
-        if (d && d.keys && Object.prototype.hasOwnProperty.call(d.keys, String(k))) {
+        if (d && d.ok === true && d.keys && Object.prototype.hasOwnProperty.call(d.keys, String(k))) {
           const v = d.keys[String(k)];
           if (v === null || v === undefined) return null;
           if (t === "json") { try { return JSON.parse(String(v)); } catch (e) { return null; } }
           return String(v);
         }
+        if (d && d.ok === true) return rawKv.get(k, t); // رله سالم ولی کلید نیست (مثلاً write دوره قطعی) → KV
+        if (!d) return rawKv.get(k, t); // رله در دسترس نیست → KV
+        return rawKv.get(k, t);
       }
       return rawKv.get(k, t);
     },
     put: async (k, v, o) => {
-      if (sessKey(k)) {
+      // فقط مقادیر رشته‌ای روی رله؛ بقیه عین رفتار خام KV (اعتبارسنجی همان‌جا).
+      if (sessKey(k) && typeof v === "string") {
         let ttl = 0;
         try { ttl = Math.max(0, Number(o && o.expirationTtl) || 0); } catch (e) {}
-        const d = await sessRelayCall(cfg, "/kvput", { key: String(k), value: v === null || v === undefined ? "" : String(v), ttlSec: ttl }, 8000);
-        if (d) return;
+        const d = await sessRelayCall(cfg, "/kvput", { key: String(k), value: v, ttlSec: ttl }, 8000);
+        if (d && d.ok === true) return;
       }
       return rawKv.put(k, v, o);
     },
     delete: async (k) => {
       if (sessKey(k)) {
-        const d = await sessRelayCall(cfg, "/kvdel", { key: String(k) }, 8000);
-        if (d) return;
+        // حذف از هر دو: اول رله، بعد KV (کپی‌های دوره قطعی جا نمانند؛ delete کم‌تکرار است).
+        try { await sessRelayCall(cfg, "/kvdel", { key: String(k) }, 8000); } catch (e) {}
       }
       return rawKv.delete(k);
     },
