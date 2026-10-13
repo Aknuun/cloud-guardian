@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.4";
+const BOT_VERSION = "4.1.5";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.5": [
+    "🗄 سهمیهٔ KV بیشتر روی رله: علاوه بر نشست‌ها، cache/queue/گیت‌ها/صفحه‌بندی (pgq/pgdr/pgub، sr/dd/ct، inbox_idx، navhist، selfup_*، promo و...) روی رلهٔ شخصی می‌روند؛ قطع رله = fallback به KV",
+  ],
   "4.1.4": [
     "🗄 نشست‌ها روی رله: کلیدهای موقت (نشست، pend، قفل تپ، ...) اول روی دیسک رلهٔ شخصی می‌روند و سهمیه KV مصرف نمی‌شود؛ اگر رله قطع باشد خودکار همان KV (فقط رلهٔ شخصی، هرگز رایگان)",
   ],
@@ -1304,6 +1307,9 @@ export default {
   async fetch(request, env, ctx) {
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    if (env.BOT_KV && !env.BOT_KV.__sess) {
+      try { const w = await sessKv(env.BOT_KV, env); if (w) { w.__sess=true; env.BOT_KV = w; } } catch (e) {}
+    }
     let kv = env.BOT_KV;
     const url = new URL(request.url);
 
@@ -1594,6 +1600,9 @@ export default {
     const cron = event.cron || "";
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    if (env.BOT_KV && !env.BOT_KV.__sess) {
+      try { const w = await sessKv(env.BOT_KV, env); if (w) { w.__sess=true; env.BOT_KV = w; } } catch (e) {}
+    }
     // خاموش‌کردن موقت کرون‌جاب‌ها (از منوی سهمیه یا لینک هشدار): فقط گارد سهمیه اجرا شود تا خودکار روشن شویم
     const qcfg = await getQuotaCfg(env.BOT_KV, env).catch(() => null);
     if (qcfg && qcfg.cronPausedUntil) {
@@ -1714,6 +1723,9 @@ export default {
   // متن در KV ذخیره می‌شود (inbox:<domain>:<id>) و به ادمین اعلان می‌رود.
   async email(message, env, ctx) {
     try {
+      if (env.BOT_KV && !env.BOT_KV.__sess) {
+        try { const w = await sessKv(env.BOT_KV, env); if (w) { w.__sess=true; env.BOT_KV = w; } } catch (e) {}
+      }
       const kv = qKvCount(env.BOT_KV, "mail");
       const fromRaw = String(message.from || "");
       const to = String(message.to || "");
@@ -1766,8 +1778,13 @@ export default {
 
 async function processUpdate(payload, env, botToken, adminId) {
   let kv = env.BOT_KV;
-  // نشست‌ها اول روی رلهٔ شخصی (صفر write در KV)؛ اگر رله نبود/قطع بود همان خام
-  try { kv = await sessKv(kv, env); } catch (e) {}
+  // اگر env از قبل wrap نشده، دور آن relay گذار می‌کنیم (بدون double-wrap)
+  try {
+    if (kv && !kv.__sess) {
+      const w = await sessKv(kv, env);
+      if (w) { w.__sess = true; env.BOT_KV = w; kv = w; }
+    }
+  } catch (e) {}
   // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
   await ensureBotCommands(env, botToken, kv).catch(() => {});
 
@@ -7005,7 +7022,7 @@ async function relayCandidates(kv, env) {
 // وقتی رلهٔ شخصی تنظیم شده، این کلیدها اول روی دیسک رله می‌روند (صفر write در KV)؛
 // اگر رله قطع/ناموفق باشد، همان KV خودمان (fallback همیشگی). رلهٔ پیش‌فرض رایگان
 // هرگز برای نشست استفاده نمی‌شود (state کاربر دست ثالث نمی‌رود).
-const SESS_PRE = ["s:", "pend:", "zctx:", "taplck:", "qa:", "pretrytxt:", "srvback:", "relayback:", "srvsub", "stick:", "navhist:", "pgstart"];
+const SESS_PRE = ["s:", "pend:", "zctx:", "taplck:", "qa:", "pretry", "srvback:", "relayback:", "srvsub", "stick:", "navhist:", "pgstart", "pgq:", "pgdr:", "pgdbg", "pgselftry:", "pgdlast:", "pgub:", "pgstartmsg:", "qw:", "sr:", "dd:", "ct:", "lbg:", "lbn:", "pbeaut:", "hfgsel:", "ipsel:", "sel:", "hub_ann", "hubq:", "rtraf:", "delaybox", "errnotice_ts", "promo:", "quota_tok_cache", "selfup_", "inbox_idx:", "inbox:", "rmsess:", "hfdmode:", "hfdpanel:", "hf_progress", "fmail_fwd:", "ndst", "hfd", "rss", "um_report_ts"];
 function sessKey(k) {
   const s = String(k || "");
   for (const p of SESS_PRE) {
