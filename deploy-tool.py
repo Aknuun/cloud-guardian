@@ -341,6 +341,23 @@ def enable_workers_dev(cfg, tok):
         print(T("workers_dev_warn", err), file=sys.stderr)
 
 
+
+def put_script_ratelimit(tok, url, body, ctype, label="script"):
+    """PUT اسکریپت ورکر با تحمل ۱۰۴۲۹: ۶۰ثانیه، ۱۲۰ثانیه، ۲۴۰ثانیه صبر و تلاش مجدد.
+    کوبیدن پشت سر هم ریت‌لیمیت را بدتر می‌کند؛ پس با فاصله تلاش می‌کنیم."""
+    waits = [60, 120, 240]
+    st, out = req(tok, "PUT", url, body, ctype)
+    for w in waits:
+        res, err = json_ok(st, out)
+        if not err:
+            return st, out
+        if "10429" not in err and "rate" not in err.lower() and "throttl" not in err.lower():
+            return st, out
+        print(f"[!] {label}: Cloudflare rate-limited (10429); waiting {w}s before retry…", file=sys.stderr)
+        time.sleep(w)
+        st, out = req(tok, "PUT", url, body, ctype)
+    return st, out
+
 def install(cfg, tok, code):
     kv_id, err = ensure_kv(cfg, tok)
     if err:
@@ -353,10 +370,12 @@ def install(cfg, tok, code):
         "bindings": bindings(cfg, kv_id),
     }
     body, B = module_body(code, meta)
-    st, out = req(tok, "PUT", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}",
+    st, out = put_script_ratelimit(tok, f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}",
                   body, f"multipart/form-data; boundary={B}")
     res, err = json_ok(st, out)
     if err:
+        if "10429" in err:
+            return f"SCRIPT ERR: {err} — چند دقیقه صبر کن و فقط یک بار دوباره اجرا کن (زدن پشت سر هم بدترش می‌کند)."
         return f"SCRIPT ERR: {err}"
     enable_workers_dev(cfg, tok)
     res, err = set_schedules(cfg, tok, SCHEDULES)
@@ -396,10 +415,12 @@ def update(cfg, tok, code):
         "bindings": bindings(cfg, kv_id),
     }
     body, B = module_body(code, meta)
-    st, out = req(tok, "PUT", f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}",
+    st, out = put_script_ratelimit(tok, f"{API}/accounts/{cfg['account_id']}/workers/scripts/{cfg['worker']}",
                   body, f"multipart/form-data; boundary={B}")
     res, err = json_ok(st, out)
     if err:
+        if "10429" in err:
+            return f"SCRIPT ERR: {err} — چند دقیقه صبر کن و فقط یک بار دوباره اجرا کن (زدن پشت سر هم بدترش می‌کند)."
         return f"SCRIPT ERR: {err}"
     enable_workers_dev(cfg, tok)
     # PUT ممکن است زمان‌بندها را پاک کند — برگردان (مثل install)

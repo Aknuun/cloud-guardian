@@ -3187,20 +3187,46 @@ async function selfDeployTag(env, botToken, adminId, o) {
       signal: withTimeout(90000),
     });
     let upData = await upRes.json();
-    if (!upData.success) {
-      // خطای لحظه‌ای کلادفلر؟ یک‌بار دیگر تلاش کن، بعد با جزئیات گزارش بده
-      try { await sleep(5000); } catch (e) {}
+    const isRateLimited = (d) => {
       try {
-        const upRes2 = await fetch(base, {
-          method: "PUT",
-          headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
-          body: enc.encode(bodyStr),
-          signal: withTimeout(90000),
-        });
-        upData = await upRes2.json();
-      } catch (e) {}
+        const es = (d && d.errors) || [];
+        return es.some((x) => x && (x.code === 10429 || /rate.?limit|throttl/i.test(String(x.message || ""))));
+      } catch (e) { return false; }
+    };
+    if (!upData.success) {
+      if (isRateLimited(upData)) {
+        // ۱۰۴۲۹ یعنی خودِ API کلادفلر ریت‌لیمیت کرده (نه باگ ما): کوبیدن پشت سر هم بدترش می‌کند.
+        // یک بار بعد ۳۰ ثانیه تلاش کن؛ اگر باز هم محدود بود، عقب‌نشینی کوتاه بذار تا
+        // کرون خودکار به‌زودی دوباره تلاش کند.
+        try { await sleep(30000); } catch (e) {}
+        try {
+          const upRes2 = await fetch(base, {
+            method: "PUT",
+            headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body: enc.encode(bodyStr),
+            signal: withTimeout(90000),
+          });
+          upData = await upRes2.json();
+        } catch (e) {}
+      } else {
+        // خطای لحظه‌ای کلادفلر؟ یک‌بار دیگر تلاش کن، بعد با جزئیات گزارش بده
+        try { await sleep(5000); } catch (e) {}
+        try {
+          const upRes2 = await fetch(base, {
+            method: "PUT",
+            headers: { Authorization: "Bearer " + tok, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+            body: enc.encode(bodyStr),
+            signal: withTimeout(90000),
+          });
+          upData = await upRes2.json();
+        } catch (e) {}
+      }
     }
     if (!upData.success) {
+      if (isRateLimited(upData)) {
+        await selfupBackoff(kv, 10, 20);
+        return { ok: false, reason: "ratelimit", detail: "کلادفلر موقتاً محدود کرده (۱۰۴۲۹)؛ تا ~۱۵ دقیقه دیگر خودکار دوباره تلاش می‌کنم — لازم نیست دوباره بزنی (زدن پشت سر هم بدترش می‌کند)." };
+      }
       await selfupBackoff(kv, 30, 90);
       let cfErr = "";
       try {
@@ -13874,7 +13900,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         } catch (e) {}
         await edit("✅ نسخه " + vTag + " نصب شد." + (vLatest2 && vTag === vLatest2 ? "" : "\n📌 پین شد — آپدیت خودکار تا تغییر پین دخالت نمی‌کند."), vBack);
       } else {
-        await edit("❌ نصب ناموفق بود (" + String(vr.reason || "unknown") + (vr.detail ? ": " + vr.detail : "") + ").", vBack);
+        if (vr.reason === "ratelimit") await edit("⏳ " + String(vr.detail || "کلادفلر محدود کرده؛ خودکار تلاش می‌کنم."), vBack);
+        else await edit("❌ نصب ناموفق بود (" + String(vr.reason || "unknown") + (vr.detail ? ": " + vr.detail : "") + ").", vBack);
       }
     } else if (data === "verlatest") {
       const vBack2 = [[{ text: "🔙 نسخه‌ها", callback_data: "vers" }]];
@@ -13899,7 +13926,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         try { await kv.delete("selfup_pinned"); } catch (e) {}
         await edit("✅ به نسخه آخر آپدیت شد: " + vDec.tag + "\n\n🕐 انتشار نسخهٔ جدید روی کلادفلر تا ~۱ دقیقه طول می‌کشد؛ اگر صفحهٔ نسخه‌ها هنوز قدیمی نشان داد کمی صبر کن و دوباره بازش کن.", vBack2);
       } else {
-        await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + (vr2.detail ? ": " + vr2.detail : "") + ").", vBack2);
+        if (vr2.reason === "ratelimit") await edit("⏳ " + String(vr2.detail || "کلادفلر محدود کرده؛ خودکار تلاش می‌کنم."), vBack2);
+        else await edit("❌ نصب ناموفق بود (" + String(vr2.reason || "unknown") + (vr2.detail ? ": " + vr2.detail : "") + ").", vBack2);
       }
     } else if (data === "hubstats") {
       if (!(await isHubWorker(env, botToken, kv))) return edit("❌ فقط در ربات اصلی.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
