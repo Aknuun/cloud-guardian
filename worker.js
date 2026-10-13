@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "1.9.30";
+const BOT_VERSION = "4.1.0";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.0": [
+    "🔙 بازگشت به معماری کلاسیک ۱.۹.۳۰: بدون ایجنت، بدون heartbeat، بدون حالت اضطراری — ورکر همه‌چیز را خودش انجام می‌دهد و رلهٔ SSH جداگانه مثل قبل کار می‌کند",
+    "✅ حفظ‌شده از نسخه‌های جدید: هشدار تکی حجم/انقضا با دو دکمه، دستورهای ‎/dns‎ ‎/dnsadd‎ ‎/dnsdel‎ بدون KV، پیام فارسی سهمیه، لیست read-only زیر سقف، ضد اسپم پول نود (۵دقیقه)، فلاش کرون ساعتی، محافظ بودجهٔ نوشتن",
+    "🖥 اگر قبلاً ایجنت نصب کرده‌ای، دیگر لازم نیست (heartbeat آن ۴۰۴ می‌گیرد و ساکت می‌ماند)؛ برای SSH و آمار سرور از رله استفاده کن",
+  ],
   "1.9.30": [
     "📥 وارد کردن از دیتاسنترها دیگر گیر نمی‌کند: خواندن موازی هر ۳ پرووایدر + ریجن‌های موازی آروان + کش ریجن",
   ],
@@ -1199,7 +1204,10 @@ async function kvGetCached(kv, key, type, ttl = MEM_TTL) {
 
 async function kvPutCached(kv, key, value, opts, ttl = MEM_TTL) {
   if (!kv) return;
-  await kv.put(key, value, opts);
+  // best-effort: کش هیچ‌وقت caller را نمی‌اندازد — زیر سقف سهمیه، خوانش‌ها با mem ادامه می‌دهند
+  try {
+    await kv.put(key, value, opts);
+  } catch (e) {}
   try {
     memSet("kv:" + key, JSON.parse(value), ttl);
   } catch {
@@ -1210,7 +1218,9 @@ async function kvPutCached(kv, key, value, opts, ttl = MEM_TTL) {
 async function kvDeleteCached(kv, key) {
   if (!kv) return;
   memDel("kv:" + key);
-  await kv.delete(key);
+  try {
+    await kv.delete(key);
+  } catch (e) {}
 }
 
 function grid2(buttons) {
@@ -1596,12 +1606,22 @@ export default {
           const patch = {};
           // شمارش write واقعی هر جاب: env جدا با KV شمارنده‌دار (فقط put/delete)
           const qe = (s) => ({ ...env, BOT_KV: qKvCount(env.BOT_KV, s) });
-          jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
-          if (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS) {
+          // محافظ بودجهٔ نوشتن: سهمیه داغ = جاب‌های پرهزینهٔ این تیک کنسل (یک‌بار در روز اطلاع‌رسانی)
+          let wbHot = false;
+          try {
+            const wb = await writeBudget(ckv, env);
+            wbHot = writeBudgetHot(wb);
+            if (wbHot) {
+              console.log("WRITEBUDGET hot: used=" + wb.used);
+              await writeBudgetAlert(ckv, env, botToken, adminId, wb.used);
+            }
+          } catch (e) {}
+          if (!wbHot) jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
+          if (!wbHot && (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS)) {
             patch.um = now;
             jobs.push(runUsageMonitor(qe("um"), { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
           }
-          if (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS) {
+          if (!wbHot && (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS)) {
             patch.srv = now;
             jobs.push(runSrvMonitor(qe("srv"), botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
           }
@@ -1624,11 +1644,11 @@ export default {
             jobs.push(runRelayWatch(qe("relaywatch")).catch((e) => console.error("RELAYWATCH", String(e))));
           }
           // دایجست پولی هشدارهای پنل: حجم ساعتی، انقضا روزانه (هزینه ثابت هر اجرا؛ ساعت خلوت ≈ صفر write)
-          if (!cs.pgdu || now - cs.pgdu >= 3600000) {
+          if (!wbHot && (!cs.pgdu || now - cs.pgdu >= 3600000)) {
             patch.pgdu = now;
             jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "usage", "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
           }
-          if (!cs.pgdd || now - cs.pgdd >= 86400000) {
+          if (!wbHot && (!cs.pgdd || now - cs.pgdd >= 86400000)) {
             patch.pgdd = now;
             jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
           }
@@ -1641,24 +1661,38 @@ export default {
           }
           jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
           await Promise.allSettled(jobs);
-          if (Object.keys(patch).length) await saveCronState(qKvCount(ckv, "cron"), { ...cs, ...patch });
+          // فلاش cron_state حداکثر هر ۶۰ دقیقه (به‌جای هر تیک ۱۰دقیقه‌ای = ۱۴۴/روز).
+          // جاب‌ها idempotent هستند و در تیک بعدی دوباره محافظت می‌شوند.
+          try {
+            Object.assign(_cronPending, patch);
+            if (Object.keys(_cronPending).length && (!_cronLastFlush || now - _cronLastFlush >= 3600000)) {
+              await saveCronState(qKvCount(ckv, "cron"), { ...cs, ..._cronPending });
+              _cronPending = {};
+              _cronLastFlush = now;
+            }
+          } catch (e) {}
         })().catch((e) => dbgLogErr(env, e, "sched10"))
       );
     } else {
       // کرون هر دقیقه: پول نود (تراز دقیقه‌ای داخل خودش؛ write فقط موقع تغییر) + هاست‌فیلتر + یادآورها
-      ctx.waitUntil(runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))));
-      ctx.waitUntil(
-        runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
-          console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
-          try {
-            await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
-          } catch (x) {}
-        })
-      );
+      // محافظ بودجهٔ نوشتن: سهمیه داغ = جاب‌های سنگین دقیقه‌ای کنسل (یادآور/چرخش سبک می‌مانند)
+      ctx.waitUntil((async () => {
+        try {
+          if (writeBudgetHot(await writeBudget(env.BOT_KV, env))) return;
+        } catch (e) {}
+        await Promise.allSettled([
+          runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))),
+          runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
+            console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
+            try {
+              await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
+            } catch (x) {}
+          }),
+          pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))),
+        ]);
+      })().catch((e) => console.error("WB1MIN", String(e && e.message ? e.message : e).slice(0, 120))));
       ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
       ctx.waitUntil(runDailySubRotate({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hfd") }).catch((e) => console.error("DAILYROT", String(e))));
-      // فلاش بافر هشدارهای فوری (حداکثر ۳ دقیقه تأخیر تا پیام جمعی)
-      ctx.waitUntil(pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))));
     }
   },
 
@@ -1737,7 +1771,7 @@ async function processUpdate(payload, env, botToken, adminId) {
             await kv.put("errnotice_ts", String(Date.now()), { expirationTtl: 3600 });
             const cbm = payload.callback_query;
             const where = String((cbm && cbm.data) || "?").slice(0, 60);
-            await sendMessage(botToken, adminId, `❌ خطای داخلی موقع اجرای «${where}».\n\nاگر تکرار شد بگو کدوم دکمه بود.`, [
+            await sendMessage(botToken, adminId, quotaErrText(e) || `❌ خطای داخلی موقع اجرای «${where}».\n\nاگر تکرار شد بگو کدوم دکمه بود.`, [
               [{ text: "🏠 خانه", callback_data: "menu" }],
             ]);
             logE("CB_CRASH", where + " :: " + e);
@@ -1822,7 +1856,7 @@ async function processUpdate(payload, env, botToken, adminId) {
       return;
     }
 
-    if (pending) await kv.delete(`pend:${chatId}`);
+    if (pending) { try { await kv.delete(`pend:${chatId}`); } catch (e) {} }
 
     if (!text.startsWith("/") && (isIpLike(text) || isNameLike(text))) {
       const qa = await kv.get(`qa:${chatId}`, "json");
@@ -1997,6 +2031,32 @@ async function processUpdate(payload, env, botToken, adminId) {
       await handleToggleProxy(args, accounts, send, kv);
     } else if (cmd === "/delete") {
       await handleDelete(args, accounts, send, kv);
+    } else if (cmd === "/dns") {
+      // لیست رکوردها بدون حتی یک write (کار می‌کند حتی زیر سقف سهمیه)
+      if (!args[1]) return send("⚠️ استفاده: /dns <دامنه>\nمثال: /dns example.com");
+      const r = await cfDnsList(env, { zone: args[1] });
+      if (!r || !r.ok) return send("❌ دامنه پیدا نشد یا خطا در خواندن رکوردها.");
+      const lines = [`🌐 رکوردهای ${r.zone.name} (${r.records.length} مورد):`, ""];
+      for (const x of r.records.slice(0, 40)) lines.push(`${x.type} ${code(x.name)} → ${code(x.content)}${x.proxied ? " ☁️" : ""}`);
+      if (r.records.length > 40) lines.push(`… و ${r.records.length - 40} مورد دیگر`);
+      await send(lines.join("\n").slice(0, 3500), [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (cmd === "/dnsadd") {
+      // ساخت/به‌روزرسانی رکورد در یک پیام (بدون نشست و بدون write)
+      if (!args[1] || !args[2] || !args[3] || !args[4]) {
+        return send("⚠️ استفاده: /dnsadd <دامنه> <نوع> <نام> <مقدار>\nمثال: /dnsadd example.com A www 1.2.3.4\n(اگر رکورد باشد به‌روز می‌شود)");
+      }
+      const p = { zone: args[1], type: args[2], name: args[3], content: args.slice(4).join(" ") };
+      const r = await cfDnsUpsert(env, p);
+      if (!r || !r.ok) return send("❌ انجام نشد (" + String((r && r.error) || "unknown") + "). دامنه/نوع/نام را بررسی کن.");
+      await send(`✅ رکورد ${r.updated ? "به‌روز" : "ساخته"} شد:\n${r.record.type}-${code(r.record.name)} → ${code(String(r.record.content))}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
+    } else if (cmd === "/dnsdel") {
+      if (!args[1] || !args[2] || !args[3]) {
+        return send("⚠️ استفاده: /dnsdel <دامنه> <نوع> <نام>\nمثال: /dnsdel example.com A www");
+      }
+      const p = { zone: args[1], type: args[2], name: args[3] };
+      const r = await cfDnsDelete(env, p);
+      if (!r || !r.ok) return send("❌ انجام نشد (" + String((r && r.error) || "unknown") + ").");
+      await send(`🗑 رکورد حذف شد:\n${r.record.type}-${code(r.record.name)}`, [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else {
       await send("❓ دستور ناشناخته. از منو استفاده کنید.", mainMenuKeyboard());
     }
@@ -2005,7 +2065,7 @@ async function processUpdate(payload, env, botToken, adminId) {
     try {
       await tg(botToken, "sendMessage", {
         chat_id: adminId,
-        text: "❌ خطای داخلی:\n" + String(err && err.message ? err.message : err).substring(0, 3000),
+        text: quotaErrText(err) || ("❌ خطای داخلی:\n" + String(err && err.message ? err.message : err).substring(0, 500)),
       });
     } catch (e) {
       console.error("SEND_ERROR", String(e));
@@ -2615,6 +2675,11 @@ async function getCronState(kv) {
     return {};
   }
 }
+
+// بافر فلاش cron_state: کاهش نوشتن KV از ۱۴۴ به حداکثر ۲۴ در روز.
+// فقط در حافظه همان ایزوله؛ با ری‌استارت ورکر خالی می‌شود (بدون عارضه).
+let _cronPending = {};
+let _cronLastFlush = 0;
 
 async function saveCronState(kv, st) {
   if (!kv) return;
@@ -3670,6 +3735,18 @@ async function qSectionModel(kv, env, acc) {
   M.units = { cron: Math.round(cronU), web: Math.round(webU), alert: Math.round(alertU) };
   return M;
 }
+// خطای سهمیه/محدودیت کلادفلر به زبان کاربر (به‌جای متن خام انگلیسی در پیام‌ها).
+// null یعنی خطای عادی (متن خام کوتاه‌شده نمایش داده می‌شود).
+function quotaErrText(e) {
+  const m = String((e && e.message) || e || "");
+  if (/limit exceeded|quota|10048/i.test(m)) {
+    return "✍️ سهمیهٔ نوشتن امروز کلادفلر تموم شده (۱۰۰۰ در روز).\n\n🕒 ساعت ۰۳:۳۰ نیمه‌شب به‌وقت تهران صفر می‌شود و همه‌چیز خودش برمی‌گردد.\nتا آن موقع خواندن و دکمه‌ها کار می‌کنند ولی چیزی ذخیره نمی‌شود.";
+  }
+  if (/too many requests|429/i.test(m)) {
+    return "⏳ کلادفلر موقتاً محدودت کرده؛ یک دقیقهٔ دیگر دوباره امتحان کن.";
+  }
+  return null;
+}
 // سهم KV یک بخش از کل اندازه‌گیری‌شده (تخمین تسهیمی)
 function qKvShare(M, sec) {
   const out = {};
@@ -3779,6 +3856,66 @@ async function ensureTgWebhook(botToken, kv, env) {
     await kv.put("tg_secret_ts", String(ok ? now : now - 23 * 3600000));
   } catch (e) {}
 }
+// ===================== محافظ بودجهٔ نوشتن (3.0.3) =====================
+// سرنخ: ربات‌هایی که ایجنت ندارند (یا نسخهٔ قدیمی هستند) روی ورکر همه‌چیز را اجرا می‌کنند
+// و نوشتن‌های KV شان شبانه از سقف ۱۰۰۰ رد می‌شود؛ نتیجه‌اش نشست‌های خراب و دکمه‌های مرده است.
+// این محافظ، بدون توجه به علت، وقتی مصرف امروز از آستانه گذرد جاب‌های پرهزینه را کند می‌کند
+// و یک بار به ادمین می‌گوید کدام بخش دارد می‌سوزاند (از دادهٔ اندازه‌گیری‌شدهٔ خودش).
+const WB_HOT = 0.6; // ۶۰٪ سقف نوشتن
+let _wbCache = { at: 0, used: -1, ok: false };
+
+async function writeBudget(kv, env, force) {
+  if (!force && Date.now() - _wbCache.at < 600000) return _wbCache;
+  let used = -1, ok = false;
+  try {
+    const acc = await getQuotaAcct(kv, env);
+    if (acc) {
+      const u = await fetchKvUsageToday(acc.tok, acc.aid);
+      if (u && Number.isFinite(Number(u.write))) { used = Number(u.write); ok = true; }
+    }
+  } catch (e) {}
+  _wbCache = { at: Date.now(), used, ok };
+  return _wbCache;
+}
+
+function writeBudgetHot(b) {
+  return !!(b && b.ok && b.used >= Math.round(1000 * WB_HOT));
+}
+
+// پیام و اطلاع‌رسانی یک‌بار در روز وقتی بودجه داغ می‌شود
+async function writeBudgetAlert(kv, env, botToken, adminId, used) {
+  try {
+    const cfg = await getQuotaCfg(kv, env);
+    const today = new Date().toISOString().slice(0, 10);
+    if (cfg.hotDay === today) return;
+    cfg.hotDay = today;
+    await saveQuotaCfg(kv, cfg);
+    const wmap = await qwDayMap(kv);
+    const top = Object.keys(wmap)
+      .map((k) => [k, Number(wmap[k]) || 0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const QW_FA_LOCAL = { hf: "هاست‌فیلتر", node1: "پول نود", pghook: "وبهوک پنل", um: "مانیتور مصرف", srv: "مانیتور سرور", web: "پیام/دکمه تلگرام", meter: "سیستم شمارش", hfd: "چرخش ساب", cron: "کرون", selfup: "آپدیت خودکار", tm: "تله‌متری", qg: "گارد سهمیه", ssl: "SSL", domexp: "انقضای دامنه", tgsec: "امنیت وبهوک", secsweep: "پاک‌سازی رمزها", rem: "یادآور", ndhook: "وبهوک نود", mail: "ایمیل", guardian: "ایجنت" };
+    const lines = top.map(([k, v]) => `• ${QW_FA_LOCAL[k] || k}: ${faNum(v.toLocaleString("en-US"))}`);
+    await sendMessage(
+      botToken,
+      adminId,
+      [
+        `⚠️ نوشتن‌های KV امروز از ${faNum(Math.round(WB_HOT * 100))}٪ گذشت (${faNum(used.toLocaleString("en-US"))} از ۱۰۰۰).`,
+        "",
+        "برای اینکه شبانه به سقف نخوری، جاب‌های پرهزینه را خودکار کند کردم:",
+        "• هاست‌فیلتر، پول نود، مانیتور مصرف/سرور و دایجست‌ها فعلاً کندتر اجرا می‌شوند تا سهمیه تمام نشود",
+        "",
+        "پرهسته‌ترین بخش‌ها:",
+        ...(lines.length ? lines : ["• اطلاعات جزء در دسترس نیست"]),
+        "",
+        "نکته: رلهٔ سرور (منوی 🖥 سرورها) روی این محدودیت اثر ندارد و عادی کار می‌کند.",
+      ].join("\n"),
+      [[{ text: "🔄 نسخه‌ها", callback_data: "vers" }], [{ text: "☁️ سهمیه", callback_data: "quota" }]]
+    );
+  } catch (e) {}
+}
+
 async function getQuotaCfg(kv, env) {
   let cfg = null;
   try {
@@ -3791,6 +3928,7 @@ async function getQuotaCfg(kv, env) {
     cronPausedUntil: cfg && Number(cfg.cronPausedUntil) > 0 ? Number(cfg.cronPausedUntil) : 0,
     warnedDay: (cfg && cfg.warnedDay) || "",
     warned50Day: (cfg && cfg.warned50Day) || "",
+    hotDay: (cfg && cfg.hotDay) || "",
   };
 }
 
@@ -8258,6 +8396,7 @@ async function runNodePoll(env, opts) {
       const panelName = (panel && panel.name) || m.name;
       const poll = ndApplyPoll(st.nodes, list, now);
       let stDirty = poll.hasNew;
+      let sentAlert = false;
       for (const ev of poll.events) {
         if ((m.excluded || []).includes(ev.name)) continue;
         stDirty = true; // قطع/وصل — وضعیت همیشه ذخیره می‌شود، ولی هشدار سقف ۳۰دقیقه‌ای دارد
@@ -8274,12 +8413,18 @@ async function runNodePoll(env, opts) {
           for (const a of admins) await sendPanelMsg(botToken, a, msg, kv, dir === "down");
           poll.next[name].last_alert = now;
           poll.next[name].last_dir = dir;
+          sentAlert = true;
         }
       }
       for (const name of Object.keys(poll.next)) st.nodes[name] = poll.next[name];
+      // ضد اسپم write: state نود حداکثر هر ۵ دقیقه ذخیره می‌شود (نه با هر نوسان).
+      // تصمیم هشدار همین ران با حافظه گرفته می‌شود و dedup با ndq حفظ می‌ماند.
       if (stDirty) {
-        st.ts = now;
-        await saveNodeState(kv, m.id, st);
+        const lastSaveMs = (st && st.ts ? Date.parse(st.ts) : 0) || 0;
+        if (sentAlert || Date.now() - lastSaveMs >= 5 * 60000) {
+          st.ts = now;
+          await saveNodeState(kv, m.id, st);
+        }
       }
     }
   } catch (e) {
@@ -9426,17 +9571,25 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
       for (const u of r.fresh) {
         try { await kv.put(`pgq:${panel.id}:${u.username}:${kind}`, Date.now() + "." + u.bucket, { expirationTtl: 7 * 86400 }); } catch (e) {}
       }
-      const line = (u) => "• " + u.username + " (" + valFa(u) + ")";
+      // دونه‌ای: هر کاربر پیام جدا با دو دکمه (تمدید با ربات/پنل) می‌گیرد
+      const renewbot = pgPanelBot(cfg, panel.id);
+      const dashpath = pgDashOf(cfg, panel.id);
+      const sendOne = async (id, u) => {
+        try {
+          await pgSendAlert(botToken, id, panel, {
+            username: u.username, kind, value: u.value,
+            expireTs: null, status: "",
+            owner: u.ownerName || "", renewbot, dashpath,
+          }, false);
+        } catch (e) {}
+      };
       const owners = {};
       for (const u of r.fresh) {
         const ok = u.ownerName || "";
         (owners[ok] = owners[ok] || []).push(u);
       }
       if (!cfg.silent_me && (await pgStarted(kv, adminId))) {
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(r.fresh.length) + " مورد)";
-        for (const ch of chunkText(txt + "\n" + r.fresh.map(line).join("\n"))) {
-          try { await sendMessage(botToken, adminId, ch); } catch (e) {}
-        }
+        for (const u of r.fresh) await sendOne(adminId, u);
       }
       for (const on of Object.keys(owners)) {
         if (!on) continue;
@@ -9447,11 +9600,8 @@ async function runPgDigest(env, botToken, adminId, kind, lastKey, headEm, headFa
         }
         if (!started.length) continue;
         const arr = owners[on];
-        const txt = headEm + " " + headFa + " — پنل " + (panel.name || panel.id) + " (" + faD(arr.length) + " مورد)";
         for (const id of started) {
-          for (const ch of chunkText(txt + "\n" + arr.map(line).join("\n"))) {
-            try { await sendMessage(botToken, id, ch); } catch (e) {}
-          }
+          for (const u of arr) await sendOne(id, u);
         }
       }
     }
@@ -9664,7 +9814,7 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
   const pages = Math.ceil(zones.length / ZONE_PAGE_SIZE);
   if (page < 0) page = 0;
   if (page >= pages) page = pages - 1;
-  if (chatId) await kv.put(`zctx:${chatId}`, JSON.stringify({ filter: flt, page }), { expirationTtl: 86400 });
+  if (chatId) { try { await kv.put(`zctx:${chatId}`, JSON.stringify({ filter: flt, page }), { expirationTtl: 86400 }); } catch (e) {} }
 
   const slice = zones.slice(page * ZONE_PAGE_SIZE, page * ZONE_PAGE_SIZE + ZONE_PAGE_SIZE);
 
@@ -9731,12 +9881,21 @@ async function showZones(page, filter, accounts, send, kv, chatId) {
 
 async function showRecords(zone, page, accounts, send, kv) {
   const records = await getRecords(zone, accounts, kv);
-  const token = makeToken();
-  await kv.put(
-    `s:${token}`,
-    JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: zone._acc, page: page || 0, zback: "zones" }),
-    { expirationTtl: 86400 }
-  );
+  let token = null;
+  try {
+    token = makeToken();
+    await kv.put(
+      `s:${token}`,
+      JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: zone._acc, page: page || 0, zback: "zones" }),
+      { expirationTtl: 86400 }
+    );
+  } catch (e) {
+    token = null;
+  }
+  if (!token) {
+    await sendRecordsReadOnly(send, zone, records);
+    return;
+  }
 
   if (records.length === 0) {
     // addz: افزودن رکورد به دامنه | zset: تنظیمات دامنه (SSL و...) | zones: بازگشت
@@ -9750,6 +9909,17 @@ async function showRecords(zone, page, accounts, send, kv) {
   }
 
   await renderRecords(zone, records, token, page, send, undefined, "zones");
+}
+
+// لیست read-only رکوردها برای وقتی نشست KV ذخیره نمی‌شود (سهمیه) — بدون هیچ write
+async function sendRecordsReadOnly(send, zone, records) {
+  const lines = [`🌐 رکوردهای ${zone.name} (${records.length} مورد):`, ""];
+  for (const x of records.slice(0, 40)) {
+    lines.push(`${x.type} ${code(x.name)} → ${code(String(x.content)).slice(0, 120)}${x.proxied ? " ☁️" : ""}`);
+  }
+  if (records.length > 40) lines.push(`… و ${records.length - 40} مورد دیگر`);
+  lines.push("", "⚠️ نشست ذخیره نشد (سهمیه تمام شده) — دکمه‌ها تا ریست ساعت ۰۳:۳۰ کار نمی‌کنند.", "برای تغییر رکورد از دستور مستقیم استفاده کن: /dnsadd ، /dnsdel");
+  await send(lines.join("\n").slice(0, 3500), [[{ text: "🏠 خانه", callback_data: "menu" }]]);
 }
 
 async function renderRecords(zone, records, token, page, send, selected, backCb) {
@@ -10761,6 +10931,88 @@ async function findRecord(zone, type, name, accounts) {
   const data = await res.json();
   if (!data.success || !data.result || data.result.length === 0) return null;
   return data.result[0];
+}
+
+// ===================== DNS بدون KV (2.4.2) =====================
+// هستهٔ مشترک ورکر و ایجنت: صفر write (حتی کش هم نمی‌نویسد) تا زیر سقف سهمیه هم کار کند.
+// ورودی‌ها صریح‌اند (نام زون/رکورد) و نیازی به نشست KV ندارند؛ خروجی خلاصه و آمادهٔ نمایش است.
+function cfSlimRecords(recs) {
+  return (Array.isArray(recs) ? recs : []).slice(0, 100).map((r) => ({
+    id: r.id, type: r.type, name: r.name, content: String(r.content || "").slice(0, 300),
+    ttl: r.ttl, proxied: !!r.proxied,
+  }));
+}
+
+async function cfDnsList(env, p) {
+  try {
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String((p && p.zone) || ""), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const recs = await getRecords(zone, accounts, null);
+    return { ok: true, zone: { id: zone.id, name: zone.name }, records: cfSlimRecords(recs) };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
+}
+
+async function cfDnsUpsert(env, p) {
+  try {
+    const typeUp = String((p && p.type) || "").toUpperCase();
+    const name = String((p && p.name) || "");
+    const content = String((p && p.content) || "");
+    if (!p || !p.zone || !typeUp || !name || !content) return { ok: false, error: "bad_args" };
+    if (!ADD_RECORD_TYPES.includes(typeUp)) return { ok: false, error: "bad_type" };
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String(p.zone), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const fullName = normalizeName(name, zone.name);
+    const tok = accounts[zone._acc].token;
+    const old = await findRecord(zone, typeUp, name, accounts);
+    let rec = null;
+    if (old) {
+      const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${old.id}`, {
+        method: "PUT", headers: hdr(tok),
+        body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: 1, proxied: !!old.proxied }),
+        signal: withTimeout(20000),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !(d && d.success)) return { ok: false, error: "update_failed" };
+      rec = d.result;
+    } else {
+      const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records`, {
+        method: "POST", headers: hdr(tok),
+        body: JSON.stringify({ type: typeUp, name: fullName, content, ttl: 1, proxied: false }),
+        signal: withTimeout(20000),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !(d && d.success)) return { ok: false, error: "create_failed" };
+      rec = d.result;
+    }
+    return { ok: true, updated: !!old, record: { id: rec.id, type: rec.type, name: rec.name, content: rec.content, proxied: !!rec.proxied } };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
+}
+
+async function cfDnsDelete(env, p) {
+  try {
+    const typeUp = String((p && p.type) || "").toUpperCase();
+    const name = String((p && p.name) || "");
+    if (!p || !p.zone || !typeUp || !name) return { ok: false, error: "bad_args" };
+    const accounts = await getAccounts(env.BOT_KV, env);
+    const zone = await findZone(String(p.zone), accounts);
+    if (!zone) return { ok: false, error: "zone_not_found" };
+    const old = await findRecord(zone, typeUp, name, accounts);
+    if (!old) return { ok: false, error: "not_found" };
+    const res = await fetch(`${CF_API}/zones/${zone.id}/dns_records/${old.id}`, {
+      method: "DELETE", headers: hdr(accounts[zone._acc].token), signal: withTimeout(20000),
+    });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !(d && d.success)) return { ok: false, error: "delete_failed" };
+    return { ok: true, record: { id: old.id, type: old.type, name: old.name } };
+  } catch (e) {
+    return { ok: false, error: "dns_failed" };
+  }
 }
 
 async function handleEdit(args, accounts, send, kv) {
@@ -14436,12 +14688,21 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       const zone = await getZoneById(zoneId, accIndex, accounts);
       if (!zone) return edit("❌ دامنه پیدا نشد.");
       const records = await getRecords(zone, accounts, kv);
-      const token = makeToken();
       const zctx = (await kv.get(`zctx:${chatId}`, "json")) || null;
       const zback = zctx && zctx.filter !== undefined ? `zf:${zctx.filter}:${Number(zctx.page) || 0}` : "zones";
-      await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, page: 0, zback }), {
-        expirationTtl: 86400,
-      });
+      let token = null;
+      try {
+        token = makeToken();
+        await kv.put(`s:${token}`, JSON.stringify({ zone_id: zone.id, zone_name: zone.name, acc: accIndex, page: 0, zback }), {
+          expirationTtl: 86400,
+        });
+      } catch (e) {
+        token = null;
+      }
+      if (!token) {
+        await sendRecordsReadOnly(edit, zone, records);
+        return;
+      }
       if (records.length === 0) {
         const kb = [
           [{ text: "➕ افزودن", callback_data: `addz:${token}` }],
