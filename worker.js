@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.8";
+const BOT_VERSION = "4.1.9";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.9": [
+    "📊 شمارش write از ابتدای هر آپدیت: دیگر «سایر (ثبت‌نشده)» باد نمی‌کند و صفحه سهمیه دقیق نشان می‌دهد کدام بخش چقدر نوشته",
+  ],
   "4.1.8": [
     "🗄 تکمیل پوشش رله: کش DNS، staging ایمپورت/بکاپ، توکن‌های موقت و stateهای ساعتی هم روی رله؛ روی KV فقط کانفیگ، secret و دیتای کاربر ماند",
   ],
@@ -1578,7 +1581,7 @@ export default {
     }
 
     // self_url را قبل از پردازش آپدیت کش کن تا پیام اول هم reply_url معتبر داشته باشد
-    if (kv) await cacheSelfUrl(kv, url.origin);
+    if (kv) await cacheSelfUrl(qKvCount(kv, "tgsec"), url.origin);
 
     // 🔐 آپدیت واقعی تلگرام update_id دارد؛ هدر secret را چک کن (ضد جعل)
     if (payload && typeof payload === "object" && "update_id" in payload) {
@@ -1587,16 +1590,16 @@ export default {
         secret = kv ? (await kv.get("tg_secret", "text")) || "" : "";
       } catch (e) {}
       if (!secret) {
-        if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+        if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
       } else {
         const got = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
         if (got !== secret) {
-          if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+          if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
           return ok();
         }
       }
     }
-    if (kv) ctx.waitUntil(ensureTgWebhook(botToken, kv, env));
+    if (kv) ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(kv, "tgsec"), env));
 
     // شکار موقت خطاهای ۵۰۰ (۱.۸.۹۱): نمونه‌برداری، بعد از تشخیص حذف می‌شود
     ctx.waitUntil(
@@ -1621,8 +1624,8 @@ export default {
       }
       // پایان خاموشی موقت: زمان‌بندهای اصلی کرون را برگردان
       qcfg.cronPausedUntil = 0;
-      ctx.waitUntil(saveQuotaCfg(env.BOT_KV, qcfg));
-      ctx.waitUntil(quotaRestoreSchedules(env, env.BOT_KV).catch(() => {}));
+      ctx.waitUntil(saveQuotaCfg(qKvCount(env.BOT_KV, "qg"), qcfg));
+      ctx.waitUntil(quotaRestoreSchedules(env, qKvCount(env.BOT_KV, "qg")).catch(() => {}));
     }
     if (cron === "0 9 * * *") {
       ctx.waitUntil(runSslMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "ssl") }).catch((e) => console.error("SSLM", String(e))));
@@ -1794,6 +1797,14 @@ async function processUpdate(payload, env, botToken, adminId) {
       if (w) { w.__sess = true; env.BOT_KV = w; kv = w; }
     }
   } catch (e) {}
+  const kvBase = kv;
+  // شمارش زودهنگام writeها: از همین‌جا زیر بخش همان آپدیت می‌روند تا preamble (pend/pretry/…) هم «سایر» نشود.
+  // پایین‌تر همان بخش روی kvBase دوباره گذاشته می‌شود (جایگزین، نه تودرتو) تا دو بار شمرده نشود.
+  try {
+    const cbD = payload && payload.callback_query && payload.callback_query.data;
+    const mT = payload && payload.message && payload.message.text;
+    kv = qKvCount(kv, cbD ? qwBtnSec(cbD) : "m:" + String((String(mT || "").split(/\s+/)[0] || "text")).slice(1).replace(/[^a-z0-9_]/g, "").slice(0, 24));
+  } catch (e) {}
   // ثبت/به‌روزرسانی منوی دستورات تلگرام (یک‌بار برای هر نسخه، حتی در اولین پیام بعد از deploy)
   await ensureBotCommands(env, botToken, kv).catch(() => {});
 
@@ -1883,7 +1894,7 @@ async function processUpdate(payload, env, botToken, adminId) {
     // شمارش write واقعی این پیام/دستور — قبل از ویزارد تا putهای داخل resolvePending هم ثبت شوند (بخش p:*).
     // فقط put/delete شمرده می‌شود؛ تجمیعی و بدون write اضافه.
     kv = qKvCount(
-      kv,
+      kvBase,
       pending && !text.startsWith("/") && pending.type
         ? "p:" + String(pending.type).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24)
         : text.startsWith("/")
@@ -3732,6 +3743,7 @@ const QW_CRON = new Set(["hf", "hfd", "um", "srv", "node10", "node1", "nodeadd",
 function qKvCount(kv, sec) {
   if (!kv || !sec) return kv;
   return {
+    __inner: kv,
     get: (k, t) => kv.get(k, t),
     list: (o) => kv.list(o),
     put: (k, v, o) => { try { qCountSync(kv, (d) => "qw:" + d, "w", sec); } catch (e) {} return kv.put(k, v, o); },
@@ -4107,7 +4119,7 @@ async function quotaRestoreSchedules(env, kv) {
 
 // خاموش‌کردن موقت کرون‌جاب‌ها (ساعت؛ ۰ = روشن)
 async function quotaPauseCron(env, hours) {
-  const kv = env.BOT_KV;
+  const kv = env.BOT_KV ? qKvCount(env.BOT_KV, "qg") : null;
   if (!kv) return;
   const cfg = await getQuotaCfg(kv, env);
   cfg.cronPausedUntil = hours > 0 ? Date.now() + hours * 3600000 : 0;
@@ -13909,7 +13921,8 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   const pgSelfOpen = data === "pgselfcancel" || data.startsWith("pgself:");
   if (!admins.includes(chatId) && !pgSelfOpen) return;
   // شمارش write واقعی این دکمه (فقط put/delete؛ تجمیعی و بدون write اضافه)
-  kv = qKvCount(kv, qwBtnSec(data));
+  // اگر از قبل زیر بخش preamble است، همان لایه را جایگزین کن تا دو بار شمرده نشود
+  kv = qKvCount(kv && kv.__inner ? kv.__inner : kv, qwBtnSec(data));
 
   const isMain = chatId === adminId;
   if (isMain) await cacheAdminUname(kv, adminId, cb.from);
