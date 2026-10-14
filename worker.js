@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.1.7";
+const BOT_VERSION = "4.1.8";
 
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
@@ -34,6 +34,9 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.1.8": [
+    "🗄 تکمیل پوشش رله: کش DNS، staging ایمپورت/بکاپ، توکن‌های موقت و stateهای ساعتی هم روی رله؛ روی KV فقط کانفیگ، secret و دیتای کاربر ماند",
+  ],
   "4.1.7": [
     "🗄 وبهوک هشدار کامل روی رله: شمارنده هشدارها، گیت نود، کش IP، اعلان‌ها، state کرون و مانیتورها هم اول رلهٔ شخصی؛ فقط کانفیگ و secretها روی KV می‌مانند",
   ],
@@ -7028,7 +7031,7 @@ async function relayCandidates(kv, env) {
 // وقتی رلهٔ شخصی تنظیم شده، این کلیدها اول روی دیسک رله می‌روند (صفر write در KV)؛
 // اگر رله قطع/ناموفق باشد، همان KV خودمان (fallback همیشگی). رلهٔ پیش‌فرض رایگان
 // هرگز برای نشست استفاده نمی‌شود (state کاربر دست ثالث نمی‌رود).
-const SESS_PRE = ["s:", "pend:", "zctx:", "taplck:", "qa:", "pretry", "srvback:", "relayback:", "srvsub", "stick:", "navhist:", "pgstart", "pgq:", "pgdr:", "pgdbg", "pgselftry:", "pgdlast:", "pgub:", "pghook_seen", "pgstartmsg:", "qw:", "qal:", "sr:", "dd:", "ct:", "lbg:", "lbn:", "pbeaut:", "hfgsel:", "ips:", "ipsel:", "sel:", "hub_ann", "hubq:", "rtraf:", "delaybox", "errnotice_ts", "promo:", "ann", "quota_tok_cache", "selfup_", "tm:", "tm_", "cron_state", "release_seen", "secretmsg", "relay_watch", "srv_mon_last", "um_last_run", "inbox_idx:", "inbox:", "zmailaddr:", "rmsess:", "hfdmode:", "hfdpanel:", "hf_progress", "fmail_fwd:", "ndst", "ndq:", "hfd", "rss", "um_report_ts"];
+const SESS_PRE = ["s:", "pend:", "zctx:", "taplck:", "qa:", "pretry", "srvback:", "relayback:", "srvsub", "stick:", "navhist:", "pgstart", "pgq:", "pgdr:", "pgdbg", "pgselftry:", "pgdlast:", "pgub:", "pghook_seen", "pgstartmsg:", "qw:", "qal:", "sr:", "dd:", "ct:", "lbg:", "lbn:", "pbeaut:", "hfgsel:", "ips:", "ipsel:", "sel:", "hub_ann", "hubq:", "rtraf:", "delaybox", "errnotice_ts", "promo:", "ann", "quota_tok_cache", "selfup_", "tm:", "tm_", "cron_state", "release_seen", "secretmsg", "relay_watch", "srv_mon_last", "um_last_run", "inbox_idx:", "inbox:", "zmailaddr:", "rmsess:", "hfdmode:", "hfdpanel:", "hf_progress", "fmail_fwd:", "ndst", "ndq:", "hfd", "rss", "um_report_ts", "cache:", "srvimp:", "pback:", "lnip:", "favpk:"];
 function sessKey(k) {
   const s = String(k || "");
   for (const p of SESS_PRE) {
