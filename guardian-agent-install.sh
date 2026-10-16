@@ -43,6 +43,42 @@ fail() { echo "[guardian] ❌ $*" >&2; exit 1; }
 command -v systemctl >/dev/null 2>&1 || fail "systemd not found (Ubuntu/Debian with systemd only)."
 command -v curl >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq curl ca-certificates; } || fail "Failed to install curl."
 
+# ---- swap: افزودن swapfile بر اساس ظرفیت موجود (اگر سواپ فعال نباشد) ----
+swap_kb="$(awk '/^SwapTotal:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+if [ "${swap_kb:-0}" -gt 0 ]; then
+  info "Swap already active ($(( swap_kb / 1024 )) MB) - skipping."
+else
+  mem_mb="$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 0)"
+  # اندازه: رم ≤۲گیگ → ۲برابر، ≤۸گیگ → برابر، بیشتر → ۴گیگ؛ محدود ۵۱۲مگ..۸گیگ
+  if   [ "$mem_mb" -le 2048 ]; then swap_mb=$(( mem_mb * 2 ))
+  elif [ "$mem_mb" -le 8192 ]; then swap_mb="$mem_mb"
+  else swap_mb=4096
+  fi
+  [ "$swap_mb" -lt 512 ]  && swap_mb=512
+  [ "$swap_mb" -gt 8192 ] && swap_mb=8192
+  # هرگز بیشتر از فضای خالی دیسک منهای ۱گیگ حاشیه امن
+  avail_mb="$(df -Pm / 2>/dev/null | awk 'NR==2{print $4}' || echo 0)"
+  max_mb=$(( ${avail_mb:-0} - 1024 ))
+  [ "$swap_mb" -gt "$max_mb" ] && swap_mb="$max_mb"
+  if [ "${swap_mb:-0}" -lt 512 ]; then
+    info "Not enough free disk for a swapfile - skipping swap."
+  else
+    info "Adding ${swap_mb} MB swapfile ..."
+    if fallocate -l "${swap_mb}M" /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count="$swap_mb" status=none 2>/dev/null; then
+      chmod 600 /swapfile
+      if mkswap /swapfile >/dev/null 2>&1 && swapon /swapfile 2>/dev/null; then
+        grep -q '^/swapfile ' /etc/fstab 2>/dev/null || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        info "Swap enabled: ${swap_mb} MB at /swapfile"
+      else
+        info "Warning: could not activate swap on this host - continuing."
+        rm -f /swapfile
+      fi
+    else
+      info "Warning: could not create swapfile - continuing."
+    fi
+  fi
+fi
+
 # ---- Node ≥ 18 (مثل نصاب رله) ----
 need_node=0
 if command -v node >/dev/null 2>&1; then
