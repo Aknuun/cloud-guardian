@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/aknuun/cg-server/internal/cf"
 	"github.com/aknuun/cg-server/internal/cfworkers"
 )
 
@@ -100,9 +103,9 @@ func (r *Router) foStatusText() string {
 	} else if wh != "" {
 		owner = "نامشخص"
 	}
-	health := c["public_url"]
-	if health != "" {
-		health += "/health"
+	health := c["health_url"]
+	if health == "" && c["public_url"] != "" {
+		health = c["public_url"] + "/health"
 	}
 	srvUp, _ := foPing(health)
 	srvTxt := "🔴 در دسترس نیست"
@@ -240,6 +243,132 @@ func (r *Router) foNameSave(chat, mid int64, pend map[string]any, name string) {
 
 // ---------- deploy ----------
 
+// Health check hostname (Cloudflare Workers refuse to fetch bare IP literals —
+// error 1003 — so the server must be reachable via a hostname).
+const foHealthSub = "cg-failover"
+
+// foEnsureHealthDomain returns a worker-reachable health URL for the server.
+// If public_url is already a hostname it is used as-is; if it is an IP literal
+// a DNS-only (grey-cloud) A record on the account's first active zone is
+// created/reused and pointed at that IP. Returns the URL plus the DNS ids for
+// later cleanup.
+func (r *Router) foEnsureHealthDomain(token, pub string) (health, zoneID, recID, zoneName string) {
+	pub = strings.TrimRight(strings.TrimSpace(pub), "/")
+	if pub == "" {
+		return "", "", "", ""
+	}
+	u, err := url.Parse(pub)
+	if err != nil || u.Hostname() == "" {
+		return pub + "/health", "", "", ""
+	}
+	host, port := u.Hostname(), u.Port()
+	// Already a hostname -> the worker can fetch it directly.
+	if net.ParseIP(host) == nil {
+		return pub + "/health", "", "", ""
+	}
+	if token == "" {
+		return pub + "/health", "", "", ""
+	}
+	cli := cf.New(token)
+	zones, err := cli.Zones()
+	if err != nil || len(zones) == 0 {
+		return pub + "/health", "", "", ""
+	}
+	z := zones[0]
+	for _, zz := range zones {
+		if zz.Status == "active" {
+			z = zz
+			break
+		}
+	}
+	zoneID, zoneName = z.ID, z.Name
+	fqdn := foHealthSub + "." + z.Name
+	// Reuse an existing record pointing at this IP (any type that matches).
+	recs, _ := cli.Records(z.ID)
+	for _, rec := range recs {
+		if rec.Name == fqdn && (rec.Type == "A" || rec.Type == "AAAA") {
+			recID = rec.ID
+			break
+		}
+	}
+	if recID == "" {
+		rtype := "A"
+		if strings.Contains(host, ":") {
+			rtype = "AAAA"
+		}
+		if rec, e := cli.AddRecord(z.ID, rtype, foHealthSub, host, 120, false, nil); e == nil {
+			recID = rec.ID
+		}
+	}
+	h := "http://" + fqdn
+	if port != "" && port != "80" {
+		h += ":" + port
+	}
+	return h + "/health", zoneID, recID, zoneName
+}
+
+// foDeployCore builds the standby worker (KV, bindings, cron, workers.dev) and
+// returns the config map to persist. No Telegram I/O; used by the bot and by
+// the installer/CLI.
+func (r *Router) foDeployCore(token, aid, aname, name string) (map[string]string, error) {
+	c := cfworkers.New(token)
+	ns, err := c.CreateKV(aid, "cg-failover-kv-"+randHex(3))
+	if err != nil {
+		return nil, fmt.Errorf("ساخت فضای KV: %w", err)
+	}
+	js, err := r.fetchWorkerJS()
+	if err != nil || len(js) < 1000 {
+		c.DeleteKV(aid, ns)
+		return nil, fmt.Errorf("دریافت فایل ورکر: %v", err)
+	}
+	pub := strings.TrimRight(r.FO["public_url"], "/")
+	health := ""
+	zoneID, recID, zoneName := "", "", ""
+	if pub != "" {
+		health, zoneID, recID, zoneName = r.foEnsureHealthDomain(token, pub)
+	}
+	selfURL := ""
+	if sub, e := c.WorkersSubdomain(aid); e == nil && sub != "" {
+		selfURL = fmt.Sprintf("https://%s.%s.workers.dev/tg", name, sub)
+	}
+	cfJSON, _ := json.Marshal(r.cfAccs())
+	md := cfworkers.Metadata{Bindings: []cfworkers.Binding{
+		{Type: "kv_namespace", Name: "BOT_KV", NamespaceID: ns},
+		{Type: "secret_text", Name: "BOT_TOKEN", Text: r.botToken()},
+		{Type: "plain_text", Name: "ADMIN_ID", Text: fmt.Sprint(r.AdminID)},
+		{Type: "plain_text", Name: "CF_ACCOUNTS", Text: string(cfJSON)},
+		{Type: "plain_text", Name: "WORKER_ACCOUNT_ID", Text: aid},
+		{Type: "plain_text", Name: "WORKER_NAME", Text: name},
+		{Type: "plain_text", Name: "PUBLIC_URL", Text: pub},
+		{Type: "plain_text", Name: "CG_STANDBY", Text: "1"},
+		{Type: "plain_text", Name: "CG_HEALTH_URL", Text: health},
+		{Type: "plain_text", Name: "CG_SELF_URL", Text: selfURL},
+	}}
+	if err := c.DeployModule(aid, name, js, md); err != nil {
+		c.DeleteKV(aid, ns)
+		c.DeleteScript(aid, name)
+		return nil, fmt.Errorf("دپلوی ورکر: %w", err)
+	}
+	_ = c.SetSchedules(aid, name, []string{"*/5 * * * *"})
+	_ = c.SetDev(aid, name, true)
+	url, _ := c.ScriptURL(aid, name, "/tg")
+	return map[string]string{
+		"enabled":         "1",
+		"cf_api_token":    token,
+		"cf_account_id":   aid,
+		"account_name":    aname,
+		"worker_name":     name,
+		"worker_url":      url,
+		"fo_namespace_id": ns,
+		"health_url":      health,
+		"health_dns_zone": zoneID,
+		"health_dns_rec":  recID,
+		"health_dns_name": zoneName,
+		"public_url":      pub,
+		"created":         fmt.Sprint(time.Now().Unix()),
+	}, nil
+}
+
 func (r *Router) foDeploy(chat int64, pend map[string]any) {
 	token, _ := pend["token"].(string)
 	aid, _ := pend["account_id"].(string)
@@ -252,66 +381,10 @@ func (r *Router) foDeploy(chat int64, pend map[string]any) {
 	r.clearWizard(chat)
 	r.Bot.Send(chat, "🚀 در حال ساخت ورکر پشتیبان… (چند لحظه طول می‌کشد)", nil)
 	go func() {
-		c := cfworkers.New(token)
-		// 1) new KV namespace
-		ns, err := c.CreateKV(aid, "cg-failover-kv-"+randHex(3))
+		cfg, err := r.foDeployCore(token, aid, aname, name)
 		if err != nil {
-			c.DeleteScript(aid, name)
-			r.Bot.Send(chat, failMsg("ساخت فضای KV", err), [][]Btn{{btn("🔙 فیلور", "fo")}})
+			r.Bot.Send(chat, failMsg("ساخت ورکر", err), [][]Btn{{btn("🔙 فیلور", "fo")}})
 			return
-		}
-		// 2) fetch worker.js
-		js, err := r.fetchWorkerJS()
-		if err != nil || len(js) < 1000 {
-			c.DeleteKV(aid, ns)
-			r.Bot.Send(chat, "❌ دریافت فایل ورکر ناموفق بود: "+Esc(fmt.Sprint(err)), [][]Btn{{btn("🔙 فیلور", "fo")}})
-			return
-		}
-		pub := strings.TrimRight(r.FO["public_url"], "/")
-		health := ""
-		if pub != "" {
-			health = pub + "/health"
-		}
-		selfURL := ""
-		if sub, e := c.WorkersSubdomain(aid); e == nil && sub != "" {
-			selfURL = fmt.Sprintf("https://%s.%s.workers.dev/tg", name, sub)
-		}
-		cfJSON, _ := json.Marshal(r.cfAccs())
-		md := cfworkers.Metadata{Bindings: []cfworkers.Binding{
-			{Type: "kv_namespace", Name: "BOT_KV", NamespaceID: ns},
-			{Type: "secret_text", Name: "BOT_TOKEN", Text: r.botToken()},
-			{Type: "plain_text", Name: "ADMIN_ID", Text: fmt.Sprint(r.AdminID)},
-			{Type: "plain_text", Name: "CF_ACCOUNTS", Text: string(cfJSON)},
-			{Type: "plain_text", Name: "WORKER_ACCOUNT_ID", Text: aid},
-			{Type: "plain_text", Name: "WORKER_NAME", Text: name},
-			{Type: "plain_text", Name: "PUBLIC_URL", Text: pub},
-			{Type: "plain_text", Name: "CG_STANDBY", Text: "1"},
-			{Type: "plain_text", Name: "CG_HEALTH_URL", Text: health},
-			{Type: "plain_text", Name: "CG_SELF_URL", Text: selfURL},
-		}}
-		// 3) deploy
-		if err := c.DeployModule(aid, name, js, md); err != nil {
-			c.DeleteKV(aid, ns)
-			c.DeleteScript(aid, name)
-			r.Bot.Send(chat, failMsg("دپلوی ورکر", err), [][]Btn{{btn("🔙 فیلور", "fo")}})
-			return
-		}
-		// 4) cron every 5 min + workers.dev
-		_ = c.SetSchedules(aid, name, []string{"*/5 * * * *"})
-		_ = c.SetDev(aid, name, true)
-		url, _ := c.ScriptURL(aid, name, "/tg")
-
-		cfg := map[string]string{
-			"enabled":         "1",
-			"cf_api_token":    token,
-			"cf_account_id":   aid,
-			"account_name":    aname,
-			"worker_name":     name,
-			"worker_url":      url,
-			"fo_namespace_id": ns,
-			"health_url":      health,
-			"public_url":      pub,
-			"created":         fmt.Sprint(time.Now().Unix()),
 		}
 		r.foSet(cfg)
 		r.SyncPush()
@@ -319,9 +392,45 @@ func (r *Router) foDeploy(chat int64, pend map[string]any) {
 			"✅ <b>ورکر پشتیبان ساخته شد.</b>\n\n"+
 				"نام: <code>%s</code>\nآدرس: <code>%s</code>\nKV: <code>%s</code>\n\n"+
 				"حالا سرور با polling کار می‌کند و ورکر در حالت standby است؛ هر ۵ دقیقه سلامت سرور را چک می‌کند و فقط وقتی سرور قطع باشد جای ربات را می‌گیرد.",
-			Esc(name), Esc(url), Esc(ns)),
+			Esc(cfg["worker_name"]), Esc(cfg["worker_url"]), Esc(cfg["fo_namespace_id"])),
 			[][]Btn{{btn("🛟 وضعیت فیلور", "fo"), btn("🏠 خانه", "menu")}})
 	}()
+}
+
+// FailoverStatus is a renderable one-line status (used by CLI/install).
+func (r *Router) FailoverConfigured() bool { return r.foConfigured() }
+
+// DeployFailover is the CLI/installer entry: verify the token, pick the account,
+// deploy the standby worker under a fresh non-clashing name, persist the config
+// and push the first credential snapshot.
+func (r *Router) DeployFailover(token, name string) (map[string]string, error) {
+	c := cfworkers.New(token)
+	if err := c.Verify(); err != nil {
+		return nil, err
+	}
+	accs, err := c.Accounts()
+	if err != nil || len(accs) == 0 {
+		return nil, fmt.Errorf("دسترسی به اکانت کلادفلر نیست")
+	}
+	aid, aname := accs[0].ID, accs[0].Name
+	if name == "" {
+		existing, _ := c.ListScripts(aid)
+		set := map[string]bool{}
+		for _, s := range existing {
+			set[s] = true
+		}
+		name = "cg-failover-" + randHex(2)
+		for set[name] {
+			name = "cg-failover-" + randHex(2)
+		}
+	}
+	cfg, err := r.foDeployCore(token, aid, aname, name)
+	if err != nil {
+		return nil, err
+	}
+	r.foSet(cfg)
+	r.SyncPush()
+	return cfg, nil
 }
 
 func failMsg(what string, err error) string {
@@ -376,8 +485,11 @@ func (r *Router) foDeleteYes(chat, mid int64) {
 		if c["fo_namespace_id"] != "" && c["cf_account_id"] != "" {
 			_ = cl.DeleteKV(c["cf_account_id"], c["fo_namespace_id"])
 		}
+		if c["health_dns_rec"] != "" && c["health_dns_zone"] != "" {
+			_ = cf.New(c["cf_api_token"]).DelRecord(c["health_dns_zone"], c["health_dns_rec"])
+		}
 		r.Store.Delete(foCfgKey)
-		for _, k := range []string{"cf_api_token", "cf_account_id", "account_name", "worker_name", "worker_url", "fo_namespace_id", "health_url", "public_url", "health_url"} {
+		for _, k := range []string{"cf_api_token", "cf_account_id", "account_name", "worker_name", "worker_url", "fo_namespace_id", "health_url", "public_url", "health_dns_zone", "health_dns_rec", "health_dns_name"} {
 			delete(r.FO, k)
 		}
 		r.Bot.Send(chat, "🗑 ورکر پشتیبان و فضای KV حذف شدند.", [][]Btn{{btn("🛟 فیلور", "fo"), btn("🏠 خانه", "menu")}})
