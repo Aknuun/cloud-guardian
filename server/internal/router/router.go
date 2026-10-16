@@ -12,7 +12,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "go-0.1.0"
+const Version = "4.5.0"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
