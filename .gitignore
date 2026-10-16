@@ -4,3 +4,11 @@ deploy.json
 *.log
 __pycache__/
 
+# Go server build artifacts & local data (عمداً commit نمی‌شوند)
+server/config.json
+server/data.db
+server/data.db-shm
+server/data.db-wal
+server/cg-server
+server/*.log
+server/.env

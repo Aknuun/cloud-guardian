@@ -1417,7 +1417,7 @@ export default {
       } catch (e) {
         console.error("PGHOOK_PARSE", String(e));
       }
-      ctx.waitUntil(handlePgHook(token, payload, { ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken));
+      // ⛔ هشدار انقضا/حجم از نسخهٔ ورکر حذف شد (مصرف زیاد KV). نسخهٔ سروری این را کامل انجام می‌دهد.
       return ok();
     }
 
@@ -1793,15 +1793,7 @@ export default {
             patch.hubwatch = now;
             jobs.push(runHubWatch(qe("hubwatch")).catch((e) => console.error("HUBWATCH", String(e))));
           }
-          // دایجست پولی هشدارهای پنل: حجم ساعتی، انقضا روزانه (هزینه ثابت هر اجرا؛ ساعت خلوت ≈ صفر write)
-          if (!gIdle && (!cs.pgdu || now - cs.pgdu >= 3600000)) {
-            patch.pgdu = now;
-            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "usage", "pgdlast:usage", "📦", "دایجست ساعتی حجم", (u) => "≈" + faNum(u.bucket) + "٪").catch((e) => console.error("PGDU", String(e))));
-          }
-          if (!gIdle && (!cs.pgdd || now - cs.pgdd >= 86400000)) {
-            patch.pgdd = now;
-            jobs.push(runPgDigest(qe("pghook"), botToken, adminId, "days", "pgdlast:days", "📅", "دایجست روزانه انقضا", (u) => faNum(u.bucket) + " روز").catch((e) => console.error("PGDD", String(e))));
-          }
+          // ⛔ دایجست هشدارهای پنل (حجم/انقضا) حذف شد — نسخهٔ سروری انجام می‌دهد.
           jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
           jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
           jobs.push(announceRelease(qe("ann"), botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
@@ -1868,8 +1860,7 @@ export default {
                   await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
                 } catch (x) {}
               }),
-              pgUbFlush({ ...env, BOT_KV: qKvCount(env.BOT_KV, "pghook") }, botToken, adminId, false).catch((e) => console.error("PGUB", String(e))),
-              // فلاش بافر هشدارهای فوری بالا هم جزو سنگین‌هاست (حداکثر ۳ دقیقه تأخیر تا پیام جمعی)
+              // ⛔ pgUbFlush (فلاش بافر هشدارهای انقضا/حجم) حذف شد — KV-heavy
             ]);
           }
         })().catch((e) => console.error("GHEAVY", String(e)))
@@ -2420,11 +2411,8 @@ function monsKeyboard() {
       { text: "🧭 تعویض خودکار ساب فیلتر", callback_data: "hf" },
       { text: "📡 مانیتور نود پاسارگارد", callback_data: "nd" },
     ],
-    // هشدارها (۲ستونه)
-    [
-      { text: "🔔 هشدار انقضا و حجم", callback_data: "pghook" },
-      { text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" },
-    ],
+    // هشدارها (تک‌ستونه)
+    [{ text: "🔥 گزارش بد مصرف پاسارگارد", callback_data: "um" }],
     // مانیتورینگ (۲ستونه): سرورها + دامنه و ترافیک‌ها
     [
       { text: "🖥 سرورها و مانیتورینگ", callback_data: "srv", style: "plain" },
@@ -2547,8 +2535,8 @@ const HELP_GUIDE = {
     "نودهای دلخواه را «استثنا» کن تا هشدار نگیری.",
   pghook:
     "🔔 هشدار انقضا و حجم\n\n" +
-    "وبهوک پاسارگارد؛ آستانهٔ روز و حجم در خود پنل تنظیم می‌شود و ربات فقط فوروارد می‌کند (هر کاربر یک‌بار + سکوت ۴۵ دقیقه‌ای ضداسپم).\n" +
-    "لینک ادمین‌ها: خودکار، دستی یا خودثبت‌نامی با یوزر/پسورد. پیام تستی و «سایلنت من» از همان صفحه.",
+    "این قابلیت از نسخهٔ ورکر حذف شد (مصرف زیاد Workers KV).\n" +
+    "از نسخهٔ سروری (Go) استفاده کن؛ وبهوک پنل، آستانهٔ روز/حجم، تمدید و پیام تستی آنجا کامل است.",
   um:
     "🔥 گزارش بدمصرف پاسارگارد\n\n" +
     "اسنپ‌شات ساعتی مصرف کاربران؛ اگر مصرف از آستانه بگذرد هشدار می‌آید + گزارش روزانه.\n" +
@@ -2583,7 +2571,7 @@ const HELP_GUIDE = {
     "روی هر دکمه بزنی راهنمای همان بخش را می‌بینی:\n\n" +
     "🌐 دامنه و DNS: کلودفلر · افزودن رکورد · جست‌وجو · ساب‌های منتخب · عملیات گروهی\n" +
     "🖥 سرور و دیتاسنتر: سرورها و مانیتورینگ · رله · دیتاسنترها (لینود/هتزنر) · آروان\n" +
-    "🎛 پاسارگارد: پنل · تعویض خودکار · مانیتور نود · هشدار انقضا و حجم · بدمصرف\n" +
+    "🎛 پاسارگارد: پنل · تعویض خودکار · مانیتور نود · بدمصرف\n" +
     "🌐 مانیتور دامنه و ترافیک‌ها: گواهی SSL · انقضای دامنه · ترافیک ساب‌ها · سهمیه کلادفلر\n" +
     "🧰 ابزارها: یادآورها · لود بالانسر · ایمیل دامنه\n" +
     "⚙️ مدیریت: تنظیمات · مدیریت ادمین",
@@ -2635,7 +2623,6 @@ function helpKeyboard() {
       { text: "📡 مانیتور نود", callback_data: "hg:nd" },
     ],
     [
-      { text: "🔔 هشدار انقضا و حجم", callback_data: "hg:pghook" },
       { text: "🔥 بدمصرف", callback_data: "hg:um" },
     ],
 
@@ -18295,8 +18282,7 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
       await saveHostFilterCfg(kv, cfg);
       await renderHostFilterHosts(edit, kv, env, chatId, put ? `🚫 ${cur.length} هاست مستثنا شد.` : `✅ ${cur.length} هاست به چرخه برگشت.`);
     } else if (data === "pghook") {
-      if (!isMain) return edit("⛔ فقط ادمین اصلی.");
-      await renderPgHookHome(edit, kv, env, adminId);
+      return edit("ℹ️ قابلیت «هشدار انقضا و حجم» از نسخهٔ ورکر حذف شد (مصرف زیاد Workers KV).\n\nبرای این قابلیت از نسخهٔ سروری (Go) استفاده کن — کامل و بدون KV.", [[{ text: "🏠 خانه", callback_data: "menu" }]]);
     } else if (data.startsWith("pgrenewbot:")) {
       if (!isMain) return edit("⛔ فقط ادمین اصلی.");
       const pid = data.slice(11);

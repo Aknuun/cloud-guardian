@@ -1,0 +1,8 @@
+{
+  "bot_token": "123456789:AA...yourBotFatherToken",
+  "admin_id": 123456789,
+  "cf_token": "cfut_...",
+  "cf_account_id": "",
+  "public_url": "http://YOUR_SERVER_IP:8787",
+  "hz_token": ""
+}
