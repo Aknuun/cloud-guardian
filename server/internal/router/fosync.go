@@ -8,10 +8,11 @@ import (
 )
 
 func (r *Router) foSnap() map[string]any {
-	pub := strings.TrimRight(r.FO["public_url"], "/")
-	health := ""
-	if pub != "" {
-		health = pub + "/health"
+	health := r.FO["health_url"]
+	if health == "" {
+		if pub := strings.TrimRight(r.FO["public_url"], "/"); pub != "" {
+			health = pub + "/health"
+		}
 	}
 	username, _ := r.Store.GetOK("bot_username")
 	return map[string]any{
