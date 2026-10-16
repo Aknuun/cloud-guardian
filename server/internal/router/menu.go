@@ -23,6 +23,7 @@ func (r *Router) settingsHome(chat, mid int64) {
 	kb := [][]Btn{
 		{btn("📖 راهنمای بخش‌ها", "help")},
 		{btn("🔄 نسخه‌ها و آپدیت", "vers")},
+		{btn("🛟 پشتیبان فیلور (Standby)", "fo")},
 	}
 	if r.IsMain(r.curFrom) {
 		kb = append(kb, []Btn{btn("👥 مدیریت ادمین‌ها", "admins_menu")})

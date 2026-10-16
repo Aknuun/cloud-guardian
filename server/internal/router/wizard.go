@@ -75,6 +75,10 @@ func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 		r.hubReplySave(chat, mid, pend, text)
 	case "hub_annreply":
 		r.hubAnnReplySave(chat, mid, pend, text)
+	case "fo_token":
+		r.foTokenSave(chat, mid, text)
+	case "fo_name":
+		r.foNameSave(chat, mid, pend, text)
 	case "hub_set_hub":
 		r.hubCfgField(chat, mid, "hub_set_hub", text)
 	case "hub_set_secret":

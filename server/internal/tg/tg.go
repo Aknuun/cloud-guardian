@@ -344,6 +344,15 @@ func (c *Client) SetWebhook(u string) bool {
 	return err == nil
 }
 
+func (c *Client) GetWebhookInfo() (map[string]any, error) {
+	raw, err := c.call("getWebhookInfo", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]any
+	return m, json.Unmarshal(raw, &m)
+}
+
 func (c *Client) GetMe() (map[string]any, error) {
 	raw, err := c.call("getMe", map[string]any{})
 	if err != nil {

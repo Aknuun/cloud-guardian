@@ -26,16 +26,26 @@ func Esc(s any) string {
 }
 
 type Router struct {
-	Bot     *tg.Client
-	Store   *store.Store
-	AdminID int64
-	FO      map[string]string
-	CFToken string
-	DBPath  string
-	curFrom int64
+	Bot      *tg.Client
+	Store    *store.Store
+	AdminID  int64
+	FO       map[string]string
+	CFToken  string
+	BotToken string
+	DBPath   string
+	curFrom  int64
 }
 
 func New(bot *tg.Client, st *store.Store, adminID int64, fo map[string]string) *Router {
+	if fo == nil {
+		fo = map[string]string{}
+	}
+	var saved map[string]string
+	if st.GetJSON(foCfgKey, &saved) && saved != nil {
+		for k, v := range saved {
+			fo[k] = v
+		}
+	}
 	return &Router{Bot: bot, Store: st, AdminID: adminID, FO: fo}
 }
 
@@ -115,7 +125,12 @@ func (r *Router) onMessage(m *tg.Message) {
 		return
 	}
 	switch {
-	case strings.HasPrefix(text, "/start"), text == "🏠 خانه":
+	case strings.HasPrefix(text, "/start"):
+		r.Menu(chat, 0)
+		if r.IsMain(frm) {
+			r.foMaybePrompt(chat)
+		}
+	case text == "🏠 خانه":
 		r.Menu(chat, 0)
 	case strings.HasPrefix(text, "/zones"), strings.HasPrefix(text, "/cf"):
 		r.cfZones(chat, 0, "all", 0)

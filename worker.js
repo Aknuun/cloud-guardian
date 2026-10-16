@@ -1728,6 +1728,12 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    // حالت پشتیبان (standby failover): فقط نگهبان سرور اجرا می‌شود؛ بقیهٔ
+    // جاب‌های دوره‌ای و خودترمیمی وب‌هوک غیرفعال‌اند تا با سرور اصلی نجنگند.
+    if (env.CG_STANDBY) {
+      ctx.waitUntil(standbyWatchdog(env).catch((e) => console.error("STANDBY", String(e))));
+      return;
+    }
     const cron = event.cron || "";
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
@@ -4084,6 +4090,8 @@ async function tgSetWebhook(botToken, url, kv, drop) {
   } catch (e) {}
 }
 async function ensureTgWebhook(botToken, kv, env) {
+  // در حالت standby، مدیریت وب‌هوک فقط کار standbyWatchdog است.
+  if (env && env.CG_STANDBY) return;
   // خودترمیم وب‌هوک: روی موفقیت روزی یک‌بار، روی شکست (مثلاً DNS
   // موقت تلگرام) حدود یک ساعت بعد دوباره تلاش می‌کند.
   try {
@@ -4103,6 +4111,80 @@ async function ensureTgWebhook(botToken, kv, env) {
     } catch (e) {}
     // فقط موفقیت واقعی، گیت ۲۴ساعته را تمدید می‌کند؛ شکست یعنی تلاش مجدد ~۱ ساعت بعد
     await kv.put("tg_secret_ts", String(ok ? now : now - 23 * 3600000));
+  } catch (e) {}
+}
+
+// ===================== حالت پشتیبان (standby failover) =====================
+// وقتی سرور سالم است، وب‌هوک حذف می‌شود تا ربات سروری با polling کار کند.
+// وقتی سرور ۲ بار پشت‌سرهم پاسخ نداد، وب‌هوک به همین ورکر برمی‌گردد تا ربات
+// موقتاً همین‌جا (با KV محلی) جواب دهد. با برگشت سرور، دوباره آزاد می‌شود.
+// در این حالت این ورکر نسخهٔ تقریباً کاملی از ربات است (همان منطق، KV خودش).
+async function standbyWatchdog(env) {
+  const kv = env.BOT_KV;
+  const botToken = env.BOT_TOKEN || BOT_TOKEN;
+  if (!kv || !botToken) return;
+  const self = String(env.CG_SELF_URL || "").trim();
+  const health = String(env.CG_HEALTH_URL || "").trim();
+  if (!self || !health) return;
+
+  // همگام‌سازی اعتبارنامه‌ها از اسنپ‌شاتی که سرور در KV می‌گذارد
+  await foHydrate(kv);
+
+  let ok = false;
+  try {
+    const res = await fetch(health, { signal: withTimeout(6000) });
+    ok = !!res && res.ok;
+  } catch (e) {
+    ok = false;
+  }
+
+  if (ok) {
+    // سرور سالم است: اگر قبلاً وب‌هوک را گرفته بودیم، آزادش کن (پولینگ سرور)
+    const owned = (await kv.get("fo_owned", "text")) === "1";
+    await kv.put("fo_fail", "0");
+    if (owned) {
+      try {
+        await tg(botToken, "deleteWebhook", { drop_pending_updates: false });
+        await kv.put("fo_owned", "0");
+      } catch (e) {}
+    }
+    return;
+  }
+
+  // سرور پاسخ نداد: شمارش شکست متوالی (آستانه ۲ ≈ ۱۰ دقیقه با کرون ۵ دقیقه‌ای)
+  const n = Number((await kv.get("fo_fail", "text")) || 0) + 1;
+  await kv.put("fo_fail", String(n), { expirationTtl: 3600 });
+  if (n < 2) return;
+
+  if ((await kv.get("fo_owned", "text")) === "1") return; // از قبل مالک وب‌هوکیم
+  const secret = await getTgSecret(kv);
+  const body = { url: self, drop_pending_updates: false };
+  if (secret) body.secret_token = secret;
+  try {
+    const d = await tg(botToken, "setWebhook", body);
+    if (d && d.ok) await kv.put("fo_owned", "1");
+  } catch (e) {}
+}
+
+// اسنپ‌شات اعتبارنامه‌ها را از KV سرور بگیر و در KV محلی بنشان (فقط وقتی
+// تازه‌تر از آخرین همگام‌سازی باشد). شکل cf_tokens = [{name,token}] است که
+// همان چیزی است که کلید «accounts» ورکر انتظار دارد.
+async function foHydrate(kv) {
+  try {
+    const snap = await kv.get("fo_snap", "json");
+    if (!snap || !snap.ts) return;
+    const last = Number((await kv.get("fo_hydrated_ts", "text")) || 0);
+    if (Number(snap.ts) <= last) return;
+    const pairs = [
+      ["accounts", snap.cf_tokens],
+      ["hz_accounts", snap.hz_tokens],
+      ["ln_accounts", snap.ln_tokens],
+      ["arvan_accounts", snap.arvan_tokens],
+    ];
+    for (const [k, v] of pairs) {
+      if (Array.isArray(v)) await kv.put(k, JSON.stringify(v));
+    }
+    await kv.put("fo_hydrated_ts", String(snap.ts));
   } catch (e) {}
 }
 // ===================== محافظ بودجهٔ نوشتن (3.0.3) =====================

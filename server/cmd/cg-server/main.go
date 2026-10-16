@@ -57,6 +57,7 @@ func main() {
 
 	r := router.New(bot, st, cfg.AdminID, cfg.FailoverMap())
 	r.CFToken = cfg.CFToken
+	r.BotToken = cfg.BotToken
 	r.DBPath = dbPath
 
 	// health + webhook endpoints

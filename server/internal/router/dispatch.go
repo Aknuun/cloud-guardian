@@ -15,6 +15,33 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.Menu(chat, mid)
 	case data == "settings":
 		r.settingsHome(chat, mid)
+	case data == "fo":
+		r.failoverHome(chat, mid)
+	case data == "fosetup":
+		r.foSetupStart(chat, mid)
+	case data == "fodeploy":
+		if w := r.getWizard(chat); w != nil {
+			r.foDeploy(chat, w)
+		} else {
+			r.failoverHome(chat, mid)
+		}
+	case data == "forefresh":
+		r.foRefresh(chat, mid)
+	case data == "fo_skip":
+		r.Store.Put("fo:prompted", "1", 0)
+		r.Menu(chat, mid)
+	case data == "fodisable":
+		r.foDisable(chat, mid)
+	case data == "fodelete":
+		r.foDelete(chat, mid)
+	case data == "fodelete_yes":
+		r.foDeleteYes(chat, mid)
+	case data == "foold":
+		r.foOldWorkers(chat, mid)
+	case strings.HasPrefix(data, "fooldcron:"):
+		r.foOldCron(chat, mid, data[10:])
+	case strings.HasPrefix(data, "foolddel:"):
+		r.foOldDelete(chat, mid, data[9:])
 	case data == "help":
 		r.helpList(chat, mid)
 	case strings.HasPrefix(data, "help:"):
