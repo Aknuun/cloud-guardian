@@ -324,6 +324,8 @@ def bindings(cfg, kv_id):
         # شناسهٔ KV برای اینکه آپدیت خودکارِ داخل ورکر (maybeSelfUpdate) بتواند
         # بایندینگ‌ها را بدون حدس زدن بازسازی کند.
         {"type": "plain_text", "name": "KV_ID", "text": kv_id},
+        # حالت سبک نسخهٔ ورکری: پاسارگارد/ایجنت/مانیتورهای سنگین خاموش (پیش‌فرض روشن).
+        {"type": "plain_text", "name": "CG_LITE", "text": str(cfg.get("lite", 1))},
     ]
 
 

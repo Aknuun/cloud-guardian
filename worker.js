@@ -11,6 +11,12 @@ const ADMIN_ID = 0;
 // ============================================================
 const BOT_VERSION = "4.5.0";
 
+// حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
+// خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
+// فعال می‌شود؛ نسخهٔ سروری (Go) و ورکر پشتیبان فیلور این بایندینگ را ندارند.
+let LITE = false;
+const isLite = (e) => String((e && e.CG_LITE) || "").trim() === "1";
+
 // سقف روزانهٔ پلن رایگان ورکرها (۱۰۰,۰۰۰ درخواست در روز) — برای هشدار ۹۰٪ و استاپ خودکار
 // از طریق binding اختیاری REQUEST_LIMIT_DAILY قابل تغییر است؛ اگر ۰ باشد گارد غیرفعال است.
 const REQUEST_LIMIT_DAILY = 100000;
@@ -1402,6 +1408,11 @@ export default {
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
     let kv = env.BOT_KV;
     const url = new URL(request.url);
+    LITE = isLite(env);
+    // حالت سبک: مسیرهای ایجنت/گاردین/نود غیرفعال‌اند.
+    if (LITE && (url.pathname.startsWith("/guardian") || url.pathname.startsWith("/ndhook/") || url.pathname.startsWith("/node-hook/"))) {
+      return ok();
+    }
 
     if (request.method === "POST" && (url.pathname.startsWith("/ndhook/") || url.pathname.startsWith("/node-hook/"))) {
       const parts = url.pathname.split("/").filter(Boolean);
@@ -1737,6 +1748,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
+    LITE = isLite(env);
     // حالت پشتیبان (standby failover): فقط نگهبان سرور اجرا می‌شود؛ بقیهٔ
     // جاب‌های دوره‌ای و خودترمیمی وب‌هوک غیرفعال‌اند تا با سرور اصلی نجنگند.
     if (env.CG_STANDBY) {
@@ -1746,6 +1758,17 @@ export default {
     const cron = event.cron || "";
     const botToken = env.BOT_TOKEN || BOT_TOKEN;
     const adminId = Number(env.ADMIN_ID || ADMIN_ID);
+    // حالت سبک (نسخهٔ ورکری): فقط یادآورها + خودترمیمی وب‌هوک و دستورات.
+    // هیچ جاب سنگین/پاسارگارد/ایجنت/مانیتور دوره‌ای اجرا نمی‌شود (مصرف ~صفر).
+    if (LITE) {
+      ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(env.BOT_KV, "tgsec"), env).catch(() => {}));
+      if (cron === "*/10 * * * *") {
+        ctx.waitUntil(ensureBotCommands(qKvCount(env.BOT_KV, "cmd"), botToken, qKvCount(env.BOT_KV, "cmd")).catch(() => {}));
+      } else if (cron === "* * * * *") {
+        ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
+      }
+      return;
+    }
     // خاموش‌کردن موقت کرون‌جاب‌ها (از منوی سهمیه یا لینک هشدار): فقط گارد سهمیه اجرا شود تا خودکار روشن شویم
     const qcfg = await getQuotaCfg(env.BOT_KV, env).catch(() => null);
     if (qcfg && qcfg.cronPausedUntil) {
@@ -2287,6 +2310,7 @@ async function processUpdate(payload, env, botToken, adminId) {
         [{ text: "🏠 خانه", callback_data: "menu" }],
       ]);
     } else if (cmd === "/srv") {
+      if (LITE) return send("🚫 این بخش در نسخهٔ سبک (Lite) غیرفعال است.");
       await renderServersHome(send, kv, env);
     } else if (cmd === "/admins") {
       if (chatId !== adminId) await send("❌ فقط ادمین اصلی می‌تواند ادمین‌ها را مدیریت کند.");
@@ -2418,6 +2442,18 @@ function mainMenuKeyboard() {
 
 // ردیف‌های مشترک فیچرها — داخل خانه استفاده می‌شود (صفحهٔ جداگانه ندارد؛ مانیتور سرورها فقط از داخل «سرورها» باز می‌شود)
 function monsKeyboard() {
+  // حالت سبک: پاسارگارد/ایجنت/گاردین/مانیتورهای سنگین پنهان می‌شوند؛
+  // فقط ابزارهای سبک (یادآور، ایمیل، لودبالانسر) می‌مانند.
+  if (LITE) {
+    return [
+      [
+        { text: "⏰ یادآورها", callback_data: "rem", style: "plain" },
+        { text: "✉️ ایمیل دامنه", callback_data: "fmail", style: "plain" },
+        { text: "⚖️ لود بالانسر IP", callback_data: "lb", style: "plain" },
+      ],
+      [{ text: "🏠 خانه", callback_data: "menu" }],
+    ];
+  }
   return [
     // پنل پاسارگارد (تمام‌عرض، آبی)
     [{ text: "🎛 پنل پاسارگارد", callback_data: "pndef", style: "primary" }],
@@ -2464,7 +2500,8 @@ async function ensureBotCommands(env, botToken, kv) {
     if (!kv) return;
     const seen = await kvGetCached(kv, "bot_cmds_ver", "json");
     if (seen === BOT_VERSION) return;
-    await tg(botToken, "setMyCommands", { commands: BOT_COMMANDS });
+    const cmds = LITE ? BOT_COMMANDS.filter((c) => c.command !== "srv") : BOT_COMMANDS;
+    await tg(botToken, "setMyCommands", { commands: cmds });
     await kvPutCached(kv, "bot_cmds_ver", JSON.stringify(BOT_VERSION));
   } catch (e) {}
 }
@@ -2676,11 +2713,14 @@ function settingsHomeText() {
   );
 }
 function settingsHomeKb() {
+  const first = LITE
+    ? [{ text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" }]
+    : [
+        { text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" },
+        { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
+      ];
   return [
-    [
-      { text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" },
-      { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
-    ],
+    first,
     [
       { text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" },
       { text: "📞 ارتباط با سازنده", callback_data: "contactcreator", style: "plain" },
@@ -14593,6 +14633,18 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
   try {
     await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id });
   } catch (e) {}
+
+  // حالت سبک: دکمه‌های حذف‌شده (پاسارگارد/ایجنت/مانیتور سنگین) پیام راهنما بدهند.
+  if (LITE) {
+    const d0 = String(data || "");
+    const OFF = ["pndef", "pnladd", "pnle", "pnld", "pnlxx", "nd", "ndst", "ndq", "um", "hf", "srv", "dommon", "gdom", "guardian", "pgself", "pgstart", "pgselftry", "pghook", "nodeadd", "qnodes"];
+    if (OFF.some((p) => d0.startsWith(p))) {
+      try {
+        await tg(botToken, "answerCallbackQuery", { callback_query_id: cb.id, text: "این بخش در نسخهٔ سبک (Lite) غیرفعال است. برای آن از نسخهٔ سروری استفاده کن.", show_alert: true });
+      } catch (e) {}
+      return;
+    }
+  }
 
   if (!chatId && !inlineMessageId) return;
 
