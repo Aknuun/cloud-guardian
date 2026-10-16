@@ -50,6 +50,10 @@ func main() {
 		}
 	}
 	bot.DeleteWebhook()
+	bot.SetChatMenuButton(true)
+	if err := bot.SetMyCommands(router.BotCommands()); err != nil {
+		log.Printf("setMyCommands: %v", err)
+	}
 
 	r := router.New(bot, st, cfg.AdminID, cfg.FailoverMap())
 	r.CFToken = cfg.CFToken

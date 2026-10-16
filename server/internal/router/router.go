@@ -144,6 +144,12 @@ func (r *Router) onMessage(m *tg.Message) {
 		r.contactKB(chat)
 	default:
 		switch {
+		case strings.HasPrefix(text, "/"):
+			if cb, ok := slashTargets[slashCmd(text)]; ok {
+				r.dispatch(chat, 0, cb)
+				return
+			}
+			r.Menu(chat, 0)
 		case qaIPRe.MatchString(text):
 			r.qaIPSearch(chat, 0, text)
 		case cfIsHost(strings.ToLower(text)):

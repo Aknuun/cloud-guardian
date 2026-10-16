@@ -322,6 +322,22 @@ func (c *Client) DeleteWebhook() {
 	_, _ = c.call("deleteWebhook", map[string]any{"drop_pending_updates": false})
 }
 
+// SetMyCommands registers the bot command menu shown in Telegram clients.
+func (c *Client) SetMyCommands(cmds any) error {
+	_, err := c.call("setMyCommands", map[string]any{"commands": cmds})
+	return err
+}
+
+// SetChatMenuButton shows the command list in the chat menu button.
+func (c *Client) SetChatMenuButton(commands bool) {
+	mode := "default"
+	if commands {
+		mode = "commands"
+	}
+	_, _ = c.call("setChatMenuButton", map[string]any{
+		"menu_button": map[string]any{"type": mode}})
+}
+
 func (c *Client) SetWebhook(u string) bool {
 	_, err := c.call("setWebhook", map[string]any{
 		"url": u, "drop_pending_updates": false})
