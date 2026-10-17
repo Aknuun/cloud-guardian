@@ -6,8 +6,8 @@
 #  one-liner:
 #    bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/install-server.sh)"
 #
-#  دستورها / commands:  install (default) | update | uninstall | status | logs | help
-#  زبان / language:      CG_LANG=fa|en   یا   --lang fa|en
+#  commands:  install (default) | update | uninstall | status | logs | help
+#  language:  English by default.  Override with  CG_LANG=fa  or  --lang fa
 # ============================================================
 set -euo pipefail
 
@@ -40,12 +40,21 @@ warn() { printf "${YELLOW}⚠️  %s${RST}\n" "$*"; }
 err()  { printf "${RED}❌ %s${RST}\n" "$*" >&2; }
 hr()   { printf "${DIM}──────────────────────────────────────────────────────────${RST}\n"; }
 
-# --- language ---
-CG_LANG="${CG_LANG:-fa}"
+banner() {
+  echo
+  hr
+  printf "  ${CYAN}${BOLD}Cloud Guardian${RST} ${DIM}·${RST} ${GREEN}${BOLD}Server edition (Go)${RST}\n"
+  printf "  ${DIM}VPS installer — systemd service + static Go build${RST}\n"
+  hr
+  echo
+}
+
+# --- language (English by default) ---
+CG_LANG="${CG_LANG:-en}"
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
-    --lang) CG_LANG="${2:-fa}"; shift 2 ;;
+    --lang) CG_LANG="${2:-en}"; shift 2 ;;
     --lang=*) CG_LANG="${1#*=}"; shift ;;
     fa|en) CG_LANG="$1"; shift ;;
     *) args+=("$1"); shift ;;
@@ -188,10 +197,10 @@ write_config() {
   ask "$(t "توکن API کلادفلر (اختیاری، Enter برای رد)" "Cloudflare API token (optional, Enter to skip)")" ""
   cf="$REPLY"
 
-  # public url
+  # public url — auto-detected silently (no prompt); used only by the optional failover
   ip="$(curl -fsSL --max-time 8 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
-  ask "$(t "آدرس عمومی سرور برای وب‌هوک (اختیاری)" "Public server URL for webhook (optional)")" "http://${ip:-YOUR_IP}:8787"
-  pub="$REPLY"
+  if [ -n "$ip" ]; then pub="http://${ip}:8787"; else pub=""; fi
+  log "$(t "آدرس عمومی (خودکار): ${pub:-—}" "public_url (auto): ${pub:-none}")"
 
   cat > "$CFG" <<EOF
 {
@@ -266,6 +275,7 @@ summary() {
 }
 
 do_install() {
+  banner
   need_root
   ensure_base
   ensure_go
@@ -278,6 +288,7 @@ do_install() {
 }
 
 do_update() {
+  banner
   need_root
   ensure_base
   ensure_go
