@@ -5,7 +5,7 @@ import "fmt"
 // Menu renders the home menu.
 func (r *Router) Menu(chat, mid int64) {
 	kb := [][]Btn{
-		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("🔍 جست و جو", "search", "plain"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
+		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
 		{btnS("🟢 لینود", "ln", "success"), btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
 		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
 		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},

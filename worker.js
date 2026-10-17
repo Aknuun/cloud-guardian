@@ -2425,7 +2425,7 @@ function mainMenuKeyboard() {
     [
       { text: "➕ افزودن رکورد", callback_data: "addrec", style: "plain" },
       { text: "☁️ کلودفلر", callback_data: "zones" },
-      { text: "🔍 جست و جو", callback_data: "search", style: "plain" },
+      { text: "⚡ تغییر سریع", callback_data: "search", style: "plain" },
     ],
     // دیتاسنتر (۳ستونه، سبز)
     [
@@ -2487,7 +2487,7 @@ const BOT_COMMANDS = [
   { command: "zones", description: "☁️ کلودفلر — دامنه‌ها" },
   { command: "favorites", description: "⭐ ساب‌های منتخب" },
   { command: "newrecord", description: "➕ افزودن رکورد" },
-  { command: "search", description: "🔍 جست‌وجو" },
+  { command: "search", description: "⚡ تغییر سریع / جست‌وجو" },
   { command: "providers", description: "🏢 دیتاسنترها" },
   { command: "srv", description: "🖥 سرورها و مانیتورینگ" },
   { command: "help", description: "ℹ️ راهنما" },
