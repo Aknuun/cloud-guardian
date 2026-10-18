@@ -886,7 +886,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.Show(chat, mid, "⏳ در حال بررسی همه سرورها…", HomeKB())
 		r.srvmonRun(chat)
 	case strings.HasPrefix(data, "srvmonh:"):
-		r.setWizard(chat, map[string]any{"kind": "srvmon_num", "key": strings.TrimPrefix(data, "srvmonh:")})
+		r.wizStart(chat, mid, map[string]any{"kind": "srvmon_num", "key": strings.TrimPrefix(data, "srvmonh:")})
 		r.Show(chat, mid, "🔢 عدد جدید را بفرستید:", [][]Btn{{btn("🔙 انصراف", "srvmon")}})
 	case strings.HasPrefix(data, "srvstats:"):
 		r.srvStats(chat, mid, strings.TrimPrefix(data, "srvstats:"))

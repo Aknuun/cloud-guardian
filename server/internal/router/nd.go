@@ -401,7 +401,7 @@ func (r *Router) ndMkPanel(chat, mid int64) {
 }
 
 func (r *Router) ndIntAsk(chat, mid int64, idStr string) {
-	r.setWizard(chat, map[string]any{"kind": "nd_int", "id": idStr})
+	r.wizStart(chat, mid, map[string]any{"kind": "nd_int", "id": idStr})
 	r.Show(chat, mid, "⏱ فاصلهٔ پایش را به دقیقه بفرستید (مثل ۱۰):",
 		[][]Btn{{btn("🔙 بازگشت", "ndd:"+idStr), btn("🏠 خانه", "menu")}})
 }
@@ -420,6 +420,5 @@ func (r *Router) ndIntSave(chat, mid int64, idStr, text string) {
 	}
 	ndmon.SaveMonitors(r.Store, lst)
 	r.clearWizard(chat)
-	r.Bot.Send(chat, fmt.Sprintf("✅ فاصله پایش روی %d دقیقه تنظیم شد.", n), nil)
-	r.ndDetail(chat, 0, idStr)
+	r.ndDetail(chat, mid, idStr)
 }

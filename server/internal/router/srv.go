@@ -972,8 +972,7 @@ func (r *Router) srvmonNumSave(chat, mid int64, pend map[string]any, text string
 	cfg[key] = v
 	srvmon.Save(r.Store, cfg)
 	r.clearWizard(chat)
-	r.Bot.Send(chat, "✅ ذخیره شد.", nil)
-	r.srvmonHome(chat, 0)
+	r.srvmonHome(chat, mid)
 }
 
 func atofSafe(s string) float64 {

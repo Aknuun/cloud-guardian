@@ -548,7 +548,7 @@ func hfErrFA(err error) string {
 }
 
 func (r *Router) hfNumAsk(chat, mid int64, key string) {
-	r.setWizard(chat, map[string]any{"kind": "hf_num", "key": key})
+	r.wizStart(chat, mid, map[string]any{"kind": "hf_num", "key": key})
 	r.Show(chat, mid, "🔢 عدد جدید را بفرستید:", [][]Btn{{btn("🔙 انصراف", "hfsetch")}})
 }
 
@@ -579,6 +579,5 @@ func (r *Router) hfNumSave(chat, mid int64, key, text string) {
 	}
 	hostfilter.SaveCfg(r.Store, cfg)
 	r.clearWizard(chat)
-	r.Bot.Send(chat, "✅ ذخیره شد.", nil)
-	r.hfSettings(chat, 0)
+	r.hfSettings(chat, mid)
 }

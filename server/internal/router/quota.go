@@ -120,7 +120,7 @@ func (r *Router) quotaCrons(chat, mid int64) {
 }
 
 func (r *Router) quotaSetLimit(chat, mid int64) {
-	r.setWizard(chat, map[string]any{"kind": "quota_limit"})
+	r.wizStart(chat, mid, map[string]any{"kind": "quota_limit"})
 	r.Show(chat, mid, "🔢 سقف درخواست روزانه را بفرستید (عدد):",
 		[][]Btn{{btn("🔙 بازگشت", "quota"), btn("🏠 خانه", "menu")}})
 }
@@ -141,8 +141,7 @@ func (r *Router) quotaLimitSave(chat, mid int64, text string) {
 	cfg.Limit = n
 	r.quotaSave(cfg)
 	r.clearWizard(chat)
-	r.Bot.Send(chat, fmt.Sprintf("✅ سقف روزانه روی %d تنظیم شد.", n), nil)
-	r.quotaHome(chat, 0)
+	r.quotaHome(chat, mid)
 }
 
 // QuotaAlert returns an over-limit warning text (once/day) or "".

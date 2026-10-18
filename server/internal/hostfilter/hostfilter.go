@@ -211,6 +211,9 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 			if !ok {
 				continue
 			}
+			if b, ok := h["is_disabled"].(bool); ok && b {
+				continue
+			}
 			hid := strv(h["id"])
 			base := p.URL + ":" + hid
 			excSet := map[string]bool{}
@@ -236,6 +239,10 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 			}
 		}
 	}
+
+	latches := map[string]int64{}
+	st.GetJSON("host_filter_latch", &latches)
+	latchChanged := false
 
 	changed, checked := 0, 0
 	for _, item := range pairs {
@@ -277,7 +284,22 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 			diag := diagIP(resolved[0], cfg)
 			if diag.Handled {
 				fmt.Printf("hf: %s ip-diagnosis handled ip=%s, skip swap\n", dv, diag.IP)
-				notify(bot, adminID, ipDiagMsg(panelName(item.panel), item.host, dv, diag))
+				kind := "blocked"
+				if diag.IPDown {
+					kind = "down"
+				} else if diag.IranAccess {
+					kind = "iran"
+				}
+				lk := kind + "|" + diag.IP
+				last := latches[lk]
+				fresh := last > 0 && nowMS-last < 24*3600*1000
+				if force || !fresh {
+					notify(bot, adminID, ipDiagMsg(panelName(item.panel), item.host, dv, diag))
+					latches[lk] = nowMS
+					latchChanged = true
+				} else {
+					fmt.Printf("hf: %s suppressed diag notice (latch %s)\n", dv, lk)
+				}
 				continue
 			}
 			if changed >= cfg.MaxChanges {
@@ -294,6 +316,9 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 	cfg.LastRun = time.Now().UTC().Format(time.RFC3339Nano)
 	cfg.LastSummary = fmt.Sprintf("بررسی %d دامنه — %d تعویض.", checked, changed)
 	SaveCfg(st, cfg)
+	if latchChanged {
+		st.PutJSON("host_filter_latch", latches, 0)
+	}
 	res.Checked = checked
 	res.Changed = changed
 	return res

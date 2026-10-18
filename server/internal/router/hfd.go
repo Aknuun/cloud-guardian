@@ -600,7 +600,7 @@ func (r *Router) hfdIntervalSet(chat, mid int64, h int) {
 
 func (r *Router) hfdAtAsk(chat, mid int64) {
 	cfg := r.hfdCfg()
-	r.setWizard(chat, map[string]any{"kind": "hfd_at"})
+	r.wizStart(chat, mid, map[string]any{"kind": "hfd_at"})
 	r.Show(chat, mid, fmt.Sprintf("🕐 ساعت لنگر را به وقت تهران بفرست (HH:MM مثل 03:00؛ فعلی: %s):", cfg.At),
 		[][]Btn{{btn("⬅️ انصراف", "hfd")}})
 }
@@ -620,7 +620,7 @@ func (r *Router) hfdAtSave(chat, mid int64, pend map[string]any, text string) {
 }
 
 func (r *Router) hfdIntAsk(chat, mid int64) {
-	r.setWizard(chat, map[string]any{"kind": "hfd_int"})
+	r.wizStart(chat, mid, map[string]any{"kind": "hfd_int"})
 	r.Show(chat, mid, "⏱ بازه را به ساعت بفرست (۱ تا ۷۲۰):", [][]Btn{{btn("⬅️ انصراف", "hfd")}})
 }
 

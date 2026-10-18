@@ -441,19 +441,19 @@ func (r *Router) hubCfg(chat, mid int64) {
 }
 
 func (r *Router) hubCfgSetURL(chat, mid int64) {
-	r.setWizard(chat, map[string]any{"kind": "hub_set_hub"})
+	r.wizStart(chat, mid, map[string]any{"kind": "hub_set_hub"})
 	r.Show(chat, mid, "🔗 آدرس هاب را بفرست (مثلاً <code>http://1.2.3.4:8787/hub</code>)\nبرای پاک‌کردن: <code>-</code>",
 		[][]Btn{{btn("❌ انصراف", "hubcfg")}})
 }
 
 func (r *Router) hubCfgSetSecret(chat, mid int64) {
-	r.setWizard(chat, map[string]any{"kind": "hub_set_secret"})
+	r.wizStart(chat, mid, map[string]any{"kind": "hub_set_secret"})
 	r.Show(chat, mid, "🔑 یک secret دلخواه برای هاب بفرست:\nبرای پاک‌کردن: <code>-</code>",
 		[][]Btn{{btn("❌ انصراف", "hubcfg")}})
 }
 
 func (r *Router) hubCfgSetAnn(chat, mid int64) {
-	r.setWizard(chat, map[string]any{"kind": "hub_set_ann"})
+	r.wizStart(chat, mid, map[string]any{"kind": "hub_set_ann"})
 	r.Show(chat, mid, "🔗 آدرس JSON اعلان‌ها را بفرست:\nبرای پیش‌فرض: <code>-</code>",
 		[][]Btn{{btn("❌ انصراف", "hubcfg")}})
 }

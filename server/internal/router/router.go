@@ -12,7 +12,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.5.1"
+const Version = "4.5.2"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -121,7 +121,11 @@ func (r *Router) onMessage(m *tg.Message) {
 	var pend map[string]any
 	if r.Store.GetJSON(fmt.Sprintf("pend:%d", chat), &pend) && pend != nil &&
 		!strings.HasPrefix(text, "/") {
-		r.wizardStep(chat, 0, pend, text)
+		mid := int64(0)
+		if v, ok := pend["mid"].(float64); ok {
+			mid = int64(v)
+		}
+		r.wizardStep(chat, mid, pend, text)
 		return
 	}
 	switch {

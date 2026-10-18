@@ -66,7 +66,7 @@ func (r *Router) umReport(chat, mid int64) {
 }
 
 func (r *Router) umField(chat, mid int64, field, label string) {
-	r.setWizard(chat, map[string]any{"kind": "um_num", "key": field})
+	r.wizStart(chat, mid, map[string]any{"kind": "um_num", "key": field})
 	r.Show(chat, mid, "🔢 "+label+" را بفرستید:",
 		[][]Btn{{btn("🔙 انصراف", "um")}})
 }
@@ -93,5 +93,5 @@ func (r *Router) umNumSave(chat, mid int64, pend map[string]any, text string) {
 		cfg.ActiveMin = v
 	}
 	um.SaveCfg(r.Store, cfg)
-	r.umHome(chat, 0)
+	r.umHome(chat, mid)
 }

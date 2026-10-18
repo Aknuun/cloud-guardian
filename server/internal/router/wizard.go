@@ -12,6 +12,14 @@ func (r *Router) setWizard(chat int64, v map[string]any) {
 	r.Store.PutJSON(fmt.Sprintf("pend:%d", chat), v, 3600)
 }
 
+// wizStart stores the wizard along with the message id it was launched from, so
+// the result of a text-based setting can replace that same page instead of
+// spawning an extra message with no buttons.
+func (r *Router) wizStart(chat, mid int64, v map[string]any) {
+	v["mid"] = float64(mid)
+	r.setWizard(chat, v)
+}
+
 func (r *Router) getWizard(chat int64) map[string]any {
 	var v map[string]any
 	if r.Store.GetJSON(fmt.Sprintf("pend:%d", chat), &v) {
