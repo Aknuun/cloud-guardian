@@ -12,7 +12,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.5.7"
+const Version = "4.5.8"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -194,6 +194,22 @@ func (r *Router) onMessage(m *tg.Message) {
 		}
 	case strings.HasPrefix(text, "/contact"):
 		r.contactKB(chat)
+	case strings.HasPrefix(text, "/promoset"):
+		if !r.IsMain(frm) {
+			r.Show(chat, 0, "⛔ فقط ادمین اصلی.", HomeKB())
+			return
+		}
+		if v := strings.TrimSpace(strings.TrimPrefix(text, "/promoset")); v != "" {
+			r.promoSetSave(chat, 0, v)
+		} else {
+			r.promoSetAsk(chat, 0)
+		}
+	case strings.HasPrefix(text, "/promoreset"):
+		if !r.IsMain(frm) {
+			r.Show(chat, 0, "⛔ فقط ادمین اصلی.", HomeKB())
+			return
+		}
+		r.promoReset(chat, 0)
 	default:
 		switch {
 		case strings.HasPrefix(text, "/"):

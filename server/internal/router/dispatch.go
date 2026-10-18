@@ -80,6 +80,12 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.hubCfgSetAnn(chat, mid)
 	case data == "hubcontact":
 		r.hubContact(chat, mid)
+	case data == "promo":
+		r.promoHome(chat, mid)
+	case data == "promoset":
+		r.promoSetAsk(chat, mid)
+	case data == "promoreset":
+		r.promoReset(chat, mid)
 	case data == "hubctmsg":
 		r.hubContactStart(chat, mid)
 	case strings.HasPrefix(data, "hubreply:"):

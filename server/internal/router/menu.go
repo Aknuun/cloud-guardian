@@ -14,9 +14,11 @@ func (r *Router) Menu(chat, mid int64) {
 		{btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
 		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
 	}
-	r.Show(chat, mid,
-		fmt.Sprintf("به ربات نگهبان ابری خوش اومدی ⚙️ نسخه v%s", Version),
-		kb)
+	text := fmt.Sprintf("به ربات نگهبان ابری خوش اومدی ⚙️ نسخه v%s", Version)
+	if p := r.PromoText(); p != "" {
+		text += "\n\n" + p
+	}
+	r.Show(chat, mid, text, kb)
 }
 
 func (r *Router) settingsHome(chat, mid int64) {
@@ -29,7 +31,8 @@ func (r *Router) settingsHome(chat, mid int64) {
 		kb = append(kb, []Btn{btn("👥 مدیریت ادمین‌ها", "admins_menu")})
 		kb = append(kb,
 			[]Btn{btnS("📊 آمار نصب‌ها", "hubstats", "primary"), btnS("📢 پیام همگانی", "hubcast", "success")},
-			[]Btn{btn("📋 اعلان‌ها", "hubann"), btn("⚙️ تنظیم هاب", "hubcfg")})
+			[]Btn{btn("📋 اعلان‌ها", "hubann"), btn("📢 تبلیغ منوی اصلی", "promo")},
+			[]Btn{btn("⚙️ تنظیم هاب", "hubcfg")})
 	}
 	kb = append(kb, []Btn{btn("📞 ارتباط با سازنده", "hubcontact")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "menu"), btn("🏠 خانه", "menu")})

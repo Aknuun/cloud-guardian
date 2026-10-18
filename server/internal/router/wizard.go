@@ -77,6 +77,8 @@ func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 		r.quotaLimitSave(chat, mid, text)
 	case "hub_broadcast":
 		r.hubCastSave(chat, mid, text)
+	case "promo_text":
+		r.promoSetSave(chat, mid, text)
 	case "hub_contact":
 		r.hubContactSave(chat, mid, text)
 	case "hub_reply":
