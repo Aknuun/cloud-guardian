@@ -12,7 +12,14 @@ set -euo pipefail
 
 REPO="Aknuun/cloud-guardian"
 BRANCH="main"
-CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/heads/${BRANCH}"
+# ref to build from: a branch (default) or a version tag for rollback/install of a
+# specific release, e.g.  REF=v4.5.2 bash install-server.sh update
+REF="${REF:-$BRANCH}"
+if [[ "$REF" =~ ^v?[0-9] ]]; then
+  CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/tags/${REF}"
+else
+  CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/heads/${REF}"
+fi
 
 INSTALL_DIR="/opt/cloud-guardian"
 SRC_DIR="${INSTALL_DIR}/server"
@@ -114,7 +121,7 @@ ensure_go() {
 # fetch server source from GitHub
 # ------------------------------------------------------------
 fetch_source() {
-  step "Fetching source from GitHub"
+  step "Fetching source from GitHub (ref: ${REF})"
   mkdir -p "$INSTALL_DIR"
   local tmp; tmp="$(mktemp -d)"
   curl -fsSL "$CTAR" -o "${tmp}/src.tar.gz" || { err "Source download failed"; rm -rf "$tmp"; exit 1; }

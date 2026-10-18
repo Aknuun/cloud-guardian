@@ -1160,6 +1160,14 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "vers":
 		r.versHome(chat, mid)
 	case data == "verlatest":
-		r.verDo(chat, mid)
+		r.verLatest(chat, mid)
+	case data == "verlist":
+		r.verList(chat, mid)
+	case strings.HasPrefix(data, "verdoYes:"):
+		r.verDoYes(chat, mid, strings.TrimPrefix(data, "verdoYes:"))
+	case strings.HasPrefix(data, "verdo:"):
+		r.verDo(chat, mid, strings.TrimPrefix(data, "verdo:"))
+	case strings.HasPrefix(data, "updlater:"):
+		r.updLater(chat, mid, strings.TrimPrefix(data, "updlater:"))
 	}
 }

@@ -166,6 +166,7 @@ func main() {
 	go reminderLoop(r)
 	go alertLoop(r, st, bot, cfg.AdminID, dbPath)
 	go hostfilterLoop(r, st, bot, cfg.AdminID)
+	go updateLoop(r, bot)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -293,5 +294,14 @@ func hostfilterLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID i
 		}
 		accs := r.CFAccounts()
 		hostfilter.Run(bot, st, r.PanelsRaw(), adminID, accs, false, "")
+	}
+}
+
+func updateLoop(r *router.Router, bot *tg.Client) {
+	time.Sleep(45 * time.Second)
+	r.CheckUpdate(bot)
+	for {
+		time.Sleep(20 * time.Minute)
+		r.CheckUpdate(bot)
 	}
 }
