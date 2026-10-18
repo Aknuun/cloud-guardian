@@ -467,6 +467,22 @@ func (r *Router) cfRecord(chat, mid int64, acc int, zid, rid, traffic string) {
 		{tbtn, btn("✏️ تغییر مقدار", "cfedit:"+rid)},
 		{btn("⏱ TTL: "+cfTtlLabel(rec.TTL), "cfttl:"+rid), btn("🌐 Proxy: "+proxyState, "cfpx:"+rid)},
 	}
+	fqdn := rec.Name
+	if rec.Name != zname && rec.Name != "@" && !strings.HasSuffix(rec.Name, "."+zname) {
+		fqdn = rec.Name + "." + zname
+	} else if rec.Name == "@" {
+		fqdn = zname
+	}
+	cp := []Btn{}
+	if fqdn != "" {
+		cp = append(cp, copyBtnL("📋 کپی نام", fqdn))
+	}
+	if rec.Content != "" {
+		cp = append(cp, copyBtnL("📋 کپی مقدار", rec.Content))
+	}
+	if len(cp) > 0 {
+		kb = append(kb, cp)
+	}
 	if up == "A" || up == "AAAA" || up == "CNAME" {
 		kb = append(kb, []Btn{btnS("🛟 آیپی زاپاس", "lbss:"+rid, "success"), btnS("⚙️ تنظیمات لود بالانسر", "lbs:"+rid, "success")})
 	}

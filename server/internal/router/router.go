@@ -12,7 +12,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.5.4"
+const Version = "4.5.5"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -29,6 +29,10 @@ func HomeKB() [][]Btn                   { return [][]Btn{{btn("🏠 خانه", "
 //
 // Build a flat []Btn then flow it with gridBTN(items, cols); use row() for a
 // single row and navRow() for the standard back/home footer.
+//
+// Convenience rule: whenever a screen shows a value the user may need to reuse
+// (IP, sub/domain, password, token, webhook URL, SSH command...), also add a
+// tap-to-copy button via copyBtn(text) / copyBtnL(label, text).
 func row(bs ...Btn) []Btn { return bs }
 
 // navRow is the standard back/home footer shown at the bottom of sub-screens.
@@ -37,6 +41,17 @@ func navRow(back string) []Btn {
 		return row(btn("🏠 خانه", "menu"))
 	}
 	return row(btn("🔙 بازگشت", back), btn("🏠 خانه", "menu"))
+}
+
+// copyBtn is a tap-to-copy button (Telegram copy_text). It never carries a
+// callback, so tapping it just copies `text` to the clipboard.
+func copyBtn(text string) Btn { return copyBtnL("📋 کپی", text) }
+
+func copyBtnL(label, text string) Btn {
+	if strings.TrimSpace(text) == "" {
+		return btn(label, "noop")
+	}
+	return Btn{Text: label, Copy: &tg.CopyText{Text: text}}
 }
 
 func Esc(s any) string {

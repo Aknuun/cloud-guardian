@@ -305,6 +305,14 @@ func (r *Router) qaAddSave(chat, mid int64, pend map[string]any, text string) {
 			[][]Btn{{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	r.Show(chat, mid, fmt.Sprintf("✅ ساب <code>%s</code> با آی‌پی <code>%s</code> ساخته شد.", Esc(name), Esc(ip)),
-		[][]Btn{{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
+	full := name
+	if name != zname && !strings.HasSuffix(name, "."+zname) {
+		full = name + "." + zname
+	}
+	r.Show(chat, mid,
+		fmt.Sprintf("✅ ساب ساخته شد.\n\n🌐 دامنه: <code>%s</code>\n🌐 آی‌پی: <code>%s</code>", Esc(full), Esc(ip)),
+		[][]Btn{
+			{copyBtnL("📋 کپی دامنه", full)},
+			navRow("qamenu"),
+		})
 }

@@ -28,12 +28,18 @@ type Chat struct {
 	ID int64 `json:"id"`
 }
 
+// CopyText is the payload for a tap-to-copy button (Bot API copy_text).
+type CopyText struct {
+	Text string `json:"text"`
+}
+
 // Button is an inline keyboard button.
 type Button struct {
-	Text  string `json:"text"`
-	Data  string `json:"callback_data,omitempty"`
-	URL   string `json:"url,omitempty"`
-	Style string `json:"style,omitempty"`
+	Text  string    `json:"text"`
+	Data  string    `json:"callback_data,omitempty"`
+	URL   string    `json:"url,omitempty"`
+	Style string    `json:"style,omitempty"`
+	Copy  *CopyText `json:"copy_text,omitempty"`
 }
 
 // Keyboard is an inline keyboard (rows of buttons).

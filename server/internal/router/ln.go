@@ -841,8 +841,13 @@ func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 	lst = append(lst, srvRec(fmt.Sprintf("s%d%d%d", time.Now().Unix(), rand.Intn(900)+100, len(lst)),
 		strv(res["label"]), ip, "root", 22, "pass", pass, "Linode"))
 	r.srvSave(lst)
+	kb := [][]Btn{}
+	if ip != "" {
+		kb = append(kb, row(copyBtnL("📋 کپی آی‌پی", ip)))
+	}
+	kb = append(kb, row(copyBtnL("📋 کپی رمز", pass)))
+	kb = append(kb, row(btn("🖥 سرورها", "srv"), btn("🔙 لینود", fmt.Sprintf("lns:%d:0", i))))
+	kb = append(kb, row(btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, fmt.Sprintf("🎉 سرور لینود ساخته شد.\n\n🏷 %s\n🔗 <code>%s</code>\n👤 root\n🔑 رمز: <code>%s</code>\n\nبه «سرورها» اضافه شد.",
-		Esc(strv(res["label"])), Esc(ip), Esc(pass)),
-		[][]Btn{{btn("🖥 سرورها", "srv"), btn("🔙 لینود", fmt.Sprintf("lns:%d:0", i))},
-			{btn("🏠 خانه", "menu")}})
+		Esc(strv(res["label"])), Esc(ip), Esc(pass)), kb)
 }

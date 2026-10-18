@@ -152,6 +152,9 @@ func (r *Router) failoverHome(chat, mid int64) {
 			{btn("🔄 بررسی وضعیت", "forefresh"), btn("♻️ تنظیم مجدد / تغییر", "fosetup")},
 			{btnS("⏸ غیرفعال کردن", "fodisable", "danger"), btnS("🗑 حذف کامل ورکر", "fodelete", "danger")},
 		}
+		if u := r.foGet()["worker_url"]; u != "" {
+			kb = append(kb, row(copyBtnL("📋 کپی آدرس ورکر", u)))
+		}
 	} else {
 		kb = [][]Btn{{btnS("⚙️ راه‌اندازی فیلور", "fosetup", "success")}}
 	}
@@ -386,12 +389,16 @@ func (r *Router) foDeploy(chat int64, pend map[string]any) {
 		}
 		r.foSet(cfg)
 		r.SyncPush()
+		kb := [][]Btn{}
+		if wurl := cfg["worker_url"]; wurl != "" {
+			kb = append(kb, row(copyBtnL("📋 کپی آدرس ورکر", wurl)))
+		}
+		kb = append(kb, row(btn("🛟 وضعیت فیلور", "fo"), btn("🏠 خانه", "menu")))
 		r.Bot.Send(chat, fmt.Sprintf(
 			"✅ <b>ورکر پشتیبان ساخته شد.</b>\n\n"+
 				"نام: <code>%s</code>\nآدرس: <code>%s</code>\nKV: <code>%s</code>\n\n"+
 				"حالا سرور با polling کار می‌کند و ورکر در حالت standby است؛ هر ۵ دقیقه سلامت سرور را چک می‌کند و فقط وقتی سرور قطع باشد جای ربات را می‌گیرد.",
-			Esc(cfg["worker_name"]), Esc(cfg["worker_url"]), Esc(cfg["fo_namespace_id"])),
-			[][]Btn{{btn("🛟 وضعیت فیلور", "fo"), btn("🏠 خانه", "menu")}})
+			Esc(cfg["worker_name"]), Esc(cfg["worker_url"]), Esc(cfg["fo_namespace_id"])), kb)
 	}()
 }
 

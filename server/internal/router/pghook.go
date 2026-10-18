@@ -133,6 +133,7 @@ func (r *Router) pgPanel(chat, mid int64, i int) {
 	}
 	recurLabel := "⏱ recurrent"
 	kb := [][]Btn{
+		{copyBtnL("📋 کپی آدرس وبهوک", url), copyBtnL("📋 کپی سکرت", pc.Secret)},
 		{btn("🛣 مسیر داشبورد", fmt.Sprintf("pgdash:%d", i)),
 			btn("🤖 ربات داخلی", fmt.Sprintf("pgrenewbot:%d", i))},
 		{btn("🔄 توکن جدید", fmt.Sprintf("pgregen:%d", i)),

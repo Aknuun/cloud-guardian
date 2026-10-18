@@ -785,7 +785,12 @@ func (r *Router) hzCreate(chat, mid int64, i int, img string) {
 	if ip != "" {
 		msg += "\n🌐 آی‌پی: <code>" + Esc(ip) + "</code>"
 	}
-	r.Bot.Send(chat, msg, [][]Btn{{btn("🖥 سرورها", fmt.Sprintf("hzs:%d:0", i))}})
+	kb := [][]Btn{{copyBtnL("📋 کپی رمز", pw)}}
+	if ip != "" {
+		kb = append(kb, row(copyBtnL("📋 کپی آی‌پی", ip)))
+	}
+	kb = append(kb, row(btn("🖥 سرورها", fmt.Sprintf("hzs:%d:0", i))))
+	r.Bot.Send(chat, msg, kb)
 }
 
 func (r *Router) hzPick(chat, mid int64, i int, sid, step, arg string) {

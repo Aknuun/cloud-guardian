@@ -560,10 +560,16 @@ func (r *Router) arvMkWatch(chat int64, i int, region, name, pwd string) {
 	if pwd != "" {
 		b.WriteString(fmt.Sprintf("\n🔑 رمز root: <code>%s</code>", Esc(pwd)))
 	}
+	kb := [][]Btn{}
 	if ip := firstPubIP(n); ip != "" {
 		clean, verdict := hostfilter.CheckIPCleanliness(ip)
 		_ = clean
 		b.WriteString(fmt.Sprintf("\n\n🧪 چک تمیزی آیپی <code>%s</code>:\n%s", Esc(ip), Esc(verdict)))
+		kb = append(kb, row(copyBtnL("📋 کپی آی‌پی", ip)))
 	}
-	r.Bot.Send(chat, b.String(), [][]Btn{{btn("🖥 سرورها", fmt.Sprintf("arvreg:%d:%s", i, region))}})
+	if pwd != "" {
+		kb = append(kb, row(copyBtnL("📋 کپی رمز", pwd)))
+	}
+	kb = append(kb, row(btn("🖥 سرورها", fmt.Sprintf("arvreg:%d:%s", i, region))))
+	r.Bot.Send(chat, b.String(), kb)
 }

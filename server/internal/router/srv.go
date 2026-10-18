@@ -90,7 +90,15 @@ func (r *Router) srvOpen(chat, mid int64, sid string) {
 		lines = append(lines, "📝 "+Esc(n))
 	}
 	lines = append(lines, "", "یک عملیات را انتخاب کنید:")
+	host := strv(s["host"])
+	suser := orDefault(strv(s["user"]), "root")
+	sport := orDash(strv(s["port"]))
+	cp := []Btn{copyBtnL("📋 کپی هاست", host)}
+	if host != "" {
+		cp = append(cp, copyBtnL("📋 کپی دستور SSH", fmt.Sprintf("ssh %s@%s -p %s", suser, host, sport)))
+	}
 	kb := [][]Btn{
+		cp,
 		{btn("📊 مانیتور سرور", fmt.Sprintf("srvstats:%d", i)), btn("⚙️ آستانه‌ها", "srvmon")},
 		{btn("🔄 ریبوت", fmt.Sprintf("srvreboot:%s", strv(s["id"]))), btn("⏱ آپدیت و آپگرید", fmt.Sprintf("srvupd:%s", strv(s["id"])))},
 		{btn("ℹ️ مشخصات سیستم", fmt.Sprintf("srvinfo:%s", strv(s["id"]))), btn("💾 فضای دیسک", fmt.Sprintf("srvdisk:%s", strv(s["id"])))},
