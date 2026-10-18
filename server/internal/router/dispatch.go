@@ -686,6 +686,30 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		if p := strings.SplitN(strings.TrimPrefix(data, "arvtermok:"), ":", 2); len(p) == 2 {
 			r.arvDelServer(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
 		}
+	case data == "arvregrefresh":
+		r.arvCloudRefresh(chat, mid)
+	case strings.HasPrefix(data, "arvnew:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvnew:"), ":", 2); len(p) == 2 {
+			r.arvMkStart(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "arvimg:"):
+		r.arvMkPickImage(chat, mid, atoiSafe(strings.TrimPrefix(data, "arvimg:")))
+	case data == "arvimgman":
+		r.arvMkImageManual(chat, mid)
+	case strings.HasPrefix(data, "arvflv:"):
+		r.arvMkPickFlavor(chat, mid, atoiSafe(strings.TrimPrefix(data, "arvflv:")))
+	case strings.HasPrefix(data, "arvnet:"):
+		r.arvMkPickNetwork(chat, mid, atoiSafe(strings.TrimPrefix(data, "arvnet:")))
+	case data == "arvnetdef":
+		r.arvMkSkipNetwork(chat, mid)
+	case strings.HasPrefix(data, "arvsshk:"):
+		r.arvMkPickSsh(chat, mid, atoiSafe(strings.TrimPrefix(data, "arvsshk:")))
+	case data == "arvsshskip":
+		r.arvMkConfirm(chat, mid)
+	case data == "arvsshman":
+		r.arvMkSshManual(chat, mid)
+	case data == "arvcreate":
+		r.arvMkCreate(chat, mid)
 
 	// linode
 	case data == "ln":

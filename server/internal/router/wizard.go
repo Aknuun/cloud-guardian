@@ -115,6 +115,12 @@ func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 		r.arvSnapSave(chat, mid, pend, text)
 	case "arvan_srv_rename":
 		r.arvRenameSave(chat, mid, pend, text)
+	case "arvan_mk_name":
+		r.arvMkNameSave(chat, mid, text)
+	case "arvan_mk_imgid":
+		r.arvMkImageIDSave(chat, mid, text)
+	case "arvan_mk_sshn":
+		r.arvMkSshNameSave(chat, mid, text)
 	case "hfd_int":
 		r.hfdIntSave(chat, mid, pend, text)
 	case "hfd_at":

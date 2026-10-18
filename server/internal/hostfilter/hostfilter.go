@@ -440,6 +440,32 @@ func verdictIP(ip string, ipp, fp map[string]pingRes, cfg Cfg) ipDiag {
 	return d
 }
 
+// CheckIPCleanliness probes ip from check-host.net Iranian and foreign nodes and
+// returns whether the IP looks clean (reachable from Iran and abroad) plus a
+// short Persian summary suitable for a Telegram message.
+func CheckIPCleanliness(ip string) (bool, string) {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return false, "⚪ آی‌پی مشخص نیست."
+	}
+	cfg := Cfg{Cities: 2, CitiesSel: append([]string{}, irCities...), MaxOk: 0}
+	d := diagIP(ip, cfg)
+	switch {
+	case d.IPBlocked:
+		return false, "🔴 تمیز نیست — از داخل ایران فیلتر است (خارج پاسخ می‌دهد)."
+	case d.IPDown:
+		return false, "🛑 از داخل و خارج پاسخ نداد (سرور خاموش یا هنوز بالا نیامده)."
+	case d.IranAccess:
+		return false, "🟡 «ایران‌اکسس» — از ایران پاسخ می‌دهد ولی از خارج قطع است."
+	case d.IranBlocked:
+		return false, "🔴 تمیز نیست — از داخل ایران فیلتر است."
+	case d.ForeignUnknown:
+		return true, "🟢 از داخل ایران تمیز است (بررسی خارج نامشخص)."
+	default:
+		return true, "🟢 تمیز — از داخل ایران و خارج پاسخ می‌دهد."
+	}
+}
+
 func ipDiagMsg(panel string, host map[string]any, dv string, d ipDiag) string {
 	head := "🚫 آی‌پی فیلتر شده است (نه دامنه) — تعویض انجام نشد"
 	tail := "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر این هاست قرار دارد."

@@ -19876,6 +19876,7 @@ function normalizeEccServer(s) {
     image: image.name || image.distribution || s.image_name || "",
     cpu: flavor.vcpus || flavor.cpu || s.cpu || "",
     ram: flavor.ram || flavor.memory || s.ram || "",
+    disk: flavor.disk || s.disk || "",
     pub,
     priv,
     created: s.created || s.created_at || "",
@@ -20091,8 +20092,20 @@ async function arvanGetRegionsCached(idx, token, kv, env, force) {
   } catch (e) {}
   return regs;
 }
+// برچسب فارسی یک ریجن از روی کش همان اکانت (fallback: کد خام)
+async function arvanRegionLabel(acc, region, kv) {
+  try {
+    const ch = await kv.get(`arv_regs:${acc}`, "json");
+    const regs = ch && Array.isArray(ch.regs) ? ch.regs : [];
+    const hit = regs.find((x) => x && x.code === region);
+    if (hit && hit.fa) return hit.fa;
+  } catch (e) {}
+  return ARVAN_FA[region] || region;
+}
+
 async function arvanRegions(ctx, force) {
   const { edit, kv, env, arvanAccounts } = ctx;
+  if (!force) { try { await edit("⏳ لطفاً صبر کنید… در حال بارگذاری ریجن‌ها"); } catch (e) {} }
   if (!arvanAccounts.length) {
     return edit("🖥 سرورهای ابری آروان\n\n📭 اکانتی ثبت نشده.", [
       [{ text: "➕ افزودن اکانت", callback_data: "arvanaccadd" }],
@@ -20130,19 +20143,22 @@ async function arvanEccServers(ctx, acc, region) {
 
 async function arvanServersView(ctx, acc, region) {
   const { edit, kv } = ctx;
+  try { await edit("⏳ لطفاً صبر کنید… در حال بارگذاری سرورها"); } catch (e) {}
+  const label = await arvanRegionLabel(acc, region, kv);
   const r = await arvanEccServers(ctx, acc, region);
   if (r.error) return edit("❌ " + escHtml(r.error), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const t = arvanSessId();
-  await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-srv", acc, region, servers: r.servers }), { expirationTtl: 3600 });
+  await kv.put(`s:${t}`, JSON.stringify({ provider: "arvan-srv", acc, region, label, servers: r.servers }), { expirationTtl: 3600 });
   const kb = [];
   if (!r.servers.length) {
     kb.push([{ text: "➕ ساخت سرور جدید", callback_data: `arvnew:${t}` }]);
+    kb.push([{ text: "🔄 تازه‌سازی", callback_data: `arvreg:${acc}:${region}` }]);
     kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]);
-    return edit(`🖥 ${code(region)} — سروری نیست.`, kb);
+    return edit(`🖥 ${code(label)}\n\nℹ️ سروری در این ریجن نیست.`, kb);
   }
   for (let i = 0; i < r.servers.length; i++) {
     const s = r.servers[i];
-    const dot = /on|active|running|on_/i.test(s.status) ? "🟢" : (/off|shut|stop|suspend/i.test(s.status) ? "🔴" : "⚪");
+    const dot = /on|active|running|on_/i.test(s.status) ? "🟢" : (/build|creat|pending/i.test(s.status) ? "🟡" : (/off|shut|stop|suspend/i.test(s.status) ? "🔴" : "⚪"));
     const ip = s.pub[0] || s.priv[0] || "—";
     kb.push([{ text: `${dot} ${s.name} (${ip})`, callback_data: `arvs:${t}:${i}` }]);
   }
@@ -20151,19 +20167,42 @@ async function arvanServersView(ctx, acc, region) {
     { text: "🌐 آی‌پی شناور", callback_data: `arvfloat:${acc}:${region}` },
     { text: "💾 دیسک‌ها", callback_data: `arvvol:${acc}:${region}` },
   ]);
+  kb.push([{ text: "🔄 تازه‌سازی", callback_data: `arvreg:${acc}:${region}` }]);
   kb.push([{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]);
-  await edit(`🖥 سرورهای ${code(region)} (${r.servers.length})`, kb);
+  await edit(`🖥 سرورهای ${code(label)} (${r.servers.length})`, kb);
 }
 
-function arvanServerText(s, region) {
+function arvanStatusFa(st) {
+  const s = String(st || "").toLowerCase();
+  if (!s) return "نامشخص";
+  if (/active|running|(^|[^a-z])on([^a-z]|$)/.test(s)) return "روشن";
+  if (/build|creat|pending/.test(s)) return "در حال ساخت";
+  if (/rebuild/.test(s)) return "ری‌بیلد";
+  if (/off|shut|stop/.test(s)) return "خاموش";
+  if (/suspend|pause/.test(s)) return "معلق";
+  if (/error|fail/.test(s)) return "خطا";
+  return st;
+}
+
+function arvanServerText(s, label) {
+  const sp = [];
+  if (s.cpu) sp.push(`${s.cpu} vCPU`);
+  if (s.ram) sp.push(`${s.ram} GB RAM`);
+  if (s.disk) sp.push(`${s.disk} GB دیسک`);
+  const specs = sp.length ? ` (${sp.join(" · ")})` : "";
+  let status = arvanStatusFa(s.status);
+  if (s.status && status !== s.status) status += ` (${code(s.status)})`;
+  if (s.task && !/done/i.test(String(s.task))) status += ` · ⏳ ${code(s.task)}`;
   const lines = [
     `🖥 ${code(s.name)}`,
     ``,
-    `📊 وضعیت: ${code(s.status)}${s.task ? " (" + code(s.task) + ")" : ""}`,
+    `📊 وضعیت: ${status}`,
     `🌐 عمومی: ${s.pub.length ? s.pub.map(code).join("، ") : "—"}`,
     `🔒 خصوصی: ${s.priv.length ? s.priv.map(code).join("، ") : "—"}`,
-    `📦 پلن: ${code(s.flavor || "—")} · 💿 ایمیج: ${code(s.image || "—")}`,
-    `🆔 ${code(String(s.id).slice(0, 18))} · 📍 ${code(region)}`,
+    `📦 پلن: ${code(s.flavor || "—")}${escHtml(specs)}`,
+    `💿 ایمیج: ${code(s.image || "—")}`,
+    `📍 لوکیشن: ${code(label || s.region || "—")}`,
+    `🆔 ${code(String(s.id).slice(0, 18))}`,
   ];
   return lines.join("\n");
 }
@@ -20187,7 +20226,8 @@ async function arvanServerDetail(ctx, t, idx) {
     }
   } catch (e) {}
   const isOn = /on|active|running/i.test(s.status) && !/off|shut|stop/i.test(s.status);
-  await edit(arvanServerText(s, session.region), [
+  const label = session.label || (await arvanRegionLabel(session.acc, session.region, kv));
+  await edit(arvanServerText(s, label), [
     isOn
       ? [{ text: "🔌 خاموش", callback_data: `arvoff:${t}:${idx}` }, { text: "🔄 ریبوت", callback_data: `arvreboot:${t}:${idx}` }]
       : [{ text: "⚡ روشن", callback_data: `arvon:${t}:${idx}` }],
@@ -20199,13 +20239,49 @@ async function arvanServerDetail(ctx, t, idx) {
       { text: "⬆️ تغییر سایز", callback_data: `arvsize:${t}:${idx}` },
       { text: "🛠️ ریبیلد", callback_data: `arvbuild:${t}:${idx}` },
     ],
+    [{ text: "🧪 چک تمیزی آی‌پی", callback_data: `arvchkip:${t}:${idx}` }],
     [
       { text: "🔑 ریست رمز root", callback_data: `arvroot:${t}:${idx}` },
       { text: "🗑 حذف سرور", callback_data: `arvterm:${t}:${idx}` },
     ],
     [{ text: "📷 اسنپ‌شات‌ها", callback_data: `arvsnapls:${t}:${idx}` }],
+    [{ text: "🔄 تازه‌سازی", callback_data: `arvs:${t}:${idx}` }],
     [{ text: "🔙 بازگشت", callback_data: `arvregback:${t}` }, { text: "🏠 خانه", callback_data: "menu" }],
   ]);
+}
+
+// بررسی تمیزی آی‌پی سرور با check-host (ایران + خارج)
+async function arvanCheckIP(ctx, t, idx) {
+  const { edit, kv, env, arvanAccounts } = ctx;
+  const session = await kv.get(`s:${t}`, "json");
+  if (!session || session.provider !== "arvan-srv" || !session.servers[idx]) {
+    return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  }
+  const back = { text: "🔙 بازگشت", callback_data: `arvs:${t}:${idx}` };
+  const a = arvanAccounts[session.acc];
+  let s = session.servers[idx];
+  try {
+    const d = await arvanEcc(a.token, session.region, `/servers/${encodeURIComponent(s.id)}`, {}, kv, env);
+    const one = (d.data && typeof d.data === "object" && !Array.isArray(d.data) ? d.data : d.result) || null;
+    if (one) s = normalizeEccServer(one) || s;
+  } catch (e) {}
+  const ip = s.pub && s.pub[0] ? s.pub[0] : "";
+  if (!ip) return edit("ℹ️ آی‌پی عمومی این سرور هنوز مشخص نیست (شاید هنوز در حال ساخت است).", [[back]]);
+  await edit("⏳ در حال بررسی آی‌پی با چک‌هاست… (حدود ۱۵ ثانیه)");
+  let verdict = "⚪ نتیجه نامشخص.";
+  try {
+    const cfg = await getHostFilterCfg(kv);
+    const diag = await hfDiagIp(ip, cfg, env, kv);
+    if (diag.iranAccess) verdict = "🟡 «ایران‌اکسس» — از ایران پاسخ می‌دهد ولی از خارج قطع است.";
+    else if (diag.ipBlocked) verdict = "🔴 تمیز نیست — از داخل ایران فیلتر است (خارج پاسخ می‌دهد).";
+    else if (diag.ipDown) verdict = "🛑 از داخل و خارج پاسخ نداد (خاموش یا هنوز بالا نیامده).";
+    else if (diag.iranBlocked) verdict = "🔴 تمیز نیست — از داخل ایران فیلتر است.";
+    else if (diag.foreignUnknown) verdict = "🟢 از داخل ایران تمیز است (بررسی خارج نامشخص).";
+    else verdict = "🟢 تمیز — از داخل ایران و خارج پاسخ می‌دهد.";
+  } catch (e) {
+    verdict = "⚪ بررسی ناموفق بود (نودهای چک‌هاست پاسخ ندادند).";
+  }
+  return edit(`🧪 چک تمیزی آی‌پی\n\n🌐 IP: ${code(ip)}\n${verdict}`, [[back]]);
 }
 
 async function arvanSrvAction(ctx, t, idx, action, extraBody) {
@@ -20708,6 +20784,8 @@ async function arvanServerCallback(data, ctx) {
   }
   m = data.match(/^arvs:([^:]+):(\d+)$/);
   if (m) return arvanServerDetail(ctx, m[1], Number(m[2]));
+  m = data.match(/^arvchkip:([^:]+):(\d+)$/);
+  if (m) return arvanCheckIP(ctx, m[1], Number(m[2]));
 
   // اکشن‌های پاور
   m = data.match(/^arv(on|off|reboot):([^:]+):(\d+)$/);
@@ -21089,6 +21167,7 @@ async function arvanMkImages(ctx, t) {
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
+  await edit("⏳ در حال بارگذاری ایمیج‌ها…");
   const imgs = await arvanFetchImages(a.token, session.region, kv, env);
   session.images = imgs.slice(0, 40);
   await kv.put(`s:${t}`, JSON.stringify(session), { expirationTtl: 3600 });
@@ -21098,8 +21177,9 @@ async function arvanMkImages(ctx, t) {
   }
   kb.push([{ text: "⌨️ ورود دستی شناسه ایمیج", callback_data: `arvimgman:${t}` }]);
   kb.push([{ text: "⬅️ انصراف", callback_data: "arvsrv" }]);
+  const label = await arvanRegionLabel(session.acc, session.region, kv);
   await edit(
-    `➕ ساخت سرور در ${code(session.region)}\nنام: ${code(session.name)}\n\nایمیج را انتخاب کنید:${imgs.length ? "" : "\n(لیستی برنگشت — دستی وارد کنید)"}`,
+    `➕ ساخت سرور در ${code(label)}\nنام: ${code(session.name)}\n\nایمیج را انتخاب کنید:${imgs.length ? "" : "\n(لیستی برنگشت — دستی وارد کنید)"}`,
     kb
   );
 }
@@ -21109,6 +21189,7 @@ async function arvanMkFlavors(ctx, t) {
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
+  await edit("⏳ در حال بارگذاری پلن‌ها…");
   let sizes = [];
   try {
     const d = await arvanEcc(a.token, session.region, "/sizes?per_page=100", {}, kv, env);
@@ -21134,10 +21215,11 @@ async function arvanMkNetworks(ctx, t) {
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
+  await edit("⏳ در حال بارگذاری شبکه‌ها…");
   let nets = [];
   try {
     const d = await arvanEcc(a.token, session.region, "/networks", {}, kv, env);
-    nets = arvanEccList(d) || [];
+    nets = (arvanEccList(d) || []).filter((n) => !/^public/i.test(String((n && n.name) || "")));
   } catch (e) {}
   if (!nets.length) {
     session.networkId = "";
@@ -21157,6 +21239,7 @@ async function arvanMkSsh(ctx, t) {
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
   const a = arvanAccounts[session.acc];
+  await edit("⏳ در حال بارگذاری کلیدهای SSH…");
   let keys = [];
   try {
     const d = await arvanEcc(a.token, session.region, "/ssh-keys", {}, kv, env);
@@ -21174,9 +21257,10 @@ async function arvanMkConfirm(ctx, t) {
   const { edit, kv } = ctx;
   const session = await kv.get(`s:${t}`, "json");
   if (!session) return edit("⏳ نشست منقضی شده. از منو دوباره وارد شو.", [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
+  const label = await arvanRegionLabel(session.acc, session.region, kv);
   const price = session.flavorPrice ? `\n💰 حدود ${code(Number(session.flavorPrice).toLocaleString("en-US"))}/ماه` : "";
   await edit(
-    `➕ تأیید ساخت سرور\n\n📍 ریجن: ${code(session.region)}\n📛 نام: ${code(session.name)}\n💿 ایمیج: ${code(session.imageName)}\n📦 پلن: ${code(session.flavorName)}${price}\n🌐 شبکه: ${code(session.networkName || "پیش‌فرض")}\n🔑 کلید: ${code(session.sshKey || "—")}\n\n⚠️ ساخت سرور هزینه دارد. مطمئنی؟`,
+    `➕ تأیید ساخت سرور\n\n📍 لوکیشن: ${code(label)}\n📛 نام: ${code(session.name)}\n💿 ایمیج: ${code(session.imageName)}\n📦 پلن: ${code(session.flavorName)}${price}\n🌐 شبکه: ${code(session.networkName || "پیش‌فرض")}\n🔑 کلید: ${code(session.sshKey || "—")}\n\n⚠️ ساخت سرور هزینه دارد. مطمئنی؟`,
     [
       [{ text: "✅ بله، بساز", callback_data: `arvcreate:${t}` }, { text: "❌ انصراف", callback_data: "arvsrv" }],
     ]
@@ -21266,8 +21350,40 @@ async function arvanMkCallback(data, ctx) {
       return edit("❌ خطا:\n" + escHtml(arvanErrText(res)), [[{ text: "🔙 بازگشت", callback_data: "arvsrv" }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const created = res.data && typeof res.data === "object" && !Array.isArray(res.data) ? res.data : res.result || {};
+    const label = await arvanRegionLabel(session.acc, session.region, kv);
     const pwd = created.password ? `\n🔑 رمز root: ${code(String(created.password))}\n(یادداشت کن؛ دوباره نمایش داده نمی‌شود)` : "";
-    await edit(`✅ درخواست ساخت ارسال شد.\n\n🖥 ${code(session.name)} — ${code(session.region)}${pwd}\n(آماده‌سازی چند دقیقه طول می‌کشد)`, [
+    await edit(`⏳ در حال ساخت سرور «${code(session.name)}»…\nممکن است چند دقیقه طول بکشد.`);
+    // تلاش برای گرفتن آی‌پی و بررسی تمیزی با چک‌هاست
+    let ip = "";
+    try {
+      const na = normalizeEccServer(created);
+      if (na && na.pub && na.pub[0]) ip = na.pub[0];
+    } catch (e) {}
+    if (!ip) {
+      await sleep(5000);
+      try {
+        const r2 = await arvanEccServers(ctx, session.acc, session.region);
+        const found = (r2.servers || []).find((x) => x.name === session.name);
+        if (found && found.pub && found.pub[0]) ip = found.pub[0];
+      } catch (e) {}
+    }
+    let check = "";
+    if (ip) {
+      await edit(`✅ سرور «${code(session.name)}» ایجاد شد.\n\n🌐 IP: ${code(ip)}\n⏳ در حال بررسی تمیزی آی‌پی با چک‌هاست…`);
+      let verdict = "⚪ نتیجه نامشخص.";
+      try {
+        const cfg = await getHostFilterCfg(kv);
+        const diag = await hfDiagIp(ip, cfg, env, kv);
+        if (diag.iranAccess) verdict = "🟡 «ایران‌اکسس» — از ایران پاسخ می‌دهد ولی از خارج قطع است.";
+        else if (diag.ipBlocked) verdict = "🔴 تمیز نیست — از داخل ایران فیلتر است (خارج پاسخ می‌دهد).";
+        else if (diag.ipDown) verdict = "🛑 از داخل و خارج پاسخ نداد (خاموش یا هنوز بالا نیامده).";
+        else if (diag.iranBlocked) verdict = "🔴 تمیز نیست — از داخل ایران فیلتر است.";
+        else if (diag.foreignUnknown) verdict = "🟢 از داخل ایران تمیز است (بررسی خارج نامشخص).";
+        else verdict = "🟢 تمیز — از داخل ایران و خارج پاسخ می‌دهد.";
+      } catch (e) {}
+      check = `\n\n🧪 چک تمیزی آی‌پی ${code(ip)}:\n${verdict}`;
+    }
+    await edit(`✅ درخواست ساخت ارسال شد.\n\n🖥 ${code(session.name)} — ${code(label)}${pwd}${check}\n(آماده‌سازی چند دقیقه طول می‌کشد)`, [
       [{ text: "🖥 سرورها", callback_data: `arvreg:${session.acc}:${session.region}` }],
     ]);
     return;

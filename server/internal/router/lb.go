@@ -104,6 +104,8 @@ func intOrAny(v any) int {
 		return int(t)
 	case int:
 		return t
+	case string:
+		return atoiSafe(t)
 	}
 	return 0
 }
