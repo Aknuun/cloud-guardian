@@ -104,10 +104,19 @@ func (r *Router) foStatusText() string {
 		owner = "نامشخص"
 	}
 	health := c["health_url"]
-	if health == "" && c["public_url"] != "" {
-		health = c["public_url"] + "/health"
+	pub := strings.TrimRight(c["public_url"], "/")
+	probe := health
+	if probe == "" && pub != "" {
+		probe = pub + "/health"
 	}
-	srvUp, _ := foPing(health)
+	srvUp, _ := foPing(probe)
+	// اگر آدرس سلامت (هاستنیم DNS) جواب نداد، آدرس عمومی خودِ سرور را هم امتحان کن
+	// تا «در دسترس نبودن» کاذب (مثلاً رکورد DNS کهنه) گمراه‌کننده نباشد.
+	if !srvUp && pub != "" && (health == "" || probe != pub+"/health") {
+		if ok, _ := foPing(pub + "/health"); ok {
+			srvUp, probe = true, pub+"/health"
+		}
+	}
 	srvTxt := "🔴 در دسترس نیست"
 	if srvUp {
 		srvTxt = "🟢 سالم"
@@ -123,6 +132,7 @@ func (r *Router) foStatusText() string {
 	return "🛟 <b>پشتیبان فیلور (Standby)</b>\n\n" +
 		"وضعیت: " + state + "\n" +
 		"سرور: " + srvTxt + "\n" +
+		"🔎 آدرس تست سلامت: <code>" + Esc(probe) + "</code>\n" +
 		"مسئول فعلی webhook: " + owner + "\n" +
 		"نام ورکر: <code>" + Esc(c["worker_name"]) + "</code>\n" +
 		"آدرس: <code>" + Esc(c["worker_url"]) + "</code>\n" +
@@ -221,7 +231,7 @@ func (r *Router) foTokenSave(chat, mid int64, token string) {
 		for set[name] {
 			name = "cg-failover-" + randHex(2)
 		}
-		r.setWizard(chat, map[string]any{"kind": "fo_name", "token": token, "account_id": aid, "account_name": aname})
+		r.setWizard(chat, map[string]any{"kind": "fo_name", "token": token, "account_id": aid, "account_name": aname, "name": name})
 		r.Bot.Send(chat, fmt.Sprintf(
 			"✅ توکن سالم است.\n🏢 اکانت: <code>%s</code>\n👀 ورکرهای موجود: <code>%s</code>\n\n"+
 				"نام ورکر پشتیبان: <code>%s</code>\n"+
@@ -284,21 +294,33 @@ func (r *Router) foEnsureHealthDomain(token, pub string) (health, zoneID, recID,
 	}
 	zoneID, zoneName = z.ID, z.Name
 	fqdn := foHealthSub + "." + z.Name
-	// Reuse an existing record pointing at this IP (any type that matches).
+	rtype := "A"
+	if strings.Contains(host, ":") {
+		rtype = "AAAA"
+	}
+	// Reuse an existing record, but keep its target in sync with the current
+	// server IP: after moving to a new server the old record would otherwise
+	// still point at the dead IP and every health check would fail.
 	recs, _ := cli.Records(z.ID)
-	for _, rec := range recs {
-		if rec.Name == fqdn && (rec.Type == "A" || rec.Type == "AAAA") {
-			recID = rec.ID
+	var found *cf.Record
+	for i := range recs {
+		if recs[i].Name == fqdn && (recs[i].Type == "A" || recs[i].Type == "AAAA") {
+			found = &recs[i]
 			break
 		}
 	}
-	if recID == "" {
-		rtype := "A"
-		if strings.Contains(host, ":") {
-			rtype = "AAAA"
-		}
+	if found == nil {
 		if rec, e := cli.AddRecord(z.ID, rtype, foHealthSub, host, 120, false, nil); e == nil {
 			recID = rec.ID
+		}
+	} else {
+		recID = found.ID
+		if found.Type != rtype || found.Content != host {
+			if _, e := cli.UpdateRecord(z.ID, *found, map[string]any{
+				"type": rtype, "content": host, "proxied": false,
+			}); e == nil {
+				recID = found.ID
+			}
 		}
 	}
 	h := "http://" + fqdn
