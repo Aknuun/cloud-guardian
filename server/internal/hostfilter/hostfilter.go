@@ -196,7 +196,7 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 		domains []string
 	}
 	var pairs []pair
-	for _, p := range panels {
+	for pi, p := range panels {
 		c := p.Client()
 		token, err := c.Login()
 		if err != nil {
@@ -215,10 +215,14 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 				continue
 			}
 			hid := strv(h["id"])
-			base := p.URL + ":" + hid
+			// Exception keys are stored by the UI as "<panelIndex>:<hostID>[:<field>]"
+			// (see hfAllKeys). Also accept the legacy "<panelURL>:<hostID>" form.
+			base := fmt.Sprintf("%d:%s", pi, hid)
+			legacyBase := p.URL + ":" + hid
 			excSet := map[string]bool{}
 			for _, f := range []string{"host", "address", "sni"} {
-				if contains(cfg.Exceptions, base+":"+f) || contains(cfg.Exceptions, base) {
+				if contains(cfg.Exceptions, base+":"+f) || contains(cfg.Exceptions, base) ||
+					contains(cfg.Exceptions, legacyBase+":"+f) || contains(cfg.Exceptions, legacyBase) {
 					excSet[f] = true
 				}
 			}
