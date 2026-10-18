@@ -48,12 +48,17 @@ var guides = map[string][2]string{
 	"srv":   {"🖥 سرورها و مانیتورینگ", "مدیریت سرورهای لینوکسی با SSH، آمار CPU/RAM/دیسک و هشدار خودکار."},
 }
 
+var guideOrder = []string{"cf", "rem", "vers", "arvan", "ln", "hz", "srv"}
+
 func (r *Router) helpList(chat, mid int64) {
-	kb := [][]Btn{}
-	for k, v := range guides {
-		kb = append(kb, []Btn{btn(v[0], "help:"+k)})
+	var items []Btn
+	for _, k := range guideOrder {
+		if v, ok := guides[k]; ok {
+			items = append(items, btn(v[0], "help:"+k))
+		}
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("settings"))
 	r.Show(chat, mid, "📖 راهنمای بخش‌ها:", kb)
 }
 

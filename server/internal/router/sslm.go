@@ -48,11 +48,12 @@ func (r *Router) sslDelList(chat, mid int64) {
 			[][]Btn{{btn("🔙 بازگشت", "sslm"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, m := range mons {
-		kb = append(kb, []Btn{btn("🗑 "+m.Host, "sslmdy:"+strconv.Itoa(i))})
+		items = append(items, btn("🗑 "+m.Host, "sslmdy:"+strconv.Itoa(i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "sslm"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("sslm"))
 	r.Show(chat, mid, "🗑 کدام دامنه از نظارت حذف شود؟", kb)
 }
 

@@ -221,7 +221,7 @@ func (r *Router) verList(chat, mid int64) {
 		return
 	}
 	r.Store.Put("selfup_latest", vs[0], 0)
-	var kb [][]Btn
+	items := make([]Btn, 0, len(vs))
 	cur := r.curTag()
 	for _, v := range vs {
 		mark := ""
@@ -232,9 +232,10 @@ func (r *Router) verList(chat, mid int64) {
 		} else {
 			mark = "⬇️ "
 		}
-		kb = append(kb, []Btn{btn(mark+v, "verdo:"+v)})
+		items = append(items, btn(mark+v, "verdo:"+v))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "vers"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 3)
+	kb = append(kb, navRow("vers"))
 	r.Show(chat, mid, fmt.Sprintf("📋 <b>نسخه‌ها</b>\n\nفعلی: <code>%s</code>\n⬆️ جدیدتر · ⬇️ قدیمی‌تر (برگشت). یکی را انتخاب کن:", cur), kb)
 }
 

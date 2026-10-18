@@ -1096,14 +1096,15 @@ func (r *Router) cfFavsPage(chat, mid int64) {
 			[][]Btn{{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	results := map[string]any{}
 	n := min(len(favs), 40)
 	for _, f := range favs[:n] {
-		kb = append(kb, []Btn{btn(strvVal(f["name"]), "cfr:"+strvVal(f["rid"]))})
+		items = append(items, btn(strvVal(f["name"]), "cfr:"+strvVal(f["rid"])))
 		results[strvVal(f["rid"])] = map[string]any{"acc": intOrAny(f["acc"]), "zid": strvVal(f["zid"])}
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("zones"))
 	r.cfSaveSession(chat, map[string]any{"results": results})
 	r.Show(chat, mid, fmt.Sprintf("⭐ ساب‌های منتخب (%d):", len(favs)), kb)
 }
@@ -1374,21 +1375,23 @@ func (r *Router) cfFavAddMany(chat, mid int64, sess map[string]any) {
 
 func (r *Router) cfAccountsHome(chat, mid int64) {
 	accs := r.cfAccs()
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range accs {
-		kb = append(kb, []Btn{btn("👤 "+a.Name, fmt.Sprintf("zf:%d:0", i))})
+		items = append(items, btn("👤 "+a.Name, fmt.Sprintf("zf:%d:0", i)))
 	}
-	kb = append(kb, []Btn{btn("➕ افزودن اکانت", "accadd"), btn("🗑 حذف اکانت", "accdel")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("➕ افزودن اکانت", "accadd"), btn("🗑 حذف اکانت", "accdel")))
+	kb = append(kb, navRow("zones"))
 	r.Show(chat, mid, "👤 اکانت‌های کلادفلر:", kb)
 }
 
 func (r *Router) cfAccDelList(chat, mid int64) {
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range r.cfAccs() {
-		kb = append(kb, []Btn{btnS("🗑 "+a.Name, fmt.Sprintf("accd:%d", i), "danger")})
+		items = append(items, btnS("🗑 "+a.Name, fmt.Sprintf("accd:%d", i), "danger"))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "accounts")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "accounts")))
 	r.Show(chat, mid, "🗑 کدام اکانت حذف شود؟", kb)
 }
 
@@ -1459,17 +1462,18 @@ func (r *Router) cfGsearch(chat, mid int64, q string) {
 		return
 	}
 	results := map[string]any{}
-	var kb [][]Btn
+	var items []Btn
 	n := min(len(hits), 30)
 	for _, h := range hits[:n] {
 		if h.rec == nil {
-			kb = append(kb, []Btn{btn("📁 "+h.zone.Name, fmt.Sprintf("cfz:%d:%s", h.acc, h.zone.ID))})
+			items = append(items, btn("📁 "+h.zone.Name, fmt.Sprintf("cfz:%d:%s", h.acc, h.zone.ID)))
 		} else {
 			results[h.rec.ID] = map[string]any{"acc": h.acc, "zid": h.zone.ID}
-			kb = append(kb, []Btn{btn(cfRecLabel(h.rec.Name, h.rec.Type, h.zone.Name), "cfr:"+h.rec.ID)})
+			items = append(items, btn(cfRecLabel(h.rec.Name, h.rec.Type, h.zone.Name), "cfr:"+h.rec.ID))
 		}
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("zones"))
 	r.cfSaveSession(chat, map[string]any{"results": results})
 	r.Show(chat, mid, fmt.Sprintf("🔍 نتایج (%d):", len(hits)), kb)
 }

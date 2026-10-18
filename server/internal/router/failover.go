@@ -149,16 +149,14 @@ func (r *Router) failoverHome(chat, mid int64) {
 	var kb [][]Btn
 	if r.foConfigured() {
 		kb = [][]Btn{
-			{btn("🔄 بررسی وضعیت", "forefresh")},
-			{btn("♻️ تنظیم مجدد / تغییر", "fosetup")},
-			{btnS("⏸ غیرفعال کردن", "fodisable", "danger")},
-			{btnS("🗑 حذف کامل ورکر", "fodelete", "danger")},
+			{btn("🔄 بررسی وضعیت", "forefresh"), btn("♻️ تنظیم مجدد / تغییر", "fosetup")},
+			{btnS("⏸ غیرفعال کردن", "fodisable", "danger"), btnS("🗑 حذف کامل ورکر", "fodelete", "danger")},
 		}
 	} else {
 		kb = [][]Btn{{btnS("⚙️ راه‌اندازی فیلور", "fosetup", "success")}}
 	}
-	kb = append(kb, []Btn{btn("🧹 پاک‌سازی ورکرهای قبلی", "foold")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")})
+	kb = append(kb, row(btn("🧹 پاک‌سازی ورکرهای قبلی", "foold")))
+	kb = append(kb, navRow("settings"))
 	r.Show(chat, mid, r.foStatusText(), kb)
 }
 

@@ -640,11 +640,12 @@ func (r *Router) hfdHostsHome(chat, mid int64) {
 		r.Show(chat, mid, "📭 پنلی ثبت نشده.", [][]Btn{{btn("🔙 بازگشت", "hfd")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, p := range panels {
-		kb = append(kb, []Btn{btn("🖥 "+pname(p), fmt.Sprintf("hfdpanel:%d", i))})
+		items = append(items, btn("🖥 "+pname(p), fmt.Sprintf("hfdpanel:%d", i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hfd"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("hfd"))
 	r.Show(chat, mid, "🖥 انتخاب هاست‌ها برای چرخش\n\nیک پنل را انتخاب کن:", kb)
 }
 
@@ -768,6 +769,7 @@ func (r *Router) hfdRevertList(chat, mid int64) {
 	cfg := r.hfdCfg()
 	lines := []string{"↩️ بازگردانی چرخش روزانه", ""}
 	var kb [][]Btn
+	var rvItems []Btn
 	for key, it := range cfg.Items {
 		has := false
 		for _, f := range []string{"address", "sni", "host"} {
@@ -780,12 +782,13 @@ func (r *Router) hfdRevertList(chat, mid int64) {
 		}
 		pi, hid := hfdKeyParse(key)
 		lines = append(lines, "• "+key)
-		kb = append(kb, []Btn{btn("↩️ "+key, fmt.Sprintf("hfdrv:%d:%s", pi, hid))})
+		rvItems = append(rvItems, btn("↩️ "+key, fmt.Sprintf("hfdrv:%d:%s", pi, hid)))
 	}
-	if len(kb) == 0 {
+	kb = gridBTN(rvItems, 2)
+	if len(rvItems) == 0 {
 		lines = append(lines, "📭 چیزی برای بازگردانی نیست.")
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hfd"), btn("🏠 خانه", "menu")})
+	kb = append(kb, navRow("hfd"))
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

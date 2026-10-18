@@ -42,7 +42,7 @@ func (r *Router) saveRems(list []Reminder) {
 func (r *Router) remHome(chat, mid int64) {
 	list := r.rems()
 	sort.Slice(list, func(i, j int) bool { return list[i].When < list[j].When })
-	var kb [][]Btn
+	var delItems []Btn
 	var b strings.Builder
 	b.WriteString("⏰ <b>یادآورها</b>\n\n")
 	if len(list) == 0 {
@@ -62,10 +62,11 @@ func (r *Router) remHome(chat, mid int64) {
 			txt = txt[:24] + "…"
 		}
 		b.WriteString(fmt.Sprintf("%d) %s <code>%s</code> — %s\n", i+1, mark, txt, jalali.Fmt(rm.When)))
-		kb = append(kb, []Btn{btn(fmt.Sprintf("🗑 %d", i+1), "remdelx:"+rm.ID)})
+		delItems = append(delItems, btn(fmt.Sprintf("🗑 %d", i+1), "remdelx:"+rm.ID))
 	}
-	kb = append(kb, []Btn{btn("➕ یادآور جدید", "remnew"), btn("🗑 حذف", "remdel")})
-	kb = append(kb, []Btn{btn("🏠 خانه", "menu")})
+	kb := gridBTN(delItems, 4)
+	kb = append(kb, row(btn("➕ یادآور جدید", "remnew"), btn("🗑 حذف", "remdel")))
+	kb = append(kb, row(btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, b.String(), kb)
 }
 
@@ -126,11 +127,12 @@ func (r *Router) remAbs(chat, mid int64) {
 		return
 	}
 	y, _, _ := jalali.JNow()
-	var kb [][]Btn
+	var items []Btn
 	for yy := y; yy <= y+1; yy++ {
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%d", yy), "remabsy:"+strconv.Itoa(yy))})
+		items = append(items, btn(fmt.Sprintf("%d", yy), "remabsy:"+strconv.Itoa(yy)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "remnew"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 4)
+	kb = append(kb, navRow("remnew"))
 	r.Show(chat, mid, "📅 سال را انتخاب کن:", kb)
 }
 

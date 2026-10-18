@@ -89,15 +89,13 @@ func (r *Router) quotaHome(chat, mid int64) {
 		autoLabel = "🔓 خاموش‌کردن استاپ خودکار"
 	}
 	kb := [][]Btn{
-		{btn("🔢 تغییر سقف روزانه", "qsetlimit")},
-		{btn(autoLabel, "qtgauto")},
-		{btn("🔔 هشدارها", "qalerts")},
-		{btn("📊 کرون‌جاب‌ها", "qcrons")},
+		{btn("🔢 تغییر سقف روزانه", "qsetlimit"), btn("🔔 هشدارها", "qalerts")},
+		{btn(autoLabel, "qtgauto"), btn("📊 کرون‌جاب‌ها", "qcrons")},
 	}
 	if len(r.panels()) > 0 {
-		kb = append(kb, []Btn{btn("📡 نودها", "nd")})
+		kb = append(kb, row(btn("📡 نودها", "nd")))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "dommon"), btn("🏠 خانه", "menu")})
+	kb = append(kb, navRow("dommon"))
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

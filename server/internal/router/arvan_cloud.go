@@ -264,7 +264,7 @@ func (r *Router) arvServerList(chat, mid int64, i int, region string) {
 	sess["region"] = region
 	sess["servers"] = servers
 	r.arvSessSave(chat, sess)
-	var kb [][]Btn
+	var srvItems []Btn
 	for j, x := range servers {
 		s := x.(map[string]any)
 		if j >= 30 {
@@ -279,11 +279,12 @@ func (r *Router) arvServerList(chat, mid int64, i int, region string) {
 		} else if strings.Contains(st, "off") || strings.Contains(st, "stop") || strings.Contains(st, "shut") {
 			emoji = "🔴"
 		}
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%s %s", emoji, truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j))})
+		srvItems = append(srvItems, btn(fmt.Sprintf("%s %s", emoji, truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j)))
 	}
-	kb = append(kb, []Btn{btn("➕ ساخت سرور جدید", fmt.Sprintf("arvnew:%d:%s", i, region))})
-	kb = append(kb, []Btn{btn("🔄 تازه‌سازی", fmt.Sprintf("arvreg:%d:%s", i, region))})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvsrv"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(srvItems, 2)
+	kb = append(kb, row(btn("➕ ساخت سرور جدید", fmt.Sprintf("arvnew:%d:%s", i, region))))
+	kb = append(kb, row(btn("🔄 تازه‌سازی", fmt.Sprintf("arvreg:%d:%s", i, region))))
+	kb = append(kb, navRow("arvsrv"))
 	title := fmt.Sprintf("🖥 سرورهای ابری (%d)\n📍 %s", len(servers), Esc(r.arvRegionName(region)))
 	if len(servers) == 0 {
 		title += "\n\nℹ️ سروری در این ریجن نیست."

@@ -431,12 +431,12 @@ func (r *Router) hubCfg(chat, mid int64) {
 		"برای اجرای این نصب به‌عنوان هاب، همان <code>hub_url</code> را روی بقیه نصب‌ها ست کن " +
 			"و <code>hub_secret</code> را یکسان بگذار.",
 	}
-	kb := [][]Btn{
-		{btn("🔗 ست‌کردن آدرس هاب", "hubsethub")},
-		{btn("🔑 ست‌کردن secret هاب", "hubsetsc")},
-		{btn("🔗 منبع اعلان‌ها", "annurl")},
-		{btn("🔙 بازگشت", "hub"), btn("🏠 خانه", "menu")},
-	}
+	kb := gridBTN([]Btn{
+		btn("🔗 ست‌کردن آدرس هاب", "hubsethub"),
+		btn("🔑 ست‌کردن secret هاب", "hubsetsc"),
+		btn("📢 منبع اعلان‌ها", "annurl"),
+	}, 2)
+	kb = append(kb, navRow("hub"))
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

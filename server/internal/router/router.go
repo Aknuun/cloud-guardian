@@ -12,7 +12,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.5.3"
+const Version = "4.5.4"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -20,6 +20,24 @@ type Btn = tg.Button
 func btn(text, data string) Btn         { return Btn{Text: text, Data: data} }
 func btnS(text, data, style string) Btn { return Btn{Text: text, Data: data, Style: style} }
 func HomeKB() [][]Btn                   { return [][]Btn{{btn("🏠 خانه", "menu")}} }
+
+// Button layout standard (keep screens compact so they fit without scrolling):
+//   - 1 column  (full-width): long labels / primary actions / confirmations.
+//   - 2 columns: short labels, paired actions (e.g. بازگشت + خانه).
+//   - 3 columns: short list items (versions, tags, zones, short names).
+//   - 4 columns: very short items (single digits / numbers / emoji icons).
+//
+// Build a flat []Btn then flow it with gridBTN(items, cols); use row() for a
+// single row and navRow() for the standard back/home footer.
+func row(bs ...Btn) []Btn { return bs }
+
+// navRow is the standard back/home footer shown at the bottom of sub-screens.
+func navRow(back string) []Btn {
+	if back == "" {
+		return row(btn("🏠 خانه", "menu"))
+	}
+	return row(btn("🔙 بازگشت", back), btn("🏠 خانه", "menu"))
+}
 
 func Esc(s any) string {
 	return html.EscapeString(fmt.Sprint(s))

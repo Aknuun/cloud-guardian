@@ -230,11 +230,12 @@ func (r *Router) domexpCalList(chat, mid int64) {
 	if len(show) > 30 {
 		show = show[:30]
 	}
-	var kb [][]Btn
+	var items []Btn
 	for _, x := range show {
-		kb = append(kb, []Btn{btn("🗓 "+x.Domain, "domexpi:"+url.QueryEscape(x.Domain))})
+		items = append(items, btn("🗓 "+x.Domain, "domexpi:"+url.QueryEscape(x.Domain)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("domexpp:0"))
 	r.Show(chat, mid, "🗓 برای کدام دامنه تاریخ انقضا را دستی ثبت/اصلاح کنیم؟", kb)
 }
 
@@ -269,11 +270,12 @@ func (r *Router) domexpDelList(chat, mid int64) {
 	if n > 40 {
 		n = 40
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i := 0; i < n; i++ {
-		kb = append(kb, []Btn{btn("🗑 "+lst[i].Domain, "domexpdy:"+strconv.Itoa(i))})
+		items = append(items, btn("🗑 "+lst[i].Domain, "domexpdy:"+strconv.Itoa(i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("domexpp:0"))
 	r.Show(chat, mid, "🗑 کدام دامنه از مانیتور حذف شود؟", kb)
 }
 

@@ -112,21 +112,22 @@ func (r *Router) arvanDoms(chat, mid int64) {
 				{btn("🔙 بازگشت", "arvan")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range accs {
 		doms := arvan.New(strv(a["token"])).Domains()
 		if len(doms) == 0 {
 			continue
 		}
 		for _, d := range doms {
-			if len(kb) >= 20+len(accs) {
+			if len(items) >= 20 {
 				break
 			}
 			dn := arvanName(d)
-			kb = append(kb, []Btn{btn("🇮🇷 "+dn, fmt.Sprintf("arvdom:%d:%s", i, dn))})
+			items = append(items, btn("🇮🇷 "+dn, fmt.Sprintf("arvdom:%d:%s", i, dn)))
 		}
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("arvan"))
 	r.Show(chat, mid, "🌐 دامنه‌های آروان:", kb)
 }
 

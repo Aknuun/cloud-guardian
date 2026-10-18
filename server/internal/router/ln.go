@@ -92,12 +92,14 @@ func (r *Router) lnHome(chat, mid int64) {
 	}
 	lines = append(lines, fmt.Sprintf("«%s» انتخاب شده:", strv(accs[sel]["name"])), "")
 	servers := ln.New(strv(accs[sel]["token"])).All("/linode/instances")
+	var srvItems []Btn
 	for i, s := range servers {
 		if i >= 20 {
 			break
 		}
-		kb = append(kb, []Btn{btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", sel, strv(s["id"])))})
+		srvItems = append(srvItems, btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", sel, strv(s["id"]))))
 	}
+	kb = append(kb, gridBTN(srvItems, 2)...)
 	nm := strv(accs[sel]["name"])
 	label := "⚙️ تنظیمات"
 	if len(accs) > 1 {
@@ -140,11 +142,12 @@ func (r *Router) lnAccsMenu(chat, mid int64) {
 
 func (r *Router) lnDelList(chat, mid int64) {
 	accs := r.lnAccs()
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range accs {
-		kb = append(kb, []Btn{btn("🗑 "+strv(a["name"]), fmt.Sprintf("lnd:%d", i))})
+		items = append(items, btn("🗑 "+strv(a["name"]), fmt.Sprintf("lnd:%d", i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ln")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "ln")))
 	r.Show(chat, mid, "🗑 کدام اکانت حذف شود؟", kb)
 }
 
@@ -194,10 +197,11 @@ func (r *Router) lnServers(chat, mid int64, i int, pg int) {
 	if hi > len(servers) {
 		hi = len(servers)
 	}
-	var kb [][]Btn
+	var items []Btn
 	for _, s := range servers[lo:hi] {
-		kb = append(kb, []Btn{btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", i, strv(s["id"])))})
+		items = append(items, btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", i, strv(s["id"]))))
 	}
+	kb := gridBTN(items, 2)
 	if pages > 1 {
 		var nav []Btn
 		if pg > 0 {

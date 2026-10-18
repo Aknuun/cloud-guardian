@@ -126,11 +126,12 @@ func (r *Router) hzDelList(chat, mid int64) {
 		r.Show(chat, mid, "📭 اکانتی نیست.", [][]Btn{{btn("🔙 بازگشت", "hz")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range accs {
-		kb = append(kb, []Btn{btn("🗑 "+strv(a["name"]), fmt.Sprintf("hzd:%d", i))})
+		items = append(items, btn("🗑 "+strv(a["name"]), fmt.Sprintf("hzd:%d", i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hz")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "hz")))
 	r.Show(chat, mid, "🗑 کدام اکانت حذف شود؟", kb)
 }
 

@@ -122,11 +122,12 @@ func (r *Router) qaResults(chat, mid int64, token string, page int) {
 		end = n
 	}
 	results := map[string]any{}
-	var kb [][]Btn
+	var items []Btn
 	for _, h := range s.Hits[start:end] {
 		results[h.RID] = map[string]any{"acc": h.Acc, "zid": h.ZID}
-		kb = append(kb, []Btn{btn(cfRecLabel(h.Name, h.Type, h.ZName), "cfr:"+h.RID)})
+		items = append(items, btn(cfRecLabel(h.Name, h.Type, h.ZName), "cfr:"+h.RID))
 	}
+	kb := gridBTN(items, 2)
 	r.cfSaveSession(chat, map[string]any{"results": results})
 	if pages > 1 {
 		var nav []Btn
@@ -142,7 +143,7 @@ func (r *Router) qaResults(chat, mid int64, token string, page int) {
 	kb = append(kb,
 		[]Btn{btnS("🗑 حذف همه", "qadelall:"+token, "danger"), btnS("⭐ افزودن همه به منتخب", "qafavall:"+token, "primary")},
 		[]Btn{btn("➕ افزودن ساب برای این آی‌پی", "qadd:"+token)},
-		[]Btn{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")},
+		navRow("qamenu"),
 	)
 	r.Show(chat, mid, fmt.Sprintf("⚡ آی‌پی <code>%s</code> در %d رکورد:", Esc(s.IP), n), kb)
 }
@@ -231,7 +232,7 @@ func (r *Router) qaAddZones(chat, mid int64, token string) {
 		r.Show(chat, mid, "⏳ نشست منقضی شد. دوباره آی‌پی را بفرستید.", HomeKB())
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, a := range r.cfAccs() {
 		cli := cf.New(a.Token)
 		zs, err := cli.Zones()
@@ -242,14 +243,15 @@ func (r *Router) qaAddZones(chat, mid int64, token string) {
 			if z.Status != "active" {
 				continue
 			}
-			kb = append(kb, []Btn{btn("📁 "+z.Name, fmt.Sprintf("qanz:%d:%s", i, z.ID))})
+			items = append(items, btn("📁 "+z.Name, fmt.Sprintf("qanz:%d:%s", i, z.ID)))
 		}
 	}
-	if len(kb) == 0 {
+	if len(items) == 0 {
 		r.Show(chat, mid, "📭 دامنه‌ای نیست.", HomeKB())
 		return
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("qamenu"))
 	r.Show(chat, mid, fmt.Sprintf("➕ افزودن ساب برای <code>%s</code>\n\nدامنه را انتخاب کن:", Esc(ip)), kb)
 }
 

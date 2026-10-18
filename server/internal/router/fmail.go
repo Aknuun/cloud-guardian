@@ -176,7 +176,6 @@ func (r *Router) fmailAdd(chat, mid int64) {
 		}
 	}
 	lines := []string{"➕ وصل دامنه جدید", "", "دامنه را بزن و حالت دریافت را انتخاب کن:"}
-	var kb [][]Btn
 	if len(zones) == 0 {
 		if len(on) > 0 {
 			lines = append(lines, "", "همهٔ دامنه‌ها تنظیم شده‌اند.")
@@ -184,17 +183,19 @@ func (r *Router) fmailAdd(chat, mid int64) {
 			lines = append(lines, "", "📭 دامنه‌ای پیدا نشد.")
 		}
 	}
+	var items []Btn
 	for i, z := range zones {
 		if i >= 20 {
 			break
 		}
-		kb = append(kb, []Btn{btnS("➕ "+z.Zone.Name,
-			fmt.Sprintf("fmode:%d:%s", z.Acc, z.Zone.ID), "success")})
+		items = append(items, btnS("➕ "+z.Zone.Name,
+			fmt.Sprintf("fmode:%d:%s", z.Acc, z.Zone.ID), "success"))
 	}
 	if len(zones) > 20 {
 		lines = append(lines, "", fmt.Sprintf("… و %d دامنه دیگر", len(zones)-20))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "fmail"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("fmail"))
 	txt := strings.Join(lines, "\n")
 	if len(txt) > 3500 {
 		txt = txt[:3500]

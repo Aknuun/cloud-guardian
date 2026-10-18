@@ -133,12 +133,12 @@ func (r *Router) pgPanel(chat, mid int64, i int) {
 	}
 	recurLabel := "⏱ recurrent"
 	kb := [][]Btn{
-		{btn("🧪 پیام تستی", fmt.Sprintf("pgtest:%d", i))},
 		{btn("🛣 مسیر داشبورد", fmt.Sprintf("pgdash:%d", i)),
 			btn("🤖 ربات داخلی", fmt.Sprintf("pgrenewbot:%d", i))},
-		{btn("🔄 توکن جدید", fmt.Sprintf("pgregen:%d", i))},
-		{btn(recurLabel, fmt.Sprintf("pgrecur:%d", i))},
-		{btn("🔙 هشدارها", "pghook"), btn("🏠 خانه", "menu")},
+		{btn("🔄 توکن جدید", fmt.Sprintf("pgregen:%d", i)),
+			btn(recurLabel, fmt.Sprintf("pgrecur:%d", i))},
+		{btn("🧪 پیام تستی", fmt.Sprintf("pgtest:%d", i))},
+		navRow("pghook"),
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }

@@ -350,11 +350,12 @@ func (r *Router) srvSubZones(chat, mid int64) {
 			[][]Btn{{btn("🔙 بازگشت", "srvsub"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	var rows [][]Btn
+	var items []Btn
 	for _, z := range zs {
-		rows = append(rows, []Btn{btn("📁 "+z.Zone.Name, fmt.Sprintf("srvsubz:%d:%s", z.Acc, z.Zone.ID))})
+		items = append(items, btn("📁 "+z.Zone.Name, fmt.Sprintf("srvsubz:%d:%s", z.Acc, z.Zone.ID)))
 	}
-	rows = append(rows, []Btn{btn("🔙 بازگشت", "srvsub"), btn("🏠 خانه", "menu")})
+	rows := gridBTN(items, 2)
+	rows = append(rows, navRow("srvsub"))
 	r.Show(chat, mid, "📁 دامنه را انتخاب کنید:", rows)
 }
 

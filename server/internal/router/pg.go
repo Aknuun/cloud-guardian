@@ -48,11 +48,12 @@ func (r *Router) pnleList(chat, mid int64) {
 			[][]Btn{{btn("➕ افزودن پنل", "pga")}, {btn("🔙 بازگشت", "pg"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for i, p := range panels {
-		kb = append(kb, []Btn{btn("✏️ "+pname(p), fmt.Sprintf("pnle:%d", i))})
+		items = append(items, btn("✏️ "+pname(p), fmt.Sprintf("pnle:%d", i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "pg"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("pg"))
 	r.Show(chat, mid, "کدام پنل را ویرایش کنم؟", kb)
 }
 
@@ -139,12 +140,12 @@ func (r *Router) pnlops(chat, mid int64, i int) {
 	}
 	p := panels[i]
 	lines := []string{fmt.Sprintf("🔧 عملیات پنل «%s»", Esc(pname(p))), "🌐 " + strv(p.URL), ""}
-	kb := [][]Btn{
-		{btn("🔁 چرخش روزانه ساب‌ها", fmt.Sprintf("hfdpanel:%d", i))},
-		{btn("✏️ ویرایش پنل", fmt.Sprintf("pnle:%d", i))},
-		{btn("🔔 هشدارها/وبهوک", "pghook")},
-		{btn("🔙 بازگشت", "pg"), btn("🏠 خانه", "menu")},
-	}
+	kb := gridBTN([]Btn{
+		btn("✏️ ویرایش پنل", fmt.Sprintf("pnle:%d", i)),
+		btn("🔔 هشدارها/وبهوک", "pghook"),
+		btn("🔁 چرخش روزانه ساب‌ها", fmt.Sprintf("hfdpanel:%d", i)),
+	}, 2)
+	kb = append(kb, navRow("pg"))
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -163,11 +164,12 @@ func (r *Router) pgAdd(chat, mid int64) {
 
 func (r *Router) pgDelList(chat, mid int64) {
 	panels := r.panels()
-	var kb [][]Btn
+	var items []Btn
 	for i, p := range panels {
-		kb = append(kb, []Btn{btn("🗑 "+pname(p), "pgd:"+strconv.Itoa(i))})
+		items = append(items, btn("🗑 "+pname(p), "pgd:"+strconv.Itoa(i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "pg")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "pg")))
 	r.Show(chat, mid, "🗑 کدام پنل حذف شود؟", kb)
 }
 
@@ -254,7 +256,7 @@ func (r *Router) pgUsers(chat, mid int64, i, page int, q string) {
 	}
 	r.Store.PutJSON(fmt.Sprintf("s:%d", chat),
 		map[string]any{"panel": i, "users": names}, 3600)
-	var kb [][]Btn
+	var items []Btn
 	for idx, u := range pageUsers {
 		flag := ""
 		if p95 := pg.Pct(u.Used, u.Limit); p95 != nil {
@@ -264,14 +266,15 @@ func (r *Router) pgUsers(chat, mid int64, i, page int, q string) {
 				flag = "🟡 "
 			}
 		}
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%s%s", flag, u.Username), "pgu:"+strconv.Itoa(idx))})
+		items = append(items, btn(fmt.Sprintf("%s%s", flag, u.Username), "pgu:"+strconv.Itoa(idx)))
 	}
+	kb := gridBTN(items, 2)
 	if pages > 1 {
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%d/%d", page+1, pages),
-			fmt.Sprintf("pgl:%d:%d", i, (page+1)%pages))})
+		kb = append(kb, row(btn(fmt.Sprintf("%d/%d", page+1, pages),
+			fmt.Sprintf("pgl:%d:%d", i, (page+1)%pages))))
 	}
-	kb = append(kb, []Btn{btn("🔍 جستجو", "pgq"), btn("🔙 بازگشت", "pg")})
-	kb = append(kb, []Btn{btn("🏠 خانه", "menu")})
+	kb = append(kb, row(btn("🔍 جستجو", "pgq"), btn("🔙 بازگشت", "pg")))
+	kb = append(kb, row(btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, fmt.Sprintf("👥 کاربران «%s» (%d نفر):", Esc(pname(p)), len(users)), kb)
 }
 

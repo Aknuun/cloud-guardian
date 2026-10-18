@@ -49,19 +49,21 @@ func (r *Router) ndHome(chat, mid int64) {
 			"سپس همین‌جا وضعیت همهٔ نودها را مستقیم می‌بینی. " +
 			"اگر نودی قطع یا دوباره وصل شود، فوری خبر داده می‌شود.",
 		"پایش خودکار با فاصلهٔ قابل تنظیم انجام می‌شود.", ""}
-	var kb [][]Btn
+	var items []Btn
 	for _, m := range mons {
 		st := "🟢"
 		if !m.IsEnabled() {
 			st = "⏸"
 		}
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%s %s", st, m.Label()), "ndd:"+m.ID)})
+		items = append(items, btn(fmt.Sprintf("%s %s", st, m.Label()), "ndd:"+m.ID))
 	}
-	kb = append(kb, []Btn{btn("➕ ساخت مانیتور", "ndmk")})
+	kb := gridBTN(items, 2)
 	if len(mons) > 0 {
-		kb = append(kb, []Btn{btn("🗑 حذف مانیتور", "nddelmenu")})
+		kb = append(kb, row(btn("➕ ساخت مانیتور", "ndmk"), btn("🗑 حذف مانیتور", "nddelmenu")))
+	} else {
+		kb = append(kb, row(btn("➕ ساخت مانیتور", "ndmk")))
 	}
-	kb = append(kb, []Btn{btn("❓ راهنما", "ndhelp"), btn("🏠 خانه", "menu")})
+	kb = append(kb, row(btn("❓ راهنما", "ndhelp"), btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -107,7 +109,7 @@ func (r *Router) ndDetail(chat, mid int64, idStr string) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var nodeKB [][]Btn
+	var items []Btn
 	for i, name := range names {
 		if i >= 10 {
 			break
@@ -116,8 +118,9 @@ func (r *Router) ndDetail(chat, mid int64, idStr string) {
 		if ndmon.NodeDir(nodes[name].Status) == "up" {
 			icon = "🟢"
 		}
-		nodeKB = append(nodeKB, []Btn{btn(fmt.Sprintf("%s %s", icon, name), "ndi:"+m.ID+":"+name)})
+		items = append(items, btn(fmt.Sprintf("%s %s", icon, name), "ndi:"+m.ID+":"+name))
 	}
+	nodeKB := gridBTN(items, 2)
 	kb = append(nodeKB, kb...)
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -191,15 +194,16 @@ func (r *Router) ndExc(chat, mid int64, idStr string) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var kb [][]Btn
+	var items []Btn
 	for _, name := range names {
 		mark := "🔔"
 		if exc[name] {
 			mark = "🚫"
 		}
-		kb = append(kb, []Btn{btn(mark+" "+name, "ndx:"+m.ID+":"+name)})
+		items = append(items, btn(mark+" "+name, "ndx:"+m.ID+":"+name))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ndd:"+m.ID), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("ndd:"+m.ID))
 	r.Show(chat, mid, "🚫 برای خاموش‌کردن هشدار هر نود بزن:", kb)
 }
 
@@ -382,21 +386,23 @@ func (r *Router) ndDelDo(chat, mid int64, idStr string) {
 
 func (r *Router) ndDelMenu(chat, mid int64) {
 	mons := ndmon.Monitors(r.Store)
-	var kb [][]Btn
+	var items []Btn
 	for _, m := range mons {
-		kb = append(kb, []Btn{btn("🗑 "+m.Label(), "nddel:"+m.ID)})
+		items = append(items, btn("🗑 "+m.Label(), "nddel:"+m.ID))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "nd")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "nd")))
 	r.Show(chat, mid, "🗑 کدام مانیتور حذف شود؟", kb)
 }
 
 func (r *Router) ndMkPanel(chat, mid int64) {
 	panels := r.panels()
-	var kb [][]Btn
+	var items []Btn
 	for i, p := range panels {
-		kb = append(kb, []Btn{btn("🖥 "+pname(p), fmt.Sprintf("ndmk:%d", i))})
+		items = append(items, btn("🖥 "+pname(p), fmt.Sprintf("ndmk:%d", i)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "nd"), btn("🏠 خانه", "menu")})
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("nd"))
 	r.Show(chat, mid, "🖥 برای کدام پنل مانیتور بسازم؟", kb)
 }
 

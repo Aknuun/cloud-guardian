@@ -37,15 +37,16 @@ func (r *Router) adminAdd(chat, mid int64) {
 
 func (r *Router) adminDelList(chat, mid int64) {
 	extra := r.Admins()
-	var kb [][]Btn
+	var items []Btn
 	for _, id := range extra[1:] {
-		kb = append(kb, []Btn{btn(fmt.Sprintf("➖ %d", id), "admindely:"+strconv.FormatInt(id, 10))})
+		items = append(items, btn(fmt.Sprintf("➖ %d", id), "admindely:"+strconv.FormatInt(id, 10)))
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "admins_menu"), btn("🏠 خانه", "menu")})
-	if len(kb) == 1 {
+	if len(items) == 0 {
 		r.Show(chat, mid, "— ادمینی برای حذف نیست.", [][]Btn{{btn("🔙 بازگشت", "admins_menu")}})
 		return
 	}
+	kb := gridBTN(items, 2)
+	kb = append(kb, navRow("admins_menu"))
 	r.Show(chat, mid, "➖ کدام ادمین حذف شود؟", kb)
 }
 
