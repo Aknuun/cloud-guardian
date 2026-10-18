@@ -491,6 +491,18 @@ func CheckIPCleanliness(ip string) (bool, string) {
 	}
 }
 
+// reHostPlaceholder matches panel remark template tokens like {USERNAME},
+// {TIME_LEFT}, {STATUS_EMOJI}, {DATA_LEFT} that the panel expands at
+// subscription time. They are meaningless in a raw notification, so drop them.
+var reHostPlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+func cleanHostLabel(s string) string {
+	s = reHostPlaceholder.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "|", "·")
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.Trim(s, " ·-|")
+}
+
 func ipDiagMsg(panel string, host map[string]any, dv string, d ipDiag) string {
 	head := "🚫 آی‌پی فیلتر شده است (نه دامنه) — تعویض انجام نشد"
 	tail := "این آی‌پی از خارج (آلمان/هلند) پاسخ می‌دهد ولی از داخل ایران فیلتر است و زیر این هاست قرار دارد."
@@ -501,7 +513,7 @@ func ipDiagMsg(panel string, host map[string]any, dv string, d ipDiag) string {
 		head = "🇮🇷 آی‌پی «ایران‌اکسس» شد — تعویض انجام نشد"
 		tail = "این آی‌پی از داخل ایران پاسخ می‌دهد ولی از آلمان/هلند در دسترس نیست."
 	}
-	remark := strv(host["remark"])
+	remark := cleanHostLabel(strv(host["remark"]))
 	if remark == "" {
 		remark = strv(host["id"])
 	}

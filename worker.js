@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.5.5";
+const BOT_VERSION = "4.5.6";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.5.6": [
+    "🧹 پیام‌های «نگهبان ابری» تمیز شدند: متغیرهای قالب پنل مثل {USERNAME} و {STATUS_EMOJI} و {TIME_LEFT} که در نام هاست هستند دیگر خام نمایش داده نمی‌شوند",
+    "📄 نام هاست در پیام فیلتر/خاموش با حذف این متغیرها و یکدست‌سازی فاصله‌ها مرتب نمایش داده می‌شود",
+  ],
   "4.5.5": [
     "📋 دکمهٔ «کپی» یک‌ضربه‌ای اضافه شد؛ هرجا مقدار مهمی نمایش داده می‌شود (ساب/دامنه، آی‌پی، رمز root، توکن، آدرس وبهوک، دستور SSH و...) با یک لمس کپی می‌شود",
     "🌐 صفحهٔ ساخت ساب: دامنهٔ کامل ساب و آی‌پی نمایش داده می‌شود + دکمهٔ کپی دامنه",
@@ -24186,6 +24190,18 @@ async function hfNotify(botToken, admins, text, kb) {
   }
 }
 
+// Remove panel remark template tokens like {USERNAME}, {TIME_LEFT},
+// {STATUS_EMOJI}, {DATA_LEFT} (expanded by the panel at subscription time)
+// so raw notifications stay clean.
+function hfCleanRemark(s) {
+  return String(s || "")
+    .replace(/\{[^{}]*\}/g, "")
+    .replace(/\|/g, "·")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[·\-\s]+|[·\-\s]+$/g, "");
+}
+
 async function hostFilterRevert(kv, env, panelId, hostId) {
   const panels = await getPanels(kv);
   const panel = panels.find((p) => p.id === panelId);
@@ -25160,7 +25176,7 @@ async function runHostFilter(env, opts = {}) {
             const txt =
               head + "\n" +
               "🖥 پنل: " + escHtml(item.panel.name) + "\n" +
-              "📄 هاست: " + escHtml(String(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
+              "📄 هاست: " + escHtml(hfCleanRemark(item.host.remark || item.host.id).substring(0, 60)) + "\n" +
               "🌐 آی‌پی: " + code(diag.ip || "?") + "\n" +
               "🔗 زیرساب‌دامنه: " + code(dv) + "\n" +
               (members.length ? "➕ " + members.length + " ساب‌دامنهٔ دیگر روی همین آی‌پی در این بررسی\n" : "") +
