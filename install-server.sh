@@ -6,20 +6,13 @@
 #  one-liner:
 #    bash -c "$(curl -sL https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/install-server.sh)"
 #
-#  commands:  install (default) | update | uninstall | status | logs | help
+#  commands:  (no arg = interactive menu) | install | update | rollback | \
+#             reconfig | status | logs | uninstall | help
 # ============================================================
 set -euo pipefail
 
 REPO="Aknuun/cloud-guardian"
 BRANCH="main"
-# ref to build from: a branch (default) or a version tag for rollback/install of a
-# specific release, e.g.  REF=v4.5.2 bash install-server.sh update
-REF="${REF:-$BRANCH}"
-if [[ "$REF" =~ ^v?[0-9] ]]; then
-  CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/tags/${REF}"
-else
-  CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/heads/${REF}"
-fi
 
 INSTALL_DIR="/opt/cloud-guardian"
 SRC_DIR="${INSTALL_DIR}/server"
@@ -29,6 +22,18 @@ DB="${INSTALL_DIR}/data.db"
 ENVFILE="${INSTALL_DIR}/server.env"
 UNIT="/etc/systemd/system/cg-server.service"
 SERVICE="cg-server"
+
+# ref to build from: a branch (default) or a version tag for rollback/install of a
+# specific release, e.g.  REF=v4.5.2 bash install-server.sh update
+set_ref() {
+  REF="$1"
+  if [[ "$REF" =~ ^v?[0-9] ]]; then
+    CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/tags/${REF}"
+  else
+    CTAR="https://codeload.github.com/${REPO}/tar.gz/refs/heads/${REF}"
+  fi
+}
+set_ref "${REF:-$BRANCH}"
 
 # --- colors ---
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -55,7 +60,7 @@ banner() {
   echo
 }
 
-CMD="${1:-install}"
+CMD="${1:-}"
 
 need_root() {
   if [ "$(id -u)" != "0" ]; then
@@ -70,15 +75,15 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # install prerequisites (curl + tar)
 # ------------------------------------------------------------
 ensure_base() {
-  if have curl && have tar; then return; fi
+  if have curl && have tar && have python3; then return; fi
   step "Installing prerequisites"
   if have apt-get; then
     apt-get update -y >/dev/null 2>&1 || true
-    DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar ca-certificates >/dev/null 2>&1 || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y curl tar ca-certificates python3 >/dev/null 2>&1 || true
   elif have dnf; then
-    dnf install -y curl tar ca-certificates >/dev/null 2>&1 || true
+    dnf install -y curl tar ca-certificates python3 >/dev/null 2>&1 || true
   elif have yum; then
-    yum install -y curl tar ca-certificates >/dev/null 2>&1 || true
+    yum install -y curl tar ca-certificates python3 >/dev/null 2>&1 || true
   fi
   have curl || { err "curl is required"; exit 1; }
   have tar  || { err "tar is required";  exit 1; }
@@ -151,6 +156,21 @@ build_binary() {
 # ------------------------------------------------------------
 json_escape() { printf '%s' "$1" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null || printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# read a key from the existing config.json (empty if missing)
+cfg_get() {
+  [ -f "$CFG" ] || return 0
+  python3 - "$1" "$CFG" <<'PY' 2>/dev/null || true
+import json,sys
+k,p=sys.argv[1],sys.argv[2]
+try:
+    d=json.load(open(p))
+except Exception:
+    sys.exit(0)
+v=d.get(k,"")
+print(v if isinstance(v,str) else ("" if v is None else v))
+PY
+}
+
 ask() { # ask <prompt> [default] -> REPLY
   local p="$1" d="${2:-}"
   if [ -n "$d" ]; then
@@ -163,14 +183,16 @@ ask() { # ask <prompt> [default] -> REPLY
 
 write_config() {
   step "Server configuration"
-  local token admin cf ip pub
+  local token admin cf pub acct hz
+  token="$(cfg_get bot_token)"; admin="$(cfg_get admin_id)"
+  cf="$(cfg_get cf_token)"; acct="$(cfg_get cf_account_id)"; hz="$(cfg_get hz_token)"
   if [ -f "$CFG" ]; then
-    warn "config.json exists; press Enter to keep current values"
+    warn "config.json exists — press Enter to keep the current value"
   fi
 
   # bot token
   while :; do
-    ask "Telegram bot token (from @BotFather)" ""
+    ask "Telegram bot token (from @BotFather)" "$token"
     token="$REPLY"
     if [[ "$token" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]]; then break; fi
     err "Invalid token format"
@@ -178,19 +200,22 @@ write_config() {
 
   # admin id
   while :; do
-    ask "Your numeric Telegram ID (main admin)" ""
+    ask "Your numeric Telegram ID (main admin)" "$admin"
     admin="${REPLY%%,*}"
     if [[ "$admin" =~ ^[0-9]+$ ]]; then break; fi
     err "Must be numeric"
   done
 
   # cf token (optional)
-  ask "Cloudflare API token (optional, Enter to skip)" ""
+  ask "Cloudflare API token (optional, Enter to keep/skip)" "$cf"
   cf="$REPLY"
 
   # public url — auto-detected silently (no prompt); used only by the optional failover
-  ip="$(curl -fsSL --max-time 8 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
-  if [ -n "$ip" ]; then pub="http://${ip}:8787"; else pub=""; fi
+  pub="$(cfg_get public_url)"
+  if [ -z "$pub" ]; then
+    local ip; ip="$(curl -fsSL --max-time 8 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    if [ -n "$ip" ]; then pub="http://${ip}:8787"; fi
+  fi
   log "public_url (auto): ${pub:-none}"
 
   cat > "$CFG" <<EOF
@@ -198,9 +223,9 @@ write_config() {
   "bot_token": "$(json_escape "$token")",
   "admin_id": ${admin},
   "cf_token": "$(json_escape "$cf")",
-  "cf_account_id": "",
+  "cf_account_id": "$(json_escape "$acct")",
   "public_url": "$(json_escape "$pub")",
-  "hz_token": ""
+  "hz_token": "$(json_escape "$hz")"
 }
 EOF
   chmod 600 "$CFG"
@@ -265,6 +290,30 @@ summary() {
   hr
 }
 
+is_installed() { [ -x "$BIN" ] || [ -d "$SRC_DIR" ]; }
+
+installed_version() {
+  if [ -f "${SRC_DIR}/VERSION" ]; then
+    tr -d '[:space:]' < "${SRC_DIR}/VERSION"
+  else
+    echo "unknown"
+  fi
+}
+
+# list published version tags (newest first)
+list_tags() {
+  curl -fsSL -H 'User-Agent: cg-installer' \
+    "https://api.github.com/repos/${REPO}/tags?per_page=30" \
+  | python3 -c 'import json,sys,re
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+t=[x.get("name","") for x in d if isinstance(x,dict)]
+t=[v for v in t if re.match(r"^v?\d+(\.\d+){1,2}$",v)]
+print("\n".join(t))'
+}
+
 do_install() {
   banner
   need_root
@@ -283,11 +332,89 @@ do_update() {
   need_root
   ensure_base
   ensure_go
-  [ -d "$SRC_DIR" ] || { err "Not installed; run install first"; exit 1; }
+  is_installed || { err "Not installed; run install first"; exit 1; }
   fetch_source
   build_binary
   systemctl restart "$SERVICE"
-  ok "Updated"
+  ok "Updated to $(installed_version)"
+}
+
+do_reconfig() {
+  banner
+  need_root
+  [ -f "$CFG" ] || { err "Not installed; run install first"; exit 1; }
+  write_config
+  if systemctl is-enabled --quiet "$SERVICE" 2>/dev/null; then
+    systemctl restart "$SERVICE" >/dev/null 2>&1 || true
+    ok "Config saved; service restarted"
+  fi
+}
+
+do_rollback() {
+  banner
+  need_root
+  ensure_base
+  is_installed || { err "Not installed; run install first"; exit 1; }
+  step "Available versions   ${DIM}(current: $(installed_version))${RST}"
+  local tags; tags="$(list_tags)" || true
+  if [ -z "$tags" ]; then err "Could not fetch versions from GitHub"; return 1; fi
+  local -a arr=(); local i=1 t
+  while IFS= read -r t; do
+    [ -n "$t" ] || continue
+    arr+=("$t"); printf "  ${CYAN}%2d)${RST} %s\n" "$i" "$t"; i=$((i+1))
+  done <<< "$tags"
+  printf "  ${CYAN}%2d)${RST} Cancel\n" "0"
+  echo
+  local a; read -r -p "$(printf "${CYAN}?${RST} Choose a version to install: ")" a || true
+  if [ -z "${a:-}" ] || [ "$a" = "0" ]; then warn "Cancelled"; return 0; fi
+  if ! [[ "$a" =~ ^[0-9]+$ ]] || [ "$a" -lt 1 ] || [ "$a" -gt "${#arr[@]}" ]; then
+    err "Invalid choice"; return 1
+  fi
+  local tag="${arr[$((a-1))]}"
+  echo
+  read -r -p "$(printf "${YELLOW}?${RST} Install %s and restart the service? [y/N]: " "$tag")" c || true
+  [[ "${c:-}" =~ ^[Yy]$ ]] || { warn "Cancelled"; return 0; }
+  ensure_go
+  set_ref "$tag"
+  fetch_source
+  build_binary
+  systemctl restart "$SERVICE"
+  ok "Now running $(installed_version)"
+}
+
+menu() {
+  banner
+  while :; do
+    if is_installed; then
+      printf "  status: ${GREEN}installed${RST} ${DIM}(version $(installed_version))${RST}\n"
+    else
+      printf "  status: ${YELLOW}not installed${RST}\n"
+    fi
+    echo
+    echo "  ${BOLD}1)${RST} Install / reinstall        ${DIM}(fresh install)${RST}"
+    echo "  ${BOLD}2)${RST} Update to latest           ${DIM}(build from main)${RST}"
+    echo "  ${BOLD}3)${RST} Rollback / pick a version  ${DIM}(install a tag)${RST}"
+    echo "  ${BOLD}4)${RST} Reconfigure                ${DIM}(token / admin / CF)${RST}"
+    echo "  ${BOLD}5)${RST} Status"
+    echo "  ${BOLD}6)${RST} Logs"
+    echo "  ${BOLD}7)${RST} Uninstall"
+    echo "  ${BOLD}0)${RST} Exit"
+    echo
+    local c; read -r -p "$(printf "${CYAN}?${RST} Choose an option: ")" c || true
+    echo
+    case "${c:-}" in
+      1) do_install; return ;;
+      2) do_update; return ;;
+      3) do_rollback; return ;;
+      4) do_reconfig; return ;;
+      5) do_status ;;
+      6) do_logs ;;
+      7) do_uninstall; return ;;
+      0|"") return ;;
+      *) err "Invalid option" ;;
+    esac
+    echo
+  done
 }
 
 do_uninstall() {
@@ -309,21 +436,40 @@ do_logs() {
   journalctl -u "$SERVICE" -n 80 --no-pager || true
 }
 
+usage() {
+  cat <<EOF
+Cloud Guardian — Server installer (Go)
+
+  bash install-server.sh                 interactive menu
+  bash install-server.sh install         full install
+  bash install-server.sh update          update to latest
+  bash install-server.sh rollback        pick & install a version
+  bash install-server.sh reconfig        edit config only
+  bash install-server.sh status          service status
+  bash install-server.sh logs            service logs
+  bash install-server.sh uninstall       remove service (asks about data)
+
+  REF=<tag|branch> bash install-server.sh install|update   build a specific ref
+EOF
+}
+
 case "$CMD" in
   install|i|new-install) do_install ;;
-  update|u) do_update ;;
-  uninstall|remove|rm) do_uninstall ;;
-  status|st) do_status ;;
-  logs|log) do_logs ;;
-  help|-h|--help)
-    cat <<EOF
-Cloud Guardian — Server installer
-  install     full install
-  update      update
-  uninstall   uninstall
-  status      service status
-  logs        logs
-EOF
+  update|u|upgrade)      do_update ;;
+  rollback|rb|downgrade|version) do_rollback ;;
+  reconfig|config|cfg)   do_reconfig ;;
+  uninstall|remove|rm)   do_uninstall ;;
+  status|st)             do_status ;;
+  logs|log)              do_logs ;;
+  menu|"")               
+    if [ -t 0 ]; then
+      need_root; menu
+    elif is_installed; then
+      do_update
+    else
+      do_install
+    fi
     ;;
-  *) err "Unknown command: $CMD"; exit 1 ;;
+  help|-h|--help) usage ;;
+  *) err "Unknown command: $CMD"; echo; usage; exit 1 ;;
 esac
