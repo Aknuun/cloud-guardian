@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.5.10";
+const BOT_VERSION = "4.5.11";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,10 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.5.11": [
+    "🧹 پاک‌سازی ایجنت/رله از ورکر پشتیبان: دکمهٔ «🖥 راهنمای نصب ایجنت» از «تنظیمات و راهنما» و «راهنمای بخش‌ها» و صفحهٔ «نسخه‌ها» حذف شد",
+    "📝 متن‌های راهنما (سرورها/مدیریت) به «مدیریت سرورها با SSH» تغییر کرد تا با ربات سروری یکدست شود و دیگر «ایجنت» نشان ندهد",
+  ],
   "4.5.10": [
     "🛟 رفع باگ راه‌اندازی پشتیبان فیلور: دکمهٔ «✅ دپلو با همین اسم» خطای «اطلاعات ناقص» می‌داد — اسم پیش‌فرض حالا واقعاً ذخیره و ورکر ساخته می‌شود",
     "🌐 رفع باگ رکورد سلامت: بعد از جابه‌جایی به سرور جدید، رکورد DNS سلامت (cg-failover) هنوز به IP قبلی اشاره می‌کرد و همیشه «🔴 در دسترس نیست» نشان می‌داد؛ حالا خودکار به IP فعلی سرور آپدیت می‌شود",
@@ -2567,7 +2571,7 @@ function helpText() {
     "ℹ️ راهنما\n\n" +
     "روی هر بخش بزن تا راهنمای همان بخش را ببینی.\n" +
     "برای «جست‌وجوی سریع» (فرستادن آی‌پی/ساب‌دامنه در چت) دکمهٔ «⚡ جای‌گذاری سریع» را بزن.\n" +
-    "مدیریت سرورها از طریق ایجنت سرور انجام می‌شود"
+    "مدیریت سرورها از طریق SSH انجام می‌شود"
   );
 }
 
@@ -2621,14 +2625,13 @@ const HELP_GUIDE = {
     "دامنه‌ها را برای نظارت اضافه کن تا هنگام نزدیک‌شدن به انقضای گواهی (پیش‌فرض ۵ روز قبل) هشدار بگیری.",
   srv:
     "🖥 سرورها و مانیتورینگ (SSH و آمار زنده)\n\n" +
-    "مدیریت سرورهای لینوکسی از طریق SSH — همهٔ اتصال‌ها از «رلهٔ واحد» عبور می‌کنند:\n\n" +
+    "مدیریت سرورهای لینوکسی از طریق SSH:\n\n" +
     "• ➕ افزودن سرور: آی‌پی/هاست (+پورت) → رمز یا کلید SSH (نام پیش‌فرض = هاست، کاربر root)\n" +
     "• 🔑 رمزهای ذخیره‌شده: چند رمز را ذخیره کن تا هنگام افزودن سرور با یک دکمه انتخاب شوند\n" +
-
-    "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپتایم/پهنای باند هر سرور + هشدار خودکار قابل‌تنظیم\n" +
+    "\n" +
+    "• 📊 مانیتور سرور: مشاهدهٔ زندهٔ CPU/RAM/دیسک/آپ‌تایم/پهنای باند هر سرور + هشدار خودکار قابل‌تنظیم\n" +
     "• 🔄 ریبوت · ⏱ آپدیت و آپگرید · ℹ️ مشخصات سیستم · 💽 فضای دیسک\n\n" +
-    "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.\n" +
-    "⚠️ اگر رله راه‌اندازی نشده باشد، ربات خودش پیام نصب رله را نشان می‌دهد.",
+    "🔑 کلید SSH امن‌تر از رمز است؛ برای سرورهای پرکاربرد از کلید استفاده کنید.",
   pndef:
     "🎛 پنل پاسارگارد\n\n" +
     "ثبت پنل با آدرس + یوزر/پسورد سودو. ربات داخلی هر پنل خودکار از خود پنل خوانده می‌شود.\n" +
@@ -2678,7 +2681,7 @@ const HELP_GUIDE = {
     "ℹ️ راهنما — بخش‌بندی\n\n" +
     "روی هر دکمه بزنی راهنمای همان بخش را می‌بینی:\n\n" +
     "🌐 دامنه و DNS: کلودفلر · افزودن رکورد · جست‌وجو · ساب‌های منتخب · عملیات گروهی\n" +
-    "🖥 سرور و دیتاسنتر: سرورها و مانیتورینگ · رله · دیتاسنترها (لینود/هتزنر) · آروان\n" +
+    "🖥 سرور و دیتاسنتر: سرورها و مانیتورینگ · دیتاسنترها (لینود/هتزنر) · آروان\n" +
     "🎛 پاسارگارد: پنل · تعویض خودکار · مانیتور نود · بدمصرف\n" +
     "🌐 مانیتور دامنه و ترافیک‌ها: گواهی SSL · انقضای دامنه · ترافیک ساب‌ها · سهمیه کلادفلر\n" +
     "🧰 ابزارها: یادآورها · لود بالانسر · ایمیل دامنه\n" +
@@ -2721,7 +2724,6 @@ function helpKeyboard() {
       { text: "🏢 دیتاسنترها", callback_data: "hg:prov" },
     ],
     [{ text: "🇮🇷 آروان", callback_data: "hg:arvan" }],
-    [{ text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" }],
 
     // 🎛 پاسارگارد
     sec("— 🎛 پاسارگارد —"),
@@ -2754,14 +2756,13 @@ function helpKeyboard() {
   ];
 }
 
-// صفحهٔ «⚙️ تنظیمات و راهنما» — دسته‌بندی: مدیریت (رله/ادمین) + راهنمای بخش‌ها
+// صفحهٔ «⚙️ تنظیمات و راهنما» — دسته‌بندی: مدیریت + راهنمای بخش‌ها
 function settingsHomeText() {
   return (
     "⚙️ تنظیمات و راهنما و ...\n\n" +
     "🧩 مدیریت\n" +
-    "• 🌐 تنظیم رله — وضعیت و مدیریت رلهٔ SSH (شخصی / رایگان / خودکار)\n" +
     "• 👥 مدیریت ادمین‌ها — افزودن یا حذف ادمین (فقط ادمین اصلی)\n" +
-    "• 🔄 نسخه‌ها — انتخاب از ۲۰ ریلیز آخر، پین نسخه، یا آپدیت به آخر\n\n" +
+    "• 🔄 نسخه‌ها — انتخاب ریلیز، پین نسخه، یا آپدیت به آخر\n\n" +
     "📖 راهنما\n" +
     "• راهنمای بخش‌ها — توضیح کامل هر بخش ربات\n\n" +
     "📞 ارتباط با سازنده\n" +
@@ -2769,14 +2770,8 @@ function settingsHomeText() {
   );
 }
 function settingsHomeKb() {
-  const first = LITE
-    ? [{ text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" }]
-    : [
-        { text: "🖥️ راهنمای نصب ایجنت", callback_data: "guardian:install" },
-        { text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" },
-      ];
   return [
-    first,
+    [{ text: "👥 مدیریت ادمین‌ها", callback_data: "admins_menu" }],
     [
       { text: "ℹ️ راهنمای بخش‌ها", callback_data: "help" },
       { text: "📞 ارتباط با سازنده", callback_data: "contactcreator", style: "plain" },
@@ -14907,69 +14902,6 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         }
         const vLatest = selfLatestTag(vItems.map((x) => x.tag));
         if (vLatest) vKb.push([{ text: "⬆️ آپدیت به نسخه آخر (" + vLatest + ")", callback_data: "verlatest" }]);
-        // 🖥 ایجنت سرور مدل 3.0: معیار اتصال = تازگی heartbeat (نه ping/آدرس).
-        // نه فایروال لازم است نه IP عمومی — ایجنت خودش بیرون‌زنگ می‌زند.
-        let vGCfg = null, vGSt = {};
-        try { vGCfg = await getGuardianCfg(kv); } catch (e) {}
-        try { vGSt = await getGuardianState(kv); } catch (e) {}
-        const agoFa = (ms) => {
-          if (!(ms >= 0)) return "نامشخص";
-          const s = Math.floor(ms / 1000);
-          if (s < 90) return "لحظاتی پیش";
-          const m = Math.floor(s / 60);
-          if (m < 60) return `${faD(m)} دقیقه پیش`;
-          return `${faD(Math.floor(m / 60))} ساعت پیش`;
-        };
-        if (vGCfg && vGCfg.token) {
-          // 3.0.1: لiveness با ping زنده (هیچ نوشتنی نیست) — دیگر استمپ heartbeat نداریم
-          const vLive = await guardianAgentAlive(kv, vGCfg);
-          const vAlive = vLive.ok || vGSt.mode === "server";
-          let qDepth = 0;
-          try {
-            const gr0 = await kv.get("guardian_agents", "json");
-            const en0 = gr0 && gr0[vGCfg.token];
-            if (en0 && Array.isArray(en0.cmds)) qDepth = en0.cmds.filter((c) => c && Date.now() - Number(c.at || 0) < 600000).length;
-          } catch (e) {}
-          let testLine = "";
-          try {
-            const tp = await kv.get(`guardian_ping:${String(vGCfg.token).slice(0, 64)}`, "json");
-            if (tp && tp.at) testLine = ` · تست: ${agoFa(Date.now() - Number(tp.at))}`;
-          } catch (e) {}
-          vLines.push("", "🖥 ایجنت سرور: " + (vLive.ok ? "🟢 فعال" : vAlive ? "🟡 ناشناس (ping نشد)" : "🔴 قطع (ورکر اضطراری کار می‌کند)") + (vGSt.agent_version ? " · v" + vGSt.agent_version : "") + (vLive.ok ? " · پاسخ‌دهنده" : "") + (qDepth ? ` · ⏳ ${faD(qDepth)} دستور در صف` : "") + testLine);
-          const uh = gUnknownHint();
-          if (!vLive.ok && uh) {
-            vLines.push(`💡 یک ایجنت با توکن اشتباه (${uh.prefix}…، ${faD(uh.n)} بار) تلاش کرد — احتمالاً توکن دستور نصب با توکن ربات فرق دارد. دستور نصب تازه از دکمه زیر بگیر.`);
-          }
-          vKb.push([{ text: "⬆️ آپدیت ایجنت", callback_data: "guardian:update" }]);
-          vKb.push([{ text: "📡 تست اتصال", callback_data: "guardian:test" }]);
-          vKb.push([{ text: vGCfg.dom ? "🌐 تغییر دامنه" : "🌐 اتصال با دامنه", callback_data: "guardian:domain" }]);
-          vKb.push([{ text: "🖥 نصب مجدد / سرور جایگزین", callback_data: "guardian:install" }]);
-        } else {
-          vLines.push("", "🖥 ایجنت سرور: ⚪ نصب نشده (کارها روی ورکر است؛ برای رفع سقف کلادفلر نصب کن)");
-          vKb.push([{ text: "🖥 نصب ایجنت روی سرور", callback_data: "guardian:install" }]);
-        }
-        // ایجنت‌های دوم به بعد (رجیستری چندایجنتی 2.2.0): فقط نمایش وضعیت، بدون هشدار
-        try {
-          const gRegs = await kv.get("guardian_agents", "json");
-          if (gRegs && typeof gRegs === "object") {
-            const pTok = (vGCfg && vGCfg.token) || "";
-            const secs = Object.keys(gRegs).filter((tk) => tk && tk !== pTok);
-            if (secs.length) {
-              // 3.0.1: وضعیت هر ایجنت دوم با ping موازی (بدون نوشتن) — کند نیست
-              const pings = await Promise.all(secs.map((tk) => guardianAgentAlive(kv, null, tk)));
-              secs.forEach((tk, i) => {
-                const e2 = gRegs[tk] || {};
-                const host = String(e2.url || "").replace(/^https?:\/\//, "").split(/[/:]/)[0].replace(/^\[|\]$/g, "") || ("…" + String(tk).slice(-6));
-                const q2 = e2.cmds && Array.isArray(e2.cmds) ? e2.cmds.filter((c) => c && Date.now() - Number(c.at || 0) < 600000).length : 0;
-                if (!e2.url) {
-                  vLines.push("", "🖥 ایجنت " + host + ": ⏳ در انتظار اولین heartbeat (دستور نصب را روی سرور بزن)");
-                } else {
-                  vLines.push("", "🖥 ایجنت " + host + ": " + (pings[i].ok ? "🟢 فعال" : "🔴 قطع") + (e2.agent_version ? " · v" + e2.agent_version : "") + (q2 ? ` · ⏳ ${faD(q2)} دستور` : ""));
-                }
-              });
-            }
-          }
-        } catch (e) {}
         vKb.push([{ text: "🔙 بازگشت", callback_data: "settings" }]);
         await edit(vLines.join("\n").slice(0, 3500), vKb);
       }
