@@ -4,6 +4,7 @@ package alerts
 import (
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aknuun/cg-server/internal/jalali"
@@ -456,6 +457,54 @@ func FlushBuffers(bot *tg.Client, st *store.Store, panels map[string]pg.Panel, a
 	return sent
 }
 
+// webhookURLs extracts every push-webhook URL configured on a panel.
+func webhookURLs(wh map[string]any) []string {
+	var urls []string
+	if s, ok := wh["url"].(string); ok && strings.TrimSpace(s) != "" {
+		urls = append(urls, strings.TrimSpace(s))
+	}
+	if arr, ok := wh["webhooks"].([]any); ok {
+		for _, x := range arr {
+			if m, ok := x.(map[string]any); ok {
+				if s, ok := m["url"].(string); ok && strings.TrimSpace(s) != "" {
+					urls = append(urls, strings.TrimSpace(s))
+				}
+			}
+		}
+	}
+	return urls
+}
+
+// ownsDigest reports whether this install is the panel's designated alert
+// receiver. When a panel has an active push webhook the pull-digest must run
+// only on that panel's webhook owner (matched by our /pghook/<secret> path);
+// otherwise every install that merely added the panel would duplicate reports.
+func ownsDigest(cfg Cfg, p pg.Panel, stg map[string]any) bool {
+	wh, _ := stg["webhook"].(map[string]any)
+	if wh == nil {
+		return true
+	}
+	enabled, _ := wh["enable"].(bool)
+	urls := webhookURLs(wh)
+	if !enabled || len(urls) == 0 {
+		return true
+	}
+	secret := ""
+	if pc := cfg.Panels[p.URL]; pc != nil {
+		secret = pc.Secret
+	}
+	if secret == "" {
+		return false
+	}
+	want := "/pghook/" + secret
+	for _, u := range urls {
+		if strings.Contains(u, want) {
+			return true
+		}
+	}
+	return false
+}
+
 // RunDigest performs hourly(usage)/daily(days) full-panel scans.
 func RunDigest(bot *tg.Client, st *store.Store, panels []pg.Panel, kind string, adminID int64) int {
 	cfg := GetCfg(st)
@@ -468,6 +517,9 @@ func RunDigest(bot *tg.Client, st *store.Store, panels []pg.Panel, kind string, 
 		c := p.Client()
 		tok, err := c.Login()
 		if err != nil {
+			continue
+		}
+		if !ownsDigest(cfg, p, c.Settings(tok)) {
 			continue
 		}
 		users, err := c.Users(tok, 1000)
