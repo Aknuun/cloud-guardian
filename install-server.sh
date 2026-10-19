@@ -171,6 +171,36 @@ print(v if isinstance(v,str) else ("" if v is None else v))
 PY
 }
 
+# extract the :port from a url (empty if none)
+port_of_url() {
+  printf '%s' "$1" | sed -nE 's#^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*:([0-9]{2,5})(/.*)?$#\1#p'
+}
+
+# pick a random free 5-digit TCP port (checks bindability before returning)
+pick_free_port() {
+  python3 - <<'PY'
+import socket, random, sys
+def free(p):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("0.0.0.0", p))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+cands = list(range(10000, 65536))
+random.shuffle(cands)
+for p in cands[:300]:
+    if free(p):
+        print(p); sys.exit(0)
+for p in cands[300:]:
+    if free(p):
+        print(p); sys.exit(0)
+print(10000)
+PY
+}
+
 ask() { # ask <prompt> [default] -> REPLY
   local p="$1" d="${2:-}"
   if [ -n "$d" ]; then
@@ -210,13 +240,18 @@ write_config() {
   ask "Cloudflare API token (optional, Enter to keep/skip)" "$cf"
   cf="$REPLY"
 
-  # public url — auto-detected silently (no prompt); used only by the optional failover
+  # public url — auto-detected silently (no prompt); used only by the optional failover.
+  # The health/webhook port is random per install (5 digits, verified free) to avoid
+  # clashing with other services on the host (e.g. a check-host relay on 8787).
   pub="$(cfg_get public_url)"
+  CG_PORT="$(port_of_url "$pub")"
   if [ -z "$pub" ]; then
+    [ -n "$CG_PORT" ] || CG_PORT="$(pick_free_port)"
     local ip; ip="$(curl -fsSL --max-time 8 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
-    if [ -n "$ip" ]; then pub="http://${ip}:8787"; fi
+    if [ -n "$ip" ]; then pub="http://${ip}:${CG_PORT}"; fi
   fi
-  log "public_url (auto): ${pub:-none}"
+  [ -n "$CG_PORT" ] || CG_PORT="$(pick_free_port)"
+  log "public_url (auto): ${pub:-none}   port: ${CG_PORT}"
 
   cat > "$CFG" <<EOF
 {
@@ -237,6 +272,9 @@ EOF
 # ------------------------------------------------------------
 write_unit() {
   step "Creating systemd service"
+  local port="${CG_PORT:-}"
+  [ -n "$port" ] || port="$(port_of_url "$(cfg_get public_url)")"
+  [ -n "$port" ] || port="$(pick_free_port)"
   cat > "$UNIT" <<EOF
 [Unit]
 Description=Cloud Guardian Server (Go)
@@ -248,7 +286,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 Environment=CG_CONFIG=${CFG}
 Environment=CG_DB=${DB}
-Environment=CG_HEALTH=:8787
+Environment=CG_HEALTH=:${port}
 ExecStart=${BIN}
 Restart=always
 RestartSec=5
