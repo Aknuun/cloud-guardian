@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.5.11";
+const BOT_VERSION = "4.5.12";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,12 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.5.12": [
+    "⚡️ کاهش شدید مصرف Workers KV: کرون‌های ورکر از دقیقه‌ای/۵دقیقه‌ای/۱۰دقیقه‌ای به «ساعتی + روزانه» تغییر کردند",
+    "🖥 کارهای سنگین (هاست‌فیلتر، پول نود، مانیتور مصرف/سرور، SSL، انقضای دامنه، چرخش ساب، یادآور، تلمتری، پایش هاب) از ورکر برداشته شد و روی نسخهٔ سروری (Go) اجرا می‌شود",
+    "🪶 ورکر فقط کارهای سبک خودش را ساعتی یک‌بار انجام می‌دهد: خودترمیمی وبهوک، ثبت دستورها، آپدیت خودکار، اعلان نسخه، گارد سهمیه و پاک‌سازی رمز",
+    "🛟 اعلان فیلور: وقتی سرور اصلی قطع شود، ورکر پشتیبان پیام «🔴 سرور قطع شد» می‌فرستد و وقتی برگردد پیام «🟢 سرور برگشت»",
+  ],
   "4.5.11": [
     "🧹 پاک‌سازی ایجنت/رله از ورکر پشتیبان: دکمهٔ «🖥 راهنمای نصب ایجنت» از «تنظیمات و راهنما» و «راهنمای بخش‌ها» و صفحهٔ «نسخه‌ها» حذف شد",
     "📝 متن‌های راهنما (سرورها/مدیریت) به «مدیریت سرورها با SSH» تغییر کرد تا با ربات سروری یکدست شود و دیگر «ایجنت» نشان ندهد",
@@ -1822,9 +1828,8 @@ export default {
     // هیچ جاب سنگین/پاسارگارد/ایجنت/مانیتور دوره‌ای اجرا نمی‌شود (مصرف ~صفر).
     if (LITE) {
       ctx.waitUntil(ensureTgWebhook(botToken, qKvCount(env.BOT_KV, "tgsec"), env).catch(() => {}));
-      if (cron === "*/10 * * * *") {
+      if (cron === "0 * * * *") {
         ctx.waitUntil(ensureBotCommands(qKvCount(env.BOT_KV, "cmd"), botToken, qKvCount(env.BOT_KV, "cmd")).catch(() => {}));
-      } else if (cron === "* * * * *") {
         ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
       }
       return;
@@ -1842,130 +1847,24 @@ export default {
       ctx.waitUntil(quotaRestoreSchedules(env, qKvCount(env.BOT_KV, "qg")).catch(() => {}));
     }
     if (cron === "0 9 * * *") {
-      // فاز ۴: اگر ایجنت زنده است SSL و انقضای دامنه روی سرور اجرا می‌شوند (تایمر روزانه ایجنت)؛ ورکر رد می‌کند
-      let gIdle9 = false;
-      try { gIdle9 = await guardianWorkerIdle(qKvCount(env.BOT_KV, "guardian")); } catch (e) {}
-      if (!gIdle9) {
-        ctx.waitUntil(runSslMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "ssl") }).catch((e) => console.error("SSLM", String(e))));
-        ctx.waitUntil(runDomExpiryMonitor({ ...env, BOT_KV: qKvCount(env.BOT_KV, "domexp") }).catch((e) => console.error("DOMEXP", String(e))));
-      }
-    } else if (cron === "*/10 * * * *") {
-      // همهٔ کارهای دوره‌ای در یک بلوک؛ زمان‌بندی‌شان در یک کلید (cron_state) ذخیره می‌شود
-      ctx.waitUntil(
-        (async () => {
-          const ckv = env.BOT_KV;
-          const cs = await getCronState(ckv);
-          const now = Date.now();
-          const jobs = [];
-          const patch = {};
-          // شمارش write واقعی هر جاب: env جدا با KV شمارنده‌دار (فقط put/delete)
-          const qe = (s) => ({ ...env, BOT_KV: qKvCount(env.BOT_KV, s) });
-          // ایجنت سرور زنده است؟ اگر بله، جاب‌های سنگین را ورکر رد می‌کند (روی سرور اجرا می‌شوند)
-          let gIdle = false;
-          try { gIdle = await guardianWorkerIdle(qKvCount(env.BOT_KV, "guardian")); } catch (e) {}
-          // اطلاع مهاجرت (یک‌بار) + چک شبانهٔ نسخهٔ ایجنت — سبک‌اند و همیشه اجرا می‌شوند
-          try { await maybeGuardianMigrationNotice(qe("guardian"), botToken, adminId); } catch (e) {}
-          try { await runGuardianNightly(qe("guardian"), botToken, adminId); } catch (e) {}
-          if (!gIdle) jobs.push(runNodePoll(qe("node10")).catch((e) => console.error("NODEPOLL", String(e))));
-          if (!gIdle && (!cs.um || now - cs.um >= UM_MIN_INTERVAL_MS)) {
-            patch.um = now;
-            jobs.push(runUsageMonitor(qe("um"), { skipGuard: true }).catch((e) => console.error("USAGE_MONITOR", String(e))));
-          }
-          if (!gIdle && (!cs.srv || now - cs.srv >= SRV_MON_MIN_MS)) {
-            patch.srv = now;
-            jobs.push(runSrvMonitor(qe("srv"), botToken, false, { skipGuard: true }).catch((e) => console.error("SRV_MON", String(e))));
-          }
-          if (!cs.selfup || now - cs.selfup >= SELFUP_MIN_MS + selfupJitter(env)) {
-            patch.selfup = now;
-            jobs.push(maybeSelfUpdate(qe("selfup"), botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
-          }
-          if (!cs.ann || now - cs.ann >= ANN_MIN_MS - selfupJitter(env)) {
-            patch.ann = now;
-            jobs.push(runAnnFetch(qe("ann"), botToken).catch((e) => console.error("ANN", String(e))));
-          }
-          if (!cs.tm || now - cs.tm >= TM_MIN_MS - selfupJitter(env)) {
-            patch.tm = now;
-            jobs.push(runTelemetryPing(qe("tm")).catch((e) => console.error("TM", String(e))));
-          }
-          if (!cs.hubwatch || now - cs.hubwatch >= 60 * 60000) {
-            patch.hubwatch = now;
-            jobs.push(runHubWatch(qe("hubwatch")).catch((e) => console.error("HUBWATCH", String(e))));
-          }
-          // ⛔ دایجست هشدارهای پنل (حجم/انقضا) حذف شد — نسخهٔ سروری انجام می‌دهد.
-          jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
-          jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
-          jobs.push(announceRelease(qe("ann"), botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
-          if (!cs.qg || now - cs.qg >= 60 * 60000) {
-            patch.qg = now;
-            jobs.push(quotaGuard(qe("qg"), botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
-          }
-          jobs.push(ensureBotCommands(qe("cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
-          // محافظ بودجهٔ نوشتن (3.0.3): اگر مصرف امروز بالاست، جاب‌های پرهزینهٔ این تیک کنسل می‌شوند
-          let wbHot = false;
-          try {
-            if (!gIdle) {
-              const wb = await writeBudget(ckv, env);
-              wbHot = writeBudgetHot(wb);
-              if (wbHot) {
-                console.log("WRITEBUDGET hot: used=" + wb.used);
-                await writeBudgetAlert(ckv, env, botToken, adminId, wb.used);
-              }
-            }
-          } catch (e) {}
-          if (wbHot) {
-            // ایجنت نداریم و سهمیه داغ است: مانیتور مصرف/سرور و دایجست‌ها را عقب بینداز
-            const bump = (k) => { if (!cs[k] || now - cs[k] >= 60000) patch[k] = now + 3600000; };
-            bump("um"); bump("srv"); bump("pgdu"); bump("pgdd");
-          }
-          await Promise.allSettled(jobs);
-          // 3.0.1: cron_state را حداکثر هر ۳۰ دقیقه فلاش می‌کنیم (قبلاً هر تیک ۱۰دقیقه‌ای
-          // = ۱۴۴ نوشتن در روز). همهٔ جاب‌های زمان‌بندشده idempotent هستند و در تیک بعدی
-          // دوباره محافظت می‌شوند، پس تأخیر فلاش فقط هزینهٔ یک ران اضافی است نه خرابی.
-          try {
-            Object.assign(_cronPending, patch);
-            if (Object.keys(_cronPending).length && (!_cronLastFlush || now - _cronLastFlush >= 3600000)) {
-              await saveCronState(qKvCount(ckv, "cron"), { ...cs, ..._cronPending });
-              _cronPending = {};
-              _cronLastFlush = now;
-            }
-          } catch (e) {}
-        })().catch((e) => dbgLogErr(env, e, "sched10"))
-      );
-    } else {
-      // کرون هر دقیقه: پول نود (تراز دقیقه‌ای داخل خودش؛ write فقط موقع تغییر) + هاست‌فیلتر + یادآورها
-      // اگر ایجنت سرور زنده است، سه‌تای سنگین را ورکر رد می‌کند (روی سرور اجرا می‌شوند)؛ سبک‌ها همیشه اینجان.
-      ctx.waitUntil(
-        (async () => {
-          let skipHeavy = false;
-          try {
-            skipHeavy = !!(await runGuardianWatchdog({ ...env, BOT_KV: qKvCount(env.BOT_KV, "guardian") }, botToken, adminId)).skipHeavy;
-          } catch (e) {}
-          // محافظ بودجهٔ نوشتن (3.0.3): سهمیه داغ + بدون ایجنت = جاب‌های سنگین کند
-          let wbHot = false;
-          if (!skipHeavy) {
-            try {
-              const wb = await writeBudget(env.BOT_KV, env);
-              wbHot = writeBudgetHot(wb);
-              if (wbHot) console.log("WRITEBUDGET hot (1min): used=" + wb.used);
-            } catch (e) {}
-          }
-          if (!skipHeavy && !wbHot) {
-            await Promise.allSettled([
-              runNodePoll({ ...env, BOT_KV: qKvCount(env.BOT_KV, "node1") }, {}).catch((e) => console.error("NODEPOLL1M", String(e))),
-              runHostFilter({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hf") }).catch(async (e) => {
-                console.error("HOSTFILTER", e && e.stack ? e.stack : String(e));
-                try {
-                  await qKvCount(env.BOT_KV, "hf").put("host_filter_crash", JSON.stringify({ ts: new Date().toISOString(), err: String(e && e.stack ? e.stack : e).slice(0, 900) }));
-                } catch (x) {}
-              }),
-              // ⛔ pgUbFlush (فلاش بافر هشدارهای انقضا/حجم) حذف شد — KV-heavy
-            ]);
-          }
-        })().catch((e) => console.error("GHEAVY", String(e)))
-      );
-      ctx.waitUntil(runReminders({ ...env, BOT_KV: qKvCount(env.BOT_KV, "rem") }).catch((e) => console.error("REMIND", String(e))));
-      ctx.waitUntil(runDailySubRotate({ ...env, BOT_KV: qKvCount(env.BOT_KV, "hfd") }).catch((e) => console.error("DAILYROT", String(e))));
+      // روزانه: فقط گارد سهمیه؛ کارهای سنگینِ زمانی روی نسخهٔ سروری (Go) اجرا می‌شوند
+      ctx.waitUntil(quotaGuard(qKvCount(env.BOT_KV, "qg"), botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+      return;
     }
+    // ساعتی: فقط کارهای سبک و مخصوص ورکر
+    ctx.waitUntil(
+      (async () => {
+        const ckv = env.BOT_KV;
+        const jobs = [];
+        jobs.push(ensureTgWebhook(botToken, qKvCount(ckv, "tgsec"), env).catch((e) => console.error("TGSEC", String(e))));
+        jobs.push(runSecretSweep(botToken, qKvCount(ckv, "secsweep")).catch((e) => console.error("SECDEL", String(e))));
+        jobs.push(announceRelease(qKvCount(ckv, "ann"), botToken, adminId).catch((e) => console.error("RELEASE", String(e))));
+        jobs.push(ensureBotCommands(qKvCount(ckv, "cmd"), botToken, qKvCount(ckv, "cmd")).catch(() => {}));
+        jobs.push(quotaGuard(qKvCount(ckv, "qg"), botToken, adminId).catch((e) => console.error("QUOTA", String(e))));
+        jobs.push(maybeSelfUpdate(qKvCount(ckv, "selfup"), botToken, adminId, { skipGuard: true }).catch((e) => console.error("SELFUPDATE", String(e))));
+        await Promise.allSettled(jobs);
+      })().catch((e) => dbgLogErr(env, e, "schedHour"))
+    );
   },
 
   // 📥 دریافت ایمیل در ربات (Email Workers): قوانینی که action=worker دارند اینجا می‌آیند.
@@ -4226,6 +4125,7 @@ async function standbyWatchdog(env) {
   const self = String(env.CG_SELF_URL || "").trim();
   const health = String(env.CG_HEALTH_URL || "").trim();
   if (!self || !health) return;
+  const adminId = Number(env.ADMIN_ID || ADMIN_ID);
 
   // همگام‌سازی اعتبارنامه‌ها از اسنپ‌شاتی که سرور در KV می‌گذارد
   await foHydrate(kv);
@@ -4246,6 +4146,13 @@ async function standbyWatchdog(env) {
       try {
         await tg(botToken, "deleteWebhook", { drop_pending_updates: false });
         await kv.put("fo_owned", "0");
+        try {
+          await sendMessage(
+            botToken, adminId,
+            "🟢 <b>سرور برگشت</b>\n\nسرور اصلی دوباره در دسترس شد و ربات از همین حالا روی خودِ سرور اجرا می‌شود.",
+            [[{ text: "🏠 خانه", callback_data: "menu" }]]
+          );
+        } catch (e) {}
       } catch (e) {}
     }
     return;
@@ -4262,7 +4169,16 @@ async function standbyWatchdog(env) {
   if (secret) body.secret_token = secret;
   try {
     const d = await tg(botToken, "setWebhook", body);
-    if (d && d.ok) await kv.put("fo_owned", "1");
+    if (d && d.ok) {
+      await kv.put("fo_owned", "1");
+      try {
+        await sendMessage(
+          botToken, adminId,
+          "🔴 <b>سرور قطع شد!</b>\n\nسرور اصلی پاسخ نمی‌دهد؛ ربات موقتاً روی ورکر پشتیبان (کلادفلر) اجرا می‌شود. به‌محض برگشت سرور، خودکار برمی‌گردد.",
+          [[{ text: "🏠 خانه", callback_data: "menu" }]]
+        );
+      } catch (e) {}
+    }
   } catch (e) {}
 }
 

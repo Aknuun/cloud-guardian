@@ -17,10 +17,8 @@ API = "https://api.cloudflare.com/client/v4"
 here = os.path.dirname(os.path.abspath(__file__))
 CFG = os.path.join(here, "config.json")
 SCHEDULES = [
-    "* * * * *",
     "0 9 * * *",
-    "*/10 * * * *",
-    "*/5 * * * *",
+    "0 * * * *",
 ]
 
 
@@ -370,7 +368,7 @@ def install(cfg, tok, code):
         res, err = set_schedules(cfg, tok, SCHEDULES)
     if err and "10072" in err:
         # سقف کرون‌های پلن رایگان در کل اکانت پر شده؛ حداقل کرون‌های ضروری را نصب کن
-        for subset in (["*/10 * * * *", "*/5 * * * *"], ["*/10 * * * *"], ["*/5 * * * *"]):
+        for subset in (["0 * * * *"], ["0 9 * * *"]):
             res, err = set_schedules(cfg, tok, subset)
             if not err:
                 print(T("sched_min", SEP.join(subset)), file=sys.stderr)
@@ -414,7 +412,7 @@ def update(cfg, tok, code):
         res, err = set_schedules(cfg, tok, SCHEDULES)
     if err and "10072" in err:
         # سقف کرون‌های پلن رایگان در کل اکانت پر شده؛ حداقل کرون‌های ضروری را نصب کن
-        for subset in (["*/10 * * * *", "*/5 * * * *"], ["*/10 * * * *"], ["*/5 * * * *"]):
+        for subset in (["0 * * * *"], ["0 9 * * *"]):
             res, err = set_schedules(cfg, tok, subset)
             if not err:
                 print(T("sched_min", SEP.join(subset)), file=sys.stderr)
