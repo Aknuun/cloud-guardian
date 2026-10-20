@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.5.13";
+const BOT_VERSION = "4.5.14";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,11 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.5.14": [
+    "🧩 دکمهٔ پلن‌های هتزنر حالا به‌جای اسم پلن، تعداد هسته و رم را کوتاه نشان می‌دهد (مثلاً `2C/4G · 5€`)",
+    "🛟 اگر ساخت سرور با پلن انتخاب‌شده ممکن نباشد، دیگر به منوی اول برنمی‌گردد: علت فارسی پایین پیام نوشته می‌شود و دکمهٔ «🔁 یک پلن دیگر امتحان کن» همان پیام را با فهرست پلن‌ها جایگزین می‌کند",
+    "🔧 رفع خطای آی‌پی اصلی: شناسهٔ IPv4/IPv6 حالا از فیلد درست `public_net` خوانده می‌شود؛ خطای «Primary IP with ID 0 not found» هنگام حذف IPv6 رفع شد",
+  ],
   "4.5.13": [
     "🔀 پورت سلامت/وبهوک سرور حالا برای هر نصب به‌صورت تصادفی ۵ رقمی انتخاب می‌شود و قبل از انتخاب، آزادبودنش با یک تست واقعی bind بررسی می‌شود",
     "🛡 رفع ریشه‌ای «سرور قطع شد» الکی: اگر سرویس دیگری روی سرور پورت را گرفته باشد (مثل رلهٔ چک‌هاست روی 8787)، سرور Go خودش یک پورت آزاد می‌گیرد و فیلور دیگر اشتباهی webhook را برنمی‌دارد",
@@ -6508,7 +6513,10 @@ function hzPriceShort(eur) {
   return (Number.isInteger(v) ? String(v) : v.toFixed(2)) + "€";
 }
 function hzPlanLabel(t, eur) {
-  return `${t.name}-${t.memory}G-${t.cores}c(${hzPriceShort(eur)})`;
+  const cores = Number(t.cores) || 0;
+  const mem = Number(t.memory) || 0;
+  const p = eur != null && eur !== "" ? `(${hzPriceShort(eur)})` : "";
+  return `${cores}C/${mem}G${p}`;
 }
 
 // کیبورد پیام رمز عبور: دکمهٔ «کپی رمز» (copy_text) + بازگشت.
@@ -19013,11 +19021,14 @@ async function handleCallback(cb, botToken, adminId, kv, env, depth) {
         }),
       });
       if (r.error) {
-        // خطای ساخت (مثلاً پلن ناموجود در لوکیشن) با پیام فارسی + دکمهٔ بازگشت به انتخاب پلن
-        return edit(`❌ ساخت سرور ناموفق بود:\n${hzErrFa(r)}`, [
-          [{ text: "🔙 بازگشت", callback_data: `hzsl:${i}:${pend.location}` }, { text: "🏠 خانه", callback_data: "menu" }],
-          [{ text: "🖥️ سرورها", callback_data: `hzs:${i}:0` }],
-        ]);
+        // خطای ساخت (مثلاً پلن ناموجود در لوکیشن) با علت فارسی + دکمهٔ «پلن دیگر»
+        return edit(
+          `❌ ساخت سرور انجام نشد.\n\n🔎 علت: ${hzErrFa(r)}\n\n👇 یک پلن دیگر انتخاب کن (این پیام جایگزین می‌شود):`,
+          [
+            [{ text: "🔁 یک پلن دیگر امتحان کن", callback_data: `hzsl:${i}:${pend.location}` }],
+            [{ text: "🏠 خانه", callback_data: "menu" }],
+          ]
+        );
       }
       await kv.delete(`pend:${chatId}`);
       const hs = r.server || {};
@@ -21664,7 +21675,7 @@ async function hzServerDispatch(hzAccounts, i, serverId, step, edit, kv, chatId)
   }
   if (step === "a4" || step === "a6") {
     const type = step === "a4" ? "ipv4" : "ipv6";
-    if (s.public_net && s.public_net[type === "ipv4" ? "primary_ipv4" : "primary_ipv6"]) {
+    if (s.public_net && s.public_net[type]) {
       return edit(`⚠️ این سرور از قبل ${type} اختصاصی دارد؛ اول آن را حذف کن.`, [[{ text: "🔙 بازگشت", callback_data: back }, { text: "🏠 خانه", callback_data: "menu" }]]);
     }
     const ips = await hzGetAll(acc.token, "/primary_ips");
@@ -21735,7 +21746,7 @@ async function hzServerDo(hzAccounts, i, serverId, step, arg, edit, extra) {
   }
   if (step === "u4" || step === "u6") {
     const s = (await hzFetch(token, `/servers/${serverId}`)).server;
-    const ipId = hzPrimaryIpId(s.public_net && s.public_net[step === "u4" ? "primary_ipv4" : "primary_ipv6"]);
+    const ipId = hzPrimaryIpId(s.public_net && s.public_net[step === "u4" ? "ipv4" : "ipv6"]);
     if (!ipId) return edit("❌ آی‌پی اختصاصی وجود ندارد.", back);
     await hzEnsureOff(token, serverId);
     const r = await hzRetry(token, `/primary_ips/${ipId}/actions/unassign`, { method: "POST", body: "{}" });

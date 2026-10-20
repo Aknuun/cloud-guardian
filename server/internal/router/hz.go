@@ -427,7 +427,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 			if j >= 40 {
 				break
 			}
-			rows = append(rows, btn(strv(t["name"]), fmt.Sprintf("hzsv:%d:%s:upgrade:%s", i, sid, strv(t["id"]))))
+			rows = append(rows, btn(fmt.Sprintf("%dC/%dG", intOfAny(t["cores"]), intOfAny(t["memory"])), fmt.Sprintf("hzsv:%d:%s:upgrade:%s", i, sid, strv(t["id"]))))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -635,7 +635,7 @@ func (r *Router) hzPickPlan(chat, mid int64, i int, loc string) {
 					break
 				}
 			}
-			rows = append(rows, btn(fmt.Sprintf("%s · %s€", strv(t["name"]), eur), fmt.Sprintf("hzscp:%d:%s", i, strv(t["id"]))))
+			rows = append(rows, btn(fmt.Sprintf("%dC/%dG · %s€", intOfAny(t["cores"]), intOfAny(t["memory"]), eur), fmt.Sprintf("hzscp:%d:%s", i, strv(t["id"]))))
 		}
 		kb = append(kb, gridBTN(rows, 2)...)
 	}
@@ -757,7 +757,13 @@ func (r *Router) hzCreate(chat, mid int64, i int, img string) {
 		"user_data":          cloudInit,
 	})
 	if err != nil {
-		r.Show(chat, mid, "❌ ساخت ناموفق بود:\n"+Esc(err.Error()), HomeKB())
+		loc := strv(pend["location"])
+		kb := [][]Btn{
+			{btn("🔁 یک پلن دیگر امتحان کن", fmt.Sprintf("hzsl:%d:%s", i, loc))},
+			{btn("🏠 خانه", "menu")},
+		}
+		r.Show(chat, mid, "❌ ساخت سرور انجام نشد.\n\n🔎 علت: "+Esc(err.Error())+
+			"\n\n👇 یک پلن دیگر انتخاب کن (پیام قبلی جایگزین می‌شود):", kb)
 		return
 	}
 	r.clearWizard(chat)
