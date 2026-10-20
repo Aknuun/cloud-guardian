@@ -27,10 +27,17 @@ func New(token string) *Client {
 
 var faCodes = []struct{ key, fa string }{
 	{"unsupported_location", "این پلن در لوکیشن انتخاب‌شده موجود نیست."},
-	{"server_limit", "محدودیت تعداد سرور این اکانت پر شده است."},
+	{"server limit", "محدودیت تعداد سرور این اکانت پر شده است."},
+	{"shared core limit", "ظرفیت هسته‌های shared اکانت پر شده است."},
+	{"dedicated core limit", "ظرفیت هسته‌های dedicated اکانت پر شده است."},
 	{"resource_limit_exceeded", "محدودیت منابع اکانت پر شده است."},
+	{"rate_limit_exceeded", "تعداد درخواست‌ها زیاد شده؛ چند لحظه بعد دوباره تلاش کن."},
 	{"unauthorized", "توکن هتزنر نامعتبر است."},
 	{"resource_locked", "ریسورس قفل است؛ چند لحظه بعد دوباره تلاش کن."},
+	{"resource_unavailable", "این پلن/ریسورس در لوکیشن انتخاب‌شده فعلاً موجود نیست."},
+	{"conflict", "ریسورس در حال تغییر است؛ چند لحظه بعد دوباره تلاش کن."},
+	{"maintenance", "به‌خاطر تعمیرات موقتاً ممکن نیست؛ بعداً تلاش کن."},
+	{"deprecated_api_endpoint", "این قابلیت از API هتزنر حذف شده است."},
 	{"uniqueness_error", "نام انتخاب‌شده تکراری است."},
 	{"invalid_input", "ورودی نامعتبر است."},
 	{"not_found", "موردی پیدا نشد."},

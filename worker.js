@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.5.18";
+const BOT_VERSION = "4.5.19";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,15 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.5.19": [
+    "📍 رفع «کشور/شهر: —» در مشخصات سرور هتزنر (فیلد datacenter حذف شده؛ حالا از location)",
+    "💰 رفع «قیمت: —» در مشخصات سرور (آبجکت سرور قیمت همراه ندارد؛ از /server_types خوانده می‌شود)",
+    "📄 فهرست سرورها حالا همهٔ صفحات را می‌خواند (قبلاً فقط ۲۵ سرور اول)",
+    "🛠 ریبیلد: اگر تصویر فعلی حذف شده باشد، معماری از خود سرور گرفته می‌شود",
+    "⬆️ ارتقا: فقط پلن‌هایی که در همان لوکیشن موجودند",
+    "🌐 پیام فارسی برای resource_unavailable / rate limit / conflict / maintenance و تفکیک محدودیت shared / dedicated / تعداد سرور",
+    "⚡ شمارش اسنپ‌شات سریع‌تر شد (فقط لیست اسنپ‌شات‌ها)",
+  ],
   "4.5.18": [
     "🖼️ ساخت سرور: اول تصویر (سیستم‌عامل) انتخاب می‌شود، بعد فقط پلن‌های سازگار با معماری آن (x86/ARM) نمایش داده می‌شوند",
     "✅/⛔ در فهرست پلن‌ها مشخص است کدام پلن با ظرفیت فعلی اکانت قابل ساخت است و کدام نه",
@@ -21599,20 +21608,28 @@ async function showHzServerInfo(hzAccounts, i, serverId, edit, kv) {
   const used_pct = included_gb ? Math.round((out_gb / included_gb) * 1000) / 10 : null;
   const billable = included_gb ? Math.round(Math.max(total_gb - included_gb, 0) * 1000) / 1000 : 0;
   const euro = await hzEuroRate(kv);
+  const st = s.server_type || {};
+  const dcloc = (s.datacenter && s.datacenter.location) || s.location;
   let hourly = "—";
   let monthly = "—";
-  const p = s.server_type && s.server_type.prices && s.server_type.prices[0];
+  let p = st.prices && st.prices[0];
+  if (!p && st.id) {
+    try {
+      const t = (await hzFetch(acc.token, `/server_types/${st.id}`)).server_type;
+      if (t && t.prices && t.prices.length) {
+        p = t.prices.find((x) => x.location === (dcloc && dcloc.name)) || t.prices[0];
+      }
+    } catch (e) {}
+  }
   if (p) {
     hourly = hzPriceFmt(p.price_hourly && p.price_hourly.gross, euro);
     monthly = hzPriceFmt(p.price_monthly && p.price_monthly.gross, euro);
   }
   let snapCount = "—";
   try {
-    const imgs = await hzGetAll(acc.token, "/images");
+    const imgs = await hzGetAll(acc.token, "/images?type=snapshot");
     snapCount = hzSnapshotCount(imgs, serverId);
   } catch (e) {}
-  const st = s.server_type || {};
-  const dcloc = (s.datacenter && s.datacenter.location) || s.location;
   const loc = dcloc ? `${dcloc.country}, ${dcloc.city}` : "—";
   const text =
     `🚀 نام: ${code(s.name)} [${code(s.status)}]\n` +

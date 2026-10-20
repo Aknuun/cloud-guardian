@@ -168,12 +168,12 @@ func (r *Router) hzServers(chat, mid int64, i int, pg int) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	d, err := hz.New(strv(accs[i]["token"])).Call("/servers", "GET", nil)
-	if err != nil {
+	cli := hz.New(strv(accs[i]["token"]))
+	if _, err := cli.Call("/servers?per_page=1", "GET", nil); err != nil {
 		r.Show(chat, mid, "❌ "+Esc(err.Error()), HomeKB())
 		return
 	}
-	servers := hzList(d, "servers")
+	servers := cli.All("/servers")
 	per := 10
 	pages := (len(servers) + per - 1) / per
 	if pages < 1 {
@@ -231,21 +231,30 @@ func (r *Router) hzInfo(chat, mid int64, i int, sid string) {
 	}
 	euro := hz.EuroRate()
 	st, _ := s["server_type"].(map[string]any)
+	location, _ := s["location"].(map[string]any)
+	locName := strv(location["name"])
 	var p map[string]any
-	if prices, ok := st["prices"].([]any); ok && len(prices) > 0 {
-		p, _ = prices[0].(map[string]any)
+	// The server object embeds server_type without prices; fetch them.
+	if stid := strv(st["id"]); stid != "" {
+		if td, err := cli.Call("/server_types/"+stid, "GET", nil); err == nil {
+			if t2, _ := td["server_type"].(map[string]any); t2 != nil {
+				for _, x := range priceList(t2) {
+					if strv(x["location"]) == locName {
+						p = x
+						break
+					}
+				}
+				if p == nil {
+					if ps := priceList(t2); len(ps) > 0 {
+						p = ps[0]
+					}
+				}
+			}
+		}
 	}
 	hourly := hz.PriceFmt(priceGross(p, "price_hourly"), euro)
 	monthly := hz.PriceFmt(priceGross(p, "price_monthly"), euro)
-	snaps := "—"
-	if list := r.hzAllImages(cli); len(list) > 0 {
-		snaps = fmt.Sprint(hz.SnapCount(list, sid))
-	}
-	loc, _ := s["datacenter"].(map[string]any)
-	var location map[string]any
-	if loc != nil {
-		location, _ = loc["location"].(map[string]any)
-	}
+	snaps := fmt.Sprint(hz.SnapCount(cli.All("/images?type=snapshot"), sid))
 	locs := "—"
 	if location != nil {
 		locs = fmt.Sprintf("%s, %s", orDash(strv(location["country"])), orDash(strv(location["city"])))
@@ -385,6 +394,11 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 		if im, ok := s["image"].(map[string]any); ok {
 			arch = strv(im["architecture"])
 		}
+		if arch == "" {
+			if st, _ := s["server_type"].(map[string]any); st != nil {
+				arch = strv(st["architecture"])
+			}
+		}
 		var avail []map[string]any
 		for _, im := range imgs {
 			t := strv(im["type"])
@@ -418,9 +432,16 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 	if step == "upgrade" {
 		types := r.hzAllTypes(cli)
 		cur, _ := s["server_type"].(map[string]any)
+		locName := ""
+		if lm, _ := s["location"].(map[string]any); lm != nil {
+			locName = strv(lm["name"])
+		}
 		var up []map[string]any
 		for _, t := range types {
 			if strv(t["architecture"]) != strv(cur["architecture"]) || strv(t["id"]) == strv(cur["id"]) {
+				continue
+			}
+			if !hzPlanInLoc(t, locName) {
 				continue
 			}
 			if intOfAny(t["memory"]) >= intOfAny(cur["memory"]) ||
@@ -789,11 +810,8 @@ func (r *Router) hzPlanList(chat, mid int64, i int, notice, retryPlan string) {
 		if arch != "" && strv(t["architecture"]) != arch {
 			continue
 		}
-		for _, p := range priceList(t) {
-			if strv(p["location"]) == loc {
-				avail = append(avail, t)
-				break
-			}
+		if hzPlanInLoc(t, loc) {
+			avail = append(avail, t)
 		}
 	}
 	sortPlanByPrice(avail, loc)
@@ -870,6 +888,19 @@ func priceList(t map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+// hzPlanInLoc reports whether a server type is offered in a location.
+func hzPlanInLoc(t map[string]any, loc string) bool {
+	if loc == "" {
+		return true
+	}
+	for _, p := range priceList(t) {
+		if strv(p["location"]) == loc {
+			return true
+		}
+	}
+	return false
 }
 
 func sortPlanByPrice(avail []map[string]any, loc string) {
