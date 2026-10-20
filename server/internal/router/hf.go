@@ -262,15 +262,19 @@ func sortedKeys(set map[string]bool) []string {
 }
 
 func selStrings(v any) []string {
-	var out []string
-	if arr, ok := v.([]any); ok {
-		for _, x := range arr {
+	switch t := v.(type) {
+	case []string:
+		return append([]string{}, t...)
+	case []any:
+		var out []string
+		for _, x := range t {
 			if s, ok := x.(string); ok {
 				out = append(out, s)
 			}
 		}
+		return out
 	}
-	return out
+	return nil
 }
 
 func firstOf(v any, def string) string {

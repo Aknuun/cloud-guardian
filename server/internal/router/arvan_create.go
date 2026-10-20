@@ -42,7 +42,7 @@ func (r *Router) arvMkStart(chat, mid int64, i int, region string) {
 		r.arvMkExpired(chat, mid)
 		return
 	}
-	r.arvMkSave(chat, map[string]any{"acc": i, "region": region})
+	r.arvMkSave(chat, map[string]any{"acc": i, "region": region, "firewall": "Default"})
 	r.setWizard(chat, map[string]any{"kind": "arvan_mk_name", "acc": i, "region": region})
 	r.Show(chat, mid,
 		fmt.Sprintf("➕ ساخت سرور جدید\n📍 %s\n\n📛 نام سرور را بفرست (۱ تا ۶۰ کاراکتر):", Esc(r.arvRegionName(region))),
@@ -455,13 +455,15 @@ func (r *Router) arvMkConfirm(chat, mid int64) {
 	}
 	net := firstOf(strv(sess["networkName"]), "پیش‌فرض")
 	ssh := firstOf(strv(sess["sshKey"]), "—")
+	fw := firstOf(strv(sess["firewall"]), "Default")
 	txt := fmt.Sprintf("➕ تأیید ساخت سرور\n\n"+
 		"📍 لوکیشن: <code>%s</code>\n📛 نام: <code>%s</code>\n💿 ایمیج: <code>%s</code>\n"+
-		"📦 پلن: <code>%s</code>%s\n🌐 شبکه: <code>%s</code>\n🔑 کلید: <code>%s</code>\n\n"+
+		"📦 پلن: <code>%s</code>%s\n🌐 شبکه: <code>%s</code>\n🔑 کلید: <code>%s</code>\n🛡 فایروال: <code>%s</code>\n\n"+
 		"⚠️ ساخت سرور هزینه دارد. مطمئنی؟",
 		Esc(r.arvRegionName(region)), Esc(strv(sess["name"])), Esc(strv(sess["imageName"])),
-		Esc(strv(sess["flavorName"])), price, Esc(net), Esc(ssh))
+		Esc(strv(sess["flavorName"])), price, Esc(net), Esc(ssh), Esc(fw))
 	r.Show(chat, mid, txt, [][]Btn{
+		{btn("🛡 تغییر فایروال", "arvfwman")},
 		{btnS("✅ بله، بساز", "arvcreate", "success"), btn("❌ انصراف", fmt.Sprintf("arvreg:%d:%s", i, region))},
 	})
 }
@@ -471,6 +473,37 @@ func firstPubIP(s map[string]any) string {
 		return arr[0]
 	}
 	return ""
+}
+
+func (r *Router) arvMkFwStart(chat, mid int64) {
+	sess := r.arvMkLoad(chat)
+	if sess == nil {
+		r.arvMkExpired(chat, mid)
+		return
+	}
+	i := intOrAny(sess["acc"])
+	region := strv(sess["region"])
+	r.setWizard(chat, map[string]any{"kind": "arvan_mk_fw", "acc": i, "region": region})
+	r.Show(chat, mid, "🛡 نام گروه فایروال را بفرست.\n\n"+
+		"در پنل آروان: سرور ابری ← فایروال ← ساخت گروه. نام همان گروه را اینجا بفرست.\n"+
+		"پیش‌فرض: <code>Default</code>",
+		[][]Btn{{btn("⬅️ انصراف", fmt.Sprintf("arvreg:%d:%s", i, region))}})
+}
+
+func (r *Router) arvMkFwSave(chat, mid int64, text string) {
+	name := strings.TrimSpace(text)
+	sess := r.arvMkLoad(chat)
+	if sess == nil {
+		r.arvMkExpired(chat, mid)
+		return
+	}
+	r.clearWizard(chat)
+	if name == "" {
+		name = "Default"
+	}
+	sess["firewall"] = name
+	r.arvMkSave(chat, sess)
+	r.arvMkConfirm(chat, mid)
 }
 
 func (r *Router) arvMkCreate(chat, mid int64) {
@@ -487,11 +520,13 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 		r.arvMkExpired(chat, mid)
 		return
 	}
+	fw := firstOf(strv(sess["firewall"]), "Default")
 	body := map[string]any{
-		"name":        name,
-		"flavor_id":   strv(sess["flavorId"]),
-		"image_id":    strv(sess["imageId"]),
-		"enable_ipv4": true,
+		"name":            name,
+		"flavor_id":       strv(sess["flavorId"]),
+		"image_id":        strv(sess["imageId"]),
+		"enable_ipv4":     true,
+		"security_groups": []map[string]any{{"name": fw}},
 	}
 	if nid := strv(sess["networkId"]); nid != "" {
 		body["network_ids"] = []string{nid}
@@ -502,6 +537,13 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 	r.Show(chat, mid, fmt.Sprintf("⏳ در حال ساخت سرور «%s»…", Esc(name)), nil)
 	d, err := cli.Ecc(region, "POST", "/servers", body)
 	if err != nil {
+		low := strings.ToLower(err.Error())
+		if strings.Contains(low, "firewall") {
+			r.Show(chat, mid, "❌ آروان بدون «گروه فایروال» سرور نمی‌سازد.\n\n"+
+				"در پنل آروان: سرور ابری ← فایروال ← ساخت گروه، یک گروه بساز و نامش را با دکمهٔ «🛡 تغییر فایروال» اینجا وارد کن.",
+				arvMkBack(i, region))
+			return
+		}
 		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), arvMkBack(i, region))
 		return
 	}

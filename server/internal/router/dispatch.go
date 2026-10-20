@@ -714,8 +714,56 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.arvMkConfirm(chat, mid)
 	case data == "arvsshman":
 		r.arvMkSshManual(chat, mid)
+	case strings.HasPrefix(data, "arvhuntgo:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvhuntgo:"), ":", 2); len(p) == 2 {
+			r.arvHuntStart(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "arvhuntstop"):
+		r.arvHuntStop(chat)
+	case strings.HasPrefix(data, "arvhunt:"):
+		rest := strings.TrimPrefix(data, "arvhunt:")
+		if p := strings.SplitN(rest, ":", 2); len(p) == 1 {
+			r.arvHuntRegions(chat, mid, atoiSafe(p[0]))
+		} else if len(p) == 2 {
+			r.arvHuntConfirm(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case data == "arvfwman":
+		r.arvMkFwStart(chat, mid)
 	case data == "arvcreate":
 		r.arvMkCreate(chat, mid)
+	case strings.HasPrefix(data, "arvpick:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvpick:"), ":", 2); len(p) == 2 {
+			r.arvPick(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
+	case strings.HasPrefix(data, "arvbuy:"):
+		rest := strings.TrimPrefix(data, "arvbuy:")
+		if p := strings.SplitN(rest, ":", 2); len(p) == 1 {
+			r.arvBuyRegions(chat, mid, atoiSafe(p[0]))
+		} else if len(p) == 2 {
+			r.arvMkStart(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "arvregs:"):
+		r.arvBrowseRegions(chat, mid, atoiSafe(strings.TrimPrefix(data, "arvregs:")))
+	case strings.HasPrefix(data, "arvipc:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvipc:"), ":", 2); len(p) == 2 {
+			r.arvIPCheck(chat, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
+	case strings.HasPrefix(data, "arvup:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvup:"), ":", 2); len(p) == 2 {
+			r.arvUpgrade(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
+	case strings.HasPrefix(data, "arvupd:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvupd:"), ":", 3); len(p) == 3 {
+			r.arvUpgradeAsk(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]), atoiSafe(p[2]))
+		}
+	case strings.HasPrefix(data, "arvupdo:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvupdo:"), ":", 3); len(p) == 3 {
+			r.arvUpgradeDo(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]), atoiSafe(p[2]))
+		}
+	case strings.HasPrefix(data, "arvupok:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "arvupok:"), ":", 2); len(p) == 2 {
+			r.arvUpgradeConfirm(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
 
 	// linode
 	case data == "ln":
@@ -832,6 +880,16 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		}
 	case strings.HasPrefix(data, "hzipsw:"):
 		r.hzIPPoolSwap(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipsw:")))
+	case strings.HasPrefix(data, "hzipdel:"):
+		r.hzIPPoolDeleteList(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipdel:")))
+	case strings.HasPrefix(data, "hzipdely:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipdely:"), ":", 2); len(p) == 2 {
+			r.hzIPPoolDeleteAsk(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
+	case strings.HasPrefix(data, "hzipdeldo:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipdeldo:"), ":", 2); len(p) == 2 {
+			r.hzIPPoolDeleteDo(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
+		}
 	case strings.HasPrefix(data, "hzipcl:"):
 		r.hzIPPoolCleanupAsk(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipcl:")))
 	case strings.HasPrefix(data, "hzipcly:"):

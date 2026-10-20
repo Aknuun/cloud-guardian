@@ -131,6 +131,8 @@ func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 		r.arvMkImageIDSave(chat, mid, text)
 	case "arvan_mk_sshn":
 		r.arvMkSshNameSave(chat, mid, text)
+	case "arvan_mk_fw":
+		r.arvMkFwSave(chat, mid, text)
 	case "hfd_int":
 		r.hfdIntSave(chat, mid, pend, text)
 	case "hfd_at":

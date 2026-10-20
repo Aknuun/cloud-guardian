@@ -102,7 +102,7 @@ func (r *Router) hzIPPool(chat, mid int64, i int) {
 	kb := [][]Btn{
 		{btn("➕ ساخت/افزودن آی‌پی", fmt.Sprintf("hzipadd:%d", i))},
 		{btn("🧪 بررسی تمیزی همه", fmt.Sprintf("hzipchk:%d", i)), btn("♻️ تعویض IP یک سرور", fmt.Sprintf("hzipsw:%d", i))},
-		{btn("🗑 حذف آی‌پی‌های آلوده", fmt.Sprintf("hzipcl:%d", i))},
+		{btn("🗑 حذف آی‌پی‌های آلوده", fmt.Sprintf("hzipcl:%d", i)), btn("🗑 حذف آی‌پی دلخواه", fmt.Sprintf("hzipdel:%d", i))},
 	}
 	kb = append(kb, navRow(fmt.Sprintf("hzm:%d", i)))
 	r.Show(chat, mid, b.String(), kb)
@@ -432,6 +432,82 @@ func (r *Router) hzIPPoolCleanupDo(chat, mid int64, i int) {
 	r.hzSaveChecks(i, checks)
 	r.hzIPPool(chat, mid, i)
 	_ = deleted
+}
+
+func (r *Router) hzIPPoolDeleteList(chat, mid int64, i int) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		return
+	}
+	cli := hz.New(strv(accs[i]["token"]))
+	var free []hzPoolIP
+	for _, p := range r.hzPoolList(cli, i) {
+		if p.Assignee == 0 {
+			free = append(free, p)
+		}
+	}
+	if len(free) == 0 {
+		r.Show(chat, mid, "📭 آی‌پی آزادی برای حذف نیست.", navKB(fmt.Sprintf("hzip:%d", i)))
+		return
+	}
+	var kb [][]Btn
+	for _, p := range free {
+		mark := "⏳"
+		if p.HasCheck && p.Check.Clean {
+			mark = "✅"
+		} else if p.HasCheck && len(p.Check.Listed) > 0 {
+			mark = "❌"
+		}
+		kb = append(kb, []Btn{btn(fmt.Sprintf("%s %s · %s", mark, p.IP, truncRune(p.Loc, 20)), fmt.Sprintf("hzipdely:%d:%d", i, p.ID))})
+	}
+	kb = append(kb, navRow(fmt.Sprintf("hzip:%d", i)))
+	r.Show(chat, mid, "🗑 کدام آی‌پی حذف شود؟\n(فقط آی‌پی‌های آزاد قابل حذف‌اند)", kb)
+}
+
+func (r *Router) hzIPPoolDeleteAsk(chat, mid int64, i, ipID int) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		return
+	}
+	cli := hz.New(strv(accs[i]["token"]))
+	var target *hzPoolIP
+	for _, p := range r.hzPoolList(cli, i) {
+		if p.ID == ipID {
+			pp := p
+			target = &pp
+			break
+		}
+	}
+	if target == nil {
+		r.Show(chat, mid, "❌ آی‌پی پیدا نشد.", navKB(fmt.Sprintf("hzip:%d", i)))
+		return
+	}
+	r.Show(chat, mid, fmt.Sprintf("⚠️ آی‌پی <code>%s</code> (%s) حذف شود؟\nاین عمل بازگشت‌پذیر نیست.",
+		Esc(target.IP), Esc(target.Loc)),
+		[][]Btn{
+			{btnS("🗑 بله، حذف کن", fmt.Sprintf("hzipdeldo:%d:%d", i, ipID), "danger")},
+			navRow(fmt.Sprintf("hzipdel:%d", i)),
+		})
+}
+
+func (r *Router) hzIPPoolDeleteDo(chat, mid int64, i, ipID int) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		return
+	}
+	cli := hz.New(strv(accs[i]["token"]))
+	if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d", ipID), "DELETE", nil); err != nil {
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("hzip:%d", i)))
+		return
+	}
+	checks := r.hzChecks(i)
+	delete(checks, strconv.Itoa(ipID))
+	r.hzSaveChecks(i, checks)
+	r.Bot.Send(chat, "✅ آی‌پی حذف شد.", nil)
+	r.hzIPPool(chat, mid, i)
 }
 
 // runChecks fills the map with fresh results for the given IPs (concurrently).

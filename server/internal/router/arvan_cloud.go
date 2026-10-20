@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aknuun/cg-server/internal/arvan"
 )
@@ -41,6 +42,19 @@ var arvanFallbackRegions = []string{
 	"ir-thr-ba1", "ir-thr-fr1", "ir-tbz-sh1", "ir-thr-si1", "ir-southwest1-a", "eu-west1-a",
 }
 
+func arvEmoji(status string) string {
+	st := strings.ToLower(status)
+	switch {
+	case strings.Contains(st, "run") || strings.Contains(st, "active"):
+		return "🟢"
+	case strings.Contains(st, "build") || strings.Contains(st, "creat") || strings.Contains(st, "pending") || strings.Contains(st, "reboot"):
+		return "🟡"
+	case strings.Contains(st, "off") || strings.Contains(st, "stop") || strings.Contains(st, "shut"):
+		return "🔴"
+	}
+	return "⚪"
+}
+
 func (r *Router) arvCloudHome(chat, mid int64) {
 	accs := r.arvAccounts()
 	if len(accs) == 0 {
@@ -48,27 +62,34 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 			[][]Btn{{btn("👤 اکانت‌ها", "arvanacc")}, {btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	r.Show(chat, mid, "⏳ لطفاً صبر کنید… در حال بارگذاری ریجن‌ها", nil)
+	r.Show(chat, mid, "⏳ لطفاً صبر کنید… در حال بارگذاری سرورها", nil)
 	kb := [][]Btn{}
-	lines := []string{"🖥 سرورهای ابری آروان", "", "یک اکانت و ریجن را انتخاب کن:", ""}
+	lines := []string{"🖥 سرورهای ابری آروان", ""}
 	for i, a := range accs {
 		regions := r.arvRegions(i, false)
-		lines = append(lines, fmt.Sprintf("👤 %s — %d ریجن", Esc(strv(a["name"])), len(regions)))
-		for _, rg := range regions {
-			if len(kb) >= 40 {
+		list := r.arvAllServers(i, false)
+		lines = append(lines, fmt.Sprintf("👤 <b>%s</b> — %d سرور · %d ریجن", Esc(strv(a["name"])), len(list), len(regions)))
+		for j, s := range list {
+			if j >= 8 {
 				break
 			}
-			label := rg.Fa
-			if rg.Def {
-				label += " ✅"
+			label := fmt.Sprintf("%s %s", arvEmoji(strv(s["status"])), strv(s["name"]))
+			if ip := firstPubIP(s); ip != "" {
+				label += " · " + ip
 			}
-			labelshort := truncRune(label, 45)
-			btnlabel := truncRune("📍 "+strv(a["name"])+" · "+labelshort, 60)
-			kb = append(kb, []Btn{btn(btnlabel, fmt.Sprintf("arvreg:%d:%s", i, rg.Code))})
+			label += " · " + r.arvRegionName(strv(s["region"]))
+			kb = append(kb, []Btn{btn(truncRune(label, 58), fmt.Sprintf("arvpick:%d:%d", i, j))})
 		}
-		kb = append(kb, []Btn{btn("⌨️ ریجن دستی («"+strv(a["name"])+"»)", fmt.Sprintf("arvregcustom:%d", i))})
+		if len(list) == 0 {
+			lines = append(lines, "📭 سروری در این اکانت نیست.")
+		}
+		kb = append(kb, []Btn{
+			btn("➕ خرید سرور جدید", fmt.Sprintf("arvbuy:%d", i)),
+			btn("📍 انتخاب ریجن", fmt.Sprintf("arvregs:%d", i)),
+		})
+		kb = append(kb, []Btn{btn("🎯 شکار IP تمیز (آروان)", fmt.Sprintf("arvhunt:%d", i))})
 	}
-	kb = append(kb, []Btn{btn("🔄 تازه‌سازی ریجن‌ها", "arvregrefresh")})
+	kb = append(kb, []Btn{btn("🔄 تازه‌سازی", "arvregrefresh")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -80,66 +101,12 @@ func (r *Router) arvCloudRefresh(chat, mid int64) {
 		r.arvCloudHome(chat, mid)
 		return
 	}
-	r.Show(chat, mid, "⏳ در حال تازه‌سازی ریجن‌ها…", nil)
+	r.Show(chat, mid, "⏳ در حال تازه‌سازی…", nil)
 	for i := range accs {
 		r.arvRegions(i, true)
+		r.arvAllServers(i, true)
 	}
 	r.arvCloudHome(chat, mid)
-}
-
-func arvServerIPs(s map[string]any) (pub, priv []string) {
-	addrs := s["addresses"]
-	if arr, ok := addrs.([]any); ok {
-		for _, x := range arr {
-			m, _ := x.(map[string]any)
-			ip := firstOf(m["addr"], firstOf(m["ip"], strv(m["address"])))
-			if ip == "" {
-				continue
-			}
-			privFlag := false
-			if b, ok := m["is_public"].(bool); ok && !b {
-				privFlag = true
-			}
-			if strv(m["type"]) == "private" || boolVal(m["is_vpc"]) {
-				privFlag = true
-			}
-			if privFlag {
-				priv = append(priv, ip)
-			} else {
-				pub = append(pub, ip)
-			}
-		}
-	} else if m, ok := addrs.(map[string]any); ok {
-		for _, k := range []string{"public", "private", "vpc"} {
-			for _, x := range toList(m[k]) {
-				ip := strv(x)
-				if mm, ok := x.(map[string]any); ok {
-					ip = firstOf(mm["addr"], firstOf(mm["ip"], strv(mm["address"])))
-				}
-				if ip == "" {
-					continue
-				}
-				if k == "public" {
-					pub = append(pub, ip)
-				} else {
-					priv = append(priv, ip)
-				}
-			}
-		}
-	}
-	for _, x := range toList(s["networks"]) {
-		m, _ := x.(map[string]any)
-		ip := firstOf(m["ip"], firstOf(m["addr"], strv(m["address"])))
-		if ip == "" || containsStr(pub, ip) || containsStr(priv, ip) {
-			continue
-		}
-		if b, ok := m["public"].(bool); ok && !b {
-			priv = append(priv, ip)
-		} else {
-			pub = append(pub, ip)
-		}
-	}
-	return pub, priv
 }
 
 func arvNormalize(s map[string]any) map[string]any {
@@ -157,9 +124,15 @@ func arvNormalize(s map[string]any) map[string]any {
 		if cpu == 0 {
 			cpu = intOrAny(flavor["cpu_count"])
 		}
+		if cpu == 0 {
+			cpu = intOrAny(flavor["vcpus"])
+		}
 		ram = intOrAny(flavor["ram"])
 		if ram == 0 {
 			ram = intOrAny(flavor["memory"])
+		}
+		if ram >= 512 {
+			ram /= 1024
 		}
 		disk = intOrAny(flavor["disk"])
 	}
@@ -169,27 +142,38 @@ func arvNormalize(s map[string]any) map[string]any {
 	if ram == 0 {
 		ram = intOrAny(s["ram"])
 	}
+	if ram >= 512 {
+		ram /= 1024
+	}
 	if disk == 0 {
 		disk = intOrAny(s["disk"])
 	}
 	im := ""
+	osName := ""
 	if image != nil {
 		im = firstOf(image["name"], strv(image["distribution"]))
+		if v := strv(image["os_version"]); v != "" {
+			im += " " + v
+		}
+		osName = firstOf(image["os"], strv(image["distribution"]))
 	}
 	pub, priv := arvServerIPs(s)
 	return map[string]any{
-		"id":     strv(s["id"]),
-		"name":   name,
-		"status": firstOf(s["status"], firstOf(s["state"], strv(s["power_state"]))),
-		"task":   strv(s["task_status"]),
-		"flavor": fl,
-		"image":  im,
-		"cpu":    cpu,
-		"ram":    ram,
-		"disk":   disk,
-		"region": firstOf(s["region"], strv(s["region_code"])),
-		"pub":    pub,
-		"priv":   priv,
+		"id":      strv(s["id"]),
+		"name":    name,
+		"status":  firstOf(s["status"], firstOf(s["state"], strv(s["power_state"]))),
+		"task":    strv(s["task_status"]),
+		"flavor":  fl,
+		"image":   im,
+		"cpu":     cpu,
+		"ram":     ram,
+		"disk":    disk,
+		"region":  firstOf(s["region"], strv(s["region_code"])),
+		"pub":     pub,
+		"priv":    priv,
+		"created": strv(s["created"]),
+		"os":      osName,
+		"ha":      boolVal(s["ha_enabled"]),
 	}
 }
 
@@ -202,19 +186,20 @@ func containsStr(a []string, x string) bool {
 	return false
 }
 
-func (r *Router) arvServerText(s map[string]any, region string) string {
-	pub := "—"
-	if arr := selStrings(s["pub"]); len(arr) > 0 {
-		pub = strings.Join(arr, "، ")
-	}
-	priv := "—"
-	if arr := selStrings(s["priv"]); len(arr) > 0 {
-		priv = strings.Join(arr, "، ")
+func (r *Router) arvServerText(s map[string]any, region string, extra ...string) string {
+	pub := selStrings(s["pub"])
+	priv := selStrings(s["priv"])
+	var v4, v6 []string
+	for _, ip := range pub {
+		if strings.Contains(ip, ":") {
+			v6 = append(v6, ip)
+		} else {
+			v4 = append(v4, ip)
+		}
 	}
 	plan := orDash(strv(s["flavor"]))
-	specs := ""
-	cpu, ram, disk := intOrAny(s["cpu"]), intOrAny(s["ram"]), intOrAny(s["disk"])
 	var sp []string
+	cpu, ram, disk := intOrAny(s["cpu"]), intOrAny(s["ram"]), intOrAny(s["disk"])
 	if cpu > 0 {
 		sp = append(sp, fmt.Sprintf("%d vCPU", cpu))
 	}
@@ -224,6 +209,7 @@ func (r *Router) arvServerText(s map[string]any, region string) string {
 	if disk > 0 {
 		sp = append(sp, fmt.Sprintf("%d GB دیسک", disk))
 	}
+	specs := ""
 	if len(sp) > 0 {
 		specs = " (" + strings.Join(sp, " · ") + ")"
 	}
@@ -234,14 +220,42 @@ func (r *Router) arvServerText(s map[string]any, region string) string {
 	if t := strv(s["task"]); t != "" && t != "done" {
 		st += " · ⏳ " + t
 	}
-	loc := r.arvRegionName(region)
-	return fmt.Sprintf("🖥 <code>%s</code>\n\n"+
-		"📊 وضعیت: <code>%s</code>\n🌐 عمومی: <code>%s</code>\n🔒 خصوصی: <code>%s</code>\n"+
-		"📦 پلن: <code>%s</code>%s\n💿 ایمیج: <code>%s</code>\n📍 لوکیشن: <code>%s</code>\n"+
-		"🆔 <code>%s</code>",
-		Esc(strv(s["name"])), Esc(st), Esc(pub), Esc(priv),
-		Esc(plan), Esc(specs), Esc(orDash(strv(s["image"]))), Esc(loc),
-		Esc(truncRune(strv(s["id"]), 18)))
+	lines := []string{
+		"🖥 <b>" + Esc(strv(s["name"])) + "</b>",
+		"",
+		"📊 وضعیت: <code>" + Esc(st) + "</code>",
+		"🌐 IPv4: <code>" + Esc(orDash(strings.Join(v4, "، "))) + "</code>",
+	}
+	if len(v6) > 0 {
+		lines = append(lines, "🌐 IPv6: <code>"+Esc(strings.Join(v6, "، "))+"</code>")
+	}
+	lines = append(lines,
+		"🔒 خصوصی: <code>"+Esc(orDash(strings.Join(priv, "، ")))+"</code>",
+		"📦 پلن: <code>"+Esc(plan)+"</code>"+Esc(specs),
+		"💿 ایمیج: <code>"+Esc(orDash(strv(s["image"])))+"</code>",
+		"📍 لوکیشن: <code>"+Esc(orDash(r.arvRegionName(region)))+"</code>",
+	)
+	if ha, ok := s["ha"].(bool); ok && ha {
+		lines = append(lines, "🛡 HA: <code>فعال</code>")
+	}
+	if c := strv(s["created"]); c != "" {
+		day := c
+		age := ""
+		if t, err := time.Parse(time.RFC3339, c); err == nil {
+			if len(day) >= 10 {
+				day = day[:10]
+			}
+			age = fmt.Sprintf(" · %d روز پیش", int(time.Since(t).Hours()/24))
+		}
+		lines = append(lines, "📅 ساخته‌شده: <code>"+Esc(day)+"</code>"+Esc(age))
+	}
+	for _, x := range extra {
+		if strings.TrimSpace(x) != "" {
+			lines = append(lines, x)
+		}
+	}
+	lines = append(lines, "🆔 <code>"+Esc(truncRune(strv(s["id"]), 18))+"</code>")
+	return strings.Join(lines, "\n")
 }
 
 func (r *Router) arvServerList(chat, mid int64, i int, region string) {
@@ -270,16 +284,7 @@ func (r *Router) arvServerList(chat, mid int64, i int, region string) {
 		if j >= 30 {
 			break
 		}
-		st := strings.ToLower(strv(s["status"]))
-		emoji := "⚪"
-		if strings.Contains(st, "run") || strings.Contains(st, "active") {
-			emoji = "🟢"
-		} else if strings.Contains(st, "build") || strings.Contains(st, "creat") || strings.Contains(st, "pending") {
-			emoji = "🟡"
-		} else if strings.Contains(st, "off") || strings.Contains(st, "stop") || strings.Contains(st, "shut") {
-			emoji = "🔴"
-		}
-		srvItems = append(srvItems, btn(fmt.Sprintf("%s %s", emoji, truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j)))
+		srvItems = append(srvItems, btn(fmt.Sprintf("%s %s", arvEmoji(strv(s["status"])), truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j)))
 	}
 	kb := gridBTN(srvItems, 2)
 	kb = append(kb, row(btn("➕ ساخت سرور جدید", fmt.Sprintf("arvnew:%d:%s", i, region))))
@@ -310,6 +315,7 @@ func (r *Router) arvServerDetail(chat, mid int64, i int, idx int) {
 	if d, err := cli.Ecc(region, "GET", "/servers/"+strv(s["id"]), nil); err == nil {
 		if one := arvan.EccOne(d); one != nil {
 			if n := arvNormalize(one); n != nil {
+				n["region"] = region
 				s = n
 				servers[idx] = s
 				sess["servers"] = servers
@@ -328,12 +334,23 @@ func (r *Router) arvServerDetail(chat, mid int64, i int, idx int) {
 		kb = append(kb, []Btn{btnS("⚡ روشن", fmt.Sprintf("arvon:%d:%d", i, idx), "success")})
 	}
 	kb = append(kb,
+		[]Btn{btn("🧪 بررسی IP (ایران/آلمان)", fmt.Sprintf("arvipc:%d:%d", i, idx)), btn("⬆️ ارتقا", fmt.Sprintf("arvup:%d:%d", i, idx))},
 		[]Btn{btn("📷 اسنپ‌شات", fmt.Sprintf("arvsnap:%d:%d", i, idx)), btn("📷 اسنپ‌شات‌ها", fmt.Sprintf("arvsnapls:%d:%d", i, idx))},
 		[]Btn{btn("✏️ تغییرنام", fmt.Sprintf("arvren:%d:%d", i, idx)), btn("🔑 ریست رمز root", fmt.Sprintf("arvyroot:%d:%d", i, idx))},
-		[]Btn{btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx))},
+	)
+	if ip := firstPubIP(s); ip != "" {
+		kb = append(kb, []Btn{copyBtnL("📋 کپی IPv4", ip), btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx))})
+	} else {
+		kb = append(kb, []Btn{btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx))})
+	}
+	kb = append(kb,
 		[]Btn{btnS("🗑 حذف سرور", fmt.Sprintf("arvterm:%d:%d", i, idx), "danger")},
 		[]Btn{btn("🔙 بازگشت", fmt.Sprintf("arvreg:%d:%s", i, region)), btn("🏠 خانه", "menu")})
-	r.Show(chat, mid, r.arvServerText(s, region), kb)
+	traffic := ""
+	if id := strv(s["id"]); id != "" {
+		traffic = r.arvTrafficLine(i, region, id)
+	}
+	r.Show(chat, mid, r.arvServerText(s, region, traffic), kb)
 }
 
 func (r *Router) arvRootReset(chat, mid int64, i, idx int) {

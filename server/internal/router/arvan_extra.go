@@ -1,0 +1,462 @@
+package router
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/aknuun/cg-server/internal/hostfilter"
+)
+
+// ---------- Arvan ECC: addresses, all-regions list, traffic, resize ----------
+
+func arvAddrEntries(v any) []map[string]any {
+	var out []map[string]any
+	switch t := v.(type) {
+	case []any:
+		for _, x := range t {
+			if m, ok := x.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+	case map[string]any:
+		out = append(out, t)
+	}
+	return out
+}
+
+func arvServerIPs(s map[string]any) (pub, priv []string) {
+	add := func(ip string, public bool) {
+		if ip == "" {
+			return
+		}
+		if public {
+			if !containsStr(pub, ip) {
+				pub = append(pub, ip)
+			}
+			return
+		}
+		if !containsStr(priv, ip) && !containsStr(pub, ip) {
+			priv = append(priv, ip)
+		}
+	}
+	if addrs, ok := s["addresses"].(map[string]any); ok {
+		for k, v := range addrs {
+			lk := strings.ToLower(k)
+			public := !strings.Contains(lk, "priv") && !strings.Contains(lk, "vpc") && !strings.Contains(lk, "internal")
+			for _, e := range arvAddrEntries(v) {
+				ip := firstOf(e["addr"], firstOf(e["ip"], strv(e["address"])))
+				flag := public
+				if b, ok := e["is_public"].(bool); ok {
+					flag = b
+				}
+				if strings.EqualFold(strv(e["type"]), "private") || boolVal(e["is_vpc"]) {
+					flag = false
+				}
+				add(ip, flag)
+			}
+		}
+	} else if arr, ok := s["addresses"].([]any); ok {
+		for _, x := range arr {
+			m, _ := x.(map[string]any)
+			if m == nil {
+				continue
+			}
+			flag := true
+			if b, ok := m["is_public"].(bool); ok {
+				flag = b
+			}
+			if strings.EqualFold(strv(m["type"]), "private") || boolVal(m["is_vpc"]) {
+				flag = false
+			}
+			add(firstOf(m["addr"], firstOf(m["ip"], strv(m["address"]))), flag)
+		}
+	}
+	for _, x := range toList(s["networks"]) {
+		m, _ := x.(map[string]any)
+		if m == nil {
+			continue
+		}
+		ip := firstOf(m["ip"], firstOf(m["addr"], strv(m["address"])))
+		if ip == "" || containsStr(pub, ip) || containsStr(priv, ip) {
+			continue
+		}
+		flag := true
+		if b, ok := m["public"].(bool); ok {
+			flag = b
+		}
+		add(ip, flag)
+	}
+	return pub, priv
+}
+
+type arvAllCache struct {
+	T    int64            `json:"t"`
+	List []map[string]any `json:"list"`
+}
+
+func (r *Router) arvFetchAll(i int) []map[string]any {
+	cli, ok := r.arvCli(i)
+	if !ok {
+		return nil
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var out []map[string]any
+	for _, rg := range r.arvRegions(i, false) {
+		wg.Add(1)
+		go func(code string) {
+			defer wg.Done()
+			var rows []map[string]any
+			for _, s := range cli.EccList(code, "/servers") {
+				n := arvNormalize(s)
+				if n == nil {
+					continue
+				}
+				n["region"] = code
+				rows = append(rows, n)
+			}
+			mu.Lock()
+			out = append(out, rows...)
+			mu.Unlock()
+		}(rg.Code)
+	}
+	wg.Wait()
+	for a := 0; a < len(out); a++ {
+		for b := a + 1; b < len(out); b++ {
+			if strv(out[b]["name"]) < strv(out[a]["name"]) {
+				out[a], out[b] = out[b], out[a]
+			}
+		}
+	}
+	return out
+}
+
+func (r *Router) arvAllServers(i int, force bool) []map[string]any {
+	key := fmt.Sprintf("arvall:%d", i)
+	if !force {
+		var ch arvAllCache
+		if r.Store.GetJSON(key, &ch) && ch.List != nil && time.Now().Unix()-ch.T < 120 {
+			return ch.List
+		}
+	}
+	list := r.arvFetchAll(i)
+	r.Store.PutJSON(key, arvAllCache{T: time.Now().Unix(), List: list}, 0)
+	return list
+}
+
+func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
+	var kb [][]Btn
+	for _, rg := range r.arvRegions(i, false) {
+		label := rg.Fa
+		if rg.Def {
+			label += " ✅"
+		}
+		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("%s:%d:%s", cb, i, rg.Code))})
+	}
+	return kb
+}
+
+func (r *Router) arvBuyRegions(chat, mid int64, i int) {
+	kb := r.arvRegionButtons(i, "arvbuy")
+	kb = append(kb, navRow("arvsrv"))
+	r.Show(chat, mid, "➕ خرید سرور جدید\n\n📍 ریجن را انتخاب کن:", kb)
+}
+
+func (r *Router) arvBrowseRegions(chat, mid int64, i int) {
+	kb := r.arvRegionButtons(i, "arvreg")
+	kb = append(kb, navRow("arvsrv"))
+	r.Show(chat, mid, "📍 ریجن‌ها\n\nبرای دیدن سرورهای هر ریجن انتخاب کن:", kb)
+}
+
+func (r *Router) arvPick(chat, mid int64, i, j int) {
+	list := r.arvAllServers(i, false)
+	if j < 0 || j >= len(list) {
+		r.Show(chat, mid, "⏳ نشست منقضی شد؛ دوباره تلاش کن.", navKB("arvsrv"))
+		return
+	}
+	sess := r.arvSess(chat)
+	sess["acc"] = i
+	sess["region"] = strv(list[j]["region"])
+	sess["servers"] = list
+	r.arvSessSave(chat, sess)
+	r.arvServerDetail(chat, mid, i, j)
+}
+
+func arvFmtBytes(v float64) string {
+	if v <= 0 {
+		return "۰"
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	u := 0
+	for v >= 1024 && u < len(units)-1 {
+		v /= 1024
+		u++
+	}
+	if v >= 100 {
+		return fmt.Sprintf("%.0f %s", v, units[u])
+	}
+	return fmt.Sprintf("%.1f %s", v, units[u])
+}
+
+func (r *Router) arvTraffic(i int, region, id string) (inB, outB float64, ok bool) {
+	cli, good := r.arvCli(i)
+	if !good {
+		return 0, 0, false
+	}
+	now := time.Now().Unix()
+	path := fmt.Sprintf("/reports/traffic?servers=%s&start=%d&end=%d", id, now-30*86400, now)
+	type res struct {
+		in, out float64
+		ok      bool
+	}
+	ch := make(chan res, 1)
+	go func() {
+		defer func() { recover() }()
+		d, err := cli.Ecc(region, "GET", path, nil)
+		if err != nil || d == nil {
+			ch <- res{}
+			return
+		}
+		data, _ := d["data"].(map[string]any)
+		charts, _ := data["charts"].(map[string]any)
+		netw, _ := charts["network"].(map[string]any)
+		if netw == nil {
+			ch <- res{}
+			return
+		}
+		var in, out float64
+		seen := false
+		for _, x := range toList(netw["series"]) {
+			m, _ := x.(map[string]any)
+			if m == nil {
+				continue
+			}
+			name := strings.ToLower(strv(m["name"]))
+			var sum float64
+			for _, v := range toList(m["data"]) {
+				if f, ok := v.(float64); ok {
+					sum += f
+				}
+			}
+			if sum > 0 {
+				seen = true
+			}
+			if strings.Contains(name, "out") {
+				out += sum
+			} else {
+				in += sum
+			}
+		}
+		ch <- res{in: in, out: out, ok: seen}
+	}()
+	select {
+	case v := <-ch:
+		return v.in, v.out, v.ok
+	case <-time.After(7 * time.Second):
+		return 0, 0, false
+	}
+}
+
+func (r *Router) arvTrafficLine(i int, region, id string) string {
+	inB, outB, ok := r.arvTraffic(i, region, id)
+	if !ok {
+		return "📊 ترافیک ۳۰ روز: <i>داده‌ای ثبت نشده</i>"
+	}
+	return fmt.Sprintf("📊 ترافیک ۳۰ روز: ⬇️ %s · ⬆️ %s", arvFmtBytes(inB), arvFmtBytes(outB))
+}
+
+func (r *Router) arvIPCheck(chat int64, i, idx int) {
+	sess := r.arvSess(chat)
+	list := asMapList(sess["servers"])
+	if idx < 0 || idx >= len(list) {
+		r.Bot.Send(chat, "⏳ نشست منقضی شد.", navKB("arvsrv"))
+		return
+	}
+	ip := firstPubIP(list[idx])
+	if ip == "" {
+		r.Bot.Send(chat, "❌ این سرور IPv4 عمومی ندارد.", navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+		return
+	}
+	r.Bot.Send(chat, "🧪 بررسی IP <code>"+Esc(ip)+"</code> از ایران و آلمان/هلند… (۳۰ تا ۶۰ ثانیه)", nil)
+	go func() {
+		defer func() { recover() }()
+		clean, verdict := hostfilter.CheckIPCleanliness(ip)
+		head := "🔴 IP تمیز نیست"
+		if clean {
+			head = "🟢 IP تمیز است"
+		}
+		r.Bot.Send(chat, fmt.Sprintf("%s\n🌐 <code>%s</code>\n📝 %s", head, Esc(ip), Esc(verdict)),
+			navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+	}()
+}
+
+func arvToman(v any) string {
+	n := intOrAny(v)
+	if n <= 0 {
+		return ""
+	}
+	n = n / 10
+	s := fmt.Sprintf("%d", n)
+	var parts []string
+	for len(s) > 3 {
+		parts = append([]string{s[len(s)-3:]}, parts...)
+		s = s[:len(s)-3]
+	}
+	parts = append([]string{s}, parts...)
+	return strings.Join(parts, ",") + " تومان/ماه"
+}
+
+type arvSize struct {
+	ID, Name   string
+	CPU, RAM   int
+	Disk       int
+	Price      int
+	PricePerHr int
+}
+
+func (r *Router) arvSizes(i int, region string) []arvSize {
+	cli, ok := r.arvCli(i)
+	if !ok {
+		return nil
+	}
+	var out []arvSize
+	for _, m := range cli.EccList(region, "/sizes") {
+		id := strv(m["id"])
+		if id == "" {
+			continue
+		}
+		out = append(out, arvSize{
+			ID: id, Name: firstOf(m["name"], id),
+			CPU: intOrAny(m["cpu_count"]), RAM: intOrAny(m["memory"]), Disk: intOrAny(m["disk"]),
+			Price: intOrAny(m["price_per_month"]), PricePerHr: intOrAny(m["price_per_hour"]),
+		})
+	}
+	return out
+}
+
+func (r *Router) arvUpgrade(chat, mid int64, i, idx int) {
+	sess := r.arvSess(chat)
+	region := strv(sess["region"])
+	list := asMapList(sess["servers"])
+	if idx < 0 || idx >= len(list) {
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
+		return
+	}
+	s := list[idx]
+	st := strings.ToLower(strv(s["status"]))
+	if strings.Contains(st, "run") || strings.Contains(st, "active") && !strings.Contains(st, "off") {
+		r.Show(chat, mid, "⬆️ ارتقای سرور\n\n⚠️ برای تغییر پلن، سرور باید خاموش باشد.\nاول خاموشش کن، بعد دوباره «ارتقا» را بزن.",
+			[][]Btn{
+				{btnS("🔌 خاموش کن", fmt.Sprintf("arvoff:%d:%d", i, idx), "danger")},
+				{btn("⬆️ ادامهٔ ارتقا", fmt.Sprintf("arvup:%d:%d", i, idx))},
+				navRow(fmt.Sprintf("arvs:%d:%d", i, idx)),
+			})
+		return
+	}
+	r.Show(chat, mid, "⏳ در حال بارگذاری پلن‌ها…", nil)
+	sizes := r.arvSizes(i, region)
+	if len(sizes) == 0 {
+		r.Show(chat, mid, "❌ پلنی پیدا نشد.", navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+		return
+	}
+	var szl []any
+	for _, sz := range sizes {
+		szl = append(szl, map[string]any{"id": sz.ID, "name": sz.Name, "cpu": sz.CPU, "ram": sz.RAM, "disk": sz.Disk, "price": sz.Price})
+	}
+	sess["sizes"] = szl
+	r.arvSessSave(chat, sess)
+	curID := strv(s["flavor"])
+	var kb [][]Btn
+	for j, sz := range sizes {
+		if j >= 30 {
+			break
+		}
+		label := fmt.Sprintf("%s · %dvCPU/%dGB/%dGB", sz.Name, sz.CPU, sz.RAM, sz.Disk)
+		if sz.ID == curID {
+			label = "✅ " + label + " (فعلی)"
+		}
+		if p := arvToman(sz.Price); p != "" {
+			label += " · " + p
+		}
+		kb = append(kb, []Btn{btn(truncRune(label, 58), fmt.Sprintf("arvupd:%d:%d:%d", i, idx, j))})
+	}
+	kb = append(kb, navRow(fmt.Sprintf("arvs:%d:%d", i, idx)))
+	r.Show(chat, mid, fmt.Sprintf("⬆️ ارتقا/تغییر پلن «%s»\n📦 فعلی: <code>%s</code>\n\nپلن جدید را انتخاب کن:",
+		Esc(strv(s["name"])), Esc(orDash(curID))), kb)
+}
+
+func (r *Router) arvUpgradeAsk(chat, mid int64, i, idx, sj int) {
+	sess := r.arvSess(chat)
+	sizes := asMapList(sess["sizes"])
+	if sj < 0 || sj >= len(sizes) {
+		r.Show(chat, mid, "❌ پلن پیدا نشد.", navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+		return
+	}
+	sz := sizes[sj]
+	price := arvToman(sz["price"])
+	if price == "" {
+		price = "—"
+	}
+	r.Show(chat, mid, fmt.Sprintf("⬆️ تأیید ارتقا\n\n📦 پلن جدید: <code>%s</code> (%dvCPU / %dGB RAM / %dGB دیسک)\n💰 %s\n\n⚠️ سرور باید خاموش باشد.",
+		Esc(strv(sz["name"])), intOrAny(sz["cpu"]), intOrAny(sz["ram"]), intOrAny(sz["disk"]), Esc(price)),
+		[][]Btn{
+			{btnS("✅ بله، ارتقا بده", fmt.Sprintf("arvupdo:%d:%d:%d", i, idx, sj), "success")},
+			navRow(fmt.Sprintf("arvup:%d:%d", i, idx)),
+		})
+}
+
+func (r *Router) arvUpgradeDo(chat, mid int64, i, idx, sj int) {
+	sess := r.arvSess(chat)
+	sizes := asMapList(sess["sizes"])
+	list := asMapList(sess["servers"])
+	region := strv(sess["region"])
+	if sj < 0 || sj >= len(sizes) || idx < 0 || idx >= len(list) {
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
+		return
+	}
+	cli, ok := r.arvCli(i)
+	if !ok {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("arvsrv"))
+		return
+	}
+	sizeID := strv(sizes[sj]["id"])
+	sid := strv(list[idx]["id"])
+	d, err := cli.Ecc(region, "POST", "/servers/"+sid+"/action", map[string]any{"resize": map[string]any{"flavorRef": sizeID}})
+	if err != nil {
+		d, err = cli.Ecc(region, "POST", "/servers/"+sid+"/action", map[string]any{"resize": map[string]any{"flavor_id": sizeID}})
+	}
+	if err != nil {
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+		return
+	}
+	r.Bot.Send(chat, "✅ درخواست ارتقا ارسال شد.\n⏳ چند دقیقه طول می‌کشد؛ بعد از آماده‌شدن «تأیید ارتقا» را بزن.",
+		[][]Btn{
+			{btn("✅ تأیید ارتقا", fmt.Sprintf("arvupok:%d:%d", i, idx))},
+			navRow(fmt.Sprintf("arvs:%d:%d", i, idx)),
+		})
+	_ = d
+}
+
+func (r *Router) arvUpgradeConfirm(chat, mid int64, i, idx int) {
+	sess := r.arvSess(chat)
+	list := asMapList(sess["servers"])
+	region := strv(sess["region"])
+	if idx < 0 || idx >= len(list) {
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
+		return
+	}
+	cli, ok := r.arvCli(i)
+	if !ok {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("arvsrv"))
+		return
+	}
+	sid := strv(list[idx]["id"])
+	_, err := cli.Ecc(region, "POST", "/servers/"+sid+"/action", map[string]any{"confirmResize": nil})
+	if err != nil {
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
+		return
+	}
+	r.Show(chat, mid, "✅ ارتقا تأیید شد.", [][]Btn{{btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx)), btn("🏠 خانه", "menu")}})
+}
