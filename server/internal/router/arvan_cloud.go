@@ -62,12 +62,15 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 			[][]Btn{{btn("👤 اکانت‌ها", "arvanacc")}, {btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")}})
 		return
 	}
-	r.Show(chat, mid, "⏳ لطفاً صبر کنید… در حال بارگذاری سرورها", nil)
 	kb := [][]Btn{}
 	lines := []string{"🖥 سرورهای ابری آروان", ""}
+	stale := false
 	for i, a := range accs {
 		regions := r.arvRegions(i, false)
-		list := r.arvAllServers(i, false)
+		list, st := r.arvAllServersSWR(i)
+		if st {
+			stale = true
+		}
 		lines = append(lines, fmt.Sprintf("👤 <b>%s</b> — %d سرور · %d ریجن", Esc(strv(a["name"])), len(list), len(regions)))
 		for j, s := range list {
 			if j >= 8 {
@@ -83,15 +86,30 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 		if len(list) == 0 {
 			lines = append(lines, "📭 سروری در این اکانت نیست.")
 		}
-		kb = append(kb, []Btn{
-			btn("➕ خرید سرور جدید", fmt.Sprintf("arvbuy:%d", i)),
-			btn("📍 انتخاب ریجن", fmt.Sprintf("arvregs:%d", i)),
-		})
-		kb = append(kb, []Btn{btn("🎯 شکار IP تمیز (آروان)", fmt.Sprintf("arvhunt:%d", i))})
+		kb = append(kb, arvNav(i)...)
+	}
+	if stale {
+		lines = append(lines, "", "🔄 در حال به‌روزرسانی در پس‌زمینه…")
 	}
 	kb = append(kb, []Btn{btn("🔄 تازه‌سازی", "arvregrefresh")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
+	if !stale {
+		return
+	}
+	if _, loaded := arvHomeBusy.LoadOrStore(chat, true); loaded {
+		return
+	}
+	go func() {
+		defer arvHomeBusy.Delete(chat)
+		for i := range accs {
+			r.arvAllServers(i, true)
+		}
+		v, _ := r.lastNav.Load(chat)
+		if cur, _ := v.(string); cur == "arvsrv" || cur == "arvregrefresh" {
+			r.arvCloudHome(chat, mid)
+		}
+	}()
 }
 
 // arvCloudRefresh forces a fresh fetch of every account's regions.
@@ -289,7 +307,7 @@ func (r *Router) arvServerList(chat, mid int64, i int, region string) {
 	kb := gridBTN(srvItems, 2)
 	kb = append(kb, row(btn("➕ ساخت سرور جدید", fmt.Sprintf("arvnew:%d:%s", i, region))))
 	kb = append(kb, row(btn("🔄 تازه‌سازی", fmt.Sprintf("arvreg:%d:%s", i, region))))
-	kb = append(kb, navRow("arvsrv"))
+	kb = append(kb, arvNav(i)...)
 	title := fmt.Sprintf("🖥 سرورهای ابری (%d)\n📍 %s", len(servers), Esc(r.arvRegionName(region)))
 	if len(servers) == 0 {
 		title += "\n\nℹ️ سروری در این ریجن نیست."
@@ -343,14 +361,25 @@ func (r *Router) arvServerDetail(chat, mid int64, i int, idx int) {
 	} else {
 		kb = append(kb, []Btn{btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx))})
 	}
+	kb = append(kb, arvNav(i)...)
 	kb = append(kb,
 		[]Btn{btnS("🗑 حذف سرور", fmt.Sprintf("arvterm:%d:%d", i, idx), "danger")},
 		[]Btn{btn("🔙 بازگشت", fmt.Sprintf("arvreg:%d:%s", i, region)), btn("🏠 خانه", "menu")})
-	traffic := ""
-	if id := strv(s["id"]); id != "" {
-		traffic = r.arvTrafficLine(i, region, id)
-	}
+	traffic, ready := r.arvTrafficLineAsync(i, region, strv(s["id"]))
 	r.Show(chat, mid, r.arvServerText(s, region, traffic), kb)
+	if !ready {
+		key := fmt.Sprintf("dtrf:%d:%d:%d", chat, i, idx)
+		if _, loaded := arvDetailBusy.LoadOrStore(key, true); !loaded {
+			go func() {
+				defer arvDetailBusy.Delete(key)
+				r.arvTraffic(i, region, strv(s["id"]))
+				v, _ := r.lastNav.Load(chat)
+				if cur, _ := v.(string); cur == "arvs" || cur == "arvpick" {
+					r.arvServerDetail(chat, mid, i, idx)
+				}
+			}()
+		}
+	}
 }
 
 func (r *Router) arvRootReset(chat, mid int64, i, idx int) {

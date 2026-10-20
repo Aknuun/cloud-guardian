@@ -133,6 +133,26 @@ func (r *Router) arvFetchAll(i int) []map[string]any {
 	return out
 }
 
+func (r *Router) arvAllServersSWR(i int) ([]map[string]any, bool) {
+	key := fmt.Sprintf("msrv:%d", i)
+	if _, ok := arvMem.Load(key); !ok {
+		var ch arvAllCache
+		if r.Store.GetJSON(fmt.Sprintf("arvall:%d", i), &ch) && ch.List != nil {
+			arvMem.Store(key, &arvCacheBox{v: ch.List, at: time.Unix(ch.T, 0)})
+		}
+	}
+	v, stale := arvCached(key, 90*time.Second, func() any {
+		l := r.arvFetchAll(i)
+		if l == nil {
+			l = []map[string]any{}
+		}
+		r.Store.PutJSON(fmt.Sprintf("arvall:%d", i), arvAllCache{T: time.Now().Unix(), List: l}, 0)
+		return l
+	})
+	out, _ := v.([]map[string]any)
+	return out, stale
+}
+
 func (r *Router) arvAllServers(i int, force bool) []map[string]any {
 	key := fmt.Sprintf("arvall:%d", i)
 	if !force {
@@ -142,8 +162,130 @@ func (r *Router) arvAllServers(i int, force bool) []map[string]any {
 		}
 	}
 	list := r.arvFetchAll(i)
+	if list == nil {
+		list = []map[string]any{}
+	}
 	r.Store.PutJSON(key, arvAllCache{T: time.Now().Unix(), List: list}, 0)
+	arvMem.Store(fmt.Sprintf("msrv:%d", i), &arvCacheBox{v: list, at: time.Now()})
 	return list
+}
+
+// ---------- in-memory SWR cache ----------
+
+type arvCacheBox struct {
+	mu      sync.Mutex
+	v       any
+	at      time.Time
+	loading bool
+}
+
+var arvMem sync.Map
+
+var arvHomeBusy sync.Map
+
+var arvDetailBusy sync.Map
+
+// arvCached returns a cached value and whether it is stale. A stale value is
+// served immediately while a background refresh runs (stale-while-revalidate).
+func arvCached(key string, ttl time.Duration, load func() any) (any, bool) {
+	e, _ := arvMem.LoadOrStore(key, &arvCacheBox{})
+	b := e.(*arvCacheBox)
+	b.mu.Lock()
+	if b.v != nil {
+		if time.Since(b.at) < ttl {
+			v := b.v
+			b.mu.Unlock()
+			return v, false
+		}
+		v := b.v
+		if !b.loading {
+			b.loading = true
+			go func() {
+				nv := load()
+				b.mu.Lock()
+				if nv != nil {
+					b.v, b.at = nv, time.Now()
+				}
+				b.loading = false
+				b.mu.Unlock()
+			}()
+		}
+		b.mu.Unlock()
+		return v, true
+	}
+	b.loading = true
+	b.mu.Unlock()
+	nv := load()
+	b.mu.Lock()
+	if nv != nil {
+		b.v, b.at = nv, time.Now()
+	}
+	b.loading = false
+	b.mu.Unlock()
+	return nv, false
+}
+
+// arvCachedAsync serves a cached value without blocking; a missing value is
+// loaded in the background and the second return value is false until ready.
+func arvCachedAsync(key string, ttl time.Duration, load func() any) (any, bool) {
+	e, _ := arvMem.LoadOrStore(key, &arvCacheBox{})
+	b := e.(*arvCacheBox)
+	b.mu.Lock()
+	if b.v != nil {
+		v := b.v
+		if time.Since(b.at) >= ttl && !b.loading {
+			b.loading = true
+			go func() {
+				nv := load()
+				b.mu.Lock()
+				if nv != nil {
+					b.v, b.at = nv, time.Now()
+				}
+				b.loading = false
+				b.mu.Unlock()
+			}()
+		}
+		b.mu.Unlock()
+		return v, true
+	}
+	if !b.loading {
+		b.loading = true
+		go func() {
+			nv := load()
+			b.mu.Lock()
+			if nv != nil {
+				b.v, b.at = nv, time.Now()
+			}
+			b.loading = false
+			b.mu.Unlock()
+		}()
+	}
+	b.mu.Unlock()
+	return nil, false
+}
+
+// arvNav is the standard Arvan navigation bar: one tap to any main screen.
+func arvNav(i int) [][]Btn {
+	return [][]Btn{
+		{btn("🖥 سرورها", "arvsrv"), btn("➕ خرید سرور", fmt.Sprintf("arvbuy:%d", i))},
+		{btn("🎯 شکار IP تمیز", fmt.Sprintf("arvhunt:%d", i)), btn("📍 ریجن‌ها", fmt.Sprintf("arvregs:%d", i))},
+	}
+}
+
+func (r *Router) arvImageGroups(i int, region string) []map[string]any {
+	v, _ := arvCached(fmt.Sprintf("mimg:%d:%s", i, region), 6*time.Hour, func() any {
+		cli, ok := r.arvCli(i)
+		if !ok {
+			return []map[string]any{}
+		}
+		out := cli.EccList(region, "/images?type=distributions&per_page=50")
+		if out == nil {
+			out = []map[string]any{}
+		}
+		return out
+	})
+	out, _ := v.([]map[string]any)
+	return out
 }
 
 func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
@@ -160,7 +302,7 @@ func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
 
 func (r *Router) arvBuyRegions(chat, mid int64, i int) {
 	kb := r.arvRegionButtons(i, "arvbuy")
-	kb = append(kb, navRow("arvsrv"))
+	kb = append(kb, arvNav(i)...)
 	r.Show(chat, mid, "➕ خرید سرور جدید\n\n📍 ریجن را انتخاب کن:", kb)
 }
 
@@ -254,7 +396,7 @@ func (r *Router) arvTraffic(i int, region, id string) (inB, outB float64, ok boo
 	select {
 	case v := <-ch:
 		return v.in, v.out, v.ok
-	case <-time.After(7 * time.Second):
+	case <-time.After(4 * time.Second):
 		return 0, 0, false
 	}
 }
@@ -265,6 +407,31 @@ func (r *Router) arvTrafficLine(i int, region, id string) string {
 		return "📊 ترافیک ۳۰ روز: <i>داده‌ای ثبت نشده</i>"
 	}
 	return fmt.Sprintf("📊 ترافیک ۳۰ روز: ⬇️ %s · ⬆️ %s", arvFmtBytes(inB), arvFmtBytes(outB))
+}
+
+type arvTrafficVal struct {
+	In, Out float64
+	OK      bool
+}
+
+// arvTrafficLineAsync never blocks: it returns the cached line and whether it
+// is already available; the first call starts a background fetch.
+func (r *Router) arvTrafficLineAsync(i int, region, id string) (string, bool) {
+	if id == "" {
+		return "📊 ترافیک ۳۰ روز: <i>داده‌ای ثبت نشده</i>", true
+	}
+	v, ok := arvCachedAsync(fmt.Sprintf("mtrf:%d:%s", i, id), 10*time.Minute, func() any {
+		in, out, good := r.arvTraffic(i, region, id)
+		return arvTrafficVal{In: in, Out: out, OK: good}
+	})
+	if !ok {
+		return "📊 ترافیک ۳۰ روز: ⏳ در حال دریافت…", false
+	}
+	tv, _ := v.(arvTrafficVal)
+	if !tv.OK {
+		return "📊 ترافیک ۳۰ روز: <i>داده‌ای ثبت نشده</i>", true
+	}
+	return fmt.Sprintf("📊 ترافیک ۳۰ روز: ⬇️ %s · ⬆️ %s", arvFmtBytes(tv.In), arvFmtBytes(tv.Out)), true
 }
 
 func (r *Router) arvIPCheck(chat int64, i, idx int) {
@@ -317,22 +484,44 @@ type arvSize struct {
 }
 
 func (r *Router) arvSizes(i int, region string) []arvSize {
-	cli, ok := r.arvCli(i)
-	if !ok {
-		return nil
-	}
-	var out []arvSize
-	for _, m := range cli.EccList(region, "/sizes") {
-		id := strv(m["id"])
-		if id == "" {
-			continue
+	v, _ := arvCached(fmt.Sprintf("msz:%d:%s", i, region), 30*time.Minute, func() any {
+		cli, ok := r.arvCli(i)
+		if !ok {
+			return []arvSize{}
 		}
-		out = append(out, arvSize{
-			ID: id, Name: firstOf(m["name"], id),
-			CPU: intOrAny(m["cpu_count"]), RAM: intOrAny(m["memory"]), Disk: intOrAny(m["disk"]),
-			Price: intOrAny(m["price_per_month"]), PricePerHr: intOrAny(m["price_per_hour"]),
-		})
-	}
+		out := []arvSize{}
+		for _, m := range cli.EccList(region, "/sizes") {
+			id := strv(m["id"])
+			if id == "" {
+				continue
+			}
+			cpu := intOrAny(m["cpu_count"])
+			if cpu == 0 {
+				cpu = intOrAny(m["vcpus"])
+			}
+			if cpu == 0 {
+				cpu = intOrAny(m["cpu"])
+			}
+			ram := intOrAny(m["memory"])
+			if ram == 0 {
+				ram = intOrAny(m["ram"])
+			}
+			if ram >= 512 {
+				ram /= 1024
+			}
+			price := intOrAny(m["price_per_month"])
+			if price == 0 {
+				price = intOrAny(m["price"])
+			}
+			out = append(out, arvSize{
+				ID: id, Name: firstOf(m["name"], id),
+				CPU: cpu, RAM: ram, Disk: intOrAny(m["disk"]),
+				Price: price, PricePerHr: intOrAny(m["price_per_hour"]),
+			})
+		}
+		return out
+	})
+	out, _ := v.([]arvSize)
 	return out
 }
 

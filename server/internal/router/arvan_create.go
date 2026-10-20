@@ -68,7 +68,7 @@ func (r *Router) arvMkNameSave(chat, mid int64, text string) {
 	r.arvMkImages(chat, mid)
 }
 
-func (r *Router) arvImages(cli *arvan.Client, region string) []any {
+func (r *Router) arvImages(i int, region string) []any {
 	var out []any
 	seen := map[string]bool{}
 	add := func(m map[string]any, prefix string) {
@@ -83,21 +83,8 @@ func (r *Router) arvImages(cli *arvan.Client, region string) []any {
 		nm := strings.TrimSpace(prefix + " " + firstOf(m["name"], firstOf(m["distribution"], id)))
 		out = append(out, map[string]any{"id": id, "name": nm})
 	}
-	if d, err := cli.Ecc(region, "GET", "/images?per_page=100&type=distributions", nil); err == nil {
-		for _, g := range arvan.EccOneList(d) {
-			gname := strv(g["name"])
-			for _, im := range asMapList(g["images"]) {
-				add(im, gname)
-			}
-		}
-	}
-	if d, err := cli.Ecc(region, "GET", "/images?per_page=100", nil); err == nil {
-		for _, im := range arvan.EccOneList(d) {
-			add(im, "")
-		}
-	}
-	if d, err := cli.Ecc(region, "GET", "/images/marketplaces", nil); err == nil {
-		for _, g := range arvan.EccOneList(d) {
+	{
+		for _, g := range r.arvImageGroups(i, region) {
 			gname := strv(g["name"])
 			for _, im := range asMapList(g["images"]) {
 				add(im, gname)
@@ -115,13 +102,12 @@ func (r *Router) arvMkImages(chat, mid int64) {
 	}
 	i := intOrAny(sess["acc"])
 	region := strv(sess["region"])
-	cli, ok := r.arvCli(i)
-	if !ok {
+	if _, ok := r.arvCli(i); !ok {
 		r.arvMkExpired(chat, mid)
 		return
 	}
 	r.Show(chat, mid, "⏳ در حال بارگذاری ایمیج‌ها…", nil)
-	imgs := r.arvImages(cli, region)
+	imgs := r.arvImages(i, region)
 	sess["images"] = imgs
 	delete(sess, "imageId")
 	delete(sess, "imageName")
@@ -199,33 +185,23 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 	}
 	i := intOrAny(sess["acc"])
 	region := strv(sess["region"])
-	cli, ok := r.arvCli(i)
-	if !ok {
+	if _, ok := r.arvCli(i); !ok {
 		r.arvMkExpired(chat, mid)
 		return
 	}
 	r.Show(chat, mid, "⏳ در حال بارگذاری پلن‌ها…", nil)
 	var flavors []any
-	for _, m := range cli.EccList(region, "/sizes") {
-		id := firstOf(m["id"], strv(m["name"]))
-		if id == "" {
+	for _, sz := range r.arvSizes(i, region) {
+		if sz.ID == "" {
 			continue
 		}
-		cpu := intOrAny(m["cpu"])
-		if cpu == 0 {
-			cpu = intOrAny(m["cpu_count"])
-		}
-		ram := intOrAny(m["ram"])
-		if ram == 0 {
-			ram = intOrAny(m["memory"])
-		}
 		flavors = append(flavors, map[string]any{
-			"id":    id,
-			"name":  firstOf(m["name"], id),
-			"cpu":   cpu,
-			"ram":   ram,
-			"disk":  intOrAny(m["disk"]),
-			"price": firstOf(m["price"], firstOf(m["price_per_month"], "")),
+			"id":    sz.ID,
+			"name":  sz.Name,
+			"cpu":   sz.CPU,
+			"ram":   sz.RAM,
+			"disk":  sz.Disk,
+			"price": sz.Price,
 		})
 	}
 	sess["flavors"] = flavors

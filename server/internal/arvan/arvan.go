@@ -3,6 +3,7 @@ package arvan
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -23,7 +24,7 @@ type Client struct {
 }
 
 func New(token string) *Client {
-	return &Client{token: token, hc: &http.Client{Timeout: 30 * time.Second}}
+	return &Client{token: token, hc: &http.Client{Timeout: 15 * time.Second}}
 }
 
 func NormKey(raw string) string {
@@ -39,32 +40,55 @@ func (c *Client) Call(method, path string, body any) (map[string]any, error) {
 }
 
 func (c *Client) do(base, method, path string, body any) (map[string]any, error) {
-	var rdr io.Reader
+	var raw []byte
 	if body != nil {
-		b, _ := json.Marshal(body)
-		rdr = bytes.NewReader(b)
+		raw, _ = json.Marshal(body)
 	}
-	req, err := http.NewRequest(method, base+path, rdr)
-	if err != nil {
-		return nil, &Error{err.Error()}
+	var lastErr string
+	for attempt := 1; attempt <= 2; attempt++ {
+		var rdr io.Reader
+		if raw != nil {
+			rdr = bytes.NewReader(raw)
+		}
+		req, err := http.NewRequest(method, base+path, rdr)
+		if err != nil {
+			return nil, &Error{err.Error()}
+		}
+		req.Header.Set("Authorization", "Apikey "+c.token)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		resp, err := c.hc.Do(req)
+		if err != nil {
+			lastErr = trunc(err.Error(), 200)
+			if attempt < 2 {
+				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, &Error{lastErr}
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode == 429 || resp.StatusCode == 500 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
+			lastErr = trunc(string(b), 200)
+			if attempt < 2 {
+				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+				continue
+			}
+			return nil, &Error{fmt.Sprintf("HTTP %d: %s", resp.StatusCode, lastErr)}
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, &Error{fmt.Sprintf("HTTP %d: %s", resp.StatusCode, trunc(string(b), 200))}
+		}
+		if len(b) == 0 {
+			return map[string]any{}, nil
+		}
+		var out map[string]any
+		if err := json.Unmarshal(b, &out); err != nil {
+			return map[string]any{}, nil
+		}
+		return out, nil
 	}
-	req.Header.Set("Authorization", "Apikey "+c.token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return nil, &Error{trunc(err.Error(), 200)}
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if len(b) == 0 {
-		return map[string]any{}, nil
-	}
-	var out map[string]any
-	if err := json.Unmarshal(b, &out); err != nil {
-		return map[string]any{}, nil
-	}
-	return out, nil
+	return nil, &Error{lastErr}
 }
 
 // ---------- ECC (cloud server) ----------
@@ -103,14 +127,26 @@ func eccList(v any) []map[string]any {
 // EccList fetches a paginated list from a region-scoped ECC path.
 func (c *Client) EccList(region, path string) []map[string]any {
 	var out []map[string]any
+	switch path {
+	case "/sizes", "/securities", "/networks":
+		if d, err := c.Ecc(region, "GET", path, nil); err == nil {
+			return eccList(d)
+		}
+		return nil
+	}
 	page := 1
 	sep := "?"
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
 	for {
-		d, err := c.Ecc(region, "GET", path+sep+"per_page=100&page="+strconv.Itoa(page), nil)
+		d, err := c.Ecc(region, "GET", path+sep+"per_page=50&page="+strconv.Itoa(page), nil)
 		if err != nil {
+			if page == 1 && sep == "?" {
+				if d2, err2 := c.Ecc(region, "GET", path, nil); err2 == nil {
+					return eccList(d2)
+				}
+			}
 			return out
 		}
 		arr := eccList(d)
@@ -121,7 +157,7 @@ func (c *Client) EccList(region, path string) []map[string]any {
 			page = np
 			continue
 		}
-		if pag == nil && len(arr) >= 100 {
+		if pag == nil && len(arr) >= 50 {
 			page++
 			continue
 		}

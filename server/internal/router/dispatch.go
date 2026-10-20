@@ -10,6 +10,7 @@ import (
 )
 
 func (r *Router) dispatch(chat, mid int64, data string) {
+	r.lastNav.Store(chat, data)
 	switch {
 	case data == "menu":
 		r.Menu(chat, mid)

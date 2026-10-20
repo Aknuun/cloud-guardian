@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aknuun/cg-server/internal/jalali"
@@ -12,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.0"
+const Version = "4.6.1"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -59,6 +60,7 @@ func Esc(s any) string {
 }
 
 type Router struct {
+	lastNav  sync.Map
 	Bot      *tg.Client
 	Store    *store.Store
 	AdminID  int64

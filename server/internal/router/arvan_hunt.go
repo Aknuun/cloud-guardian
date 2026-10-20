@@ -54,7 +54,7 @@ func (h *arvHuntState) set(fn func(*arvHuntState)) {
 
 func (r *Router) arvHuntRegions(chat, mid int64, i int) {
 	kb := r.arvRegionButtons(i, "arvhunt")
-	kb = append(kb, navRow("arvsrv"))
+	kb = append(kb, arvNav(i)...)
 	r.Show(chat, mid, "🎯 شکار IP تمیز — آروان\n\n📍 ریجن را انتخاب کن:", kb)
 }
 
@@ -128,15 +128,14 @@ type arvHuntPrep struct {
 	SizeID, SizeName, SizeLabel, ImageID, ImageName string
 }
 
-func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, bool) {
+func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, string) {
 	var p arvHuntPrep
-	cli, ok := r.arvCli(i)
-	if !ok {
-		return p, false
+	if _, ok := r.arvCli(i); !ok {
+		return p, "اکانت پیدا نشد"
 	}
 	sizes := r.arvSizes(i, region)
 	if len(sizes) == 0 {
-		return p, false
+		return p, "لیست پلن‌ها از آروان نیامد (خطای موقت API یا ریجن نامعتبر)"
 	}
 	sort.SliceStable(sizes, func(a, b int) bool {
 		if sizes[a].Price > 0 && sizes[b].Price > 0 {
@@ -149,36 +148,48 @@ func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, bool) {
 	})
 	sz := sizes[0]
 	p.SizeID, p.SizeName = sz.ID, sz.Name
-	p.SizeLabel = fmt.Sprintf("%s (%dvCPU/%dGB)", sz.Name, sz.CPU, sz.RAM)
-	imgID, imgName := "", ""
-	for _, m := range cli.EccList(region, "/images?type=distributions") {
+	if sz.CPU > 0 || sz.RAM > 0 {
+		p.SizeLabel = fmt.Sprintf("%s (%dvCPU/%dGB)", sz.Name, sz.CPU, sz.RAM)
+	} else {
+		p.SizeLabel = sz.Name
+	}
+	var debID, debName, ubuID, ubuName string
+	for _, m := range r.arvImageGroups(i, region) {
 		grp := strings.ToLower(strv(m["name"]))
 		for _, im := range asMapList(m["images"]) {
 			nm := strings.ToLower(strv(im["name"]))
-			if grp == "debian" && (nm == "12" || nm == "13") {
-				imgID, imgName = strv(im["id"]), "Debian "+strv(im["name"])
-				break
+			id := strv(im["id"])
+			if id == "" {
+				continue
 			}
-			if imgID == "" && grp == "ubuntu" && nm == "22.04" {
-				imgID, imgName = strv(im["id"]), "Ubuntu 22.04"
+			if debID == "" && grp == "debian" && (nm == "12" || nm == "13") {
+				debID, debName = id, "Debian "+strv(im["name"])
+			}
+			if ubuID == "" && grp == "ubuntu" && (nm == "22.04" || nm == "24.04" || nm == "26.04") {
+				ubuID, ubuName = id, "Ubuntu "+strv(im["name"])
 			}
 		}
-		if strings.HasPrefix(imgName, "Debian") {
+		if debID != "" {
 			break
 		}
 	}
-	if imgID == "" {
-		return p, false
+	switch {
+	case debID != "":
+		p.ImageID, p.ImageName = debID, debName
+	case ubuID != "":
+		p.ImageID, p.ImageName = ubuID, ubuName
 	}
-	p.ImageID, p.ImageName = imgID, imgName
-	return p, true
+	if p.ImageID == "" {
+		return p, "ایمیج Debian/Ubuntu پیدا نشد"
+	}
+	return p, ""
 }
 
 func (r *Router) arvHuntConfirm(chat, mid int64, i int, region string) {
 	r.Show(chat, mid, "⏳ در حال آماده‌سازی (پلن/ایمیج)…", nil)
-	p, ok := r.arvHuntPrepare(i, region)
-	if !ok {
-		r.Show(chat, mid, "❌ پلن یا ایمیج برای این ریجن پیدا نشد.", navKB("arvsrv"))
+	p, reason := r.arvHuntPrepare(i, region)
+	if reason != "" {
+		r.Show(chat, mid, "❌ "+Esc(reason)+"\n\nچند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
 		return
 	}
 	r.Show(chat, mid, fmt.Sprintf("🎯 <b>شکار IP تمیز — آروان</b>\n\n"+
@@ -190,7 +201,7 @@ func (r *Router) arvHuntConfirm(chat, mid int64, i int, region string) {
 		Esc(r.arvRegionName(region)), Esc(p.SizeLabel), Esc(p.ImageName)),
 		[][]Btn{
 			{btnS("🚀 شروع شکار", fmt.Sprintf("arvhuntgo:%d:%s", i, region), "success")},
-			navRow(fmt.Sprintf("arvhunt:%d", i)),
+			arvNav(i)[0],
 		})
 }
 
@@ -199,9 +210,9 @@ func (r *Router) arvHuntStart(chat, mid int64, i int, region string) {
 		r.Show(chat, mid, "⏳ یک شکار IP در حال اجراست؛ اول آن را متوقف کن.", navKB("arvsrv"))
 		return
 	}
-	p, ok := r.arvHuntPrepare(i, region)
-	if !ok {
-		r.Show(chat, mid, "❌ پلن یا ایمیج برای این ریجن پیدا نشد.", navKB("arvsrv"))
+	p, reason := r.arvHuntPrepare(i, region)
+	if reason != "" {
+		r.Show(chat, mid, "❌ "+Esc(reason)+"\n\nچند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
 		return
 	}
 	h := &arvHuntState{
