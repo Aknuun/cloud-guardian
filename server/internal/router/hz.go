@@ -96,6 +96,7 @@ func (r *Router) hzHome(chat, mid int64) {
 		createLabel = "➕ ساخت سرور در " + nm
 	}
 	kb = append(kb, []Btn{btn(createLabel, fmt.Sprintf("hzsc:%d", sel))})
+	kb = append(kb, []Btn{btn("🧼 استخر IP تمیز", fmt.Sprintf("hzip:%d", sel))})
 	kb = append(kb, []Btn{btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }

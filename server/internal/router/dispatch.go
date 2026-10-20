@@ -808,6 +808,34 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		if p := strings.SplitN(strings.TrimPrefix(data, "hzsi:"), ":", 2); len(p) == 2 {
 			r.hzInfo(chat, mid, atoiSafe(p[0]), p[1])
 		}
+	case strings.HasPrefix(data, "hzip:"):
+		r.hzIPPool(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzip:")))
+	case strings.HasPrefix(data, "hzipadd:"):
+		r.hzIPPoolFill(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipadd:")))
+	case strings.HasPrefix(data, "hzipl:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipl:"), ":", 2); len(p) == 2 {
+			r.hzIPPoolFillLoc(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "hzipan:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipan:"), ":", 3); len(p) == 3 {
+			r.hzIPPoolFillDo(chat, mid, atoiSafe(p[0]), p[1], atoiSafe(p[2]))
+		}
+	case strings.HasPrefix(data, "hzipchk:"):
+		r.hzIPPoolRecheck(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipchk:")))
+	case strings.HasPrefix(data, "hzipsws:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipsws:"), ":", 2); len(p) == 2 {
+			r.hzIPPoolSwapAsk(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "hzipswy:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzipswy:"), ":", 2); len(p) == 2 {
+			r.hzIPPoolSwapDo(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "hzipsw:"):
+		r.hzIPPoolSwap(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipsw:")))
+	case strings.HasPrefix(data, "hzipcl:"):
+		r.hzIPPoolCleanupAsk(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipcl:")))
+	case strings.HasPrefix(data, "hzipcly:"):
+		r.hzIPPoolCleanupDo(chat, mid, atoiSafe(strings.TrimPrefix(data, "hzipcly:")))
 	case strings.HasPrefix(data, "hzsl:"):
 		if p := strings.SplitN(strings.TrimPrefix(data, "hzsl:"), ":", 2); len(p) == 2 {
 			r.hzPickPlan(chat, mid, atoiSafe(p[0]), p[1])
