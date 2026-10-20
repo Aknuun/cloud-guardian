@@ -152,6 +152,21 @@ func cfValueHint(value, rtype string) string {
 	return ""
 }
 
+// cfTypeForValue infers the record type an address/hostname belongs to.
+func cfTypeForValue(s string) string {
+	s = strings.TrimSpace(s)
+	if ip := net.ParseIP(s); ip != nil {
+		if ip.To4() != nil {
+			return "A"
+		}
+		return "AAAA"
+	}
+	if cfIsHost(s) {
+		return "CNAME"
+	}
+	return ""
+}
+
 // ---------- sessions ----------
 
 func (r *Router) cfGetSession(chat int64) map[string]any {
@@ -573,11 +588,11 @@ func (r *Router) cfTypeToggle(chat, mid int64, acc int, zid, rid string) {
 	v := strings.TrimSpace(rec.Content)
 	isIP := net.ParseIP(v) != nil
 	if target == "A" && !isIP {
-		r.Show(chat, mid, "❌ برای نوع A باید مقدار آیپی باشد.", HomeKB())
+		r.cfEditStartTyped(chat, mid, acc, zid, rid, "A")
 		return
 	}
 	if target == "CNAME" && isIP {
-		r.Show(chat, mid, "❌ برای نوع CNAME باید مقدار هاست‌نیم باشد.", HomeKB())
+		r.cfEditStartTyped(chat, mid, acc, zid, rid, "CNAME")
 		return
 	}
 	cli, _ := r.cfClientFor(acc)
@@ -676,8 +691,26 @@ func (r *Router) cfEditStart(chat, mid int64, acc int, zid, rid string) {
 	if rec != nil {
 		name, content = rec.Name, rec.Content
 	}
-	r.Show(chat, mid, fmt.Sprintf("✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):\n\n📛 سابی که تغییر می‌کند: <code>%s</code>\n\n🔴 مقدار فعلی که عوض می‌شود:\n<code>%s</code>",
+	r.Show(chat, mid, fmt.Sprintf("✏️ مقدار جدید را بفرستید (IP یا هدف CNAME):\n\n📛 سابی که تغییر می‌کند: <code>%s</code>\n\n🔴 مقدار فعلی که عوض می‌شود:\n<code>%s</code>\n\n💡 اگر IPv4 بفرستی نوع A، اگر IPv6 بفرستی AAAA و اگر دامنه بفرستی CNAME می‌شود.",
 		Esc(name), Esc(content)), [][]Btn{{btn("⬅️ انصراف", "cfr:"+rid)}})
+}
+
+// cfEditStartTyped starts the edit wizard for a specific target type (used by
+// the A<->CNAME toggle when the current value does not fit the target type).
+func (r *Router) cfEditStartTyped(chat, mid int64, acc int, zid, rid, newType string) {
+	rec := r.cfFind(acc, zid, rid)
+	r.setWizard(chat, map[string]any{"kind": "cr_cfedit", "acc": acc, "zid": zid, "rid": rid, "newtype": newType})
+	name, content := "", ""
+	if rec != nil {
+		name, content = rec.Name, rec.Content
+	}
+	example := "1.2.3.4"
+	if strings.ToUpper(newType) == "CNAME" {
+		example = "sub.example.com"
+	}
+	r.Show(chat, mid, fmt.Sprintf("✏️ برای تبدیل به رکورد %s، مقدار جدید را بفرستید (مثل <code>%s</code>):\n\n📛 ساب: <code>%s</code>\n🔴 مقدار فعلی: <code>%s</code>",
+		Esc(newType), Esc(example), Esc(name), Esc(content)),
+		[][]Btn{{btn("⬅️ انصراف", "cfr:"+rid)}})
 }
 
 func (r *Router) cfEditSave(chat, mid int64, pend map[string]any, text string) {
@@ -690,18 +723,36 @@ func (r *Router) cfEditSave(chat, mid int64, pend map[string]any, text string) {
 		r.Bot.Send(chat, "❌ رکورد پیدا نشد.", nil)
 		return
 	}
-	if hint := cfValueHint(text, strings.ToUpper(rec.Type)); hint != "" {
+	recType := strings.ToUpper(rec.Type)
+	eff := recType
+	if forced := strings.ToUpper(strvVal(pend["newtype"])); forced != "" {
+		eff = forced
+	} else if recType == "A" || recType == "AAAA" || recType == "CNAME" {
+		// Sending an IP switches to A/AAAA; a hostname switches to CNAME.
+		if t := cfTypeForValue(text); t != "" {
+			eff = t
+		}
+	}
+	if hint := cfValueHint(text, eff); hint != "" {
 		r.Bot.Send(chat, "❌ "+hint+"\n\nپیام اصلاح‌شده را دوباره بفرستید؛ همین‌جا ویرایش می‌شود.",
 			[][]Btn{{btn("⬅️ انصراف", "cfr:"+rid)}})
 		return
 	}
 	cli, _ := r.cfClientFor(acc)
-	if _, err := cli.UpdateRecord(zid, *rec, map[string]any{"content": strings.TrimSpace(text)}); err != nil {
+	patch := map[string]any{"content": strings.TrimSpace(text)}
+	if eff != recType {
+		patch["type"] = eff
+	}
+	if _, err := cli.UpdateRecord(zid, *rec, patch); err != nil {
 		r.Bot.Send(chat, "❌ نشد: "+Esc(err.Error()), nil)
 		return
 	}
 	r.clearWizard(chat)
-	r.Bot.Send(chat, "✅ مقدار عوض شد.", nil)
+	if eff != recType {
+		r.Bot.Send(chat, fmt.Sprintf("✅ رکورد به %s تغییر کرد و مقدار عوض شد.", Esc(eff)), nil)
+	} else {
+		r.Bot.Send(chat, "✅ مقدار عوض شد.", nil)
+	}
 	r.cfRecord(chat, 0, acc, zid, rid, "")
 }
 
