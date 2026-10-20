@@ -946,10 +946,10 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 			return
 		}
 		s, _ := d["server"].(map[string]any)
-		dc, _ := s["datacenter"].(map[string]any)
-		dcName := strv(dc["name"])
-		if dcName == "" {
-			r.Show(chat, mid, "❌ دیتاسنتر سرور مشخص نیست.", back)
+		loc, _ := s["location"].(map[string]any)
+		locName := strv(loc["name"])
+		if locName == "" {
+			r.Show(chat, mid, "❌ لوکیشن سرور مشخص نیست.", back)
 			return
 		}
 		pn, _ := s["public_net"].(map[string]any)
@@ -959,7 +959,7 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 			return
 		}
 		c, err := cli.Call("/primary_ips", "POST", map[string]any{
-			"type": "ipv4", "name": "replace-" + sid, "datacenter": dcName, "auto_delete": true})
+			"type": "ipv4", "name": "replace-" + sid, "location": locName, "auto_delete": true})
 		if err != nil {
 			fail(err)
 			return
