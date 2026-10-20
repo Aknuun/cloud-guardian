@@ -1,7 +1,9 @@
 package router
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -332,6 +334,15 @@ func floatAny(v any) float64 {
 	return 0
 }
 
+// eur0 formats a Hetzner price as a whole euro amount (no decimals).
+func eur0(v any) string {
+	f := floatAny(v)
+	if f <= 0 {
+		return "?"
+	}
+	return strconv.Itoa(int(math.Round(f))) + "€"
+}
+
 func strvVal(v any) string {
 	switch t := v.(type) {
 	case float64:
@@ -583,10 +594,199 @@ func (r *Router) hzPickPlan(chat, mid int64, i int, loc string) {
 		r.Show(chat, mid, "⏳ عملیات منقضی شده.", HomeKB())
 		return
 	}
-	types := r.hzAllTypes(hz.New(strv(accs[i]["token"])))
+	pend["location"] = loc
+	delete(pend, "planId")
+	delete(pend, "image")
+	delete(pend, "imageName")
+	delete(pend, "arch")
+	r.setWizard(chat, pend)
+	r.hzImageList(chat, mid, i)
+}
+
+// hzImageList is the first step after the location: pick the image, then only
+// plans compatible with its architecture (x86/ARM) are shown.
+func (r *Router) hzImageList(chat, mid int64, i int) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
+		return
+	}
+	imgs := r.hzAllImages(hz.New(strv(accs[i]["token"])))
+	var avail []map[string]any
+	for _, im := range imgs {
+		t := strv(im["type"])
+		if t == "system" || t == "snapshot" {
+			avail = append(avail, im)
+		}
+	}
+	if len(avail) == 0 {
+		r.Show(chat, mid, "❌ تصویری پیدا نشد.", HomeKB())
+		return
+	}
+	var rows []Btn
+	for j, im := range avail {
+		if j >= 50 {
+			break
+		}
+		label := strv(im["name"])
+		if label == "" {
+			label = strv(im["description"])
+		}
+		if label == "" {
+			label = strv(im["id"])
+		}
+		if strv(im["type"]) == "snapshot" {
+			label = "💾 " + label
+		}
+		switch strv(im["architecture"]) {
+		case "arm":
+			label += " · ARM"
+		case "x86":
+			label += " · x86"
+		}
+		rows = append(rows, btn(label, fmt.Sprintf("hzsci:%d:%s", i, strv(im["id"]))))
+	}
+	kb := gridBTN(rows, 2)
+	kb = append(kb, row(btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")))
+	r.Show(chat, mid, "🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:\n\n💡 بعد از انتخاب تصویر، فقط پلن‌های سازگار با معماری آن (x86/ARM) نمایش داده می‌شوند.", kb)
+}
+
+// hzPickPlanForImage stores the chosen image and shows the plan list.
+func (r *Router) hzPickPlanForImage(chat, mid int64, i int, img string) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
+		return
+	}
+	pend := r.getWizard(chat)
+	if pend == nil || strv(pend["kind"]) != "hz_srv_remark" || strv(pend["location"]) == "" {
+		r.Show(chat, mid, "⏳ عملیات منقضی شده.", HomeKB())
+		return
+	}
+	cli := hz.New(strv(accs[i]["token"]))
+	arch, name := "", ""
+	if d, err := cli.Call("/images/"+img, "GET", nil); err == nil {
+		if im, _ := d["image"].(map[string]any); im != nil {
+			arch = strv(im["architecture"])
+			name = strv(im["name"])
+			if name == "" {
+				name = strv(im["description"])
+			}
+		}
+	}
+	pend["image"] = img
+	pend["imageName"] = name
+	pend["arch"] = arch
+	r.setWizard(chat, pend)
+	r.hzPlanList(chat, mid, i, "", "")
+}
+
+// hzUsage returns the account's current server usage by core type.
+func (r *Router) hzUsage(cli *hz.Client) (shared, dedicated, count int) {
+	for _, s := range cli.All("/servers") {
+		count++
+		st, _ := s["server_type"].(map[string]any)
+		if st == nil {
+			continue
+		}
+		c := intOfAny(st["cores"])
+		if strings.ToLower(strv(st["cpu_type"])) == "dedicated" {
+			dedicated += c
+		} else {
+			shared += c
+		}
+	}
+	return
+}
+
+// hzCapGet returns the learned capacity failures for an account.
+func (r *Router) hzCapGet(accName string) map[string]any {
+	var m map[string]any
+	if !r.Store.GetJSON("hzcap:"+accName, &m) || m == nil {
+		m = map[string]any{}
+	}
+	return m
+}
+
+func (r *Router) hzCapSet(accName, kind string, need, used int) {
+	m := r.hzCapGet(accName)
+	m[kind] = map[string]any{"need": need, "used": used, "ts": time.Now().Unix()}
+	if b, err := json.Marshal(m); err == nil {
+		r.Store.Put("hzcap:"+accName, string(b), 0)
+	}
+}
+
+// hzBlocked reports whether a plan is known to exceed the account limits.
+func hzBlocked(t map[string]any, caps map[string]any, shared, dedicated, count int) (bool, string) {
+	kind := "shared"
+	usedNow := shared
+	if strings.ToLower(strv(t["cpu_type"])) == "dedicated" {
+		kind, usedNow = "dedicated", dedicated
+	}
+	cores := intOfAny(t["cores"])
+	// Learned from a previous resource_limit_exceeded on this account.
+	if m, ok := caps[kind].(map[string]any); ok {
+		need, u0 := intOfAny(m["need"]), intOfAny(m["used"])
+		ts := int64(0)
+		switch v := m["ts"].(type) {
+		case float64:
+			ts = int64(v)
+		case int64:
+			ts = v
+		}
+		if need > 0 && (ts == 0 || time.Now().Unix()-ts < 12*3600) {
+			// At failure: u0+need > limit. A plan fits only if
+			// usedNow+cores <= limit < u0+need.
+			if threshold := need + u0 - usedNow; threshold > 0 && cores >= threshold {
+				label := "ظرفیت هسته‌های shared اکانت پر است"
+				if kind == "dedicated" {
+					label = "ظرفیت هسته‌های dedicated اکانت پر است"
+				}
+				return true, label
+			}
+		}
+	}
+	if m, ok := caps["server"].(map[string]any); ok {
+		ts := int64(0)
+		switch v := m["ts"].(type) {
+		case float64:
+			ts = int64(v)
+		case int64:
+			ts = v
+		}
+		if (ts == 0 || time.Now().Unix()-ts < 12*3600) && count >= intOfAny(m["used"]) {
+			return true, "سقف تعداد سرورهای اکانت پر است"
+		}
+	}
+	return false, ""
+}
+
+// hzPlanList renders the plan list for the pending location+image, marking
+// plans that are known not to fit the account limits. It edits the current
+// message (no navigation) and can show a notice plus a one-tap retry.
+func (r *Router) hzPlanList(chat, mid int64, i int, notice, retryPlan string) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
+		return
+	}
+	pend := r.getWizard(chat)
+	if pend == nil || strv(pend["kind"]) != "hz_srv_remark" || strv(pend["location"]) == "" {
+		r.Show(chat, mid, "⏳ عملیات منقضی شده.", HomeKB())
+		return
+	}
+	loc := strv(pend["location"])
+	arch := strv(pend["arch"])
+	cli := hz.New(strv(accs[i]["token"]))
+	types := r.hzAllTypes(cli)
+	shared, dedicated, count := r.hzUsage(cli)
+	caps := r.hzCapGet(strv(accs[i]["name"]))
 	var avail []map[string]any
 	for _, t := range types {
 		if boolVal(t["deprecated"]) {
+			continue
+		}
+		if arch != "" && strv(t["architecture"]) != arch {
 			continue
 		}
 		for _, p := range priceList(t) {
@@ -597,17 +797,11 @@ func (r *Router) hzPickPlan(chat, mid int64, i int, loc string) {
 		}
 	}
 	sortPlanByPrice(avail, loc)
-	pend["location"] = loc
-	r.setWizard(chat, pend)
 	famLabels := map[string]string{"cpx": "🧩 CPX · پردازنده AMD", "cx": "🧩 CX · پردازنده Intel",
 		"cax": "🧩 CAX · پردازنده Ampere ARM", "ccx": "🧩 CCX · اختصاصی (Dedicated)",
 		"other": "🧩 سایر پلن‌ها"}
 	groups := map[string][]map[string]any{}
-	var order []string
 	for _, t := range avail {
-		if len(order) >= 60 {
-			break
-		}
 		nm := strings.ToLower(strv(t["name"]))
 		fam := "other"
 		for _, f := range []string{"cpx", "cx", "cax", "ccx"} {
@@ -619,6 +813,7 @@ func (r *Router) hzPickPlan(chat, mid int64, i int, loc string) {
 		groups[fam] = append(groups[fam], t)
 	}
 	var kb [][]Btn
+	anyBlocked := false
 	for _, fam := range []string{"cpx", "cx", "cax", "ccx", "other"} {
 		arr := groups[fam]
 		if len(arr) == 0 {
@@ -631,17 +826,39 @@ func (r *Router) hzPickPlan(chat, mid int64, i int, loc string) {
 			for _, p := range priceList(t) {
 				if strv(p["location"]) == loc {
 					if pm, ok := p["price_monthly"].(map[string]any); ok && pm["gross"] != nil {
-						eur = fmt.Sprint(pm["gross"])
+						eur = eur0(pm["gross"])
 					}
 					break
 				}
 			}
-			rows = append(rows, btn(fmt.Sprintf("%dC/%dG · %s€", intOfAny(t["cores"]), intOfAny(t["memory"]), eur), fmt.Sprintf("hzscp:%d:%s", i, strv(t["id"]))))
+			mark, cb := "✅", fmt.Sprintf("hzscp:%d:%s", i, strv(t["id"]))
+			if bad, _ := hzBlocked(t, caps, shared, dedicated, count); bad {
+				mark, cb = "⛔", fmt.Sprintf("hzcap:%d:%s", i, strv(t["id"]))
+				anyBlocked = true
+			}
+			rows = append(rows, btn(fmt.Sprintf("%s %dC/%dG · %s", mark, intOfAny(t["cores"]), intOfAny(t["memory"]), eur), cb))
 		}
 		kb = append(kb, gridBTN(rows, 2)...)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")})
-	r.Show(chat, mid, fmt.Sprintf("💰 پلن سرور را انتخاب کن (لوکیشن: %s):", loc), kb)
+	if retryPlan != "" {
+		kb = append(kb, row(btn("🔁 به‌هرحال امتحان کن", fmt.Sprintf("hzscp:%d:%s", i, retryPlan))))
+	}
+	kb = append(kb, row(btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")))
+	hd := fmt.Sprintf("💰 پلن سرور را انتخاب کن\n📍 لوکیشن: %s", Esc(loc))
+	if img := strv(pend["imageName"]); img != "" {
+		hd += " • 🖼️ " + Esc(img)
+	}
+	hd += fmt.Sprintf("\n📊 مصرف فعلی اکانت: %d هستهٔ shared", shared)
+	if dedicated > 0 {
+		hd += fmt.Sprintf(" • %d هستهٔ dedicated", dedicated)
+	}
+	if anyBlocked {
+		hd += "\n⛔ = با ظرفیت فعلی اکانت جا نمی‌شود • ✅ = قابل ساخت"
+	}
+	if notice != "" {
+		hd = "⚠️ " + notice + "\n\n" + hd
+	}
+	r.Show(chat, mid, hd, kb)
 }
 
 func priceList(t map[string]any) []map[string]any {
@@ -675,96 +892,56 @@ func sortPlanByPrice(avail []map[string]any, loc string) {
 	}
 }
 
-func (r *Router) hzPickImage(chat, mid int64, i int, plan string) {
+const randChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func (r *Router) hzCreate(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
 	pend := r.getWizard(chat)
-	if pend == nil || strv(pend["kind"]) != "hz_srv_remark" {
+	if pend == nil || strv(pend["kind"]) != "hz_srv_remark" || strv(pend["location"]) == "" ||
+		strv(pend["planId"]) == "" || strv(pend["image"]) == "" {
 		r.Show(chat, mid, "⏳ عملیات منقضی شده.", HomeKB())
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
-	td, err := cli.Call("/server_types/"+plan, "GET", nil)
-	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), HomeKB())
-		return
-	}
-	stype, _ := td["server_type"].(map[string]any)
-	imgs := r.hzAllImages(cli)
-	arch := ""
-	if stype != nil {
-		arch = strv(stype["architecture"])
-	}
-	var avail []map[string]any
-	for _, im := range imgs {
-		t := strv(im["type"])
-		if (t == "system" || t == "snapshot") && (arch == "" || strv(im["architecture"]) == arch) {
-			avail = append(avail, im)
+	plan := strv(pend["planId"])
+	cores := 0
+	if td, err := cli.Call("/server_types/"+plan, "GET", nil); err == nil {
+		if st, _ := td["server_type"].(map[string]any); st != nil {
+			cores = intOfAny(st["cores"])
 		}
 	}
-	if len(avail) == 0 {
-		r.Show(chat, mid, "❌ تصویری پیدا نشد.", HomeKB())
-		return
-	}
-	pend["planId"] = plan
-	r.setWizard(chat, pend)
-	var rows []Btn
-	for j, im := range avail {
-		if j >= 50 {
-			break
-		}
-		label := strv(im["name"])
-		if label == "" {
-			label = strv(im["description"])
-		}
-		if label == "" {
-			label = strv(im["id"])
-		}
-		rows = append(rows, btn(label, fmt.Sprintf("hzsci:%d:%s", i, strv(im["id"]))))
-	}
-	kb := gridBTN(rows, 2)
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")})
-	r.Show(chat, mid, "🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb)
-}
-
-const randChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-func (r *Router) hzCreate(chat, mid int64, i int, img string) {
-	accs := r.hzAccs()
-	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
-		return
-	}
-	pend := r.getWizard(chat)
-	if pend == nil || strv(pend["kind"]) != "hz_srv_remark" || pend["location"] == nil || pend["planId"] == nil {
-		r.Show(chat, mid, "⏳ عملیات منقضی شده.", HomeKB())
-		return
-	}
+	sharedBefore, dedBefore, countBefore := r.hzUsage(cli)
 	b := make([]byte, 16)
 	for k := range b {
 		b[k] = randChars[rand.Intn(len(randChars))]
 	}
 	pw := string(b)
 	cloudInit := "#cloud-config\nssh_pwauth: true\nchpasswd:\n  list: |\n    root:" + pw + "\n  expire: False\n"
-	resp, err := hz.New(strv(accs[i]["token"])).Call("/servers", "POST", map[string]any{
+	resp, err := cli.Call("/servers", "POST", map[string]any{
 		"name":               strv(pend["remark"]),
-		"server_type":        strv(pend["planId"]),
-		"image":              img,
+		"server_type":        plan,
+		"image":              strv(pend["image"]),
 		"location":           strv(pend["location"]),
 		"start_after_create": true,
 		"user_data":          cloudInit,
 	})
 	if err != nil {
-		loc := strv(pend["location"])
-		kb := [][]Btn{
-			{btn("🔁 یک پلن دیگر امتحان کن", fmt.Sprintf("hzsl:%d:%s", i, loc))},
-			{btn("🏠 خانه", "menu")},
+		low := strings.ToLower(err.Error())
+		accName := strv(accs[i]["name"])
+		switch {
+		case strings.Contains(low, "core limit") && strings.Contains(low, "dedicated"):
+			r.hzCapSet(accName, "dedicated", cores, dedBefore)
+		case strings.Contains(low, "core limit"):
+			r.hzCapSet(accName, "shared", cores, sharedBefore)
+		case strings.Contains(low, "server limit"):
+			r.hzCapSet(accName, "server", 0, countBefore)
 		}
-		r.Show(chat, mid, "❌ ساخت سرور انجام نشد.\n\n🔎 علت: "+Esc(err.Error())+
-			"\n\n👇 یک پلن دیگر انتخاب کن (پیام قبلی جایگزین می‌شود):", kb)
+		// Stay on the plan list (same message) with the reason and a		// one-tap retry; no extra page.
+		r.hzPlanList(chat, mid, i, "ساخت سرور انجام نشد: "+Esc(err.Error()), plan)
 		return
 	}
 	r.clearWizard(chat)
@@ -924,16 +1101,19 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 		if step == "u6" {
 			key = "ipv6"
 		}
-		ipid := hz.PrimaryIPID(pn[key])
-		if ipid == nil {
-			r.Show(chat, mid, "ℹ️ آی‌پی اختصاصی ندارد.", back)
+		ipid := 0
+		if m, _ := pn[key].(map[string]any); m != nil {
+			ipid = intOfAny(m["id"])
+		}
+		if ipid <= 0 {
+			r.Show(chat, mid, "ℹ️ آی‌پی اختصاصی (Primary IP) برای حذف وجود ندارد.", back)
 			return
 		}
 		if !hz.EnsureOff(cli, sid, 30000) {
 			r.Show(chat, mid, "⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", back)
 			return
 		}
-		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%v/actions/unassign", ipid), "POST", map[string]any{}); err != nil {
+		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", ipid), "POST", map[string]any{}); err != nil {
 			fail(err)
 			return
 		}
@@ -953,7 +1133,10 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 			return
 		}
 		pn, _ := s["public_net"].(map[string]any)
-		old := hz.PrimaryIPID(pn["ipv4"])
+		oldID := 0
+		if m, _ := pn["ipv4"].(map[string]any); m != nil {
+			oldID = intOfAny(m["id"])
+		}
 		if !hz.EnsureOff(cli, sid, 30000) {
 			r.Show(chat, mid, "⚠️ سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن.", back)
 			return
@@ -965,17 +1148,21 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 			return
 		}
 		nip, _ := c["primary_ip"].(map[string]any)
-		if nip == nil || nip["id"] == nil {
+		newID := 0
+		if nip != nil {
+			newID = intOfAny(nip["id"])
+		}
+		if newID <= 0 {
 			r.Show(chat, mid, "❌ ساخت IPv4 تازه ناموفق شد.", back)
 			return
 		}
-		if old != nil {
-			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%v/actions/unassign", old), "POST", map[string]any{})
+		if oldID > 0 {
+			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", oldID), "POST", map[string]any{})
 		}
-		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%v/actions/assign", nip["id"]), "POST",
+		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", newID), "POST",
 			map[string]any{"assignee_id": atoiSafe(sid), "assignee_type": "server"})
-		if old != nil {
-			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%v", old), "DELETE", nil)
+		if oldID > 0 {
+			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d", oldID), "DELETE", nil)
 		}
 		_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
 		r.Bot.Send(chat, "✅ جایگزینی انجام شد.\nIPv4 تازه: <code>"+Esc(strv(nip["ip"]))+"</code>", nil)

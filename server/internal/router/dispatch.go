@@ -845,11 +845,21 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.Show(chat, mid, "🏷️ نام سرور (بدون فاصله) را بفرستید:", [][]Btn{{btn("🔙 انصراف", "hz")}})
 	case strings.HasPrefix(data, "hzscp:"):
 		if p := strings.SplitN(strings.TrimPrefix(data, "hzscp:"), ":", 2); len(p) == 2 {
-			r.hzPickImage(chat, mid, atoiSafe(p[0]), p[1])
+			i := atoiSafe(p[0])
+			if w := r.getWizard(chat); w != nil {
+				w["planId"] = p[1]
+				r.setWizard(chat, w)
+			}
+			r.hzCreate(chat, mid, i)
+		}
+	case strings.HasPrefix(data, "hzcap:"):
+		if p := strings.SplitN(strings.TrimPrefix(data, "hzcap:"), ":", 2); len(p) == 2 {
+			r.hzPlanList(chat, mid, atoiSafe(p[0]),
+				"این پلن با ظرفیت فعلی اکانت جا نمی‌شود؛ یک پلن کوچک‌تر انتخاب کن یا با دکمهٔ زیر به‌هرحال امتحان کن.", p[1])
 		}
 	case strings.HasPrefix(data, "hzsci:"):
 		if p := strings.SplitN(strings.TrimPrefix(data, "hzsci:"), ":", 2); len(p) == 2 {
-			r.hzCreate(chat, mid, atoiSafe(p[0]), p[1])
+			r.hzPickPlanForImage(chat, mid, atoiSafe(p[0]), p[1])
 		}
 	case strings.HasPrefix(data, "hzsu:"):
 		if p := strings.SplitN(strings.TrimPrefix(data, "hzsu:"), ":", 3); len(p) == 3 {
