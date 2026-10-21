@@ -1,8 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader, Meter } from '@cloudflare/kumo'
-import { ArrowClockwise, ArrowRight, GlobeHemisphereWest, Plus } from '@phosphor-icons/react'
-import { api, ApiError, fallbackCopy, faNum, gb, gbf, mem, num, setToken, TG, token } from './lib'
-import Cloudflare from './Cloudflare'
+import {
+  ArrowClockwise,
+  ArrowCounterClockwise,
+  ArrowRight,
+  ArrowUp,
+  ArrowsClockwise,
+  Camera,
+  CaretLeft,
+  CheckCircle,
+  Copy,
+  GlobeHemisphereWest,
+  Key,
+  PencilSimple,
+  Plus,
+  Power,
+  Scissors,
+  Trash,
+  WarningCircle,
+  Wrench,
+} from '@phosphor-icons/react'
+import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
+
+const Cloudflare = lazy(() => import('./Cloudflare'))
 
 /* ---------------- types ---------------- */
 
@@ -94,7 +114,9 @@ export default function App() {
   const [phase, setPhase] = useState<'boot' | 'ready' | 'error'>('boot')
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
-  const [provider, setProvider] = useState<'hz' | 'cf'>('hz')
+  const [provider, setProvider] = useState<'hz' | 'cf'>(() =>
+    sessionStorage.getItem('cg_provider') === 'cf' ? 'cf' : 'hz',
+  )
   const cfBack = useRef<() => void>(() => {})
   const [stack, setStack] = useState<View[]>([])
   const [q, setQ] = useState('')
@@ -111,14 +133,20 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<{ t: string; err?: boolean } | null>(null)
   const optsCache = useRef<Record<string, Options>>({})
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const scrollPos = useRef<Record<string, number>>({})
+
+  useEffect(() => {
+    sessionStorage.setItem('cg_provider', provider)
+  }, [provider])
 
   function bump(n: number) {
     setBusy((b) => Math.max(0, b + n))
   }
   function toast(t: string, err = false) {
     setToastMsg({ t, err })
+    haptic(err ? 'error' : 'success')
     clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastMsg(null), 3200)
+    toastTimer.current = setTimeout(() => setToastMsg(null), err ? 3200 : 2100)
   }
   async function copy(v: string) {
     try {
@@ -256,10 +284,15 @@ export default function App() {
 
   /* ---------------- navigation ---------------- */
 
+  function vkey(v: View) {
+    return v.v + ':' + String((v as any).acc || '') + ':' + String((v as any).id || '')
+  }
   function push(v: View) {
+    scrollPos.current[vkey(cur)] = window.scrollY
     setStack((s) => [...s, cur])
     setCur(v)
     setQ('')
+    requestAnimationFrame(() => window.scrollTo(0, 0))
   }
   function goBack() {
     if (provider === 'cf') {
@@ -284,9 +317,12 @@ export default function App() {
       return
     }
     if (stack.length) {
-      setCur(stack[stack.length - 1])
+      const target = stack[stack.length - 1]
+      scrollPos.current[vkey(cur)] = window.scrollY
+      setCur(target)
       setStack(stack.slice(0, -1))
       setQ('')
+      requestAnimationFrame(() => window.scrollTo(0, scrollPos.current[vkey(target)] || 0))
       return
     }
     if (TG) TG.close()
@@ -294,6 +330,7 @@ export default function App() {
   backRef.current = goBack
 
   function reload() {
+    setViewErr('')
     if (cur.v === 'create') {
       setOpts(null)
       optsCache.current = {}
@@ -480,6 +517,10 @@ export default function App() {
       toast('نام سرور را وارد کن', true)
       return
     }
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/i.test(name)) {
+      toast('نام فقط حروف انگلیسی، عدد و خط تیره باشد', true)
+      return
+    }
     const st = cur
     setModal({
       kind: 'confirm',
@@ -537,11 +578,27 @@ export default function App() {
             : 'ساخت سرور'
 
   function body() {
-    if (viewErr) return <Empty title="خطا" description={viewErr} />
+    if (viewErr) {
+      return (
+        <div className="cc-card cc-error-card" role="alert">
+          <div className="cc-error-ico">
+            <WarningCircle size={24} />
+          </div>
+          <div className="cc-name">مشکلی پیش آمد</div>
+          <div className="cc-sub">{viewErr}</div>
+          <Button variant="primary" icon={ArrowClockwise} onClick={reload}>
+            تلاش دوباره
+          </Button>
+        </div>
+      )
+    }
     if (cur.v === 'accounts') {
       return (
         <>
-          {!accounts.length && <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />}
+          {!accounts.length && busy > 0 && <AppSkeleton />}
+          {!accounts.length && busy === 0 && (
+            <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />
+          )}
           {accounts.map((a) => (
             <LayerCard
               key={a.i}
@@ -559,7 +616,7 @@ export default function App() {
                 <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
                 <div className="cc-sub">{a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}</div>
               </div>
-              <span className="cc-chev">›</span>
+              <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
             </LayerCard>
           ))}
           <div className="cc-hint cc-center cc-mt">هر اکانت را انتخاب کن تا سرورها و آی‌پی‌ها را ببینی.</div>
@@ -596,7 +653,8 @@ export default function App() {
             </Button>
           </div>
           <div className="cc-section">{num(list.length)} سرور</div>
-          {list.length === 0 && <Empty title="سروری پیدا نشد" />}
+          {servers.length === 0 && busy > 0 && <AppSkeleton />}
+          {list.length === 0 && busy === 0 && <Empty title="سروری پیدا نشد" />}
           {list.map((s) => (
             <LayerCard
               key={s.id}
@@ -625,7 +683,7 @@ export default function App() {
     }
 
     if (cur.v === 'server') {
-      if (!server) return null
+      if (!server) return busy > 0 ? <AppSkeleton rows={3} /> : null
       const s = server
       const tr = s.traffic || ({} as Traffic)
       const pct = Math.min(100, Number(tr.used_pct || 0))
@@ -666,7 +724,7 @@ export default function App() {
             </div>
             <div className="cc-kv">
               <span>ساخت</span>
-              <span>{(s.created || '').slice(0, 10) || '—'}</span>
+              <span>{faDate(s.created)}</span>
             </div>
             <div className="cc-kv">
               <span>هزینه</span>
@@ -684,19 +742,20 @@ export default function App() {
 
           <div className="cc-actions">
             {s.status === 'running' ? (
-              <Button variant="secondary" onClick={() => runAction('poweroff', { id: s.id })}>
-                ⏻ خاموش
+              <Button variant="secondary" icon={Power} onClick={() => runAction('poweroff', { id: s.id })}>
+                خاموش
               </Button>
             ) : (
-              <Button variant="primary" onClick={() => runAction('poweron', { id: s.id })}>
-                ⏻ روشن
+              <Button variant="primary" icon={Power} onClick={() => runAction('poweron', { id: s.id })}>
+                روشن
               </Button>
             )}
-            <Button variant="secondary" onClick={() => runAction('reboot', { id: s.id })}>
-              ↻ ری‌بوت
+            <Button variant="secondary" icon={ArrowClockwise} onClick={() => runAction('reboot', { id: s.id })}>
+              ری‌بوت
             </Button>
             <Button
               variant="secondary"
+              icon={ArrowCounterClockwise}
               onClick={() =>
                 runAction('reset', {
                   id: s.id,
@@ -706,10 +765,11 @@ export default function App() {
                 })
               }
             >
-              ⟳ ریست سخت
+              ریست سخت
             </Button>
             <Button
               variant="secondary"
+              icon={Key}
               onClick={() =>
                 runAction('reset_password', {
                   id: s.id,
@@ -719,10 +779,11 @@ export default function App() {
                 })
               }
             >
-              🔑 رمز روت
+              رمز روت
             </Button>
             <Button
               variant="secondary"
+              icon={PencilSimple}
               onClick={() =>
                 setModal({
                   kind: 'prompt',
@@ -739,10 +800,11 @@ export default function App() {
                 })
               }
             >
-              ✎ تغییر نام
+              تغییر نام
             </Button>
             <Button
               variant="secondary"
+              icon={Camera}
               onClick={() =>
                 setModal({
                   kind: 'prompt',
@@ -752,19 +814,20 @@ export default function App() {
                 })
               }
             >
-              📸 اسنپ‌شات
+              اسنپ‌شات
             </Button>
-            <Button variant="outline" onClick={() => void rebuildFlow(s.id)}>
-              💿 ریبیلد
+            <Button variant="outline" icon={Wrench} onClick={() => void rebuildFlow(s.id)}>
+              ریبیلد
             </Button>
-            <Button variant="outline" onClick={() => void resizeFlow(s.id)}>
-              ⬆ ارتقا
+            <Button variant="outline" icon={ArrowUp} onClick={() => void resizeFlow(s.id)}>
+              ارتقا
             </Button>
-            <Button variant="outline" onClick={() => void ipAssignFlow(s.id)}>
-              🌐 اتصال IP
+            <Button variant="outline" icon={GlobeHemisphereWest} onClick={() => void ipAssignFlow(s.id)}>
+              اتصال IP
             </Button>
             <Button
               variant="outline"
+              icon={ArrowsClockwise}
               onClick={() =>
                 runAction('ip_replace', {
                   id: s.id,
@@ -774,11 +837,12 @@ export default function App() {
                 })
               }
             >
-              ♻ تعویض IPv4
+              تعویض IPv4
             </Button>
             <Button
               className="cc-wide"
               variant="secondary-destructive"
+              icon={Scissors}
               onClick={() =>
                 runAction('ip_unassign', {
                   id: s.id,
@@ -789,11 +853,12 @@ export default function App() {
                 })
               }
             >
-              ✂ حذف IPv4 اختصاصی
+              حذف IPv4 اختصاصی
             </Button>
             <Button
               className="cc-wide"
               variant="secondary-destructive"
+              icon={Scissors}
               onClick={() =>
                 runAction('ip_unassign', {
                   id: s.id,
@@ -804,11 +869,12 @@ export default function App() {
                 })
               }
             >
-              ✂ حذف IPv6 اختصاصی
+              حذف IPv6 اختصاصی
             </Button>
             <Button
               className="cc-wide"
               variant="destructive"
+              icon={Trash}
               onClick={() =>
                 runAction('delete', {
                   id: s.id,
@@ -818,7 +884,7 @@ export default function App() {
                 })
               }
             >
-              🗑 حذف سرور
+              حذف سرور
             </Button>
           </div>
 
@@ -829,12 +895,14 @@ export default function App() {
               <div className="cc-grow">
                 <div className="cc-name">{sn.name || sn.id}</div>
                 <div className="cc-sub">
-                  {gb(sn.size_gb)} · {(sn.created || '').slice(0, 10)}
+                  {gb(sn.size_gb)} · {faDate(sn.created)}
                 </div>
               </div>
               <Button
                 variant="secondary-destructive"
                 size="sm"
+                icon={Trash}
+                aria-label="حذف اسنپ‌شات"
                 onClick={() =>
                   setModal({
                     kind: 'confirm',
@@ -844,9 +912,8 @@ export default function App() {
                     onOk: () => doAction({ op: 'snapshot_delete', id: s.id, arg: sn.id }),
                   })
                 }
-              >
-                حذف
-              </Button>
+              />
+
             </LayerCard>
           ))}
         </>
@@ -857,14 +924,15 @@ export default function App() {
       return (
         <>
           <div className="cc-grid2 cc-mb">
-            <Button variant="outline" onClick={() => setCur({ v: 'servers', acc: cur.acc })}>
-              → سرورها
+            <Button variant="outline" icon={ArrowRight} onClick={() => setCur({ v: 'servers', acc: cur.acc })}>
+              سرورها
             </Button>
             <Button variant="secondary" icon={ArrowClockwise} onClick={() => setCur((c) => ({ ...c }))}>
               بروزرسانی
             </Button>
           </div>
-          {ips.length === 0 && <Empty title="آی‌پی‌ای در استخر نیست" />}
+          {ips.length === 0 && busy > 0 && <AppSkeleton />}
+          {ips.length === 0 && busy === 0 && <Empty title="آی‌پی‌ای در استخر نیست" />}
           {ips.map((p) => {
             const c = p.check
             const badge = !c ? (
@@ -1016,19 +1084,36 @@ export default function App() {
   if (phase === 'error') {
     return (
       <div className="cc-main">
-        <Empty title="دسترسی نداریم" description={authErr} />
+        <div className="cc-card cc-error-card" role="alert">
+          <div className="cc-error-ico">
+            <WarningCircle size={24} />
+          </div>
+          <div className="cc-name">دسترسی نداریم</div>
+          <div className="cc-sub">{authErr}</div>
+          <Button variant="primary" icon={ArrowClockwise} onClick={() => window.location.reload()}>
+            تلاش دوباره
+          </Button>
+        </div>
       </div>
     )
   }
 
   if (provider === 'cf') {
     return (
-      <Cloudflare
-        onSwitch={() => setProvider('hz')}
-        onBackRef={(f) => {
-          cfBack.current = f
-        }}
-      />
+      <Suspense
+        fallback={
+          <div className="cc-boot">
+            <Loader size="lg" />
+          </div>
+        }
+      >
+        <Cloudflare
+          onSwitch={() => setProvider('hz')}
+          onBackRef={(f) => {
+            cfBack.current = f
+          }}
+        />
+      </Suspense>
     )
   }
 
@@ -1036,25 +1121,33 @@ export default function App() {
 
   return (
     <div className="cc-app">
+      <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
       <header className="cc-topbar">
         {showBack && (
           <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
         )}
         <h1 className="cc-title">{title}</h1>
         {cur.v !== 'create' && (
-          <Button variant="ghost" shape="square" icon={ArrowClockwise} aria-label="بروزرسانی" onClick={reload} />
+          <Button
+            className={busy > 0 ? 'cc-spin' : ''}
+            variant="ghost"
+            shape="square"
+            icon={ArrowClockwise}
+            aria-label="بروزرسانی"
+            onClick={reload}
+          />
         )}
       </header>
-      <main className="cc-main">
+      <main className="cc-main" aria-busy={busy > 0}>
         {(cur.v === 'accounts' || cur.v === 'servers') && <ProviderSwitch provider={provider} onChange={setProvider} />}
         {body()}
       </main>
-      {busy > 0 && (
-        <div className="cc-loading">
-          <Loader size="lg" />
+      {toastMsg && (
+        <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
+          {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
+          <span>{toastMsg.t}</span>
         </div>
       )}
-      {toastMsg && <div className={'cc-toast' + (toastMsg.err ? ' err' : '')}>{toastMsg.t}</div>}
       <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
     </div>
   )
@@ -1064,11 +1157,19 @@ export default function App() {
 
 function ProviderSwitch({ provider, onChange }: { provider: 'hz' | 'cf'; onChange: (p: 'hz' | 'cf') => void }) {
   return (
-    <div className="cc-provider">
-      <button className={'cc-provider-btn' + (provider === 'hz' ? ' on' : '')} onClick={() => onChange('hz')}>
+    <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
+      <button
+        className={'cc-provider-btn' + (provider === 'hz' ? ' on' : '')}
+        aria-pressed={provider === 'hz'}
+        onClick={() => onChange('hz')}
+      >
         هتزنر
       </button>
-      <button className={'cc-provider-btn' + (provider === 'cf' ? ' on' : '')} onClick={() => onChange('cf')}>
+      <button
+        className={'cc-provider-btn' + (provider === 'cf' ? ' on' : '')}
+        aria-pressed={provider === 'cf'}
+        onClick={() => onChange('cf')}
+      >
         کلادفلر
       </button>
     </div>
@@ -1162,7 +1263,7 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
             <Dialog.Title className="cc-dialog-title">رمز روت جدید</Dialog.Title>
             <div className="cc-secret cc-mono">{modal.password}</div>
             <div className="cc-dialog-actions">
-              <Button variant="secondary" onClick={() => onCopy(modal.password)}>
+              <Button variant="secondary" icon={Copy} onClick={() => onCopy(modal.password)}>
                 کپی
               </Button>
               <Button variant="primary" onClick={onClose}>
@@ -1187,7 +1288,7 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
             </div>
             <div className="cc-secret cc-mono">{modal.password}</div>
             <div className="cc-dialog-actions">
-              <Button variant="secondary" onClick={() => onCopy(`${modal.ip} root ${modal.password}`)}>
+              <Button variant="secondary" icon={Copy} onClick={() => onCopy(`${modal.ip} root ${modal.password}`)}>
                 کپی همه
               </Button>
               <Button
@@ -1205,5 +1306,19 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
         )}
       </Dialog>
     </Dialog.Root>
+  )
+}
+
+
+function AppSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <LayerCard key={i} className="cc-card cc-skel" aria-hidden="true">
+          <span className="cc-skel-line" style={{ width: 40 + ((i * 11) % 24) + '%' }} />
+          <span className="cc-skel-line" style={{ width: 64 + ((i * 9) % 18) + '%', height: 8 }} />
+        </LayerCard>
+      ))}
+    </>
   )
 }

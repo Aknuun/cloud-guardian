@@ -1,7 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader } from '@cloudflare/kumo'
-import { ArrowClockwise, ArrowRight, Star } from '@phosphor-icons/react'
-import { api, fallbackCopy, faNum, num, TG } from './lib'
+import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from '@cloudflare/kumo'
+import {
+  ArrowClockwise,
+  ArrowRight,
+  ArrowsClockwise,
+  Broom,
+  CaretDown,
+  CaretLeft,
+  ChartBar,
+  CheckCircle,
+  CheckSquare,
+  Clock,
+  Copy,
+  EnvelopeSimple,
+  Gear,
+  Globe,
+  Info,
+  Lifebuoy,
+  Link as LinkIcon,
+  MagnifyingGlass,
+  Pause,
+  PencilSimple,
+  Play,
+  Plus,
+  Star,
+  Trash,
+  UsersThree,
+  WarningCircle,
+  X,
+} from '@phosphor-icons/react'
+import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 
 /* ---------------- types ---------------- */
 
@@ -77,6 +105,8 @@ type Field = {
   value?: string
   password?: boolean
   select?: { value: string; label: string }[]
+  hint?: string
+  validate?: (v: string) => string | undefined
 }
 type PickItem = { id: string; title: string; sub?: string }
 type Dlg =
@@ -99,6 +129,12 @@ const ZONE_BADGE: Record<string, any> = {
 const TTL_STEPS = [1, 120, 300, 1800, 3600, 21600, 86400]
 const TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV']
 const PROXYABLE = ['A', 'AAAA', 'CNAME']
+const TAB_KEYS = ['records', 'settings', 'email', 'traffic'] as const
+type Tab = (typeof TAB_KEYS)[number]
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const HOST_RE = /^(?=.{1,253}$)(?!-)[a-z0-9_-]{1,63}(?:\.(?!-)[a-z0-9_-]{1,63})*\.?$/i
+const NAME_RE = /^(@|\*|(?=.{1,253}$)(?!-)[a-z0-9_*-]{1,63}(?:\.(?!-)[a-z0-9_*-]{1,63})*)$/i
 
 function statusLabel(s: string) {
   switch (s) {
@@ -128,16 +164,80 @@ function relName(name: string, zone: string) {
   if (name.endsWith('.' + zone)) return name.slice(0, -(zone.length + 1))
   return name
 }
+function isIPv4(v: string) {
+  const p = v.split('.')
+  return p.length === 4 && p.every((x) => /^\d{1,3}$/.test(x) && Number(x) <= 255)
+}
+function isIPv6(v: string) {
+  return v.includes(':') && /^[0-9a-f:]+$/i.test(v)
+}
+function validateRecord(type: string, name: string, content: string, priority: string, isNew: boolean) {
+  if (isNew && !name.trim()) return 'نام رکورد را وارد کن.'
+  if (isNew && !NAME_RE.test(name.trim())) return 'نام معتبر نیست؛ از حروف، عدد، خط تیره و نقطه استفاده کن.'
+  if (!content.trim()) return 'مقدار رکورد را وارد کن.'
+  if (type === 'A' && !isIPv4(content.trim())) return 'آی‌پی IPv4 معتبر نیست (مثلاً 1.2.3.4).'
+  if (type === 'AAAA' && !isIPv6(content.trim())) return 'آی‌پی IPv6 معتبر نیست.'
+  if (['CNAME', 'MX', 'NS'].includes(type) && !HOST_RE.test(content.trim()))
+    return 'میزبان معتبر نیست (مثلاً host.example.com).'
+  if (type === 'TXT' && content.length > 2048) return 'متن TXT حداکثر ۲۰۴۸ کاراکتر است.'
+  if (type === 'MX' && priority !== '') {
+    const n = Number(priority)
+    if (!Number.isInteger(n) || n < 0 || n > 65535) return 'اولویت باید عددی بین ۰ تا ۶۵۵۳۵ باشد.'
+  }
+  return ''
+}
+function riskySetting(key: string, value: string, current: string) {
+  if (key === 'ssl' && ['off', 'flexible'].includes(value))
+    return 'با این حالت، ارتباط بین کلادفلر و سرور شما رمزنگاری نمی‌شود و ممکن است سایت از دسترس خارج شود.'
+  if (key === 'min_tls_version' && ['1.0', '1.1'].includes(value))
+    return 'نسخه‌های قدیمی TLS امنیت سایت را کاهش می‌دهند.'
+  if (key === 'security_level' && ['off', 'low'].includes(value))
+    return 'با کاهش سطح امنیت، حملات خودکار کمتر مسدود می‌شوند.'
+  if (key === 'always_use_https' && value === 'off')
+    return 'با خاموش‌شدن این گزینه، بازدید بدون HTTPS ممکن می‌شود.'
+  if (key === 'automatic_https_rewrites' && value === 'off')
+    return 'لینک‌های HTTP به‌صورت خودکار به HTTPS تبدیل نمی‌شوند.'
+  if (key === 'tls_1_3' && value === 'off' && current === 'on')
+    return 'TLS 1.3 امن‌ترین نسخه است؛ خاموش‌کردن آن توصیه نمی‌شود.'
+  return ''
+}
+
+function isView(v: any): v is View {
+  if (!v || typeof v !== 'object') return false
+  if (!['zones', 'accounts', 'favs', 'search', 'zone', 'lbzones', 'lb', 'lbgroup'].includes(v.v)) return false
+  if (['zone', 'lb', 'lbgroup'].includes(v.v) && (typeof v.acc !== 'number' || typeof v.zid !== 'string')) return false
+  if (v.v === 'lbgroup' && typeof v.name !== 'string') return false
+  return true
+}
+function restoreCfState(): { view: View; stack: View[]; tab: Tab } | null {
+  try {
+    const raw = sessionStorage.getItem('cg_cf_state')
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (!isView(d.view)) return null
+    const stack = Array.isArray(d.stack) ? d.stack.filter(isView) : []
+    const tab: Tab = TAB_KEYS.includes(d.tab) ? d.tab : 'records'
+    return { view: d.view, stack, tab }
+  } catch {
+    return null
+  }
+}
 
 export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => void; onBackRef: (f: () => void) => void }) {
-  const [view, setView] = useState<View>({ v: 'zones' })
-  const [stack, setStack] = useState<View[]>([])
+  const [boot] = useState(restoreCfState)
+  const [view, setView] = useState<View>(boot?.view || { v: 'zones' })
+  const [stack, setStack] = useState<View[]>(boot?.stack || [])
   const [rev, setRev] = useState(0)
   const [busy, setBusy] = useState(0)
   const [toastMsg, setToastMsg] = useState<{ t: string; err?: boolean } | null>(null)
   const [dlg, setDlg] = useState<Dlg | null>(null)
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState<'records' | 'settings' | 'email' | 'traffic'>('records')
+  const [recQ, setRecQ] = useState('')
+  const [recType, setRecType] = useState('all')
+  const [newId, setNewId] = useState('')
+  const [searchErr, setSearchErr] = useState('')
+  const [searchBusy, setSearchBusy] = useState(false)
+  const [tab, setTab] = useState<Tab>(boot?.tab || 'records')
   const [err, setErr] = useState('')
 
   const [zones, setZones] = useState<CFZone[]>([])
@@ -163,11 +263,13 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   const [days, setDays] = useState(1)
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const scrollPos = useRef<Record<string, number>>({})
   const bump = (n: number) => setBusy((b) => Math.max(0, b + n))
   function toast(t: string, isErr = false) {
     setToastMsg({ t, err: isErr })
+    haptic(isErr ? 'error' : 'success')
     clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToastMsg(null), 3400)
+    toastTimer.current = setTimeout(() => setToastMsg(null), isErr ? 3200 : 2100)
   }
   async function copy(v: string, label = 'کپی شد') {
     try {
@@ -194,19 +296,32 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
 
   /* ---------------- navigation ---------------- */
 
+  function vkey(v: View) {
+    return v.v + ':' + String((v as any).acc || '') + ':' + String((v as any).zid || '') + ':' + String((v as any).name || '')
+  }
+  function saveScroll() {
+    scrollPos.current[vkey(view)] = window.scrollY
+  }
+  function jumpTo(y: number) {
+    requestAnimationFrame(() => window.scrollTo(0, Math.max(0, y)))
+  }
   function push(v: View) {
+    saveScroll()
     setStack((s) => [...s, view])
     setView(v)
-    setQ('')
     setErr('')
+    if (v.v === 'search') setQ('')
     if (v.v === 'zone') {
       setTab('records')
+      setRecQ('')
+      setRecType('all')
       setSel(new Set())
       setSelMode(false)
       setSettings(null)
       setEmail(null)
       setTraffic(null)
     }
+    jumpTo(0)
   }
   function goBack() {
     if (dlg) {
@@ -214,42 +329,61 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       return
     }
     if (stack.length) {
-      setView(stack[stack.length - 1])
+      const target = stack[stack.length - 1]
+      saveScroll()
+      setView(target)
       setStack(stack.slice(0, -1))
-      setQ('')
       setErr('')
+      jumpTo(scrollPos.current[vkey(target)] || 0)
       return
     }
     onSwitch()
+  }
+  function openTab(k: Tab) {
+    saveScroll()
+    setTab(k)
+    if (k === 'records') setRecQ('')
+    setErr('')
+    jumpTo(0)
   }
   onBackRef(goBack)
   useEffect(() => {
     if (TG && TG.BackButton) TG.BackButton.show()
   }, [view, stack.length, dlg])
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('cg_cf_state', JSON.stringify({ view, stack, tab }))
+    } catch {
+      /* ignore */
+    }
+  }, [view, stack, tab])
 
   /* ---------------- data ---------------- */
 
   useEffect(() => {
     let cancelled = false
+    const ac = new AbortController()
     setErr('')
     bump(1)
     ;(async () => {
       try {
         if (view.v === 'zones' || view.v === 'lbzones') {
-          const d = await api<{ zones: CFZone[]; accounts: CFAcc[] }>('/api/cf/zones')
+          const d = await api<{ zones: CFZone[]; accounts: CFAcc[] }>('/api/cf/zones', undefined, ac.signal)
           if (!cancelled) {
             setZones(d.zones || [])
             setAccs(d.accounts || [])
           }
         } else if (view.v === 'accounts') {
-          const d = await api<{ accounts: CFAcc[] }>('/api/cf/accounts')
+          const d = await api<{ accounts: CFAcc[] }>('/api/cf/accounts', undefined, ac.signal)
           if (!cancelled) setAccs(d.accounts || [])
         } else if (view.v === 'favs') {
-          const d = await api<{ items: FavItem[] }>('/api/cf/favs')
+          const d = await api<{ items: FavItem[] }>('/api/cf/favs', undefined, ac.signal)
           if (!cancelled) setFavs(d.items || [])
         } else if (view.v === 'zone') {
           const d = await api<{ zone: ZoneInfo; records: CFRec[] }>(
             '/api/cf/records?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid),
+            undefined,
+            ac.signal,
           )
           if (cancelled) return
           setZone(d.zone)
@@ -264,20 +398,24 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             setPendingEditor(null)
           }
           if (tab === 'settings') {
-            const s = await api<any>('/api/cf/settings?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid))
+            const s = await api<any>('/api/cf/settings?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid), undefined, ac.signal)
             if (!cancelled) setSettings({ groups: s.groups || [], dev: !!s.dev, paused: !!s.paused })
           } else if (tab === 'email') {
-            const e = await api<EmailData>('/api/cf/email?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid))
+            const e = await api<EmailData>('/api/cf/email?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid), undefined, ac.signal)
             if (!cancelled) setEmail(e)
           } else if (tab === 'traffic') {
             const t = await api<any>(
               '/api/cf/traffic?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid) + '&days=' + days,
+              undefined,
+              ac.signal,
             )
             if (!cancelled) setTraffic({ days: t.days, total: t.total, top: t.top || [] })
           }
         } else if (view.v === 'lb') {
           const d = await api<{ zone: ZoneInfo; groups: LbGroup[] }>(
             '/api/cf/lbgroups?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid),
+            undefined,
+            ac.signal,
           )
           if (!cancelled) {
             setZone(d.zone)
@@ -286,6 +424,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
         } else if (view.v === 'lbgroup') {
           const d = await api<{ zone: ZoneInfo; name: string; entries: LbEntry[] }>(
             '/api/cf/lb?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid) + '&name=' + encodeURIComponent(view.name),
+            undefined,
+            ac.signal,
           )
           if (!cancelled) {
             setZone(d.zone)
@@ -294,7 +434,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           }
         }
       } catch (e: any) {
-        if (!cancelled) {
+        if (!cancelled && e && e.name !== 'AbortError') {
           setErr(e.message || 'خطا')
           toast(e.message || 'خطا', true)
         }
@@ -304,6 +444,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     })()
     return () => {
       cancelled = true
+      ac.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, rev, tab, days, pendingRid])
@@ -312,30 +453,45 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     setRev((r) => r + 1)
   }
   useEffect(() => {
+    if (!newId) return
+    const el = document.getElementById('rec-' + newId)
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }))
+    const t = setTimeout(() => setNewId(''), 3200)
+    return () => clearTimeout(t)
+  }, [newId, records])
+  useEffect(() => {
     if (view.v !== 'search') return
     const term = q.trim()
+    setSearchErr('')
     if (term.length < 2) {
       setSearch(null)
+      setSearchBusy(false)
       return
     }
     let cancelled = false
+    const ac = new AbortController()
+    setSearchBusy(true)
     const t = setTimeout(async () => {
-      bump(1)
       try {
-        const d = await api<{ zones: CFZone[]; records: any[] }>('/api/cf/search?q=' + encodeURIComponent(term))
+        const d = await api<{ zones: CFZone[]; records: any[] }>(
+          '/api/cf/search?q=' + encodeURIComponent(term),
+          undefined,
+          ac.signal,
+        )
         if (!cancelled) setSearch({ zones: d.zones || [], records: d.records || [] })
       } catch (e: any) {
-        if (!cancelled) toast(e.message || 'خطا', true)
+        if (!cancelled && e && e.name !== 'AbortError') setSearchErr(e.message || 'خطا')
       } finally {
-        bump(-1)
+        if (!cancelled) setSearchBusy(false)
       }
-    }, 350)
+    }, 320)
     return () => {
       cancelled = true
       clearTimeout(t)
+      ac.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, q])
+  }, [view, q, rev])
 
 
   async function post(path: string, body: any, keep = false) {
@@ -385,7 +541,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       const n = counts[rel] || counts[fq] || 0
       setDlg({
         k: 'list',
-        title: '📊 ترافیک امروز',
+        title: 'ترافیک امروز',
         rows: [
           { title: rec.label, sub: 'کوئری DNS امروز' },
           { title: faNum(n) + ' کوئری', sub: 'مجموع دامنه: ' + faNum(t.total || 0) },
@@ -404,7 +560,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       const d = await api<any>('/api/cf/refs?acc=' + acc + '&zid=' + encodeURIComponent(zid) + '&rid=' + encodeURIComponent(rec.id))
       setDlg({
         k: 'list',
-        title: '🔗 CNAMEهای وارده',
+        title: 'CNAMEهای وارده',
         rows: (d.refs || []).map((r: any) => ({ title: r.name, sub: r.zone })),
         empty: 'هیچ دامنه‌ای به این رکورد CNAME نکرده است.',
       })
@@ -423,11 +579,22 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       setSelMode(false)
     }
   }
+  function confirmBulkDelete() {
+    if (sel.size === 0) return
+    setDlg({
+      k: 'confirm',
+      title: 'حذف گروهی رکوردها',
+      desc: `${faNum(sel.size)} رکورد انتخاب‌شده برای همیشه حذف می‌شوند.`,
+      danger: true,
+      okText: 'حذف',
+      onOk: () => bulk('del'),
+    })
+  }
 
   function bulkEdit() {
     setDlg({
       k: 'form',
-      title: '✏️ تغییر مقدار',
+      title: 'تغییر مقدار',
       desc: 'مقدار جدید برای همهٔ رکوردهای انتخاب‌شده اعمال می‌شود.',
       fields: [{ key: 'content', label: 'مقدار جدید', placeholder: '1.2.3.4 یا host.example.com' }],
       okText: 'اعمال',
@@ -437,11 +604,17 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function bulkType() {
     setDlg({
       k: 'pick',
-      title: '🔄 تغییر نوع',
+      title: 'تغییر نوع رکوردها',
       items: ['A', 'AAAA', 'CNAME'].map((t) => ({ id: t, title: t })),
       onPick: (t) => {
-        setDlg(null)
-        void bulk('type', { type: t })
+        setDlg({
+          k: 'confirm',
+          title: 'تغییر نوع گروهی',
+          desc: `نوع ${faNum(sel.size)} رکورد به ${t} تغییر می‌کند؛ مقدارها باید با نوع جدید سازگار باشند.`,
+          danger: true,
+          okText: 'تغییر نوع',
+          onOk: () => bulk('type', { type: t }),
+        })
       },
     })
   }
@@ -452,18 +625,35 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     if (view.v !== 'zone') return
     void post('/api/cf/settings', { op: 'set', acc: view.acc, zid: view.zid, key, value })
   }
+  function applySetting(it: SetItem, value: string) {
+    const reason = riskySetting(it.key, value, it.value)
+    if (!reason) {
+      setSetting(it.key, value)
+      return
+    }
+    const label = it.values?.find((v) => v.v === value)?.l || (value === 'on' ? 'روشن' : value === 'off' ? 'خاموش' : value)
+    setDlg({
+      k: 'confirm',
+      title: 'تغییر تنظیم حساس',
+      desc: `${it.label} به «${label}» تغییر کند؟
+${reason}`,
+      danger: true,
+      okText: 'اعمال',
+      onOk: () => setSetting(it.key, value),
+    })
+  }
 
   function openZoneDetails() {
     if (!zone) return
     setDlg({
       k: 'list',
-      title: 'ℹ️ جزئیات دامنه',
+      title: 'جزئیات دامنه',
       rows: [
         { title: zone.name, sub: 'نام' },
         { title: zone.id, sub: 'شناسه' },
         { title: statusLabel(zone.status), sub: 'وضعیت' },
         { title: zone.plan || '—', sub: 'پلن' },
-        { title: zone.created || '—', sub: 'ساخت' },
+        { title: faDate(zone.created), sub: 'ساخت' },
         { title: zone.account || '—', sub: 'اکانت' },
         ...(zone.ns || []).map((n) => ({ title: n, sub: 'نیم‌سرور' })),
       ],
@@ -475,10 +665,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     const verified = (email.dests || []).filter((d) => d.verified)
     setDlg({
       k: 'pick',
-      title: '📥 مقصد catch-all',
+      title: 'مقصد catch-all',
       items: [
         ...verified.map((d) => ({ id: d.email, title: d.email })),
-        { id: '__off', title: '⏸ غیرفعال کردن', sub: 'catch-all خاموش شود' },
+        { id: '__off', title: 'غیرفعال کردن', sub: 'catch-all خاموش شود' },
       ],
       onPick: (id) => {
         setDlg(null)
@@ -531,20 +721,20 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     const count = filtered.length
     return (
       <>
-        <Input
-          className="cc-input cc-mb"
-          placeholder="جست‌وجوی دامنه…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <div className="cc-chips">
-          <button className={'cc-chip' + (accFilter === -1 ? ' on' : '')} onClick={() => setAccFilter(-1)}>
+        <SearchInput placeholder="جست‌وجوی دامنه…" value={q} onChange={setQ} />
+        <div className="cc-chips" role="group" aria-label="فیلتر اکانت">
+          <button
+            className={'cc-chip' + (accFilter === -1 ? ' on' : '')}
+            aria-pressed={accFilter === -1}
+            onClick={() => setAccFilter(-1)}
+          >
             همه اکانت‌ها
           </button>
           {accs.map((a) => (
             <button
               key={a.i}
               className={'cc-chip' + (accFilter === a.i ? ' on' : '')}
+              aria-pressed={accFilter === a.i}
               onClick={() => setAccFilter(a.i)}
             >
               {a.name}
@@ -552,7 +742,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           ))}
         </div>
         <div className="cc-section">{num(count)} دامنه</div>
-        {count === 0 && !busy && <Empty title={emptyText} />}
+        {count === 0 && !busy && !err && <Empty title={emptyText} />}
+        {zones.length === 0 && busy > 0 && <SkeletonList />}
         {filtered.map((z) => (
           <LayerCard
             key={z.id}
@@ -567,7 +758,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
               <div className="cc-sub">{z.accName || 'اکانت ' + (z.acc + 1)}</div>
             </div>
             <Badge variant={ZONE_BADGE[z.status] || 'secondary'}>{statusLabel(z.status)}</Badge>
-            <span className="cc-chev">›</span>
+            <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
           </LayerCard>
         ))}
       </>
@@ -577,28 +768,31 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function zonesPage() {
     return (
       <>
-        <div className="cc-provider">
-          <button className="cc-provider-btn" onClick={onSwitch}>
+        <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
+          <button className="cc-provider-btn" aria-pressed={false} onClick={onSwitch}>
             هتزنر
           </button>
-          <button className="cc-provider-btn on">کلادفلر</button>
+          <button className="cc-provider-btn on" aria-pressed={true}>
+            کلادفلر
+          </button>
         </div>
         <div className="cc-grid2 cc-mb">
           <Button variant="secondary" icon={Star} onClick={() => push({ v: 'favs' })}>
             منتخب‌ها
           </Button>
-          <Button variant="secondary" onClick={() => push({ v: 'accounts' })}>
-            👤 اکانت‌ها
+          <Button variant="secondary" icon={UsersThree} onClick={() => push({ v: 'accounts' })}>
+            اکانت‌ها
           </Button>
         </div>
         <Button
           variant="primary"
+          icon={Plus}
           className="cc-wide cc-mb"
           onClick={() => {
             const active = zones.filter((z) => z.status === 'active')
             setDlg({
               k: 'pick',
-              title: '➕ افزودن رکورد به کدام دامنه؟',
+              title: 'افزودن رکورد به کدام دامنه؟',
               items: (active.length ? active : zones).map((z) => ({
                 id: z.acc + '|' + z.id,
                 title: z.name,
@@ -614,14 +808,14 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             })
           }}
         >
-          ➕ افزودن رکورد
+          افزودن رکورد
         </Button>
         <div className="cc-grid2 cc-mb">
-          <Button variant="outline" onClick={() => push({ v: 'search' })}>
-            🔍 جست‌وجوی رکورد
+          <Button variant="outline" icon={MagnifyingGlass} onClick={() => push({ v: 'search' })}>
+            جست‌وجوی رکورد
           </Button>
-          <Button variant="outline" onClick={() => push({ v: 'lbzones' })}>
-            🛟 لود بالانسر
+          <Button variant="outline" icon={Lifebuoy} onClick={() => push({ v: 'lbzones' })}>
+            لود بالانسر
           </Button>
         </div>
         {zonesBody(zones)}
@@ -644,7 +838,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function favsPage() {
     return (
       <>
-        {favs.length === 0 && !busy && <Empty title="منتخب‌ها خالی است" description="از داخل رکورد، ستاره را بزن." />}
+        {favs.length === 0 && !busy && !err && (
+          <Empty title="منتخب‌ها خالی است" description="از داخل رکورد، ستاره را بزن." />
+        )}
+        {favs.length === 0 && busy > 0 && <SkeletonList />}
         {favs.map((f) => (
           <LayerCard key={f.rid} className="cc-card cc-row">
             <div className="cc-grow">
@@ -678,16 +875,16 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function searchPage() {
     return (
       <>
-        <Input
+        <SearchInput
           autoFocus
-          className="cc-input cc-mb"
           placeholder="نام رکورد، آی‌پی یا دامنه…"
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={setQ}
         />
         {!search && q.trim().length < 2 && <div className="cc-hint cc-center">حداقل ۲ حرف وارد کن.</div>}
-        {!search && q.trim().length >= 2 && <div className="cc-center cc-pad"><Loader /></div>}
-        {search && (
+        {searchErr && <ErrorState message={searchErr} onRetry={refresh} />}
+        {!search && !searchErr && q.trim().length >= 2 && searchBusy && <SkeletonList />}
+        {search && !searchErr && (
           <>
             {search.zones.length > 0 && <div className="cc-section">{num(search.zones.length)} دامنه</div>}
             {search.zones.map((z) => (
@@ -726,7 +923,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function accountsPage() {
     return (
       <>
-        {accs.length === 0 && !busy && <Empty title="اکانتی ثبت نشده" description="توکن کلادفلر را اضافه کن." />}
+        {accs.length === 0 && !busy && !err && (
+          <Empty title="اکانتی ثبت نشده" description="توکن کلادفلر را اضافه کن." />
+        )}
+        {accs.length === 0 && busy > 0 && <SkeletonList />}
         {accs.map((a) => (
           <LayerCard key={a.i} className="cc-card cc-row">
             <div className="cc-grow">
@@ -736,6 +936,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             <Button
               variant="secondary-destructive"
               size="sm"
+              icon={Trash}
+              aria-label="حذف اکانت"
               onClick={() =>
                 setDlg({
                   k: 'confirm',
@@ -759,11 +961,22 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           onClick={() =>
             setDlg({
               k: 'form',
-              title: '➕ افزودن اکانت کلادفلر',
+              title: 'افزودن اکانت کلادفلر',
               desc: 'توکن باید دسترسی Zone → DNS → Edit و Email Routing داشته باشد.',
               fields: [
-                { key: 'name', label: 'نام اکانت', placeholder: 'مثلاً main' },
-                { key: 'token', label: 'API Token', placeholder: 'توکن کلادفلر', password: true },
+                {
+                  key: 'name',
+                  label: 'نام اکانت',
+                  placeholder: 'مثلاً main',
+                  validate: (v) => (v.trim() ? undefined : 'نام اکانت را وارد کن.'),
+                },
+                {
+                  key: 'token',
+                  label: 'API Token',
+                  placeholder: 'توکن کلادفلر',
+                  password: true,
+                  validate: (v) => (v.trim().length >= 20 ? undefined : 'توکن معتبر نیست.'),
+                },
               ],
               okText: 'افزودن',
               onSubmit: async (v) => {
@@ -772,7 +985,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             })
           }
         >
-          ➕ افزودن اکانت
+          افزودن اکانت
         </Button>
       </>
     )
@@ -785,9 +998,15 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     return (
       <LayerCard
         key={r.id}
-        className={'cc-card cc-row cc-tap' + (selMode ? ' cc-selecting' : '')}
+        id={'rec-' + r.id}
+        className={'cc-card cc-row cc-tap' + (selMode ? ' cc-selecting' : '') + (newId === r.id ? ' cc-new' : '')}
+        role={selMode ? 'checkbox' : 'button'}
+        aria-checked={selMode ? checked : undefined}
+        aria-label={relName(r.name, zone?.name || '') + ' ' + r.type + ' ' + r.content}
+        tabIndex={0}
         onClick={() => {
           if (view.v !== 'zone') return
+          haptic('light')
           if (selMode) {
             const s = new Set(sel)
             if (checked) s.delete(r.id)
@@ -797,9 +1016,17 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             setDlg({ k: 'record', acc: view.acc, zid: view.zid, zone: zone?.name || '', rec: r })
           }
         }}
+        onKeyDown={(e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            ;(e.currentTarget as HTMLElement).click()
+          }
+        }}
       >
         {selMode ? (
-          <span className={'cc-check' + (checked ? ' on' : '')}>{checked ? '✓' : ''}</span>
+          <span className={'cc-check' + (checked ? ' on' : '')} aria-hidden="true">
+            {checked ? '✓' : ''}
+          </span>
         ) : (
           <Badge variant={PROXYABLE.includes(r.type) && r.proxied ? 'success' : 'secondary'}>{r.type}</Badge>
         )}
@@ -815,61 +1042,89 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             </div>
           )}
         </div>
-        {!selMode && <span className="cc-chev">›</span>}
+        {!selMode && <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>}
       </LayerCard>
     )
   }
 
   function recordsTab() {
     if (view.v !== 'zone') return null
-    const ql = q.trim().toLowerCase()
+    const ql = recQ.trim().toLowerCase()
     const list = records.filter(
       (r) =>
-        !ql ||
-        r.name.toLowerCase().includes(ql) ||
-        r.content.toLowerCase().includes(ql) ||
-        r.type.toLowerCase() === ql,
+        (recType === 'all' || r.type === recType) &&
+        (!ql ||
+          r.name.toLowerCase().includes(ql) ||
+          r.content.toLowerCase().includes(ql) ||
+          r.type.toLowerCase() === ql),
     )
+    const types = Array.from(new Set(records.map((r) => r.type)))
+    function selectAll() {
+      if (sel.size === list.length) setSel(new Set())
+      else setSel(new Set(list.map((r) => r.id)))
+    }
     return (
       <>
         <div className="cc-grid2 cc-mb">
           <Button
             variant="primary"
+            icon={Plus}
             onClick={() => setDlg({ k: 'editor', acc: view.acc, zid: view.zid, zone: zone?.name || '' })}
           >
-            ➕ رکورد
+            رکورد
           </Button>
           <Button
             variant={selMode ? 'secondary' : 'outline'}
+            icon={selMode ? X : CheckSquare}
             onClick={() => {
               setSelMode(!selMode)
               setSel(new Set())
             }}
           >
-            {selMode ? '✅ پایان' : '🗂 گروهی'}
+            {selMode ? 'پایان' : 'انتخاب گروهی'}
           </Button>
         </div>
         {selMode && (
-          <div className="cc-bulkbar">
-            <button className="cc-bulkbtn red" disabled={!sel.size} onClick={() => bulk('del')}>
-              🗑 حذف
+          <div className="cc-bulkbar" role="toolbar" aria-label="عملیات گروهی">
+            <span className="cc-bulkcount">{faNum(sel.size)} انتخاب</span>
+            <button className="cc-bulkbtn" onClick={selectAll} disabled={list.length === 0}>
+              {sel.size === list.length && list.length > 0 ? <X size={14} /> : <CheckSquare size={14} />}
+              {sel.size === list.length && list.length > 0 ? 'پاک‌کردن' : 'همه'}
+            </button>
+            <button className="cc-bulkbtn red" disabled={!sel.size} onClick={confirmBulkDelete}>
+              <Trash size={14} /> حذف
             </button>
             <button className="cc-bulkbtn" disabled={!sel.size} onClick={bulkEdit}>
-              ✏️ مقدار
+              <PencilSimple size={14} /> مقدار
             </button>
             <button className="cc-bulkbtn" disabled={!sel.size} onClick={bulkType}>
-              🔄 نوع
+              <ArrowsClockwise size={14} /> نوع
             </button>
             <button className="cc-bulkbtn green" disabled={!sel.size} onClick={() => bulk('fav')}>
-              ⭐ منتخب
+              <Star size={14} /> منتخب
             </button>
           </div>
         )}
-        <Input className="cc-input cc-mb" placeholder="جست‌وجو در رکوردها…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <SearchInput placeholder="جست‌وجو در رکوردها…" value={recQ} onChange={setRecQ} />
+        {types.length > 1 && (
+          <div className="cc-chips" role="group" aria-label="فیلتر نوع رکورد">
+            {['all', ...types].map((t) => (
+              <button
+                key={t}
+                className={'cc-chip' + (recType === t ? ' on' : '')}
+                aria-pressed={recType === t}
+                onClick={() => setRecType(t)}
+              >
+                {t === 'all' ? 'همه' : t}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="cc-section">
           {num(list.length)} رکورد{sel.size > 0 ? ' · ' + faNum(sel.size) + ' انتخاب' : ''}
         </div>
-        {list.length === 0 && !busy && <Empty title="رکوردی نیست" />}
+        {records.length === 0 && busy > 0 && <SkeletonList />}
+        {list.length === 0 && !busy && !err && <Empty title="رکوردی نیست" />}
         {list.map(recordRow)}
       </>
     )
@@ -877,41 +1132,50 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
 
   function settingsTab() {
     if (view.v !== 'zone') return null
-    if (!settings) return <div className="cc-center cc-pad"><Loader /></div>
+    if (!settings) return <SkeletonList rows={2} />
     return (
       <>
-        <div className="cc-grid2 cc-mb">
-          <Button
-            className="cc-green"
-            onClick={() =>
-              setDlg({
-                k: 'confirm',
-                title: settings.dev ? 'خاموش کردن حالت توسعه' : 'روشن کردن حالت توسعه',
-                desc: 'حالت توسعه کش را دور می‌زند و برای تست مناسب است.',
-                onOk: async () => {
-                  if (view.v === 'zone') await post('/api/cf/settings', { op: 'dev', acc: view.acc, zid: view.zid })
-                },
-              })
-            }
-          >
-            🚧 حالت توسعه: {settings.dev ? 'روشن' : 'خاموش'}
-          </Button>
-          <Button
-            variant="secondary-destructive"
-            onClick={() =>
-              setDlg({
-                k: 'confirm',
-                title: 'پاک‌سازی کش',
-                desc: 'کل کش دامنه پاک شود؟',
-                onOk: async () => {
-                  if (view.v === 'zone') await post('/api/cf/settings', { op: 'purge', acc: view.acc, zid: view.zid })
-                },
-              })
-            }
-          >
-            🧹 پاک‌سازی کش
-          </Button>
-        </div>
+        <LayerCard className="cc-card">
+          <div className="cc-kv">
+            <span>حالت توسعه</span>
+            <Switch
+              checked={settings.dev}
+              aria-label="حالت توسعه"
+              onCheckedChange={() =>
+                setDlg({
+                  k: 'confirm',
+                  title: settings.dev ? 'خاموش کردن حالت توسعه' : 'روشن کردن حالت توسعه',
+                  desc: 'حالت توسعه کش را دور می‌زند و برای تست مناسب است.',
+                  onOk: async () => {
+                    if (view.v === 'zone')
+                      await post('/api/cf/settings', { op: 'dev', acc: view.acc, zid: view.zid })
+                  },
+                })
+              }
+            />
+          </div>
+          <div className="cc-kv">
+            <span>کش دامنه</span>
+            <Button
+              size="sm"
+              variant="secondary-destructive"
+              icon={Broom}
+              onClick={() =>
+                setDlg({
+                  k: 'confirm',
+                  title: 'پاک‌سازی کش',
+                  desc: 'کل کش دامنه پاک شود؟',
+                  onOk: async () => {
+                    if (view.v === 'zone')
+                      await post('/api/cf/settings', { op: 'purge', acc: view.acc, zid: view.zid })
+                  },
+                })
+              }
+            >
+              پاک‌سازی
+            </Button>
+          </div>
+        </LayerCard>
         {settings.groups.map((g) => (
           <div key={g.key}>
             <div className="cc-section">{g.title}</div>
@@ -920,18 +1184,16 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 <div className="cc-kv" key={it.key}>
                   <span>{it.label}</span>
                   {it.kind === 'bool' ? (
-                    <Button
-                      size="sm"
-                      className={it.value === 'on' ? 'cc-green' : ''}
-                      variant={it.value === 'on' ? undefined : 'secondary'}
-                      onClick={() => setSetting(it.key, it.value === 'on' ? 'off' : 'on')}
-                    >
-                      {it.value === 'on' ? 'روشن' : 'خاموش'}
-                    </Button>
+                    <Switch
+                      checked={it.value === 'on'}
+                      aria-label={it.label}
+                      onCheckedChange={(on) => applySetting(it, on ? 'on' : 'off')}
+                    />
                   ) : (
                     <Button
                       size="sm"
                       variant="outline"
+                      icon={CaretDown}
                       onClick={() =>
                         setDlg({
                           k: 'pick',
@@ -943,12 +1205,12 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                           })),
                           onPick: (v) => {
                             setDlg(null)
-                            setSetting(it.key, v)
+                            applySetting(it, v)
                           },
                         })
                       }
                     >
-                      {it.values?.find((v) => v.v === it.value)?.l || it.value} ▾
+                      {it.values?.find((v) => v.v === it.value)?.l || it.value}
                     </Button>
                   )}
                 </div>
@@ -957,12 +1219,12 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           </div>
         ))}
         <div className="cc-grid2 cc-mt">
-          <Button variant="outline" onClick={openZoneDetails}>
-            ℹ️ جزئیات دامنه
+          <Button variant="outline" icon={Info} onClick={openZoneDetails}>
+            جزئیات دامنه
           </Button>
           <Button
-            className={settings.paused ? 'cc-green' : ''}
-            variant={settings.paused ? undefined : 'secondary-destructive'}
+            variant={settings.paused ? 'primary' : 'secondary-destructive'}
+            icon={settings.paused ? Play : Pause}
             onClick={() =>
               setDlg({
                 k: 'confirm',
@@ -972,12 +1234,13 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                   : 'دامنه متوقف شود؟ سایت از دسترس خارج می‌شود.',
                 danger: !settings.paused,
                 onOk: async () => {
-                  if (view.v === 'zone') await post('/api/cf/settings', { op: 'pause', acc: view.acc, zid: view.zid })
+                  if (view.v === 'zone')
+                    await post('/api/cf/settings', { op: 'pause', acc: view.acc, zid: view.zid })
                 },
               })
             }
           >
-            {settings.paused ? '▶️ فعال‌سازی دامنه' : '⏸ توقف دامنه'}
+            {settings.paused ? 'فعال‌سازی دامنه' : 'توقف دامنه'}
           </Button>
         </div>
       </>
@@ -986,7 +1249,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
 
   function emailTab() {
     if (view.v !== 'zone') return null
-    if (!email) return <div className="cc-center cc-pad"><Loader /></div>
+    if (!email) return <SkeletonList rows={2} />
     if (!email.available) {
       return (
         <Empty
@@ -999,13 +1262,14 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       return (
         <>
           <LayerCard className="cc-card">
-            <div className="cc-name">✉️ ایمیل فوروارد</div>
+            <div className="cc-name">ایمیل فوروارد</div>
             <div className="cc-sub">
               با فعال‌سازی، رکوردهای MX/SPF خودکار ساخته می‌شوند. اگر سرویس ایمیل دیگری داری، خراب می‌شود.
             </div>
           </LayerCard>
           <Button
             className="cc-wide cc-green"
+            icon={EnvelopeSimple}
             onClick={() =>
               setDlg({
                 k: 'confirm',
@@ -1018,7 +1282,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
               })
             }
           >
-            ✉️ فعال‌سازی ایمیل
+            فعال‌سازی ایمیل
           </Button>
         </>
       )
@@ -1037,6 +1301,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             <Button
               variant="secondary-destructive"
               size="sm"
+              icon={Trash}
+              aria-label="حذف قانون"
               onClick={() =>
                 setDlg({
                   k: 'confirm',
@@ -1049,20 +1315,27 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                   },
                 })
               }
-            >
-              🗑
-            </Button>
+            />
+
           </LayerCard>
         ))}
         <Button
           className="cc-wide cc-green cc-mb"
+          icon={Plus}
           onClick={() =>
             setDlg({
               k: 'form',
-              title: '➕ آدرس جدید',
+              title: 'آدرس جدید',
               desc: 'آدرس محلی (مثلاً info) و مقصد تأییدشده را وارد کن.',
               fields: [
-                { key: 'addr', label: 'آدرس', placeholder: 'info' },
+                {
+                  key: 'addr',
+                  label: 'آدرس',
+                  placeholder: 'info',
+                  hint: 'فقط بخش قبل از @ را وارد کن.',
+                  validate: (v) =>
+                    /^[a-z0-9._%+-]+$/i.test(v.trim()) ? undefined : 'آدرس محلی معتبر نیست.',
+                },
                 {
                   key: 'dest',
                   label: 'مقصد',
@@ -1070,6 +1343,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                     ? verified.map((d) => ({ value: d.email, label: d.email }))
                     : undefined,
                   placeholder: 'you@gmail.com',
+                  validate: (v) => (EMAIL_RE.test(v.trim()) ? undefined : 'ایمیل مقصد معتبر نیست.'),
                 },
               ],
               okText: 'ساختن',
@@ -1080,10 +1354,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             })
           }
         >
-          ➕ آدرس فوروارد
+          آدرس فوروارد
         </Button>
 
-        <div className="cc-section">📥 catch-all</div>
+        <div className="cc-section">catch-all</div>
         <LayerCard className="cc-card cc-row">
           <div className="cc-grow">
             <div className="cc-sub">ایمیل‌های بدون قانون</div>
@@ -1094,7 +1368,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           </Button>
         </LayerCard>
 
-        <div className="cc-section">📧 مقصدها ({num((email.dests || []).length)})</div>
+        <div className="cc-section">مقصدها ({num((email.dests || []).length)})</div>
         {(email.dests || []).map((d) => (
           <LayerCard key={d.email} className="cc-card cc-row">
             <span className={'cc-dot ' + (d.verified ? 'run' : 'wait')} />
@@ -1107,12 +1381,20 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
         <Button
           className="cc-wide cc-mt"
           variant="outline"
+          icon={Plus}
           onClick={() =>
             setDlg({
               k: 'form',
               title: 'افزودن مقصد',
               desc: 'لینک تأیید به این ایمیل می‌رود.',
-              fields: [{ key: 'dest', label: 'ایمیل مقصد', placeholder: 'you@gmail.com' }],
+              fields: [
+                {
+                  key: 'dest',
+                  label: 'ایمیل مقصد',
+                  placeholder: 'you@gmail.com',
+                  validate: (v) => (EMAIL_RE.test(v.trim()) ? undefined : 'ایمیل معتبر نیست.'),
+                },
+              ],
               okText: 'افزودن',
               onSubmit: async (v) => {
                 if (view.v === 'zone')
@@ -1121,7 +1403,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
             })
           }
         >
-          ➕ مقصد جدید
+          مقصد جدید
         </Button>
       </>
     )
@@ -1130,19 +1412,24 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   function trafficTab() {
     return (
       <>
-        <div className="cc-chips cc-mb">
+        <div className="cc-chips cc-mb" role="group" aria-label="بازه ترافیک">
           {[1, 7, 30].map((d) => (
-            <button key={d} className={'cc-chip' + (days === d ? ' on' : '')} onClick={() => setDays(d)}>
+            <button
+              key={d}
+              className={'cc-chip' + (days === d ? ' on' : '')}
+              aria-pressed={days === d}
+              onClick={() => setDays(d)}
+            >
               {d === 1 ? 'امروز' : d === 7 ? '۷ روز' : '۳۰ روز'}
             </button>
           ))}
         </div>
         {!traffic ? (
-          <div className="cc-center cc-pad"><Loader /></div>
+          <SkeletonList rows={2} />
         ) : (
           <>
             <LayerCard className="cc-card">
-              <div className="cc-name">📊 مجموع کوئری DNS</div>
+              <div className="cc-name">مجموع کوئری DNS</div>
               <div className="cc-kv">
                 <span>بازه</span>
                 <span>{traffic.days === 1 ? 'امروز' : faNum(traffic.days) + ' روز'}</span>
@@ -1170,6 +1457,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   }
 
   function zonePage() {
+    if (!zone) return <SkeletonList rows={2} />
     return (
       <>
         <LayerCard className="cc-card cc-row">
@@ -1182,7 +1470,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           </div>
           <Badge variant={ZONE_BADGE[zone?.status || ''] || 'secondary'}>{statusLabel(zone?.status || '')}</Badge>
         </LayerCard>
-        <div className="cc-tabs">
+        <div className="cc-tabs" role="tablist" aria-label="بخش‌های دامنه">
           {(
             [
               ['records', 'رکوردها'],
@@ -1193,20 +1481,24 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           ).map(([k, l]) => (
             <button
               key={k}
+              role="tab"
+              id={'tab-' + k}
+              aria-selected={tab === k}
+              aria-controls={'panel-' + k}
+              tabIndex={tab === k ? 0 : -1}
               className={'cc-tab' + (tab === k ? ' on' : '')}
-              onClick={() => {
-                setTab(k)
-                setQ('')
-              }}
+              onClick={() => openTab(k)}
             >
               {l}
             </button>
           ))}
         </div>
-        {tab === 'records' && recordsTab()}
-        {tab === 'settings' && settingsTab()}
-        {tab === 'email' && emailTab()}
-        {tab === 'traffic' && trafficTab()}
+        <div role="tabpanel" id={'panel-' + tab} aria-labelledby={'tab-' + tab}>
+          {tab === 'records' && recordsTab()}
+          {tab === 'settings' && settingsTab()}
+          {tab === 'email' && emailTab()}
+          {tab === 'traffic' && trafficTab()}
+        </div>
       </>
     )
   }
@@ -1227,7 +1519,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     return (
       <>
         <div className="cc-section">گروه‌های {zone?.name || ''}</div>
-        {lbGroups.length === 0 && !busy && <Empty title="گروهی نیست" description="رکورد A/AAAA/CNAME بساز تا گروه تشکیل شود." />}
+        {lbGroups.length === 0 && busy > 0 && <SkeletonList />}
+        {lbGroups.length === 0 && !busy && !err && (
+          <Empty title="گروهی نیست" description="رکورد A/AAAA/CNAME بساز تا گروه تشکیل شود." />
+        )}
         {lbGroups.map((g) => (
           <LayerCard
             key={g.name}
@@ -1240,7 +1535,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 {faNum(g.on)} فعال · {faNum(g.off)} غیرفعال
               </div>
             </div>
-            <span className="cc-chev">›</span>
+            <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
           </LayerCard>
         ))}
       </>
@@ -1253,22 +1548,48 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       if (view.v !== 'lbgroup') return
       void post('/api/cf/lb', { op, acc: view.acc, zid: view.zid, name: view.name, ...extra })
     }
+    function confirmProxy(on: boolean) {
+      setDlg({
+        k: 'confirm',
+        title: on ? 'روشن‌کردن پروکسی همه' : 'خاموش‌کردن پروکسی همه',
+        desc: `پروکسی برای هر ${faNum(lbEntries.length)} آی‌پی این گروه ${on ? 'روشن' : 'خاموش'} شود؟`,
+        danger: !on,
+        okText: on ? 'روشن کن' : 'خاموش کن',
+        onOk: () => entryAction('proxy', { on }),
+      })
+    }
     return (
       <>
+        <div className="cc-hintbox">
+          <Info size={17} />
+          <span>
+            در این گروه، زاپاس فقط وقتی آی‌پی اصلی از کار بیفتد استفاده می‌شود؛ «جایگزینی» زاپاس را به‌جای آی‌پی اصلی
+            می‌نشاند.
+          </span>
+        </div>
         <div className="cc-grid2 cc-mb">
           <Button
             variant="primary"
+            icon={Plus}
             onClick={() =>
               setDlg({
                 k: 'form',
-                title: '➕ افزودن آی‌پی',
+                title: 'افزودن آی‌پی',
                 fields: [
                   {
                     key: 'type',
                     label: 'نوع',
                     select: ['A', 'AAAA', 'CNAME'].map((t) => ({ value: t, label: t })),
                   },
-                  { key: 'content', label: 'مقدار', placeholder: '1.2.3.4 یا host.example.com' },
+                  {
+                    key: 'content',
+                    label: 'مقدار',
+                    placeholder: '1.2.3.4 یا host.example.com',
+                    validate: (v) =>
+                      isIPv4(v.trim()) || isIPv6(v.trim()) || HOST_RE.test(v.trim())
+                        ? undefined
+                        : 'آی‌پی یا میزبان معتبر نیست.',
+                  },
                 ],
                 okText: 'افزودن',
                 onSubmit: async (v) => {
@@ -1286,22 +1607,23 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
               })
             }
           >
-            ➕ افزودن آی‌پی
+            افزودن آی‌پی
           </Button>
-          <Button variant="outline" onClick={() => entryAction('proxy', { on: true })}>
-            🟠 پروکسی همه
+          <Button variant="outline" icon={Globe} onClick={() => confirmProxy(true)}>
+            پروکسی همه
           </Button>
         </div>
         <div className="cc-grid2 cc-mb">
-          <Button variant="outline" onClick={() => entryAction('proxy', { on: false })}>
-            ⚪ پروکسی خاموش
+          <Button variant="outline" icon={Globe} onClick={() => confirmProxy(false)}>
+            پروکسی خاموش
           </Button>
-          <Button variant="outline" onClick={() => push({ v: 'lb', acc: view.acc, zid: view.zid })}>
-            ↩️ گروه‌ها
+          <Button variant="outline" icon={ArrowRight} onClick={() => push({ v: 'lb', acc: view.acc, zid: view.zid })}>
+            گروه‌ها
           </Button>
         </div>
         <div className="cc-section">{faNum(lbEntries.length)} آی‌پی</div>
-        {lbEntries.length === 0 && !busy && <Empty title="آی‌پی‌ای نیست" />}
+        {lbEntries.length === 0 && busy > 0 && <SkeletonList />}
+        {lbEntries.length === 0 && !busy && !err && <Empty title="آی‌پی‌ای نیست" />}
         {lbEntries.map((e) => (
           <LayerCard key={e.content + e.type} className="cc-card">
             <div className="cc-row">
@@ -1322,8 +1644,18 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 onClick={() =>
                   setDlg({
                     k: 'form',
-                    title: '⚖️ وزن آی‌پی',
-                    fields: [{ key: 'weight', label: 'وزن (۰ یا بیشتر)', value: String(e.weight) }],
+                    title: 'وزن آی‌پی',
+                    fields: [
+                      {
+                        key: 'weight',
+                        label: 'وزن (۰ یا بیشتر)',
+                        value: String(e.weight),
+                        validate: (v) => {
+                          const n = Number(v)
+                          return Number.isFinite(n) && n >= 0 ? undefined : 'وزن باید عددی صفر یا بیشتر باشد.'
+                        },
+                      },
+                    ],
                     okText: 'ذخیره',
                     onSubmit: async (v) => {
                       if (view.v === 'lbgroup')
@@ -1339,32 +1671,42 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                   })
                 }
               >
-                ⚖️ وزن
+                وزن
               </Button>
               <Button
                 variant={e.on ? 'secondary' : 'primary'}
                 size="sm"
+                icon={e.on ? Pause : Play}
                 onClick={() => entryAction('toggle', { content: e.content, on: !e.on })}
               >
-                {e.on ? '⏸ غیرفعال' : '▶️ فعال'}
+                {e.on ? 'غیرفعال' : 'فعال'}
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
+                icon={Lifebuoy}
                 className={e.spare ? '' : 'cc-wide'}
                 onClick={() =>
                   setDlg({ k: 'spare', acc: view.acc, zid: view.zid, name: view.name, entry: e })
                 }
               >
-                🛟 زاپاس
+                زاپاس
               </Button>
               {e.spare && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => entryAction('replace', { content: e.content })}
+                  icon={ArrowsClockwise}
+                  onClick={() =>
+                    setDlg({
+                      k: 'confirm',
+                      title: 'جایگزینی با زاپاس',
+                      desc: `آی‌پی زاپاس ${e.spare?.content} جای ${e.content} بنشیند؟`,
+                      onOk: () => entryAction('replace', { content: e.content }),
+                    })
+                  }
                 >
-                  🔄 جایگزینی
+                  جایگزینی
                 </Button>
               )}
             </div>
@@ -1417,7 +1759,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                       <span className="cc-name">{it.title}</span>
                       {it.sub && <span className="cc-sub">{it.sub}</span>}
                     </span>
-                    <span className="cc-chev">›</span>
+                    <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
                   </button>
                 ))}
               </div>
@@ -1512,7 +1854,10 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 const path = '/api/cf/record'
                 const body = { ...payload, acc: dlg.acc, zid: dlg.zid, rid: dlg.rec?.id }
                 const d = await post(path, body)
-                if (d) setDlg(null)
+                if (d) {
+                  if (!dlg.rec && d.record?.id) setNewId(d.record.id)
+                  setDlg(null)
+                }
               }}
             />
           )}
@@ -1534,16 +1879,23 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 }
               }}
               onDel={() => {
-                setDlg(null)
-                if (view.v === 'lbgroup') {
-                  void post('/api/cf/lb', {
-                    op: 'spare_del',
-                    acc: dlg.acc,
-                    zid: dlg.zid,
-                    name: dlg.name,
-                    content: dlg.entry.content,
-                  })
-                }
+                const s = dlg
+                setDlg({
+                  k: 'confirm',
+                  title: 'حذف زاپاس',
+                  desc: `زاپاس ${s.entry.spare?.content || ''} برای ${s.entry.content} حذف شود؟`,
+                  danger: true,
+                  okText: 'حذف',
+                  onOk: async () => {
+                    await post('/api/cf/lb', {
+                      op: 'spare_del',
+                      acc: s.acc,
+                      zid: s.zid,
+                      name: s.name,
+                      content: s.entry.content,
+                    })
+                  },
+                })
               }}
             />
           )}
@@ -1555,9 +1907,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
   /* ---------------- render ---------------- */
 
   let body: any = null
-  if (err && (view.v === 'zones' || view.v === 'accounts' || view.v === 'favs')) {
-    body = <Empty title="خطا" description={err} />
-  } else if (view.v === 'zones') body = zonesPage()
+  if (err) body = <ErrorState message={err} onRetry={refresh} />
+  else if (view.v === 'zones') body = zonesPage()
   else if (view.v === 'accounts') body = accountsPage()
   else if (view.v === 'favs') body = favsPage()
   else if (view.v === 'search') body = searchPage()
@@ -1570,21 +1921,105 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
 
   return (
     <div className="cc-app">
+      <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
       <header className="cc-topbar">
         {(root || stack.length > 0) && (
           <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
         )}
         <h1 className="cc-title">{title}</h1>
-        <Button variant="ghost" shape="square" icon={ArrowClockwise} aria-label="بروزرسانی" onClick={refresh} />
+        <Button
+          className={busy > 0 ? 'cc-spin' : ''}
+          variant="ghost"
+          shape="square"
+          icon={ArrowClockwise}
+          aria-label="بروزرسانی"
+          onClick={refresh}
+        />
       </header>
-      <main className="cc-main">{body}</main>
-      {busy > 0 && (
-        <div className="cc-loading">
-          <Loader size="lg" />
+      <main className="cc-main" aria-busy={busy > 0}>
+        {body}
+      </main>
+      {toastMsg && (
+        <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
+          {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
+          <span>{toastMsg.t}</span>
         </div>
       )}
-      {toastMsg && <div className={'cc-toast' + (toastMsg.err ? ' err' : '')}>{toastMsg.t}</div>}
       {renderDlg()}
+    </div>
+  )
+}
+
+/* ---------------- shared ui ---------------- */
+
+function SearchInput({
+  value,
+  onChange,
+  placeholder,
+  autoFocus,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  autoFocus?: boolean
+}) {
+  return (
+    <div className="cc-search">
+      <Input
+        autoFocus={autoFocus}
+        className="cc-input"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={placeholder}
+      />
+      {value && (
+        <Button
+          className="cc-search-clear"
+          variant="ghost"
+          shape="square"
+          icon={X}
+          aria-label="پاک کردن جست‌وجو"
+          onClick={() => onChange('')}
+        />
+      )}
+    </div>
+  )
+}
+
+function SkeletonList({ rows = 3 }: { rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, i) => (
+        <LayerCard key={i} className="cc-card cc-skel" aria-hidden="true">
+          <span className="cc-skel-line" style={{ width: 38 + ((i * 13) % 24) + '%' }} />
+          <span className="cc-skel-line" style={{ width: 62 + ((i * 7) % 20) + '%', height: 8 }} />
+        </LayerCard>
+      ))}
+    </>
+  )
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const analytics = /analytics|آنالیتیکس|Zone → Analytics/i.test(message)
+  return (
+    <div className="cc-card cc-error-card" role="alert">
+      <div className="cc-error-ico">
+        <WarningCircle size={24} />
+      </div>
+      <div className="cc-name">مشکلی پیش آمد</div>
+      <div className="cc-sub">{message}</div>
+      {analytics && (
+        <div className="cc-hintbox" style={{ textAlign: 'right' }}>
+          <Info size={17} />
+          <span>
+            برای دیدن ترافیک، به توکن کلادفلر دسترسی Zone → Analytics → Read بده و دوباره تلاش کن.
+          </span>
+        </div>
+      )}
+      <Button variant="primary" icon={ArrowClockwise} onClick={onRetry}>
+        تلاش دوباره
+      </Button>
     </div>
   )
 }
@@ -1638,8 +2073,8 @@ function RecordSheet({
         </div>
         {PROXYABLE.includes(r.type) && (
           <div className="cc-kv">
-            <span>پروکسی</span>
-            <span>{r.proxied ? 'روشن' : 'خاموش'}</span>
+            <span>پروکسی کلادفلر</span>
+            <Switch checked={r.proxied} onCheckedChange={onProxy} aria-label="پروکسی کلادفلر" />
           </div>
         )}
         <div className="cc-kv">
@@ -1650,44 +2085,39 @@ function RecordSheet({
 
       <div className="cc-section">عملیات</div>
       <div className="cc-actions">
-        <Button variant="primary" className="cc-wide" onClick={onEdit}>
-          ✏️ ویرایش مقدار
+        <Button variant="primary" icon={PencilSimple} className="cc-wide" onClick={onEdit}>
+          ویرایش مقدار
         </Button>
-        <Button variant="secondary" onClick={onFav}>
-          {r.fav ? '⭐ حذف از منتخب' : '☆ افزودن به منتخب'}
+        <Button variant="secondary" icon={Star} onClick={onFav}>
+          {r.fav ? 'حذف از منتخب' : 'افزودن به منتخب'}
         </Button>
-        {PROXYABLE.includes(r.type) && (
-          <Button variant="secondary" onClick={onProxy}>
-            🌐 پروکسی: {r.proxied ? 'روشن' : 'خاموش'}
-          </Button>
-        )}
-        <Button variant="secondary" onClick={onTTL}>
-          ⏱ TTL: {ttlLabel(r.ttl)}
+        <Button variant="secondary" icon={Clock} onClick={onTTL}>
+          TTL: {ttlLabel(r.ttl)}
         </Button>
         {(r.type === 'A' || r.type === 'CNAME') && (
-          <Button variant="secondary" onClick={onType}>
-            🔄 تبدیل به {r.type === 'A' ? 'CNAME' : 'A'}
+          <Button variant="secondary" icon={ArrowsClockwise} onClick={onType}>
+            تبدیل به {r.type === 'A' ? 'CNAME' : 'A'}
           </Button>
         )}
-        <Button variant="secondary" onClick={() => onCopy(r.name, 'نام کپی شد')}>
-          📋 کپی نام
+        <Button variant="secondary" icon={Copy} onClick={() => onCopy(r.name, 'نام کپی شد')}>
+          کپی نام
         </Button>
-        <Button variant="secondary" onClick={() => onCopy(r.content, 'مقدار کپی شد')}>
-          📋 کپی مقدار
+        <Button variant="secondary" icon={Copy} onClick={() => onCopy(r.content, 'مقدار کپی شد')}>
+          کپی مقدار
         </Button>
-        <Button variant="secondary" onClick={onTraffic}>
-          📊 ترافیک امروز
+        <Button variant="secondary" icon={ChartBar} onClick={onTraffic}>
+          ترافیک امروز
         </Button>
-        <Button variant="secondary" onClick={onRefs}>
-          🔗 CNAMEهای وارده
+        <Button variant="secondary" icon={LinkIcon} onClick={onRefs}>
+          CNAMEهای وارده
         </Button>
         {PROXYABLE.includes(r.type) && (
-          <Button variant="secondary" className="cc-wide" onClick={onLB}>
-            ⚙️ لود بالانسر و آی‌پی زاپاس
+          <Button variant="secondary" icon={Gear} className="cc-wide" onClick={onLB}>
+            لود بالانسر و آی‌پی زاپاس
           </Button>
         )}
-        <Button className="cc-wide" variant="destructive" onClick={onDelete}>
-          🗑 حذف رکورد
+        <Button className="cc-wide" variant="secondary-destructive" icon={Trash} onClick={onDelete}>
+          حذف رکورد
         </Button>
       </div>
 
@@ -1718,11 +2148,18 @@ function RecordEditor({
   const [ttl, setTTL] = useState(r?.ttl || 1)
   const [proxied, setProxied] = useState(!!r?.proxied)
   const [priority, setPriority] = useState(r?.priority != null ? String(r.priority) : '')
+  const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
   const canProxy = PROXYABLE.includes(type)
 
   async function submit() {
-    if (!content.trim() || (!r && !name.trim())) return
+    const problem = validateRecord(type, name, content, priority, !r)
+    if (problem) {
+      setFormErr(problem)
+      haptic('error')
+      return
+    }
+    setFormErr('')
     setBusy(true)
     try {
       await onSubmit({
@@ -1742,40 +2179,64 @@ function RecordEditor({
 
   return (
     <>
-      <Dialog.Title className="cc-dialog-title">{r ? '✏️ ویرایش رکورد' : '➕ رکورد جدید'}</Dialog.Title>
+      <Dialog.Title className="cc-dialog-title">{r ? 'ویرایش رکورد' : 'رکورد جدید'}</Dialog.Title>
       {!r && (
         <>
           <div className="cc-section">نوع</div>
-          <div className="cc-chips">
+          <div className="cc-chips" role="group" aria-label="نوع رکورد">
             {TYPES.map((t) => (
-              <button key={t} className={'cc-chip' + (type === t ? ' on' : '')} onClick={() => setType(t)}>
+              <button
+                key={t}
+                className={'cc-chip' + (type === t ? ' on' : '')}
+                aria-pressed={type === t}
+                onClick={() => {
+                  setType(t)
+                  setFormErr('')
+                }}
+              >
                 {t}
               </button>
             ))}
           </div>
           <div className="cc-section">نام (نسبت به دامنه)</div>
           <Input
-            className="cc-input cc-mb"
+            autoFocus
+            className={'cc-input cc-mb' + (formErr && !name.trim() ? ' cc-invalid' : '')}
             placeholder={dlg.zone ? 'مثلاً sub یا @' : 'sub'}
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value)
+              setFormErr('')
+            }}
           />
         </>
       )}
       <div className="cc-section">مقدار</div>
       <Input
-        autoFocus
-        className="cc-input cc-mb cc-mono"
+        autoFocus={!!r}
+        className={'cc-input cc-mb cc-mono' + (formErr ? ' cc-invalid' : '')}
         placeholder={
           type === 'CNAME' ? 'host.example.com' : type === 'MX' ? 'mail.example.com' : type === 'TXT' ? 'متن رکورد' : '1.2.3.4'
         }
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={(e) => {
+          setContent(e.target.value)
+          setFormErr('')
+        }}
       />
+      {formErr && <div className="cc-field-err" role="alert">{formErr}</div>}
       {type === 'MX' && (
         <>
           <div className="cc-section">اولویت (Priority)</div>
-          <Input className="cc-input cc-mb" placeholder="10" value={priority} onChange={(e) => setPriority(e.target.value)} />
+          <Input
+            className={'cc-input cc-mb' + (formErr && priority ? ' cc-invalid' : '')}
+            placeholder="10"
+            value={priority}
+            onChange={(e) => {
+              setPriority(e.target.value)
+              setFormErr('')
+            }}
+          />
         </>
       )}
       <div className="cc-section">TTL</div>
@@ -1792,14 +2253,7 @@ function RecordEditor({
             <div className="cc-name">پروکسی کلادفلر</div>
             <div className="cc-sub">ترافیک از شبکهٔ کلادفلر عبور کند.</div>
           </div>
-          <Button
-            className={proxied ? 'cc-green' : ''}
-            variant={proxied ? undefined : 'secondary'}
-            size="sm"
-            onClick={() => setProxied(!proxied)}
-          >
-            {proxied ? 'روشن' : 'خاموش'}
-          </Button>
+          <Switch checked={proxied} aria-label="پروکسی کلادفلر" onCheckedChange={setProxied} />
         </LayerCard>
       )}
       <div className="cc-dialog-actions">
@@ -1828,12 +2282,34 @@ function SpareSheet({
   onDel: () => void
 }) {
   const [v, setV] = useState(dlg.entry.spare?.content || '')
+  const [vErr, setVErr] = useState('')
+  function save() {
+    const val = v.trim()
+    if (!val) {
+      setVErr('آی‌پی یا دامنهٔ زاپاس را وارد کن.')
+      return
+    }
+    if (!isIPv4(val) && !isIPv6(val) && !HOST_RE.test(val)) {
+      setVErr('آی‌پی یا میزبان معتبر نیست.')
+      haptic('error')
+      return
+    }
+    setVErr('')
+    onSet(val)
+  }
   return (
     <>
-      <Dialog.Title className="cc-dialog-title">🛟 آی‌پی زاپاس</Dialog.Title>
+      <Dialog.Title className="cc-dialog-title">آی‌پی زاپاس</Dialog.Title>
       <Dialog.Description className="cc-dialog-desc">
         زاپاس برای <span className="cc-mono">{dlg.entry.content}</span>
       </Dialog.Description>
+      <div className="cc-hintbox">
+        <Info size={17} />
+        <span>
+          اگر آی‌پی اصلی از کار بیفتد، در صورت پشتیبانی گروه، زاپاس جای آن استفاده می‌شود. «جایگزینی» در صفحهٔ گروه،
+          زاپاس را دائمی می‌کند.
+        </span>
+      </div>
       {dlg.entry.spare && (
         <div className="cc-kv">
           <span>زاپاس فعلی</span>
@@ -1841,14 +2317,24 @@ function SpareSheet({
         </div>
       )}
       <div className="cc-section">آی‌پی یا دامنهٔ زاپاس</div>
-      <Input className="cc-input cc-mb cc-mono" placeholder="1.2.3.4 یا backup.example.com" value={v} onChange={(e) => setV(e.target.value)} />
+      <Input
+        autoFocus
+        className={'cc-input cc-mb cc-mono' + (vErr ? ' cc-invalid' : '')}
+        placeholder="1.2.3.4 یا backup.example.com"
+        value={v}
+        onChange={(e) => {
+          setV(e.target.value)
+          setVErr('')
+        }}
+      />
+      {vErr && <div className="cc-field-err" role="alert">{vErr}</div>}
       <div className="cc-grid2">
-        <Button className="cc-green" disabled={!v.trim()} onClick={() => onSet(v.trim())}>
-          💾 ذخیره
+        <Button className="cc-green" disabled={!v.trim()} onClick={save}>
+          ذخیره
         </Button>
         {dlg.entry.spare && (
-          <Button variant="destructive" onClick={onDel}>
-            🗑 حذف زاپاس
+          <Button variant="secondary-destructive" icon={Trash} onClick={onDel}>
+            حذف زاپاس
           </Button>
         )}
       </div>
@@ -1883,8 +2369,20 @@ function FormDialog({
     for (const f of fields) o[f.key] = f.value || f.select?.[0]?.value || ''
     return o
   })
+  const [errs, setErrs] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   async function go() {
+    const next: Record<string, string> = {}
+    for (const f of fields) {
+      const e = f.validate ? f.validate(vals[f.key] || '') : undefined
+      if (e) next[f.key] = e
+    }
+    if (Object.keys(next).length) {
+      setErrs(next)
+      haptic('error')
+      return
+    }
+    setErrs({})
     setBusy(true)
     try {
       await onSubmit(vals)
@@ -1901,9 +2399,13 @@ function FormDialog({
           <div className="cc-section">{f.label}</div>
           {f.select ? (
             <select
-              className="cc-select cc-mb"
+              className={'cc-select cc-mb' + (errs[f.key] ? ' cc-invalid' : '')}
               value={vals[f.key]}
-              onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })}
+              aria-invalid={!!errs[f.key]}
+              onChange={(e) => {
+                setVals({ ...vals, [f.key]: e.target.value })
+                setErrs({ ...errs, [f.key]: '' })
+              }}
             >
               {f.select.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -1915,12 +2417,22 @@ function FormDialog({
             <Input
               autoFocus
               type={f.password ? 'password' : 'text'}
-              className="cc-input cc-mb"
+              className={'cc-input cc-mb' + (errs[f.key] ? ' cc-invalid' : '')}
               placeholder={f.placeholder}
+              aria-invalid={!!errs[f.key]}
               value={vals[f.key]}
-              onChange={(e) => setVals({ ...vals, [f.key]: e.target.value })}
+              onChange={(e) => {
+                setVals({ ...vals, [f.key]: e.target.value })
+                setErrs({ ...errs, [f.key]: '' })
+              }}
             />
           )}
+          {errs[f.key] && (
+            <div className="cc-field-err" role="alert">
+              {errs[f.key]}
+            </div>
+          )}
+          {f.hint && !errs[f.key] && <div className="cc-hint cc-mb">{f.hint}</div>}
         </div>
       ))}
       <div className="cc-dialog-actions">

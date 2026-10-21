@@ -10,12 +10,13 @@ export function setToken(v: string) {
 
 export class ApiError extends Error {}
 
-export async function api<T = any>(path: string, body?: any): Promise<T> {
+export async function api<T = any>(path: string, body?: any, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Authorization: 'Bearer ' + token }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
     headers,
+    signal,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   let j: any = null
@@ -60,4 +61,25 @@ export function fallbackCopy(v: string) {
     /* ignore */
   }
   ta.remove()
+}
+
+export function haptic(kind: 'light' | 'success' | 'error' = 'light') {
+  try {
+    if (!TG || !TG.HapticFeedback) return
+    if (kind === 'light') TG.HapticFeedback.impactOccurred('light')
+    else TG.HapticFeedback.notificationOccurred(kind)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function faDate(v: any) {
+  if (!v) return '—'
+  const d = new Date(String(v))
+  if (Number.isNaN(d.getTime())) return String(v).slice(0, 10)
+  try {
+    return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(d)
+  } catch {
+    return d.toLocaleDateString('fa-IR')
+  }
 }

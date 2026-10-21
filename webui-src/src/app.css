@@ -1,3 +1,18 @@
+@font-face {
+  font-family: Vazirmatn;
+  src: url('/app/fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Vazirmatn;
+  src: url('/app/fonts/Vazirmatn-Bold.woff2') format('woff2');
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 html,
 body {
   margin: 0;
@@ -7,8 +22,28 @@ body {
   color: var(--text-color-kumo-default, #f2f2f2);
 }
 
+:root {
+  --cc-primary: var(--color-kumo-brand, #3b82f6);
+  --cc-success: #0e9f6e;
+  --cc-success-strong: #0b8a5f;
+  --cc-danger: var(--color-kumo-danger, #e5484d);
+  --cc-warning: #f5b301;
+  --cc-success-soft: color-mix(in srgb, var(--cc-success) 15%, var(--color-kumo-base));
+  --cc-success-line: color-mix(in srgb, var(--cc-success) 38%, transparent);
+  --cc-danger-soft: color-mix(in srgb, var(--cc-danger) 13%, var(--color-kumo-base));
+  --cc-danger-line: color-mix(in srgb, var(--cc-danger) 38%, transparent);
+  --cc-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  color-scheme: dark;
+}
+html[data-mode='light'] {
+  --cc-success: #0b8a63;
+  --cc-success-strong: #087553;
+  --cc-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+  color-scheme: light;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Vazirmatn, Tahoma, sans-serif;
+  font-family: Vazirmatn, -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, sans-serif;
   font-size: 14px;
   line-height: 1.6;
   padding-bottom: env(safe-area-inset-bottom);
@@ -21,8 +56,8 @@ body {
 }
 
 .cc-app {
-  --cc-btn-h: 40px;
-  --cc-radius: 11px;
+  --cc-btn-h: 44px;
+  --cc-radius: 12px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -62,8 +97,8 @@ body {
 }
 
 .cc-topbar button {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   flex: 0 0 auto;
 }
 
@@ -148,6 +183,8 @@ body {
 }
 
 .cc-chev {
+  display: flex;
+  align-items: center;
   color: var(--text-color-kumo-inactive);
   font-size: 20px;
   line-height: 1;
@@ -161,17 +198,17 @@ body {
   flex: 0 0 auto;
 }
 .cc-dot.run {
-  background: var(--color-kumo-success);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-kumo-success) 18%, transparent);
+  background: var(--cc-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc-success) 16%, transparent);
 }
 .cc-dot.off {
   background: var(--text-color-kumo-inactive);
 }
 .cc-dot.wait {
-  background: var(--color-kumo-warning);
+  background: var(--cc-warning);
 }
 .cc-dot.err {
-  background: var(--color-kumo-danger);
+  background: var(--cc-danger);
 }
 
 .cc-mono {
@@ -221,15 +258,11 @@ body {
   border-radius: 9px !important;
   font-size: 12px !important;
 }
-.cc-card button.cc-green {
-  background: color-mix(in srgb, var(--color-kumo-success) 16%, var(--color-kumo-base)) !important;
-  border: 1px solid color-mix(in srgb, var(--color-kumo-success) 42%, transparent) !important;
-  color: var(--color-kumo-success) !important;
-}
+.cc-card button.cc-green,
 .cc-kv > button.cc-green {
-  background: color-mix(in srgb, var(--color-kumo-success) 16%, var(--color-kumo-base)) !important;
-  border: 1px solid color-mix(in srgb, var(--color-kumo-success) 42%, transparent) !important;
-  color: var(--color-kumo-success) !important;
+  background: var(--cc-success-soft) !important;
+  border: 1px solid var(--cc-success-line) !important;
+  color: var(--cc-success) !important;
 }
 
 .cc-link {
@@ -291,9 +324,9 @@ body {
 .cc-actions button {
   width: 100%;
   min-width: 0;
-  height: 42px !important;
-  font-size: 12.5px !important;
-  padding: 0 8px !important;
+  height: var(--cc-btn-h) !important;
+  font-size: 13px !important;
+  padding: 0 10px !important;
 }
 .cc-actions .cc-wide {
   grid-column: 1 / -1;
@@ -354,9 +387,13 @@ body {
 
 .cc-dialog {
   width: 100%;
-  max-width: min(430px, 92vw) !important;
-  padding: 18px !important;
+  max-width: min(440px, 92vw) !important;
+  max-height: 86dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px 8px !important;
   box-sizing: border-box;
+  box-shadow: var(--cc-shadow);
 }
 
 .cc-dialog-title {
@@ -368,27 +405,36 @@ body {
 .cc-dialog-desc {
   color: var(--text-color-kumo-subtle);
   font-size: 13px;
+  line-height: 1.8;
   margin: 0 0 14px;
+  white-space: pre-line;
 }
 
 .cc-dialog-actions {
+  position: sticky;
+  bottom: -8px;
+  z-index: 2;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 14px;
+  margin: 14px -4px -8px;
+  padding: 10px 4px calc(10px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--color-kumo-elevated) 96%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--color-kumo-hairline);
 }
 .cc-dialog-actions > button {
   width: 100% !important;
-  height: 42px !important;
+  height: var(--cc-btn-h) !important;
   font-size: 13px !important;
 }
 .cc-dialog-actions > .cc-wide {
   grid-column: 1 / -1;
 }
 .cc-dialog button[data-kumo-component="Button"] {
-  height: 42px !important;
+  height: var(--cc-btn-h) !important;
   border-radius: var(--cc-radius) !important;
-  font-size: 12.5px !important;
+  font-size: 13px !important;
 }
 
 .cc-picker {
@@ -409,49 +455,85 @@ body {
   font-size: 13.5px;
 }
 
-.cc-loading {
+.cc-progress {
   position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, #000 26%, transparent);
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 80;
+  opacity: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--cc-primary), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  transition: opacity 0.15s ease;
+}
+.cc-progress.on {
+  opacity: 1;
+  animation: cc-slide 1.1s linear infinite;
+}
+@keyframes cc-slide {
+  from { background-position: -40% 0; }
+  to { background-position: 140% 0; }
+}
+
+.cc-spin svg {
+  animation: cc-rotate 0.9s linear infinite;
+}
+@keyframes cc-rotate {
+  to { transform: rotate(360deg); }
 }
 
 .cc-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(20px + env(safe-area-inset-bottom));
+  bottom: calc(84px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 60;
-  max-width: 90vw;
+  max-width: min(92vw, 420px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--color-kumo-elevated);
   color: var(--text-color-kumo-default);
   border: 1px solid var(--color-kumo-line);
-  padding: 10px 16px;
+  padding: 10px 14px;
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--cc-shadow);
   font-size: 13px;
   text-align: center;
+  animation: cc-toast-in 0.16s ease-out;
+}
+.cc-toast svg {
+  flex: 0 0 auto;
 }
 .cc-toast.err {
-  background: var(--color-kumo-danger);
-  color: #fff;
-  border-color: transparent;
+  background: var(--cc-danger-soft);
+  border-color: var(--cc-danger-line);
+  color: var(--cc-danger);
+}
+.cc-toast.ok svg {
+  color: var(--cc-success);
+}
+@keyframes cc-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* ---------------- cloudflare / telegram colors ---------------- */
 
 .cc-green {
-  background: #0e9f6e !important;
+  background: var(--cc-success) !important;
   border-color: transparent !important;
   color: #fff !important;
 }
 .cc-green:hover {
-  background: #12b981 !important;
+  background: var(--cc-success-strong) !important;
 }
 .cc-starred {
-  color: #f5b301;
+  color: var(--cc-warning);
 }
 
 .cc-provider {
@@ -503,8 +585,8 @@ body {
   cursor: pointer;
 }
 .cc-chip.on {
-  background: color-mix(in srgb, var(--color-kumo-brand) 18%, var(--color-kumo-base));
-  border-color: var(--color-kumo-brand);
+  background: color-mix(in srgb, var(--cc-primary) 16%, var(--color-kumo-base));
+  border-color: color-mix(in srgb, var(--cc-primary) 62%, transparent);
   color: var(--text-color-kumo-default);
   font-weight: 600;
 }
@@ -550,9 +632,18 @@ body {
 }
 
 .cc-bulkbar {
+  position: sticky;
+  top: calc(56px + env(safe-area-inset-top));
+  z-index: 12;
   display: flex;
   gap: 6px;
-  margin-bottom: 10px;
+  padding: 8px;
+  margin: 0 -2px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--color-kumo-line);
+  background: color-mix(in srgb, var(--color-kumo-elevated) 94%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--cc-shadow);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -560,6 +651,10 @@ body {
   display: none;
 }
 .cc-bulkbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   flex: 1 0 auto;
   height: 38px;
   padding: 0 10px;
@@ -569,40 +664,199 @@ body {
   color: var(--text-color-kumo-default);
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
 .cc-bulkbtn:disabled {
-  opacity: 0.45;
+  opacity: 0.42;
 }
 .cc-bulkbtn.red {
-  background: var(--color-kumo-danger);
-  border-color: transparent;
-  color: #fff;
+  background: var(--cc-danger-soft);
+  border-color: var(--cc-danger-line);
+  color: var(--cc-danger);
 }
 .cc-bulkbtn.green {
-  background: var(--color-kumo-success);
-  border-color: transparent;
-  color: #052e16;
+  background: var(--cc-success-soft);
+  border-color: var(--cc-success-line);
+  color: var(--cc-success);
+}
+.cc-bulkcount {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-color-kumo-subtle);
+  white-space: nowrap;
 }
 
 .cc-check {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 6px;
+  border-radius: 7px;
   border: 1.5px solid var(--color-kumo-line);
   font-size: 12px;
   color: #fff;
 }
 .cc-check.on {
-  background: var(--color-kumo-brand);
+  background: var(--cc-primary);
   border-color: transparent;
 }
 .cc-star {
-  color: var(--color-kumo-warning);
+  color: var(--cc-warning);
 }
 .cc-selecting {
   border-color: color-mix(in srgb, var(--color-kumo-brand) 45%, var(--color-kumo-line));
+}
+
+
+/* ---------------- polish: fields, search, skeleton, focus, switch ---------------- */
+
+.cc-search {
+  position: relative;
+  margin-bottom: 10px;
+}
+.cc-search .cc-input {
+  padding-inline-end: 48px !important;
+}
+.cc-app button.cc-search-clear {
+  position: absolute;
+  inset-inline-end: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px !important;
+  min-width: 32px;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  color: var(--text-color-kumo-subtle) !important;
+}
+.cc-field-err {
+  margin: -6px 4px 10px;
+  color: var(--cc-danger);
+  font-size: 12px;
+}
+.cc-invalid {
+  border-color: var(--cc-danger) !important;
+}
+.cc-hintbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 2px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-line);
+  color: var(--text-color-kumo-subtle);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.cc-hintbox svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.cc-error-card {
+  padding: 18px 14px;
+  text-align: center;
+}
+.cc-error-card .cc-error-ico {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--cc-danger);
+  background: var(--cc-danger-soft);
+  border: 1px solid var(--cc-danger-line);
+}
+.cc-error-card .cc-name {
+  white-space: normal;
+  margin-bottom: 4px;
+}
+.cc-error-card .cc-sub {
+  white-space: normal;
+  margin-bottom: 14px;
+}
+
+.cc-skel {
+  padding: 14px 12px;
+  margin-bottom: 10px;
+}
+.cc-skel .cc-skel-line {
+  display: block;
+  height: 10px;
+  margin: 7px 0;
+  border-radius: 6px;
+  background: var(--color-kumo-fill);
+  animation: cc-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cc-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.9; }
+}
+
+.cc-new {
+  animation: cc-flash 2.4s ease-out;
+  border-color: var(--cc-success-line) !important;
+}
+@keyframes cc-flash {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cc-success) 40%, transparent); }
+  35% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cc-success) 20%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.cc-kv switch,
+.cc-kv button[role='switch'] {
+  flex: 0 0 auto;
+}
+.cc-app button[role='switch'] {
+  min-height: 0;
+}
+html[data-mode='dark'] .cc-app button[role='switch'][aria-checked='true'] > div {
+  background-color: var(--color-blue-300);
+}
+html[data-mode='light'] .cc-app button[role='switch'][aria-checked='true'] > div {
+  background-color: #fff;
+}
+
+.cc-chip:focus-visible,
+.cc-tab:focus-visible,
+.cc-choice:focus-visible,
+.cc-bulkbtn:focus-visible,
+.cc-provider-btn:focus-visible,
+.cc-link:focus-visible,
+.cc-search-clear:focus-visible {
+  outline: 2px solid var(--cc-primary);
+  outline-offset: 2px;
+}
+
+.cc-link,
+.cc-choice {
+  min-height: 44px;
+}
+.cc-chip {
+  min-height: 36px;
+}
+.cc-tab {
+  min-height: 38px;
+}
+.cc-provider-btn {
+  min-height: 40px;
+}
+
+.cc-tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cc-tabs::-webkit-scrollbar {
+  display: none;
+}
+.cc-tab {
+  flex: 1 0 auto;
 }
