@@ -24,6 +24,7 @@ func (r *Router) Menu(chat, mid int64) {
 func (r *Router) settingsHome(chat, mid int64) {
 	rows := [][]Btn{
 		row(btnS("📖 راهنمای بخش‌ها", "help", "primary")),
+		row(btnS("📱 راهنمای مینی‌اپ", "wahelp", "primary")),
 		row(btnS("🔄 نسخه‌ها و آپدیت", "vers", "primary")),
 		row(btnS("🛟 پشتیبان فیلور (Standby)", "fo", "primary")),
 	}

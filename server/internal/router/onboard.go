@@ -61,3 +61,38 @@ func (r *Router) onboardPrompt(chat, frm int64) {
 		r.Store.Put("fo:prompted", "1", 0)
 	}
 }
+
+// webappHelp is the persistent "mini app" guide in Settings.
+func (r *Router) webappHelp(chat, mid int64) {
+	webURL := strings.TrimSpace(r.WebAppURL)
+	webOK := strings.HasPrefix(webURL, "https://")
+
+	var b strings.Builder
+	b.WriteString("📱 <b>راهنمای مینی‌اپ</b>\n\n")
+	b.WriteString("مینی‌اپ نسخهٔ سروری، رابط سریع و لمسی ربات است:\n")
+	b.WriteString("• مدیریت سرورهای هتزنر: روشن/خاموش، ریبوت، رمز، اسنپ‌شات\n")
+	b.WriteString("• کلادفلر: دامنه‌ها، رکوردهای DNS، پروکسی و TTL\n")
+	b.WriteString("• تنظیمات دامنه، ایمیل، ترافیک، جست‌وجو و لود بالانسر\n")
+	b.WriteString("• عملیات گروهی و منتخب‌ها\n\n")
+
+	if webOK {
+		b.WriteString("برای باز کردن، دکمهٔ «هتزنر» کنار کادر پیام را بزن یا از دکمهٔ زیر استفاده کن.\n")
+		b.WriteString("برای دسترسی همیشگی، دکمه را Pin کن.\n\n")
+		b.WriteString("نسخهٔ ورکر کلادفلر مینی‌اپ ندارد؛ این امکان فقط روی نسخهٔ سروری فعال است.")
+	} else {
+		b.WriteString("مینی‌اپ روی این نصب فعال نیست.\n")
+		b.WriteString("برای فعال‌سازی SSL و مینی‌اپ، روی سرور این دستور را اجرا کن:\n")
+		b.WriteString("<code>bash install-server.sh webapp</code>\n\n")
+		b.WriteString("پورت‌های ۸۰ و ۹۴۴۳ باید باز باشند. این امکان فقط برای نسخهٔ سروری است و نسخهٔ ورکر مینی‌اپ ندارد.")
+	}
+
+	rows := [][]Btn{}
+	if webOK {
+		if chat > 0 {
+			rows = append(rows, []Btn{btnWA("🚀 باز کردن مینی‌اپ", webURL)})
+		} else {
+			rows = append(rows, []Btn{btnURL("🚀 باز کردن مینی‌اپ", webURL)})
+		}
+	}
+	r.Show(chat, mid, b.String(), stdKB("settings", rows...))
+}

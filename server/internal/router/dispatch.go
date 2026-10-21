@@ -97,6 +97,8 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.foOldDelete(chat, mid, data[9:])
 	case data == "help":
 		r.helpList(chat, mid)
+	case data == "wahelp":
+		r.webappHelp(chat, mid)
 	case strings.HasPrefix(data, "help:"):
 		r.helpShow(chat, mid, data[5:])
 
