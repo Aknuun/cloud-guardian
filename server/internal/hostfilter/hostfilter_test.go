@@ -24,3 +24,17 @@ func TestBlockedCitiesCountsRealFailures(t *testing.T) {
 		t.Fatalf("blocked cities = %d, want 1", got)
 	}
 }
+
+func TestVerdictNothingMeasured(t *testing.T) {
+	cfg := Cfg{Cities: 2, CitiesSel: []string{"Tehran"}, MaxOk: 0}
+	d := verdictIP("203.0.113.9", nil, nil, cfg)
+	if d.IranMeasured {
+		t.Fatal("IranMeasured must be false without samples")
+	}
+	if d.Handled {
+		t.Fatalf("unmeasured IP must not be handled: %+v", d)
+	}
+	if !d.ForeignUnknown {
+		t.Fatalf("foreign verdict should be unknown: %+v", d)
+	}
+}

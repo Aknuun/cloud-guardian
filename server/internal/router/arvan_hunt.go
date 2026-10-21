@@ -239,7 +239,7 @@ func (r *Router) arvHuntPlanConfirm(chat, mid int64, i int, region string, idx i
 	r.Show(chat, mid, fmt.Sprintf("🎯 <b>شکار IP تمیز — آروان</b>\n\n"+
 		"📍 ریجن: <code>%s</code>\n📦 پلن: <code>%s</code>%s\n💿 ایمیج: <code>%s</code>\n"+
 		"🛡 فایروال: <code>Default</code>\n\n"+
-		"🧪 معیار تمیزی: پینگ موفق از ایران و آلمان/هلند (check-host).\n"+
+		"🧪 معیار تمیزی: پینگ موفق از ایران و آلمان/هلند (check-host؛ در صورت قطعی Globalping).\n"+
 		"⚠️ هر دور ۳ سرور موقت ساخته می‌شود؛ کثیف‌ها خودکار حذف می‌شوند.\n"+
 		"✅ سرورهای تمیز می‌مانند (هزینهٔ ساعتی دارند) و جست‌وجو متوقف می‌شود.\n\n"+
 		"🔢 تعداد دورها را انتخاب کن:",

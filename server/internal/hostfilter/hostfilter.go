@@ -456,6 +456,7 @@ func resolveHost(host string) []string {
 // and abroad — so a filtered/down IP is never mistaken for a filtered domain.
 type ipDiag struct {
 	IP             string
+	IranMeasured   bool
 	IranBlocked    bool
 	IPBlocked      bool
 	IPDown         bool
@@ -486,10 +487,13 @@ func verdictIP(ip string, ipp, fp map[string]pingRes, cfg Cfg) ipDiag {
 	foreignOk := measured && (total-fail)*2 >= total
 	foreignDown := measured && fail >= ipDownFails
 	foreignUnknown := !foreignOk && !foreignDown
+	d.IranMeasured = iranMeasured
 	d.IranBlocked = iranBlocked
 	d.ForeignFail = fail
 	d.ForeignUnknown = foreignUnknown
-	d.IPDown = (foreignDown || foreignUnknown) && (!iranMeasured || iranBlocked)
+	// "Down" must be backed by at least one real sample; a total outage of both
+	// probe services is unknown, not a down verdict.
+	d.IPDown = (foreignDown || foreignUnknown) && (iranMeasured || measured) && (!iranMeasured || iranBlocked)
 	d.IranAccess = foreignDown && iranMeasured && !iranBlocked
 	d.IPBlocked = iranMeasured && iranBlocked && foreignOk && !foreignDown
 	d.Handled = d.IPDown || d.IranAccess || d.IPBlocked
@@ -507,6 +511,10 @@ func CheckIPCleanliness(ip string) (bool, string) {
 	cfg := Cfg{Cities: 2, CitiesSel: append([]string{}, irCities...), MaxOk: 0}
 	d := diagIP(ip, cfg)
 	switch {
+	case !d.IranMeasured && d.ForeignUnknown:
+		// Neither check-host nor Globalping produced a single sample; do not
+		// report the IP as clean just because nothing could be measured.
+		return false, "⚪ بررسی ممکن نشد — نه check-host و نه Globalping پاسخ ندادند؛ دوباره تلاش کن."
 	case d.IPBlocked:
 		return false, "🔴 تمیز نیست — از داخل ایران فیلتر است (خارج پاسخ می‌دهد)."
 	case d.IPDown:
