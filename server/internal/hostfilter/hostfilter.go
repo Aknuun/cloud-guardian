@@ -338,7 +338,32 @@ func nodesFor(citiesSel []string) []node {
 	return out
 }
 
+// checkPing asks check-host.net for ICMP results and falls back to Globalping
+// for every node that check-host did not report (service down, rate-limited or
+// empty samples).
 func checkPing(host string, nodes []node) map[string]pingRes {
+	out := checkPingCH(host, nodes)
+	if len(nodes) == 0 {
+		return out
+	}
+	var missing []node
+	for _, n := range nodes {
+		if r, ok := out[n.ID]; !ok || r.Total <= 0 {
+			missing = append(missing, n)
+		}
+	}
+	if len(missing) == 0 {
+		return out
+	}
+	if fb := globalPing(host, missing); len(fb) > 0 {
+		for k, v := range fb {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+func checkPingCH(host string, nodes []node) map[string]pingRes {
 	out := map[string]pingRes{}
 	if len(nodes) == 0 {
 		return out
@@ -689,6 +714,9 @@ func httpGetJSON(u string, out any) error {
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return &httpStatusError{resp.StatusCode}
+	}
 	return json.Unmarshal(b, out)
 }
 

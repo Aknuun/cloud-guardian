@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.15"
+const Version = "4.6.16"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button

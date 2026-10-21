@@ -70,7 +70,7 @@ func (r *Router) hfHome(chat, mid int64) {
 	lines := []string{"🧭 تعویض خودکار هاست فیلتر", "",
 		"💡 برای بررسی سریع‌تر: هاست‌هایی که نیاز به تعویض ندارند را از «📋 لیست هاست‌ها» با «🚫 استثنا» از چرخه خارج کن؛ هرچه هاست کمتر، ران زودتر تمام می‌شود.",
 		"وضعیت: " + enabled,
-		"🔌 سرویس بررسی: check-host",
+		"🔌 سرویس بررسی: check-host (در صورت قطعی: Globalping)",
 		fmt.Sprintf("⏱ فاصلهٔ اجرا: هر %d دقیقه", cfg.IntervalMin),
 		"🌆 شهرها: " + cities,
 		fmt.Sprintf("🎯 آستانه: %d شهر از %d (پینگ موفق ≤ %d از ۴)", cfg.Cities, len(cfg.CitiesSel), cfg.MaxOk),
