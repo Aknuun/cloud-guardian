@@ -33,13 +33,19 @@ type CopyText struct {
 	Text string `json:"text"`
 }
 
+// WebApp opens a Telegram Mini App from an inline button (private chats).
+type WebApp struct {
+	URL string `json:"url"`
+}
+
 // Button is an inline keyboard button.
 type Button struct {
-	Text  string    `json:"text"`
-	Data  string    `json:"callback_data,omitempty"`
-	URL   string    `json:"url,omitempty"`
-	Style string    `json:"style,omitempty"`
-	Copy  *CopyText `json:"copy_text,omitempty"`
+	Text   string    `json:"text"`
+	Data   string    `json:"callback_data,omitempty"`
+	URL    string    `json:"url,omitempty"`
+	Style  string    `json:"style,omitempty"`
+	Copy   *CopyText `json:"copy_text,omitempty"`
+	WebApp *WebApp   `json:"web_app,omitempty"`
 }
 
 // Keyboard is an inline keyboard (rows of buttons).

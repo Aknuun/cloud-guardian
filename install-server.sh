@@ -22,6 +22,11 @@ DB="${INSTALL_DIR}/data.db"
 ENVFILE="${INSTALL_DIR}/server.env"
 UNIT="/etc/systemd/system/cg-server.service"
 SERVICE="cg-server"
+WEBAPP_ENV="${INSTALL_DIR}/webapp.env"
+WEBAPP_DROPIN_DIR="/etc/systemd/system/cg-server.service.d"
+WEBAPP_DROPIN="${WEBAPP_DROPIN_DIR}/webapp.conf"
+CADDYFILE="/etc/caddy/Caddyfile"
+CADDY_MARK="# managed by cloud-guardian installer (mini app)"
 
 # ref to build from: a branch (default) or a version tag for rollback/install of a
 # specific release, e.g.  REF=v4.5.2 bash install-server.sh update
@@ -313,11 +318,209 @@ start_service() {
   fi
 }
 
+# ------------------------------------------------------------
+# mini app + automatic HTTPS (Caddy + sslip.io)
+# ------------------------------------------------------------
+public_ip() {
+  curl -fsSL --max-time 8 https://api.ipify.org 2>/dev/null \
+    || hostname -I 2>/dev/null | awk '{print $1}' \
+    || true
+}
+
+service_port() {
+  local port="${CG_PORT:-}"
+  [ -n "$port" ] || port="$(port_of_url "$(cfg_get public_url)")"
+  [ -n "$port" ] || port="$(systemctl show "$SERVICE" -p Environment --value 2>/dev/null \
+    | tr ' ' '\n' | sed -n 's/^CG_HEALTH=://p' | head -n1)"
+  printf '%s' "$port"
+}
+
+install_caddy() {
+  have caddy && return 0
+  step "Installing Caddy (automatic HTTPS)"
+  if have apt-get; then
+    apt-get install -y debian-keyring debian-archive-keyring apt-transport-https gnupg >/dev/null 2>&1 || true
+    rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    if curl -fsSL --max-time 30 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+        | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null; then
+      curl -fsSL --max-time 30 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+        > /etc/apt/sources.list.d/caddy-stable.list 2>/dev/null || true
+      apt-get update -y >/dev/null 2>&1 || true
+      DEBIAN_FRONTEND=noninteractive apt-get install -y caddy >/dev/null 2>&1 || true
+    fi
+  elif have dnf; then
+    dnf install -y caddy >/dev/null 2>&1 || true
+  fi
+  if have caddy; then
+    ok "Caddy installed"
+    return 0
+  fi
+  warn "Could not install Caddy automatically"
+  return 1
+}
+
+open_web_ports() {
+  if have ufw && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow 80/tcp >/dev/null 2>&1 || true
+    ufw allow 9443/tcp >/dev/null 2>&1 || true
+  fi
+  if have firewall-cmd && systemctl is-active --quiet firewalld 2>/dev/null; then
+    firewall-cmd --permanent --add-port=80/tcp >/dev/null 2>&1 || true
+    firewall-cmd --permanent --add-port=9443/tcp >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+}
+
+wait_https() {
+  local base="$1" i
+  for i in $(seq 1 20); do
+    if curl -fsS --max-time 8 "$base/health" >/dev/null 2>&1; then return 0; fi
+    sleep 3
+  done
+  return 1
+}
+
+apply_webapp_env() {
+  local url="$1" cur=""
+  [ -f "$WEBAPP_DROPIN" ] && cur="$(sed -n 's/^Environment=CG_WEBAPP_URL=//p' "$WEBAPP_DROPIN" | tail -n1)"
+  [ "$cur" = "$url" ] && return 0
+  mkdir -p "$WEBAPP_DROPIN_DIR"
+  cat > "$WEBAPP_DROPIN" <<EOF
+[Service]
+Environment=CG_WEBAPP_URL=${url}
+EOF
+  systemctl daemon-reload
+  systemctl restart "$SERVICE" >/dev/null 2>&1 || true
+}
+
+save_webapp_url() {
+  local url="$1"
+  cat > "$WEBAPP_ENV" <<EOF
+CG_WEBAPP_URL=${url}
+EOF
+  chmod 600 "$WEBAPP_ENV"
+}
+
+setup_webapp() {
+  local mode="${1:-install}"
+  local port; port="$(service_port)"
+  if [ -z "$port" ]; then
+    warn "Mini app skipped: server port is unknown"
+    return 0
+  fi
+
+  local url=""
+  if [ -f "$WEBAPP_ENV" ]; then
+    # shellcheck disable=SC1090
+    . "$WEBAPP_ENV" 2>/dev/null || true
+    url="${CG_WEBAPP_URL:-}"
+  fi
+  if [ -z "$url" ] && [ -f "$WEBAPP_DROPIN" ]; then
+    url="$(sed -n 's/^Environment=CG_WEBAPP_URL=//p' "$WEBAPP_DROPIN" | tail -n1)"
+  fi
+
+  if [ -n "$url" ]; then
+    save_webapp_url "$url"
+    apply_webapp_env "$url"
+    if have caddy && ! systemctl is-active --quiet caddy 2>/dev/null; then
+      systemctl restart caddy >/dev/null 2>&1 || true
+    fi
+    ok "Mini app already configured: ${url}"
+    return 0
+  fi
+
+  if [ "${CG_NO_WEBAPP:-0}" = "1" ]; then
+    warn "Mini app skipped (CG_NO_WEBAPP=1)"
+    return 0
+  fi
+
+  local want="Y"
+  [ "$mode" = "update" ] && want="N"
+  ask "Enable mini app + automatic HTTPS? (ports 80 and 9443 must be reachable)" "$want"
+  [[ "${REPLY:-}" =~ ^[Yy] ]] || { warn "Mini app skipped"; return 0; }
+
+  install_caddy || return 0
+
+  if [ -s "$CADDYFILE" ] && ! grep -qF "$CADDY_MARK" "$CADDYFILE"; then
+    if grep -q "The Caddyfile is an easy way" "$CADDYFILE"; then
+      mv "$CADDYFILE" "${CADDYFILE}.dist"
+      ok "Backed up the default Caddyfile to ${CADDYFILE}.dist"
+    else
+      warn "An existing Caddyfile was found; it was not modified."
+      warn "Add this block manually, then run: bash install-server.sh webapp"
+      echo
+      echo "https://YOUR-DOMAIN.sslip.io:9443 {"
+      echo "    reverse_proxy 127.0.0.1:${port}"
+      echo "}"
+      echo
+      return 0
+    fi
+  fi
+
+  local ip; ip="$(public_ip)"
+  if [ -z "$ip" ]; then
+    warn "Mini app skipped: public IP could not be detected"
+    return 0
+  fi
+
+  local domain="cg-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n').${ip//./-}.sslip.io"
+  local base="https://${domain}:9443"
+  step "Configuring mini app + HTTPS on ${domain}:9443"
+  mkdir -p /etc/caddy
+  cat > "$CADDYFILE" <<EOF
+${CADDY_MARK}
+{
+	http_port 80
+	https_port 9443
+	admin 127.0.0.1:2019
+}
+
+${base} {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:${port}
+}
+EOF
+
+  open_web_ports
+  systemctl enable caddy >/dev/null 2>&1 || true
+  systemctl restart caddy >/dev/null 2>&1 || true
+
+  if ! wait_https "$base"; then
+    warn "HTTPS certificate is not ready yet. Check that ports 80/9443 are open."
+    journalctl -u caddy -n 15 --no-pager 2>/dev/null || true
+    warn "After fixing the ports, run: bash install-server.sh webapp"
+    return 0
+  fi
+
+  url="${base}/app/"
+  save_webapp_url "$url"
+  apply_webapp_env "$url"
+  sleep 1
+  if curl -fsS --max-time 10 "${url}?v=$(date +%s)" >/dev/null 2>&1; then
+    ok "Mini app ready: ${url}"
+  else
+    warn "Mini app URL was set but /app/ did not respond; check: journalctl -u ${SERVICE} -n 30"
+  fi
+}
+
+do_webapp() {
+  banner
+  need_root
+  ensure_base
+  is_installed || { err "Not installed; run install first"; exit 1; }
+  setup_webapp install
+}
+
 summary() {
   echo
   hr
   printf "${GREEN}${BOLD}%s${RST}\n" "Installation complete 🎉"
   hr
+  if [ -f "$WEBAPP_ENV" ]; then
+    # shellcheck disable=SC1090
+    . "$WEBAPP_ENV" 2>/dev/null || true
+    [ -n "${CG_WEBAPP_URL:-}" ] && printf "Mini app: ${CYAN}%s${RST}\n\n" "$CG_WEBAPP_URL"
+  fi
   echo "Commands:"
   echo "  systemctl status  ${SERVICE}"
   echo "  systemctl restart ${SERVICE}"
@@ -362,6 +565,7 @@ do_install() {
   write_config
   write_unit
   start_service
+  setup_webapp install
   summary
 }
 
@@ -374,6 +578,7 @@ do_update() {
   fetch_source
   build_binary
   systemctl restart "$SERVICE"
+  setup_webapp update
   ok "Updated to $(installed_version)"
 }
 
@@ -483,6 +688,7 @@ Cloud Guardian — Server installer (Go)
   bash install-server.sh update          update to latest
   bash install-server.sh rollback        pick & install a version
   bash install-server.sh reconfig        edit config only
+  bash install-server.sh webapp          set up mini app + HTTPS (Caddy)
   bash install-server.sh status          service status
   bash install-server.sh logs            service logs
   bash install-server.sh uninstall       remove service (asks about data)
@@ -496,6 +702,7 @@ case "$CMD" in
   update|u|upgrade)      do_update ;;
   rollback|rb|downgrade|version) do_rollback ;;
   reconfig|config|cfg)   do_reconfig ;;
+  webapp|mini|https)     do_webapp ;;
   uninstall|remove|rm)   do_uninstall ;;
   status|st)             do_status ;;
   logs|log)              do_logs ;;

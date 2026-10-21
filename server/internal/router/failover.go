@@ -159,21 +159,6 @@ func (r *Router) foStatusText() string {
 		"KV: <code>" + Esc(c["fo_namespace_id"]) + "</code>\n\n" +
 		"کرون ورکر هر ۵ دقیقه سرور را چک می‌کند؛ اگر قطع بود webhook را به خودش می‌برد و اگر سالم شد پس می‌دهد."
 }
-func (r *Router) foMaybePrompt(chat int64) {
-	if r.foConfigured() {
-		return
-	}
-	if r.Store.Get("fo:prompted") == "1" {
-		return
-	}
-	r.Store.Put("fo:prompted", "1", 0)
-	r.Bot.Send(chat,
-		"🛟 <b>پیشنهاد: پشتیبان فیلور</b>\n\n"+
-			"می‌خواهی پشتیبان فیلور راه بیندازی؟ اگر سرورت قطع شود، یک ورکر کلادفلر (رایگان) موقتاً جای ربات را می‌گیرد تا سرور برگردد.\n\n"+
-			"الان تنظیم کن یا بعداً از «تنظیمات» هم می‌شود.",
-		[][]Btn{{btnS("🛟 راه‌اندازی فیلور", "fo", "success"), btn("بعداً", "fo_skip")}})
-}
-
 func (r *Router) failoverHome(chat, mid int64) {
 	var kb [][]Btn
 	if r.foConfigured() {

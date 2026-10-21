@@ -81,6 +81,8 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "fo_skip":
 		r.Store.Put("fo:prompted", "1", 0)
 		r.Menu(chat, mid)
+	case data == "onboard_skip":
+		r.Menu(chat, mid)
 	case data == "fodisable":
 		r.foDisable(chat, mid)
 	case data == "fodelete":
