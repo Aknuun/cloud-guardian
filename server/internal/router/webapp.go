@@ -142,7 +142,7 @@ func (r *Router) webAuthAPI(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	exp := time.Now().Add(12 * time.Hour).Unix()
-	webJSON(w, http.StatusOK, map[string]any{
+	webOK(w, map[string]any{
 		"token": r.webSignSession(uid, exp),
 		"user":  map[string]any{"id": uid, "isMain": r.IsMain(uid)},
 	})
