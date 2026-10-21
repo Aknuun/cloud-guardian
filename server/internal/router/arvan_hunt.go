@@ -211,13 +211,12 @@ func (r *Router) arvHuntPlans(chat, mid int64, i int, region string) {
 		if j >= 25 {
 			break
 		}
-		label := fmt.Sprintf("📦 %s (%dvCPU/%dGB", sz.Name, sz.CPU, sz.RAM)
+		label := fmt.Sprintf("%dvCPU/%dGB", sz.CPU, sz.RAM)
 		if sz.Disk > 0 {
 			label += fmt.Sprintf("/%dGB", sz.Disk)
 		}
-		label += ")"
-		if p := arvToman(sz.Price); p != "" {
-			label += " · 💰 " + p
+		if p := arvPriceShort(sz.Price); p != "" {
+			label += " · " + p
 		}
 		kb = append(kb, []Btn{btn(truncRune(label, 60), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j))})
 	}

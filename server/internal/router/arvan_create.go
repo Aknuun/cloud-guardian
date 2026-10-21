@@ -253,12 +253,12 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 		if d := intOrAny(m["disk"]); d > 0 {
 			sp = append(sp, fmt.Sprintf("%dGB", d))
 		}
-		label := "📦 " + strv(m["name"])
-		if len(sp) > 0 {
-			label += " (" + strings.Join(sp, " · ") + ")"
+		label := strings.Join(sp, " · ")
+		if label == "" {
+			label = "📦 پلن"
 		}
-		if pr := arvToman(m["price"]); pr != "" {
-			label += " · 💰 " + pr
+		if pr := arvPriceShort(m["price"]); pr != "" {
+			label += " · " + pr
 		}
 		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("arvflv:%d", j))})
 	}

@@ -603,6 +603,21 @@ func arvCreditErr(errStr string) string {
 	return msg
 }
 
+// arvPriceShort formats a monthly price compactly for buttons.
+func arvPriceShort(v any) string {
+	n := intOrAny(v)
+	if n <= 0 {
+		return ""
+	}
+	if n >= 1000000 {
+		return fmt.Sprintf("%.1fM تومان", float64(n)/1000000)
+	}
+	if n >= 1000 {
+		return fmt.Sprintf("%dK تومان", n/1000)
+	}
+	return fmt.Sprintf("%d تومان", n)
+}
+
 func arvToman(v any) string {
 	n := intOrAny(v)
 	if n <= 0 {
