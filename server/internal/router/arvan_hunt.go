@@ -244,14 +244,14 @@ func (r *Router) arvHuntPlanConfirm(chat, mid int64, i int, region string, idx i
 		"🔢 تعداد دورها را انتخاب کن:",
 		Esc(r.arvRegionName(region)), Esc(p.SizeLabel), price, Esc(p.ImageName)),
 		[][]Btn{
-			{btnS("۳ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:3", i, region, idx), "primary"),
-				btnS("۵ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:5", i, region, idx), "primary")},
-			{btnS("۱۰ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:10", i, region, idx), "success")},
+			{btnS("۳ سرور · ۱۰ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:10:3", i, region, idx), "success")},
+			{btnS("۳ سرور · ۵ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:5:3", i, region, idx), "primary"),
+				btnS("۱ سرور · ۱۰ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:10:1", i, region, idx), "primary")},
 			{btn("🔙 پلن‌ها", fmt.Sprintf("arvhuntc:%d:%s", i, region)), btn("🖥 سرورها", "arvsrv")},
 		})
 }
 
-func (r *Router) arvHuntStart(chat, mid int64, i int, region string, idx, rounds int) {
+func (r *Router) arvHuntStart(chat, mid int64, i int, region string, idx, rounds, batch int) {
 	if r.arvHuntRunning(chat) != nil {
 		r.Show(chat, mid, "⏳ یک شکار IP در حال اجراست؛ اول آن را متوقف کن.", navKB("arvsrv"))
 		return
@@ -267,11 +267,14 @@ func (r *Router) arvHuntStart(chat, mid int64, i int, region string, idx, rounds
 	if rounds > 20 {
 		rounds = 20
 	}
+	if batch <= 0 || batch > 3 {
+		batch = 3
+	}
 	h := &arvHuntState{
 		chat: chat, acc: i, region: region, fw: "Default",
 		sizeID: p.SizeID, sizeName: p.SizeLabel,
 		imageID: p.ImageID, imageName: p.ImageName,
-		maxRounds: rounds, batch: 3, started: time.Now(), stage: "create",
+		maxRounds: rounds, batch: batch, started: time.Now(), stage: "create",
 	}
 	arvHunts.Store(chat, h)
 	msgID := r.Bot.Send(chat, "🎯 آماده‌سازی شکار IP…", [][]Btn{{btnS("⏹ توقف", "arvhuntstop", "danger")}})

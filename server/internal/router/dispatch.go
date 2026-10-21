@@ -717,14 +717,17 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.arvMkSshManual(chat, mid)
 	case strings.HasPrefix(data, "arvhuntgo:"):
 		if p := strings.Split(strings.TrimPrefix(data, "arvhuntgo:"), ":"); len(p) >= 2 {
-			idx, rounds := -1, 10
+			idx, rounds, batch := -1, 10, 3
 			if len(p) >= 3 {
 				idx = atoiSafe(p[2])
 			}
 			if len(p) >= 4 {
 				rounds = atoiSafe(p[3])
 			}
-			r.arvHuntStart(chat, mid, atoiSafe(p[0]), p[1], idx, rounds)
+			if len(p) >= 5 {
+				batch = atoiSafe(p[4])
+			}
+			r.arvHuntStart(chat, mid, atoiSafe(p[0]), p[1], idx, rounds, batch)
 		}
 	case strings.HasPrefix(data, "arvhuntstop"):
 		r.arvHuntStop(chat)
