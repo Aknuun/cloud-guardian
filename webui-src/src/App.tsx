@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader, Meter } from '@cloudflare/kumo'
 import { ArrowClockwise, ArrowRight, GlobeHemisphereWest, Plus } from '@phosphor-icons/react'
+import { api, ApiError, fallbackCopy, faNum, gb, gbf, mem, num, setToken, TG, token } from './lib'
+import Cloudflare from './Cloudflare'
 
 /* ---------------- types ---------------- */
 
@@ -55,36 +57,6 @@ type Modal =
   | { kind: 'password'; password: string }
   | { kind: 'created'; name: string; ip: string; password: string; onDone: () => void }
 
-/* ---------------- telegram + api ---------------- */
-
-const TG: any = (window as any).Telegram && (window as any).Telegram.WebApp ? (window as any).Telegram.WebApp : null
-
-let token = sessionStorage.getItem('cg_token') || ''
-
-class ApiError extends Error {}
-
-async function api<T = any>(path: string, body?: any): Promise<T> {
-  const headers: Record<string, string> = { Authorization: 'Bearer ' + token }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(path, {
-    method: body === undefined ? 'GET' : 'POST',
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  let j: any = null
-  try {
-    j = await res.json()
-  } catch {
-    /* ignore */
-  }
-  if (res.status === 401) {
-    sessionStorage.removeItem('cg_token')
-    token = ''
-  }
-  if (!res.ok || !j || j.ok === false) throw new ApiError((j && j.error) || 'خطای سرور (' + res.status + ')')
-  return j.data as T
-}
-
 /* ---------------- helpers ---------------- */
 
 const STATUS: Record<string, string> = {
@@ -98,24 +70,6 @@ const STATUS: Record<string, string> = {
   unknown: 'نامشخص',
 }
 
-function num(v: any) {
-  return Number(v || 0).toLocaleString('en-US')
-}
-function gb(v: any) {
-  const n = Number(v || 0)
-  return n >= 1000 ? (n / 1000).toFixed(1) + ' TB' : n.toFixed(n < 10 ? 1 : 0) + ' GB'
-}
-function mem(mb: any) {
-  const n = Number(mb || 0)
-  return n >= 1024 ? (n / 1024).toFixed(n % 1024 ? 1 : 0) + ' GB' : n + ' MB'
-}
-function faNum(v: any) {
-  return Number(v || 0).toLocaleString('fa-IR', { maximumFractionDigits: 1 })
-}
-function gbf(v: any) {
-  const n = Number(v || 0)
-  return n >= 1000 ? faNum(n / 1000) + ' ترابایت' : faNum(n) + ' گیگابایت'
-}
 function addr(s: Server) {
   if (s.ipv4 && s.ipv6) return s.ipv4 + ' / ' + s.ipv6
   return s.ipv4 || s.ipv6 || 'بدون آی‌پی'
@@ -134,27 +88,14 @@ function badgeVariant(st: string): any {
   if (st === 'unknown' || st === 'deleting') return 'error'
   return 'secondary'
 }
-function fallbackCopy(v: string) {
-  const ta = document.createElement('textarea')
-  ta.value = v
-  ta.style.position = 'fixed'
-  ta.style.opacity = '0'
-  document.body.appendChild(ta)
-  ta.select()
-  try {
-    document.execCommand('copy')
-  } catch {
-    /* ignore */
-  }
-  ta.remove()
-}
-
 /* ---------------- app ---------------- */
 
 export default function App() {
   const [phase, setPhase] = useState<'boot' | 'ready' | 'error'>('boot')
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
+  const [provider, setProvider] = useState<'hz' | 'cf'>('hz')
+  const cfBack = useRef<() => void>(() => {})
   const [stack, setStack] = useState<View[]>([])
   const [q, setQ] = useState('')
   const [createName, setCreateName] = useState('')
@@ -225,8 +166,7 @@ export default function App() {
         })
         const j = await res.json()
         if (!res.ok || !j.ok) throw new ApiError(j.error || 'ورود ناموفق')
-        token = j.data.token
-        sessionStorage.setItem('cg_token', token)
+        setToken(j.data.token)
         if (!cancelled) setPhase('ready')
       } catch (e: any) {
         if (!cancelled) {
@@ -251,9 +191,9 @@ export default function App() {
   }, [])
   useEffect(() => {
     if (!TG || !TG.BackButton) return
-    if (modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
+    if (provider === 'cf' || modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
     else TG.BackButton.hide()
-  }, [modal, cur, stack])
+  }, [modal, cur, stack, provider])
 
   /* load current view */
   useEffect(() => {
@@ -305,7 +245,7 @@ export default function App() {
           toast(e.message || 'خطا', true)
         }
       } finally {
-        if (!cancelled) bump(-1)
+        bump(-1)
       }
     })()
     return () => {
@@ -322,6 +262,10 @@ export default function App() {
     setQ('')
   }
   function goBack() {
+    if (provider === 'cf') {
+      cfBack.current()
+      return
+    }
     if (modal) {
       setModal(null)
       return
@@ -581,7 +525,9 @@ export default function App() {
   }
   const title =
     cur.v === 'accounts'
-      ? 'هتزنر'
+      ? provider === 'cf'
+        ? 'کلادفلر'
+        : 'هتزنر'
       : cur.v === 'servers'
         ? 'سرورها' + (accName(cur.acc) ? ' · ' + accName(cur.acc) : '')
         : cur.v === 'server'
@@ -593,9 +539,9 @@ export default function App() {
   function body() {
     if (viewErr) return <Empty title="خطا" description={viewErr} />
     if (cur.v === 'accounts') {
-      if (!accounts.length) return <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />
       return (
         <>
+          {!accounts.length && <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />}
           {accounts.map((a) => (
             <LayerCard
               key={a.i}
@@ -1075,6 +1021,17 @@ export default function App() {
     )
   }
 
+  if (provider === 'cf') {
+    return (
+      <Cloudflare
+        onSwitch={() => setProvider('hz')}
+        onBackRef={(f) => {
+          cfBack.current = f
+        }}
+      />
+    )
+  }
+
   const showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
 
   return (
@@ -1088,7 +1045,10 @@ export default function App() {
           <Button variant="ghost" shape="square" icon={ArrowClockwise} aria-label="بروزرسانی" onClick={reload} />
         )}
       </header>
-      <main className="cc-main">{body()}</main>
+      <main className="cc-main">
+        {(cur.v === 'accounts' || cur.v === 'servers') && <ProviderSwitch provider={provider} onChange={setProvider} />}
+        {body()}
+      </main>
       {busy > 0 && (
         <div className="cc-loading">
           <Loader size="lg" />
@@ -1096,6 +1056,21 @@ export default function App() {
       )}
       {toastMsg && <div className={'cc-toast' + (toastMsg.err ? ' err' : '')}>{toastMsg.t}</div>}
       <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
+    </div>
+  )
+}
+
+/* ---------------- provider switch ---------------- */
+
+function ProviderSwitch({ provider, onChange }: { provider: 'hz' | 'cf'; onChange: (p: 'hz' | 'cf') => void }) {
+  return (
+    <div className="cc-provider">
+      <button className={'cc-provider-btn' + (provider === 'hz' ? ' on' : '')} onClick={() => onChange('hz')}>
+        هتزنر
+      </button>
+      <button className={'cc-provider-btn' + (provider === 'cf' ? ' on' : '')} onClick={() => onChange('cf')}>
+        کلادفلر
+      </button>
     </div>
   )
 }

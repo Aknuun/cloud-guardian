@@ -363,3 +363,167 @@ body {
   color: #fff;
   border-color: transparent;
 }
+
+/* ---------------- cloudflare / telegram colors ---------------- */
+
+.cc-green {
+  background: var(--color-kumo-success) !important;
+  border-color: transparent !important;
+  color: #052e16 !important;
+}
+.cc-green:hover {
+  background: color-mix(in srgb, var(--color-kumo-success) 88%, #fff) !important;
+}
+
+.cc-provider {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 12px;
+  border-radius: 13px;
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-line);
+}
+.cc-provider-btn {
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-color-kumo-subtle);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cc-provider-btn.on {
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-default);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.cc-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0 10px;
+  scrollbar-width: none;
+}
+.cc-chips::-webkit-scrollbar {
+  display: none;
+}
+.cc-chip {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-kumo-line);
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-subtle);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cc-chip.on {
+  background: color-mix(in srgb, var(--color-kumo-brand) 18%, var(--color-kumo-base));
+  border-color: var(--color-kumo-brand);
+  color: var(--text-color-kumo-default);
+  font-weight: 600;
+}
+
+.cc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 2px 0 12px;
+  border-radius: 13px;
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-line);
+}
+.cc-tab {
+  flex: 1;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-color-kumo-subtle);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cc-tab.on {
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-default);
+  font-weight: 600;
+}
+
+.cc-select {
+  width: 100%;
+  height: 46px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid var(--color-kumo-line);
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-default);
+  font: inherit;
+  font-size: 14px;
+  appearance: none;
+}
+
+.cc-bulkbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cc-bulkbar::-webkit-scrollbar {
+  display: none;
+}
+.cc-bulkbtn {
+  flex: 1 0 auto;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-kumo-line);
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-default);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-bulkbtn:disabled {
+  opacity: 0.45;
+}
+.cc-bulkbtn.red {
+  background: var(--color-kumo-danger);
+  border-color: transparent;
+  color: #fff;
+}
+.cc-bulkbtn.green {
+  background: var(--color-kumo-success);
+  border-color: transparent;
+  color: #052e16;
+}
+
+.cc-check {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-kumo-line);
+  font-size: 12px;
+  color: #fff;
+}
+.cc-check.on {
+  background: var(--color-kumo-brand);
+  border-color: transparent;
+}
+.cc-star {
+  color: var(--color-kumo-warning);
+}
+.cc-selecting {
+  border-color: color-mix(in srgb, var(--color-kumo-brand) 45%, var(--color-kumo-line));
+}
