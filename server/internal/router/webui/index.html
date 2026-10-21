@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>هتزنر</title>
+<link rel="stylesheet" href="/app/style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/app/app.js" defer></script>
+</head>
+<body>
+<div id="loader" class="loader hidden"><div class="spinner"></div></div>
+<header id="topbar">
+  <button id="back" class="back hidden" aria-label="بازگشت">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M9.3 5.3 3.6 11a1.4 1.4 0 0 0 0 2l5.7 5.7 1.4-1.4-4.3-4.3H21v-2H6.4l4.3-4.3z"/></svg>
+  </button>
+  <h1 id="title">هتزنر</h1>
+  <button id="refresh" class="icon" aria-label="بروزرسانی">
+    <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+  </button>
+</header>
+<main id="app"></main>
+<div id="toast" class="toast hidden"></div>
+<div id="modal" class="modal hidden"><div class="sheet"><div id="modal-body"></div></div></div>
+</body>
+</html>

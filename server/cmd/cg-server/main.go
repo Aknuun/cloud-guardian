@@ -62,6 +62,10 @@ func main() {
 
 	// health + webhook endpoints
 	mux := http.NewServeMux()
+	web := r.WebApp()
+	mux.Handle("/app/", web)
+	mux.Handle("/app", web)
+	mux.Handle("/api/", web)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
