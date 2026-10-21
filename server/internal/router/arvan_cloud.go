@@ -302,7 +302,7 @@ func (r *Router) arvServerList(chat, mid int64, i int, region string) {
 		if j >= 30 {
 			break
 		}
-		srvItems = append(srvItems, btn(fmt.Sprintf("%s %s", arvEmoji(strv(s["status"])), truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j)))
+		srvItems = append(srvItems, btnS(fmt.Sprintf("%s %s", arvEmoji(strv(s["status"])), truncRune(strv(s["name"]), 30)), fmt.Sprintf("arvs:%d:%d", i, j), "plain"))
 	}
 	kb := gridBTN(srvItems, 2)
 	kb = append(kb, row(btn("➕ ساخت سرور جدید", fmt.Sprintf("arvnew:%d:%s", i, region))))
@@ -462,7 +462,7 @@ func (r *Router) arvSnapList(chat, mid int64, i, idx int) {
 		}
 		nm := firstOf(sn["name"], strv(sn["id"]))
 		kb = append(kb, []Btn{
-			btn("📷 "+truncRune(nm, 24), "noop"),
+			btnS("📷 "+truncRune(nm, 24), "noop", "plain"),
 			btnS("🗑", fmt.Sprintf("arvsnapdel:%d:%d:%s", i, idx, strv(sn["id"])), "danger")})
 	}
 	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))})

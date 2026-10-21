@@ -218,9 +218,9 @@ func (r *Router) arvHuntPlans(chat, mid int64, i int, region string) {
 		if p := arvPriceShort(sz.Price); p != "" {
 			label += " · " + p
 		}
-		items = append(items, btn(truncRune(label, 26), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j)))
+		items = append(items, btnS(truncRune(label, 26), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j), "plain"))
 	}
-	kb := gridBtns(items, 2)
+	kb := gridBTN(items, 2)
 	kb = append(kb, arvNav(i)...)
 	r.Show(chat, mid, fmt.Sprintf("🎯 شکار IP تمیز — %s\n\n📦 پلن مورد نظر را انتخاب کن:\n<i>قالب: vCPU/RAM/دیسک · قیمت ماهانه</i>", Esc(r.arvRegionName(region))), kb)
 }

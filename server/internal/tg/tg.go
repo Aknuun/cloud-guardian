@@ -140,9 +140,15 @@ func wrapMarkup(kb any) any {
 	}
 	switch t := kb.(type) {
 	case Keyboard:
-		return map[string]any{"inline_keyboard": styleKB([][]Button(t))}
+		if kb := styleKB([][]Button(t)); len(kb) > 0 {
+			return map[string]any{"inline_keyboard": kb}
+		}
+		return map[string]any{"inline_keyboard": [][]Button{}}
 	case [][]Button:
-		return map[string]any{"inline_keyboard": styleKB(t)}
+		if kb := styleKB(t); len(kb) > 0 {
+			return map[string]any{"inline_keyboard": kb}
+		}
+		return map[string]any{"inline_keyboard": [][]Button{}}
 	}
 	return kb
 }
@@ -218,24 +224,51 @@ func rowIsData(row []Button) bool {
 }
 
 func styleRow(row []Button) []Button {
+	if rowIsData(row) {
+		out := make([]Button, len(row))
+		for i, b := range row {
+			switch {
+			case isPlaceholder(b), !isBack(b) && b.Style != "plain":
+				out[i] = b
+			case isBack(b):
+				b.Style = "danger"
+				out[i] = b
+			default:
+				b.Style = ""
+				out[i] = b
+			}
+		}
+		return out
+	}
+	auto := "primary"
+	if rowIsDanger(row) {
+		auto = "danger"
+	} else {
+		n := 0
+		for _, b := range row {
+			if !isPlaceholder(b) {
+				n++
+			}
+		}
+		if n == 1 || n == 3 {
+			auto = "success"
+		}
+	}
 	out := make([]Button, len(row))
 	for i, b := range row {
 		switch {
 		case isPlaceholder(b):
+			out[i] = b
+		case isBack(b):
+			b.Style = "danger"
 			out[i] = b
 		case b.Style == "plain":
 			b.Style = ""
 			out[i] = b
 		case b.Style != "":
 			out[i] = b
-		case isBack(b):
-			b.Style = ""
-			out[i] = b
-		case rowIsDanger([]Button{b}):
-			b.Style = "danger"
-			out[i] = b
 		default:
-			b.Style = ""
+			b.Style = auto
 			out[i] = b
 		}
 	}

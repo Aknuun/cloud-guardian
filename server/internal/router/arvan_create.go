@@ -146,9 +146,9 @@ func (r *Router) arvMkImages(chat, mid int64) {
 			break
 		}
 		m := x.(map[string]any)
-		items = append(items, btn("💿 "+truncRune(strv(m["name"]), 22), fmt.Sprintf("arvimg:%d", j)))
+		items = append(items, btnS("💿 "+truncRune(strv(m["name"]), 22), fmt.Sprintf("arvimg:%d", j), "plain"))
 	}
-	kb := gridBtns(items, 2)
+	kb := gridBTN(items, 2)
 	kb = append(kb, []Btn{btn("⌨️ شناسهٔ ایمیج دستی", "arvimgman")})
 	kb = append(kb, arvMkBack(i, region)...)
 	r.Show(chat, mid,
@@ -251,9 +251,9 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 		if pr := arvPriceShort(m["price"]); pr != "" {
 			label += " · " + pr
 		}
-		items = append(items, btn(truncRune(label, 26), fmt.Sprintf("arvflv:%d", j)))
+		items = append(items, btnS(truncRune(label, 26), fmt.Sprintf("arvflv:%d", j), "plain"))
 	}
-	kb := gridBtns(items, 2)
+	kb := gridBTN(items, 2)
 	if len(kb) == 0 {
 		kb = append(kb, []Btn{btn("🔄 تلاش دوباره", "arvflvretry")})
 	}
@@ -538,6 +538,7 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 			break
 		}
 	}
+	r.arvMkClear(chat)
 	r.Show(chat, mid, fmt.Sprintf("⏳ در حال ساخت سرور «%s»…", Esc(name)), nil)
 	d, err := r.arvCreateServer(i, region, name, flavorID, imageID, fw, disk)
 	if err != nil {
@@ -568,7 +569,6 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 	if pwd != "" {
 		msg += fmt.Sprintf("\n\n🔑 رمز root:\n<code>%s</code>\n⚠️ یادداشت کن؛ دوباره نمایش داده نمی‌شود.", Esc(pwd))
 	}
-	r.arvMkClear(chat)
 	r.Show(chat, mid, msg, [][]Btn{{btn("🖥 سرورها", fmt.Sprintf("arvreg:%d:%s", i, region))}})
 	go r.arvMkWatch(chat, i, region, name, pwd)
 }

@@ -402,7 +402,7 @@ func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
 		if rg.Def {
 			label += " ✅"
 		}
-		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("%s:%d:%s", cb, i, rg.Code))})
+		kb = append(kb, []Btn{btnS(truncRune(label, 55), fmt.Sprintf("%s:%d:%s", cb, i, rg.Code), "plain")})
 	}
 	return kb
 }
