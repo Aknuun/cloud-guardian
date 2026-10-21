@@ -4,16 +4,16 @@ import "fmt"
 
 // Menu renders the home menu.
 func (r *Router) Menu(chat, mid int64) {
-	kb := stdKB("",
-		row(btnS("➕ افزودن رکورد", "addrec", "success"), btnS("☁️ کلودفلر", "zones", "plain"), btnS("⚡ تغییر سریع", "qamenu", "primary")),
-		row(btnS("🟢 لینود", "ln", "plain"), btnS("🇩🇪 هتزنر", "hz", "plain"), btnS("🇮🇷 آروان", "arvan", "plain")),
-		row(btnS("🎛 پنل پاسارگارد", "pndef", "plain")),
-		row(btnS("🧭 تعویض خودکار ساب فیلتر", "hf", "plain"), btnS("📡 مانیتور نود پاسارگارد", "nd", "plain")),
-		row(btnS("🔔 هشدار انقضا و حجم", "pghook", "plain"), btnS("🔥 گزارش بد مصرف پاسارگارد", "um", "plain")),
-		row(btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")),
-		row(btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")),
-		row(btnS("⚙️ تنظیمات و راهنما و ...", "settings", "plain")),
-	)
+	kb := [][]Btn{
+		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
+		{btnS("🟢 لینود", "ln", "success"), btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
+		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
+		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
+		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
+		{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")},
+		{btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
+		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
+	}
 	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version)
 	if p := r.PromoText(); p != "" {
 		text += "\n\n" + p
