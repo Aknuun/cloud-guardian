@@ -288,6 +288,105 @@ func (r *Router) arvImageGroups(i int, region string) []map[string]any {
 	return out
 }
 
+// arvCreateServer builds the Arvan create payload (firewall by UUID, network
+// ids discovered from existing servers) and retries with the alternate
+// flavor/image keys when the API rejects them.
+func (r *Router) arvCreateServer(i int, region, name, flavorID, imageID, fwName string, disk int) (map[string]any, error) {
+	cli, ok := r.arvCli(i)
+	if !ok {
+		return nil, fmt.Errorf("account not found")
+	}
+	base := map[string]any{
+		"name":            name,
+		"enable_ipv4":     true,
+		"security_groups": []map[string]any{{"name": r.arvFwID(i, region, fwName)}},
+	}
+	if nids := r.arvNetworkIDs(i, region); len(nids) > 0 {
+		base["network_ids"] = nids
+	}
+	if disk > 0 {
+		base["disk_size"] = disk
+	}
+	var last error
+	for _, keys := range [][2]string{{"flavorRef", "imageRef"}, {"flavor_id", "image_id"}} {
+		body := map[string]any{}
+		for k, v := range base {
+			body[k] = v
+		}
+		body[keys[0]] = flavorID
+		body[keys[1]] = imageID
+		d, err := cli.Ecc(region, "POST", "/servers", body)
+		if err == nil {
+			return d, nil
+		}
+		last = err
+		low := strings.ToLower(err.Error())
+		if !strings.Contains(low, "plan") && !strings.Contains(low, "flavor") {
+			break
+		}
+	}
+	return nil, last
+}
+
+func (r *Router) arvFwID(i int, region, name string) string {
+	if name == "" {
+		return name
+	}
+	v, _ := arvCached(fmt.Sprintf("mfw:%d:%s", i, region), 10*time.Minute, func() any {
+		cli, ok := r.arvCli(i)
+		if !ok {
+			return map[string]string{}
+		}
+		out := map[string]string{}
+		for _, g := range cli.EccList(region, "/securities") {
+			nm, id := strv(g["name"]), strv(g["id"])
+			if nm != "" && id != "" {
+				out[nm] = id
+			}
+		}
+		return out
+	})
+	if m, ok := v.(map[string]string); ok {
+		if id := m[name]; id != "" {
+			return id
+		}
+	}
+	return name
+}
+
+func (r *Router) arvNetworkIDs(i int, region string) []string {
+	v, _ := arvCached(fmt.Sprintf("mnet:%d:%s", i, region), time.Hour, func() any {
+		cli, ok := r.arvCli(i)
+		if !ok {
+			return []string{}
+		}
+		out := []string{}
+		for _, m := range cli.EccList(region, "/networks") {
+			if id := strv(m["id"]); id != "" {
+				out = append(out, id)
+			}
+		}
+		if len(out) == 0 {
+			for _, s := range r.arvAllServers(i, false) {
+				if strv(s["region"]) != region {
+					continue
+				}
+				for _, n := range toList(s["networks"]) {
+					if id := strv(n); id != "" {
+						out = append(out, id)
+					}
+				}
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	})
+	out, _ := v.([]string)
+	return out
+}
+
 func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
 	var kb [][]Btn
 	for _, rg := range r.arvRegions(i, false) {
@@ -484,7 +583,8 @@ type arvSize struct {
 }
 
 func (r *Router) arvSizes(i int, region string) []arvSize {
-	v, _ := arvCached(fmt.Sprintf("msz:%d:%s", i, region), 30*time.Minute, func() any {
+	key := fmt.Sprintf("msz:%d:%s", i, region)
+	v, _ := arvCached(key, 30*time.Minute, func() any {
 		cli, ok := r.arvCli(i)
 		if !ok {
 			return []arvSize{}
@@ -519,10 +619,33 @@ func (r *Router) arvSizes(i int, region string) []arvSize {
 				Price: price, PricePerHr: intOrAny(m["price_per_hour"]),
 			})
 		}
+		if len(out) == 0 {
+			return nil
+		}
+		r.Store.PutJSON("mszdb:"+key, out, 0)
 		return out
 	})
-	out, _ := v.([]arvSize)
-	return out
+	if out, ok := v.([]arvSize); ok && len(out) > 0 {
+		return out
+	}
+	var db []arvSize
+	if r.Store.GetJSON("mszdb:"+key, &db) && len(db) > 0 {
+		return db
+	}
+	return arvFallbackSizes()
+}
+
+// arvFallbackSizes keeps the create wizard usable when the sizes API is
+// throttled or returns 500.
+func arvFallbackSizes() []arvSize {
+	return []arvSize{
+		{ID: "eco-1-1-0", Name: "eco-small1", CPU: 1, RAM: 1, Disk: 25},
+		{ID: "eco-2-1-0", Name: "eco-small2", CPU: 2, RAM: 1, Disk: 25},
+		{ID: "eco-2-2-0", Name: "eco-small4", CPU: 2, RAM: 2, Disk: 30},
+		{ID: "std-2-2-0", Name: "std-small1", CPU: 2, RAM: 2, Disk: 75},
+		{ID: "g4-2-2-0", Name: "g4-small2", CPU: 2, RAM: 2, Disk: 75},
+		{ID: "g4-4-2-0", Name: "c4-medium1", CPU: 4, RAM: 2, Disk: 25},
+	}
 }
 
 func (r *Router) arvUpgrade(chat, mid int64, i, idx int) {

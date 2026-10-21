@@ -303,11 +303,7 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 			go func(k int) {
 				defer wg.Done()
 				name := items[k].Name
-				d, err := cli.Ecc(h.region, "POST", "/servers", map[string]any{
-					"name": name, "flavor_id": h.sizeID, "image_id": h.imageID,
-					"enable_ipv4":     true,
-					"security_groups": []map[string]any{{"name": h.fw}},
-				})
+				d, err := r.arvCreateServer(h.acc, h.region, name, h.sizeID, h.imageID, h.fw, 0)
 				if err != nil {
 					low := strings.ToLower(err.Error())
 					if strings.Contains(low, "firewall") {

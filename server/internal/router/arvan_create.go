@@ -231,6 +231,9 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 		}
 		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("arvflv:%d", j))})
 	}
+	if len(kb) == 0 {
+		kb = append(kb, []Btn{btn("🔄 تلاش دوباره", "arvflvretry")})
+	}
 	kb = append(kb, arvMkBack(i, region)...)
 	r.Show(chat, mid, "📦 پلن (سایز) را انتخاب کن:", kb)
 }
@@ -266,6 +269,13 @@ func (r *Router) arvMkNetworks(chat, mid int64) {
 	cli, ok := r.arvCli(i)
 	if !ok {
 		r.arvMkExpired(chat, mid)
+		return
+	}
+	if ids := r.arvNetworkIDs(i, region); len(ids) > 0 {
+		sess["networkId"] = ids[0]
+		sess["networkName"] = "شبکهٔ پیش‌فرض"
+		r.arvMkSave(chat, sess)
+		r.arvMkSsh(chat, mid)
 		return
 	}
 	r.Show(chat, mid, "⏳ در حال بارگذاری شبکه‌ها…", nil)
@@ -491,27 +501,22 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 	i := intOrAny(sess["acc"])
 	region := strv(sess["region"])
 	name := strv(sess["name"])
-	cli, ok := r.arvCli(i)
-	if !ok {
+	if _, ok := r.arvCli(i); !ok {
 		r.arvMkExpired(chat, mid)
 		return
 	}
 	fw := firstOf(strv(sess["firewall"]), "Default")
-	body := map[string]any{
-		"name":            name,
-		"flavor_id":       strv(sess["flavorId"]),
-		"image_id":        strv(sess["imageId"]),
-		"enable_ipv4":     true,
-		"security_groups": []map[string]any{{"name": fw}},
-	}
-	if nid := strv(sess["networkId"]); nid != "" {
-		body["network_ids"] = []string{nid}
-	}
-	if k := strv(sess["sshKey"]); k != "" {
-		body["key_name"] = k
+	flavorID := strv(sess["flavorId"])
+	imageID := strv(sess["imageId"])
+	disk := 0
+	for _, sz := range r.arvSizes(i, region) {
+		if sz.ID == flavorID {
+			disk = sz.Disk
+			break
+		}
 	}
 	r.Show(chat, mid, fmt.Sprintf("⏳ در حال ساخت سرور «%s»…", Esc(name)), nil)
-	d, err := cli.Ecc(region, "POST", "/servers", body)
+	d, err := r.arvCreateServer(i, region, name, flavorID, imageID, fw, disk)
 	if err != nil {
 		low := strings.ToLower(err.Error())
 		if strings.Contains(low, "firewall") {

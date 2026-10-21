@@ -728,6 +728,8 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		} else if len(p) == 2 {
 			r.arvHuntConfirm(chat, mid, atoiSafe(p[0]), p[1])
 		}
+	case data == "arvflvretry":
+		r.arvMkFlavors(chat, mid)
 	case data == "arvfwman":
 		r.arvMkFwStart(chat, mid)
 	case data == "arvcreate":
