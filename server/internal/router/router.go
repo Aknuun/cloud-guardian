@@ -13,14 +13,34 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.7"
+const Version = "4.6.8"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
 
+// UI rules (see AGENTS.md):
+//   - Buttons are gray (no style) by default. Only operational actions
+//     (create/delete/power/start/stop) may pass a style to btnS.
+//   - Option lists (plans, images, snapshots, ...) use 2 columns via gridBtns.
 func btn(text, data string) Btn         { return Btn{Text: text, Data: data} }
 func btnS(text, data, style string) Btn { return Btn{Text: text, Data: data, Style: style} }
-func HomeKB() [][]Btn                   { return [][]Btn{{btn("🏠 خانه", "menu")}} }
+
+// gridBtns lays a flat list of buttons out in rows of cols buttons.
+func gridBtns(items []Btn, cols int) [][]Btn {
+	if cols < 1 {
+		cols = 1
+	}
+	var rows [][]Btn
+	for i := 0; i < len(items); i += cols {
+		end := i + cols
+		if end > len(items) {
+			end = len(items)
+		}
+		rows = append(rows, items[i:end])
+	}
+	return rows
+}
+func HomeKB() [][]Btn { return [][]Btn{{btn("🏠 خانه", "menu")}} }
 
 // Button layout standard (keep screens compact so they fit without scrolling):
 //   - 1 column  (full-width): long labels / primary actions / confirmations.

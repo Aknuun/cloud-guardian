@@ -206,22 +206,23 @@ func (r *Router) arvHuntPlans(chat, mid int64, i int, region string) {
 		r.Show(chat, mid, "❌ لیست پلن‌ها نیامد؛ چند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
 		return
 	}
-	var kb [][]Btn
+	var items []Btn
 	for j, sz := range sizes {
 		if j >= 25 {
 			break
 		}
-		label := fmt.Sprintf("%dvCPU/%dGB", sz.CPU, sz.RAM)
+		label := fmt.Sprintf("%d/%d", sz.CPU, sz.RAM)
 		if sz.Disk > 0 {
 			label += fmt.Sprintf("/%dGB", sz.Disk)
 		}
 		if p := arvPriceShort(sz.Price); p != "" {
 			label += " · " + p
 		}
-		kb = append(kb, []Btn{btn(truncRune(label, 60), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j))})
+		items = append(items, btn(truncRune(label, 26), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j)))
 	}
+	kb := gridBtns(items, 2)
 	kb = append(kb, arvNav(i)...)
-	r.Show(chat, mid, fmt.Sprintf("🎯 شکار IP تمیز — %s\n\n📦 پلن مورد نظر را انتخاب کن (قیمت ماهانه):", Esc(r.arvRegionName(region))), kb)
+	r.Show(chat, mid, fmt.Sprintf("🎯 شکار IP تمیز — %s\n\n📦 پلن مورد نظر را انتخاب کن:\n<i>قالب: vCPU/RAM/دیسک · قیمت ماهانه</i>", Esc(r.arvRegionName(region))), kb)
 }
 
 func (r *Router) arvHuntPlanConfirm(chat, mid int64, i int, region string, idx int) {

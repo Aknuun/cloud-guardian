@@ -140,14 +140,15 @@ func (r *Router) arvMkImages(chat, mid int64) {
 	delete(sess, "imageId")
 	delete(sess, "imageName")
 	r.arvMkSave(chat, sess)
-	var kb [][]Btn
+	var items []Btn
 	for j, x := range imgs {
 		if j >= 40 {
 			break
 		}
 		m := x.(map[string]any)
-		kb = append(kb, []Btn{btn("💿 "+truncRune(strv(m["name"]), 48), fmt.Sprintf("arvimg:%d", j))})
+		items = append(items, btn("💿 "+truncRune(strv(m["name"]), 22), fmt.Sprintf("arvimg:%d", j)))
 	}
+	kb := gridBtns(items, 2)
 	kb = append(kb, []Btn{btn("⌨️ شناسهٔ ایمیج دستی", "arvimgman")})
 	kb = append(kb, arvMkBack(i, region)...)
 	r.Show(chat, mid,
@@ -237,36 +238,27 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 	delete(sess, "flavorName")
 	delete(sess, "flavorPrice")
 	r.arvMkSave(chat, sess)
-	var kb [][]Btn
+	var items []Btn
 	for j, x := range flavors {
 		if j >= 40 {
 			break
 		}
 		m := x.(map[string]any)
-		var sp []string
-		if c := intOrAny(m["cpu"]); c > 0 {
-			sp = append(sp, fmt.Sprintf("%d vCPU", c))
-		}
-		if m2 := intOrAny(m["ram"]); m2 > 0 {
-			sp = append(sp, fmt.Sprintf("%dGB", m2))
-		}
+		label := fmt.Sprintf("%d/%d", intOrAny(m["cpu"]), intOrAny(m["ram"]))
 		if d := intOrAny(m["disk"]); d > 0 {
-			sp = append(sp, fmt.Sprintf("%dGB", d))
-		}
-		label := strings.Join(sp, " · ")
-		if label == "" {
-			label = "📦 پلن"
+			label += fmt.Sprintf("/%dGB", d)
 		}
 		if pr := arvPriceShort(m["price"]); pr != "" {
 			label += " · " + pr
 		}
-		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("arvflv:%d", j))})
+		items = append(items, btn(truncRune(label, 26), fmt.Sprintf("arvflv:%d", j)))
 	}
+	kb := gridBtns(items, 2)
 	if len(kb) == 0 {
 		kb = append(kb, []Btn{btn("🔄 تلاش دوباره", "arvflvretry")})
 	}
 	kb = append(kb, arvMkBack(i, region)...)
-	r.Show(chat, mid, "📦 پلن (سایز) را انتخاب کن:", kb)
+	r.Show(chat, mid, "📦 پلن (سایز) را انتخاب کن:\n\n<i>قالب: vCPU/RAM/دیسک · قیمت ماهانه</i>", kb)
 }
 
 func (r *Router) arvMkPickFlavor(chat, mid int64, j int) {
