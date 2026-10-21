@@ -221,6 +221,11 @@ body {
   border-radius: 9px !important;
   font-size: 12px !important;
 }
+.cc-card button.cc-green {
+  background: color-mix(in srgb, var(--color-kumo-success) 16%, var(--color-kumo-base)) !important;
+  border: 1px solid color-mix(in srgb, var(--color-kumo-success) 42%, transparent) !important;
+  color: var(--color-kumo-success) !important;
+}
 .cc-kv > button.cc-green {
   background: color-mix(in srgb, var(--color-kumo-success) 16%, var(--color-kumo-base)) !important;
   border: 1px solid color-mix(in srgb, var(--color-kumo-success) 42%, transparent) !important;
