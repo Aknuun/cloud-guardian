@@ -698,12 +698,12 @@ func (r *Router) arvSizes(i int, region string) []arvSize {
 // throttled or returns 500.
 func arvFallbackSizes() []arvSize {
 	return []arvSize{
-		{ID: "eco-1-1-0", Name: "eco-small1", CPU: 1, RAM: 1, Disk: 25},
-		{ID: "eco-2-1-0", Name: "eco-small2", CPU: 2, RAM: 1, Disk: 25},
-		{ID: "eco-2-2-0", Name: "eco-small4", CPU: 2, RAM: 2, Disk: 30},
-		{ID: "std-2-2-0", Name: "std-small1", CPU: 2, RAM: 2, Disk: 75},
-		{ID: "g4-2-2-0", Name: "g4-small2", CPU: 2, RAM: 2, Disk: 75},
-		{ID: "g4-4-2-0", Name: "c4-medium1", CPU: 2, RAM: 4, Disk: 25},
+		{ID: "eco-2-2-0", Name: "eco-small4", CPU: 2, RAM: 2, Disk: 30, Price: 18560000},
+		{ID: "g4-4-2-0", Name: "c4-medium1", CPU: 2, RAM: 4, Disk: 25, Price: 26216000},
+		{ID: "g4-2-2-0", Name: "g4-small2", CPU: 2, RAM: 2, Disk: 75, Price: 30548000},
+		{ID: "std-2-2-0", Name: "std-small1", CPU: 2, RAM: 2, Disk: 75, Price: 30548000},
+		{ID: "std-4-2-0", Name: "std-small2", CPU: 2, RAM: 4, Disk: 75, Price: 36216000},
+		{ID: "g4-8-2-0", Name: "m4-small1", CPU: 2, RAM: 8, Disk: 50, Price: 42552000},
 	}
 }
 
