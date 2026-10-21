@@ -185,11 +185,20 @@ func (r *Router) webStatic() http.Handler {
 			p = "/index.html"
 		}
 		setWebHeaders(w)
-		if strings.HasSuffix(p, ".html") {
+		if p == "/index.html" {
+			// Serve the SPA shell directly: http.FileServer would redirect
+			// index.html to ./ and create a loop with /app/.
+			data, err := fs.ReadFile(sub, "index.html")
+			if err != nil {
+				http.NotFound(w, req)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+			_, _ = w.Write(data)
+			return
 		}
+		w.Header().Set("Cache-Control", "public, max-age=3600")
 		req2 := req.Clone(req.Context())
 		req2.URL.Path = p
 		fileServer.ServeHTTP(w, req2)
@@ -430,7 +439,7 @@ func (r *Router) hzWebPrices(cli *hz.Client, acc int, typeID, loc string) map[st
 
 func (r *Router) hzWebSnaps(cli *hz.Client, acc int, sid string) ([]map[string]any, error) {
 	sidInt, _ := strconv.Atoi(sid)
-	var out []map[string]any
+	out := make([]map[string]any, 0)
 	for _, im := range r.hzImagesCached(cli, acc) {
 		if strv(im["type"]) != "snapshot" {
 			continue
