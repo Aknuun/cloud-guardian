@@ -28,6 +28,7 @@ function esc(v) {
 }
 function num(v) { return Number(v || 0).toLocaleString('en-US'); }
 function gb(v) { const n = Number(v || 0); return n >= 1000 ? (n / 1000).toFixed(1) + ' TB' : n.toFixed(n < 10 ? 1 : 0) + ' GB'; }
+function mem(mb) { const n = Number(mb || 0); return n >= 1024 ? (n / 1024).toFixed(n % 1024 ? 1 : 0) + ' GB' : n + ' MB'; }
 function dotClass(st) {
   if (st === 'running') return 'running';
   if (st === 'off') return 'off';
@@ -79,6 +80,7 @@ async function boot() {
   }
   $('#refresh').classList.remove('hidden');
   $('#refresh').onclick = () => reload(true);
+  $('#back').onclick = back;
   if (S.token) {
     try { await api('/api/me'); return render(); } catch (_) { /* re-auth */ }
   }
@@ -210,7 +212,7 @@ async function viewServers() {
       <div class="dot ${dotClass(s.status)}"></div>
       <div class="grow">
         <div class="name">${esc(s.name)}</div>
-        <div class="sub">${esc((s.type && s.type.name) || '')} · ${s.type ? s.type.cores + 'vCPU / ' + gb(s.type.memory) + ' / ' + s.type.disk + 'GB' : ''}</div>
+        <div class="sub">${esc((s.type && s.type.name) || '')} · ${s.type ? s.type.cores + 'vCPU / ' + mem(s.type.memory) + ' / ' + s.type.disk + 'GB' : ''}</div>
         <div class="sub mono" style="margin-top:2px">${esc(addr(s))}</div>
       </div>
       <div style="text-align:left">
@@ -268,7 +270,7 @@ async function viewServer() {
     <div class="card" style="display:block">
       <div class="kv"><span>IPv4</span><span class="mono" data-a="copy" data-v="${esc(s.ipv4 || '')}">${esc(s.ipv4 || '—')}</span></div>
       <div class="kv"><span>IPv6</span><span class="mono" style="font-size:12px">${esc(s.ipv6 || '—')}</span></div>
-      <div class="kv"><span>پلن</span><span>${s.type ? esc(s.type.name) + ' · ' + s.type.cores + 'vCPU / ' + gb(s.type.memory) + ' / ' + s.type.disk + 'GB' : '—'}</span></div>
+      <div class="kv"><span>پلن</span><span>${s.type ? esc(s.type.name) + ' · ' + s.type.cores + 'vCPU / ' + mem(s.type.memory) + ' / ' + s.type.disk + 'GB' : '—'}</span></div>
       <div class="kv"><span>لوکیشن</span><span>${esc(s.location ? (s.location.city || '') + '، ' + (s.location.country || '') : '—')}</span></div>
       <div class="kv"><span>ساخت</span><span>${esc((s.created || '').slice(0, 10) || '—')}</span></div>
       <div class="kv"><span>هزینه</span><span>${s.prices && s.prices.monthly ? esc(s.prices.monthly) + ' ماهانه' : '—'}</span></div>
@@ -369,7 +371,7 @@ async function viewCreate() {
       const o = await options(c.loc, '');
       body = `<div class="section-title">پلن · ${esc(c.loc)}</div>` + (o.types.length ? o.types.map((t) => `
         <div class="choice" data-a="ctype" data-v="${esc(t.id)}" data-arch="${esc(t.architecture)}">
-          <div class="grow"><div>${esc(t.name)}</div><div class="sub">${t.cores} vCPU · ${gb(t.memory)} RAM · ${t.disk}GB · ${esc(t.architecture)}</div></div>
+          <div class="grow"><div>${esc(t.name)}</div><div class="sub">${t.cores} vCPU · ${mem(t.memory)} RAM · ${t.disk}GB · ${esc(t.architecture)}</div></div>
           <div>${esc(t.monthly || '')}</div>
         </div>`).join('') : '<div class="empty">پلنی برای این لوکیشن نیست.</div>');
     } else if (c.step === 3) {
@@ -518,7 +520,7 @@ const handlers = {
         const o = await options(s.location.name, '');
         const types = o.types.filter((t) => t.architecture === s.type.architecture);
         pickerBox('ارتقای پلن (سرور باید خاموش باشد)', types,
-          (t) => `<div class="choice" data-pick="${esc(t.id)}"><div class="grow"><div>${esc(t.name)}</div><div class="sub">${t.cores} vCPU · ${gb(t.memory)} · ${t.disk}GB</div></div><div>${esc(t.monthly || '')}</div></div>`,
+          (t) => `<div class="choice" data-pick="${esc(t.id)}"><div class="grow"><div>${esc(t.name)}</div><div class="sub">${t.cores} vCPU · ${mem(t.memory)} · ${t.disk}GB</div></div><div>${esc(t.monthly || '')}</div></div>`,
           (tid) => confirmBox('ارتقای پلن', 'نوع سرور تغییر می‌کند و دیسک هم ارتقا می‌یابد. ادامه؟', () => doAction({ op: 'resize', id, arg: tid })));
       } catch (e) { toast(e.message, true); } finally { loading(false); }
     })();
