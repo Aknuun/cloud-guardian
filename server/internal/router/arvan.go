@@ -63,6 +63,40 @@ func (r *Router) arvanHome(chat, mid int64) {
 			{btn("👤 اکانت‌ها", "arvanacc"), btn("🔙 بازگشت", "menu")}})
 }
 
+func arvKeyGuideKB() [][]Btn {
+	return [][]Btn{
+		{btnURL("🛡 ساخت Policy", "https://panel.arvancloud.ir/profile/iam/policies"),
+			btnURL("🤖 Machine Users", "https://panel.arvancloud.ir/profile/iam/machine-users")},
+		{btn("❌ انصراف", "arvanacc")},
+	}
+}
+
+func (r *Router) arvanAccHelp(chat, mid int64) {
+	r.setWizard(chat, map[string]any{"kind": "arvan_key"})
+	r.Show(chat, mid, arvKeyGuideText(), arvKeyGuideKB())
+}
+
+func arvKeyGuideText() string {
+	return "🔑 <b>افزودن اکانت آروان — راهنمای کامل</b>\n\n" +
+		"<b>۱) ساخت Policy (دسترسی‌ها)</b>\n" +
+		"• دکمهٔ «🛡 ساخت Policy» را بزن.\n" +
+		"• <b>Create Policy</b> → نام: <code>cloud-guardian</code>\n" +
+		"• این دسترسی‌ها را فعال کن:\n" +
+		"  • CDN: <code>domains</code> و <code>dns-records</code> (خواندن/نوشتن)\n" +
+		"  • ECC: <code>servers</code> (خواندن/نوشتن)، <code>sizes</code>، <code>images</code>، " +
+		"<code>networks</code>، <code>security-groups</code>، <code>snapshots</code>\n" +
+		"• ذخیره کن.\n\n" +
+		"<b>۲) ساخت Machine User</b>\n" +
+		"• دکمهٔ «🤖 Machine Users» → <b>Create Machine User</b>\n" +
+		"• نام: <code>cloud-guardian</code>\n" +
+		"• Policy ساخته‌شده را وصل کن (اگر چند پروژه داری، همه را انتخاب کن).\n" +
+		"• بعد از ساخت، <b>API Key</b> را کپی کن — فقط یک‌بار نمایش داده می‌شود.\n\n" +
+		"<b>۳) فرستادن کلید</b>\n" +
+		"• کلید را همین‌جا بفرست (با یا بدون پیشوند <code>Apikey</code>).\n" +
+		"• ربات خودش اعتبار کلید را تست می‌کند.\n\n" +
+		"⚠️ اگر دسترسی‌ها ناقص باشند، ساخت/شکار سرور با خطای 401/403 متوقف می‌شود."
+}
+
 func (r *Router) arvanAccsPage(chat, mid int64) {
 	accs := r.arvanAccList()
 	var kb [][]Btn
@@ -71,7 +105,7 @@ func (r *Router) arvanAccsPage(chat, mid int64) {
 			btn("👤 "+strv(a["name"]), "arvanacc"),
 			btnS("🗑", fmt.Sprintf("arvanaccdel:%d", i), "danger")})
 	}
-	kb = append(kb, []Btn{btn("➕ افزودن اکانت", "arvanaccadd")})
+	kb = append(kb, []Btn{btn("➕ افزودن اکانت", "arvanaccadd"), btn("📘 راهنما", "arvanacchelp")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid,
 		"🇮🇷 آروان — اکانت‌ها\n\nکلید را از پنل آروان "+
@@ -108,7 +142,7 @@ func (r *Router) arvanDoms(chat, mid int64) {
 	accs := r.arvanAccList()
 	if len(accs) == 0 {
 		r.Show(chat, mid, "📭 اکانتی نیست.",
-			[][]Btn{{btn("➕ افزودن اکانت", "arvanaccadd")},
+			[][]Btn{{btn("➕ افزودن اکانت", "arvanaccadd"), btn("📘 راهنما", "arvanacchelp")},
 				{btn("🔙 بازگشت", "arvan")}})
 		return
 	}

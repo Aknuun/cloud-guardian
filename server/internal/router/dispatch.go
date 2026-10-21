@@ -581,12 +581,8 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.arvanHome(chat, mid)
 	case data == "arvanacc":
 		r.arvanAccsPage(chat, mid)
-	case data == "arvanaccadd":
-		r.setWizard(chat, map[string]any{"kind": "arvan_key"})
-		r.Show(chat, mid,
-			"🔑 افزودن اکانت آروان\n\nکلید ماشین‌یوزر را از پنل آروان "+
-				"(Settings → IAM → Machine users) بسازید و همین‌جا بفرستید.",
-			[][]Btn{{btn("❌ انصراف", "arvanacc")}})
+	case data == "arvanaccadd", data == "arvanacchelp":
+		r.arvanAccHelp(chat, mid)
 	case strings.HasPrefix(data, "arvanaccdel:"):
 		r.arvanAccDelAsk(chat, mid, strings.TrimPrefix(data, "arvanaccdel:"))
 	case strings.HasPrefix(data, "arvanaccdelok:"):
