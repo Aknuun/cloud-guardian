@@ -266,7 +266,7 @@ async function viewServer() {
     </div>
 
     <div class="card" style="display:block">
-      <div class="kv"><span>IPv4</span><span class="mono">${esc(s.ipv4 || '—')}</span></div>
+      <div class="kv"><span>IPv4</span><span class="mono" data-a="copy" data-v="${esc(s.ipv4 || '')}">${esc(s.ipv4 || '—')}</span></div>
       <div class="kv"><span>IPv6</span><span class="mono" style="font-size:12px">${esc(s.ipv6 || '—')}</span></div>
       <div class="kv"><span>پلن</span><span>${s.type ? esc(s.type.name) + ' · ' + s.type.cores + 'vCPU / ' + gb(s.type.memory) + ' / ' + s.type.disk + 'GB' : '—'}</span></div>
       <div class="kv"><span>لوکیشن</span><span>${esc(s.location ? (s.location.city || '') + '، ' + (s.location.country || '') : '—')}</span></div>
@@ -344,7 +344,7 @@ function createState() {
 }
 
 async function options(loc, arch) {
-  const key = loc + '|' + arch;
+  const key = S.cur.acc + '|' + loc + '|' + arch;
   if (!S.optsCache[key]) {
     S.optsCache[key] = await api('/api/hz/options?acc=' + S.cur.acc +
       (loc ? '&loc=' + encodeURIComponent(loc) : '') +
@@ -450,6 +450,11 @@ async function doAction(opts) {
       toast((d && d.message) || 'انجام شد');
     }
     S.servers = [];
+    if (opts.op === 'delete') {
+      S.stack = [];
+      S.cur = { ...S.cur, view: 'servers', id: null };
+      return render();
+    }
     await render();
   } catch (e) { toast(e.message, true); }
   finally { loading(false); }
