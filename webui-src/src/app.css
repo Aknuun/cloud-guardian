@@ -21,9 +21,31 @@ body {
 }
 
 .cc-app {
+  --cc-btn-h: 40px;
+  --cc-radius: 11px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+/* unified button system: same height, radius and type scale everywhere */
+.cc-app button[data-kumo-component="Button"] {
+  height: var(--cc-btn-h) !important;
+  min-height: var(--cc-btn-h);
+  padding: 0 14px !important;
+  border-radius: var(--cc-radius) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  gap: 7px !important;
+  white-space: nowrap;
+  transition: filter 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+.cc-app button[data-kumo-component="Button"]:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.cc-app button[data-kumo-component="Button"]:disabled {
+  opacity: 0.5;
 }
 
 .cc-topbar {
@@ -177,6 +199,33 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.cc-kvbox {
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 12px;
+  padding: 4px 12px;
+  margin: 8px 0 4px;
+}
+.cc-kvbox .cc-kv {
+  padding: 8px 0;
+  font-size: 12.5px;
+}
+.cc-kvbox .cc-kv + .cc-kv {
+  border-top: 1px solid var(--color-kumo-hairline);
+}
+.cc-kv > button[data-kumo-component="Button"] {
+  height: 34px !important;
+  min-height: 34px;
+  min-width: 64px;
+  padding: 0 10px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+}
+.cc-kv > button.cc-green {
+  background: color-mix(in srgb, var(--color-kumo-success) 16%, var(--color-kumo-base)) !important;
+  border: 1px solid color-mix(in srgb, var(--color-kumo-success) 42%, transparent) !important;
+  color: var(--color-kumo-success) !important;
+}
 
 .cc-link {
   border: 0;
@@ -198,6 +247,13 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.cc-grid2 > button {
+  width: 100% !important;
+  min-width: 0;
+}
+.cc-grid2 > .cc-wide {
+  grid-column: 1 / -1;
 }
 
 .cc-mb {
@@ -225,12 +281,14 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 4px;
 }
 .cc-actions button {
   width: 100%;
-  height: 44px;
-  font-size: 13px;
+  min-width: 0;
+  height: 42px !important;
+  font-size: 12.5px !important;
+  padding: 0 8px !important;
 }
 .cc-actions .cc-wide {
   grid-column: 1 / -1;
@@ -314,6 +372,19 @@ body {
   gap: 8px;
   margin-top: 14px;
 }
+.cc-dialog-actions > button {
+  width: 100% !important;
+  height: 42px !important;
+  font-size: 13px !important;
+}
+.cc-dialog-actions > .cc-wide {
+  grid-column: 1 / -1;
+}
+.cc-dialog button[data-kumo-component="Button"] {
+  height: 42px !important;
+  border-radius: var(--cc-radius) !important;
+  font-size: 12.5px !important;
+}
 
 .cc-picker {
   max-height: 52vh;
@@ -367,12 +438,15 @@ body {
 /* ---------------- cloudflare / telegram colors ---------------- */
 
 .cc-green {
-  background: var(--color-kumo-success) !important;
+  background: #0e9f6e !important;
   border-color: transparent !important;
-  color: #052e16 !important;
+  color: #fff !important;
 }
 .cc-green:hover {
-  background: color-mix(in srgb, var(--color-kumo-success) 88%, #fff) !important;
+  background: #12b981 !important;
+}
+.cc-starred {
+  color: #f5b301;
 }
 
 .cc-provider {

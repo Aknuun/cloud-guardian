@@ -584,15 +584,16 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
           <button className="cc-provider-btn on">کلادفلر</button>
         </div>
         <div className="cc-grid2 cc-mb">
-          <Button className="cc-green" icon={Star} onClick={() => push({ v: 'favs' })}>
+          <Button variant="secondary" icon={Star} onClick={() => push({ v: 'favs' })}>
             منتخب‌ها
           </Button>
-          <Button variant="primary" onClick={() => push({ v: 'accounts' })}>
+          <Button variant="secondary" onClick={() => push({ v: 'accounts' })}>
             👤 اکانت‌ها
           </Button>
         </div>
         <Button
-          className="cc-wide cc-green cc-mb"
+          variant="primary"
+          className="cc-wide cc-mb"
           onClick={() => {
             const active = zones.filter((z) => z.status === 'active')
             setDlg({
@@ -1034,7 +1035,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
               <div className="cc-sub cc-mono">→ {r.dest}</div>
             </div>
             <Button
-              variant="destructive"
+              variant="secondary-destructive"
               size="sm"
               onClick={() =>
                 setDlg({
@@ -1341,15 +1342,16 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
                 ⚖️ وزن
               </Button>
               <Button
-                variant={e.on ? 'secondary-destructive' : 'primary'}
+                variant={e.on ? 'secondary' : 'primary'}
                 size="sm"
                 onClick={() => entryAction('toggle', { content: e.content, on: !e.on })}
               >
                 {e.on ? '⏸ غیرفعال' : '▶️ فعال'}
               </Button>
               <Button
-                className="cc-green"
+                variant="secondary"
                 size="sm"
+                className={e.spare ? '' : 'cc-wide'}
                 onClick={() =>
                   setDlg({ k: 'spare', acc: view.acc, zid: view.zid, name: view.name, entry: e })
                 }
@@ -1620,64 +1622,67 @@ function RecordSheet({
   return (
     <>
       <Dialog.Title className="cc-dialog-title">
-        {r.fav ? '★ ' : ''}
         {r.label}
+        {r.fav && <span className="cc-starred"> ★</span>}
       </Dialog.Title>
-      <Dialog.Description className="cc-dialog-desc">
-        <span className="cc-mono">{r.content}</span>
-      </Dialog.Description>
-      <div className="cc-kv">
-        <span>نوع</span>
-        <span>{r.type}</span>
-      </div>
-      <div className="cc-kv">
-        <span>TTL</span>
-        <span>{ttlLabel(r.ttl)}</span>
-      </div>
-      {PROXYABLE.includes(r.type) && (
+      <Dialog.Description className="cc-dialog-desc cc-mono">{r.content}</Dialog.Description>
+
+      <div className="cc-kvbox">
         <div className="cc-kv">
-          <span>پروکسی</span>
-          <span>{r.proxied ? 'روشن' : 'خاموش'}</span>
+          <span>نوع</span>
+          <span>{r.type}</span>
         </div>
-      )}
-      <div className="cc-kv">
-        <span>نام کامل</span>
-        <span className="cc-mono cc-small">{r.name}</span>
+        <div className="cc-kv">
+          <span>TTL</span>
+          <span>{ttlLabel(r.ttl)}</span>
+        </div>
+        {PROXYABLE.includes(r.type) && (
+          <div className="cc-kv">
+            <span>پروکسی</span>
+            <span>{r.proxied ? 'روشن' : 'خاموش'}</span>
+          </div>
+        )}
+        <div className="cc-kv">
+          <span>نام کامل</span>
+          <span className="cc-mono cc-small">{r.name}</span>
+        </div>
       </div>
-      <div className="cc-grid2 cc-mt">
-        <Button variant="primary" onClick={onEdit}>
+
+      <div className="cc-section">عملیات</div>
+      <div className="cc-actions">
+        <Button variant="primary" className="cc-wide" onClick={onEdit}>
           ✏️ ویرایش مقدار
         </Button>
-        <Button className="cc-green" onClick={onFav}>
-          {r.fav ? '⭐ حذف از منتخب' : '⭐ افزودن به منتخب'}
+        <Button variant="secondary" onClick={onFav}>
+          {r.fav ? '⭐ حذف از منتخب' : '☆ افزودن به منتخب'}
         </Button>
         {PROXYABLE.includes(r.type) && (
-          <Button className={r.proxied ? '' : 'cc-green'} variant={r.proxied ? 'secondary' : undefined} onClick={onProxy}>
-            🌐 پروکسی {r.proxied ? 'خاموش' : 'روشن'}
+          <Button variant="secondary" onClick={onProxy}>
+            🌐 پروکسی: {r.proxied ? 'روشن' : 'خاموش'}
           </Button>
         )}
-        <Button variant="outline" onClick={onTTL}>
+        <Button variant="secondary" onClick={onTTL}>
           ⏱ TTL: {ttlLabel(r.ttl)}
         </Button>
         {(r.type === 'A' || r.type === 'CNAME') && (
-          <Button variant="outline" onClick={onType}>
+          <Button variant="secondary" onClick={onType}>
             🔄 تبدیل به {r.type === 'A' ? 'CNAME' : 'A'}
           </Button>
         )}
-        <Button variant="outline" onClick={() => onCopy(r.name, 'نام کپی شد')}>
+        <Button variant="secondary" onClick={() => onCopy(r.name, 'نام کپی شد')}>
           📋 کپی نام
         </Button>
-        <Button variant="outline" onClick={() => onCopy(r.content, 'مقدار کپی شد')}>
+        <Button variant="secondary" onClick={() => onCopy(r.content, 'مقدار کپی شد')}>
           📋 کپی مقدار
         </Button>
-        <Button variant="outline" onClick={onTraffic}>
+        <Button variant="secondary" onClick={onTraffic}>
           📊 ترافیک امروز
         </Button>
-        <Button variant="outline" onClick={onRefs}>
+        <Button variant="secondary" onClick={onRefs}>
           🔗 CNAMEهای وارده
         </Button>
         {PROXYABLE.includes(r.type) && (
-          <Button className="cc-green cc-wide" onClick={onLB}>
+          <Button variant="secondary" className="cc-wide" onClick={onLB}>
             ⚙️ لود بالانسر و آی‌پی زاپاس
           </Button>
         )}
@@ -1685,8 +1690,9 @@ function RecordSheet({
           🗑 حذف رکورد
         </Button>
       </div>
+
       <div className="cc-dialog-actions">
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" className="cc-wide" onClick={onClose}>
           بستن
         </Button>
       </div>
