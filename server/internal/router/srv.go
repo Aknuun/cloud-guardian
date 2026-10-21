@@ -739,12 +739,15 @@ func (r *Router) srvmonToggle(chat, mid int64) {
 
 func (r *Router) srvmonRun(chat int64) {
 	lst := r.srvList()
-	n := srvmon.Run(r.Store, lst, r.AdminID, func(s map[string]any) map[string]any {
-		return sshop.Stats(strv(s["host"]), orDefault(strv(s["user"]), "root"), strv(s["secret"]), intOfAny(s["port"]))
-	}, r.Bot, true)
-	if n == 0 {
-		r.Bot.Send(chat, "✅ بررسی شد؛ هشدار تازه‌ای نیست.", nil)
-	}
+	r.Bot.Send(chat, "⏳ در حال بررسی سرورها…", nil)
+	go func() {
+		n := srvmon.Run(r.Store, lst, r.AdminID, func(s map[string]any) map[string]any {
+			return sshop.Stats(strv(s["host"]), orDefault(strv(s["user"]), "root"), strv(s["secret"]), intOfAny(s["port"]))
+		}, r.Bot, true)
+		if n == 0 {
+			r.Bot.Send(chat, "✅ بررسی شد؛ هشدار تازه‌ای نیست.", nil)
+		}
+	}()
 }
 
 func (r *Router) srvStats(chat, mid int64, idx string) {
@@ -976,6 +979,18 @@ func (r *Router) srvmonNumSave(chat, mid int64, pend map[string]any, text string
 	key := keyMap[strvVal(pend["key"])]
 	if key == "" {
 		key = "cpuPct"
+	}
+	if key == "cooldownMin" {
+		if v < 1 {
+			v = 1
+		}
+		if v > 1440 {
+			v = 1440
+		}
+	} else {
+		if v > 100 {
+			v = 100
+		}
 	}
 	cfg := srvmon.Cfg(r.Store)
 	cfg[key] = v

@@ -8,9 +8,9 @@ import (
 )
 
 func (r *Router) foSnap() map[string]any {
-	health := r.FO["health_url"]
+	health := r.foVal("health_url")
 	if health == "" {
-		if pub := strings.TrimRight(r.FO["public_url"], "/"); pub != "" {
+		if pub := strings.TrimRight(r.foVal("public_url"), "/"); pub != "" {
 			health = pub + "/health"
 		}
 	}
@@ -18,8 +18,8 @@ func (r *Router) foSnap() map[string]any {
 	return map[string]any{
 		"ts":            time.Now().Unix(),
 		"bot_username":  username,
-		"cf_account_id": r.FO["cf_account_id"],
-		"worker_name":   r.FO["worker_name"],
+		"cf_account_id": r.foVal("cf_account_id"),
+		"worker_name":   r.foVal("worker_name"),
 		"health_url":    health,
 		"cf_tokens":     r.cfAccs(),
 		"hz_tokens":     r.hzAccs(),
@@ -30,7 +30,7 @@ func (r *Router) foSnap() map[string]any {
 
 // SyncPush pushes the failover snapshot to the Worker KV (best-effort).
 func (r *Router) SyncPush() {
-	tok, acc, ns := r.FO["cf_api_token"], r.FO["cf_account_id"], r.FO["fo_namespace_id"]
+	tok, acc, ns := r.foVal("cf_api_token"), r.foVal("cf_account_id"), r.foVal("fo_namespace_id")
 	if tok == "" || acc == "" || ns == "" {
 		return
 	}
@@ -40,5 +40,5 @@ func (r *Router) SyncPush() {
 
 // SyncCredentials returns the credentials needed for a DB backup push.
 func (r *Router) SyncCredentials() (token, account, ns string) {
-	return r.FO["cf_api_token"], r.FO["cf_account_id"], r.FO["fo_namespace_id"]
+	return r.foVal("cf_api_token"), r.foVal("cf_account_id"), r.foVal("fo_namespace_id")
 }

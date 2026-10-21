@@ -30,12 +30,31 @@ func (r *Router) foGet() map[string]string {
 
 func (r *Router) foSet(m map[string]string) {
 	r.Store.PutJSON(foCfgKey, m, 0)
+	r.foMu.Lock()
 	if r.FO == nil {
 		r.FO = map[string]string{}
 	}
 	for k, v := range m {
 		r.FO[k] = v
 	}
+	r.foMu.Unlock()
+}
+
+// foVal reads a runtime failover value safely (the map is also written by
+// background goroutines).
+func (r *Router) foVal(k string) string {
+	r.foMu.RLock()
+	v := r.FO[k]
+	r.foMu.RUnlock()
+	return v
+}
+
+func (r *Router) foClear(keys ...string) {
+	r.foMu.Lock()
+	for _, k := range keys {
+		delete(r.FO, k)
+	}
+	r.foMu.Unlock()
 }
 
 func (r *Router) foConfigured() bool {
@@ -344,7 +363,7 @@ func (r *Router) foDeployCore(token, aid, aname, name string) (map[string]string
 		c.DeleteKV(aid, ns)
 		return nil, fmt.Errorf("دریافت فایل ورکر: %v", err)
 	}
-	pub := strings.TrimRight(r.FO["public_url"], "/")
+	pub := strings.TrimRight(r.foVal("public_url"), "/")
 	health := ""
 	zoneID, recID, zoneName := "", "", ""
 	if pub != "" {
@@ -516,9 +535,8 @@ func (r *Router) foDeleteYes(chat, mid int64) {
 			_ = cf.New(c["cf_api_token"]).DelRecord(c["health_dns_zone"], c["health_dns_rec"])
 		}
 		r.Store.Delete(foCfgKey)
-		for _, k := range []string{"cf_api_token", "cf_account_id", "account_name", "worker_name", "worker_url", "fo_namespace_id", "health_url", "public_url", "health_dns_zone", "health_dns_rec", "health_dns_name"} {
-			delete(r.FO, k)
-		}
+		r.foClear("cf_api_token", "cf_account_id", "account_name", "worker_name", "worker_url",
+			"fo_namespace_id", "health_url", "public_url", "health_dns_zone", "health_dns_rec", "health_dns_name")
 		r.Bot.Send(chat, "🗑 ورکر پشتیبان و فضای KV حذف شدند.", [][]Btn{{btn("🛟 فیلور", "fo"), btn("🏠 خانه", "menu")}})
 	}()
 }

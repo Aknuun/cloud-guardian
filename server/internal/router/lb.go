@@ -497,7 +497,10 @@ func (r *Router) lbToggleDo(chat, mid int64, gid string, idx int) {
 	}
 	if e.On {
 		if e.ID != "" {
-			_ = cli.DelRecord(s.Zid, e.ID)
+			if err := cli.DelRecord(s.Zid, e.ID); err != nil {
+				r.Show(chat, mid, "❌ حذف رکورد نشد: "+Esc(err.Error()), HomeKB())
+				return
+			}
 		}
 		cfg.Disabled = append(cfg.Disabled, lb.Disabled{
 			Type: e.Type, Content: e.Content, Proxied: e.Proxied, TTL: e.TTL})
@@ -533,12 +536,21 @@ func (r *Router) lbProxyAll(chat, mid int64, gid string, on bool) {
 		r.Show(chat, mid, "❌ دامنه پیدا نشد.", HomeKB())
 		return
 	}
+	failed := 0
+	lastErr := ""
 	for _, e := range entries {
 		if !e.On || e.ID == "" {
 			continue
 		}
 		rec := cf.Record{ID: e.ID, Type: e.Type, Name: s.Name, Content: e.Content, TTL: e.TTL, Proxied: e.Proxied}
-		_, _ = cli.UpdateRecord(s.Zid, rec, map[string]any{"proxied": on})
+		if _, err := cli.UpdateRecord(s.Zid, rec, map[string]any{"proxied": on}); err != nil {
+			failed++
+			lastErr = err.Error()
+		}
+	}
+	if failed > 0 {
+		r.Show(chat, mid, fmt.Sprintf("⚠️ %d رکورد تغییر نکرد: %s", failed, Esc(lastErr)), navKB("zones"))
+		return
 	}
 	r.lbRender(chat, mid, gid)
 }
@@ -608,17 +620,11 @@ func (r *Router) lbSpareHomeGid(chat, mid int64, gid string) {
 func (r *Router) lbSpareMenu(chat, mid int64, gid string, idx int) {
 	s := r.lbGetSess(gid)
 	full := r.lbEntries(s)
-	var onIdx []int
-	for k, x := range full {
-		if x.On {
-			onIdx = append(onIdx, k)
-		}
-	}
-	if idx < 0 || idx >= len(onIdx) {
+	if idx < 0 || idx >= len(full) || !full[idx].On {
 		r.Show(chat, mid, "❌ مورد پیدا نشد.", HomeKB())
 		return
 	}
-	fi := onIdx[idx]
+	fi := idx
 	e := full[fi]
 	cfg := lb.GetCfg(r.Store, lb.KeyFor(s.Zid, s.Name))
 	sp := lb.SpareOf(cfg, e.Content)
@@ -674,16 +680,21 @@ func (r *Router) lbReplace(chat, mid int64, gid string, idx int, confirm bool) {
 		r.Show(chat, mid, "❌ دامنه پیدا نشد.", HomeKB())
 		return
 	}
-	if e.ID != "" {
-		_ = cli.DelRecord(s.Zid, e.ID)
-	}
 	spType := sp.Type
 	if spType == "" {
 		spType = e.Type
 	}
-	if _, err := cli.AddRecord(s.Zid, spType, s.Name, sp.Content, 1, false, nil); err != nil {
+	ttl := ttlInt(e.TTL)
+	if _, err := cli.AddRecord(s.Zid, spType, s.Name, sp.Content, ttl, e.Proxied, nil); err != nil {
 		r.Show(chat, mid, "❌ نشد: "+Esc(err.Error()), HomeKB())
 		return
+	}
+	if e.ID != "" {
+		if err := cli.DelRecord(s.Zid, e.ID); err != nil {
+			r.Show(chat, mid, "⚠️ رکورد جدید ساخته شد ولی حذف رکورد قبلی نشد: "+Esc(err.Error()), HomeKB())
+			r.lbRender(chat, 0, gid)
+			return
+		}
 	}
 	r.Bot.Send(chat, "✅ جایگزینی انجام شد.", nil)
 	r.lbRender(chat, 0, gid)
@@ -718,13 +729,7 @@ func (r *Router) lbSpareSave(chat, mid int64, pend map[string]any, text string) 
 	idx := intOrAny(pend["idx"])
 	s := r.lbGetSess(gid)
 	entries := r.lbEntries(s)
-	var on []lb.Entry
-	for _, e := range entries {
-		if e.On {
-			on = append(on, e)
-		}
-	}
-	if idx < 0 || idx >= len(on) {
+	if idx < 0 || idx >= len(entries) || !entries[idx].On {
 		r.clearWizard(chat)
 		r.Bot.Send(chat, "❌ مورد پیدا نشد.", nil)
 		return
@@ -743,7 +748,7 @@ func (r *Router) lbSpareSave(chat, mid int64, pend map[string]any, text string) 
 	if cfg.Spares == nil {
 		cfg.Spares = map[string]lb.Spare{}
 	}
-	cfg.Spares[on[idx].Content] = lb.Spare{Type: typ, Content: v}
+	cfg.Spares[entries[idx].Content] = lb.Spare{Type: typ, Content: v}
 	lb.SaveCfg(r.Store, key, cfg)
 	r.clearWizard(chat)
 	r.Bot.Send(chat, "✅ زاپاس ذخیره شد.", nil)
@@ -776,17 +781,11 @@ func (r *Router) lbAddSave(chat, mid int64, pend map[string]any, text string) {
 func (r *Router) lbSpareDel(chat, mid int64, gid string, idx int) {
 	s := r.lbGetSess(gid)
 	full := r.lbEntries(s)
-	var onIdx []int
-	for k, x := range full {
-		if x.On {
-			onIdx = append(onIdx, k)
-		}
-	}
-	if idx < 0 || idx >= len(onIdx) {
+	if idx < 0 || idx >= len(full) || !full[idx].On {
 		r.Show(chat, mid, "❌ مورد پیدا نشد.", HomeKB())
 		return
 	}
-	e := full[onIdx[idx]]
+	e := full[idx]
 	key := lb.KeyFor(s.Zid, s.Name)
 	cfg := lb.GetCfg(r.Store, key)
 	delete(cfg.Spares, e.Content)

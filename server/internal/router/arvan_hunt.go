@@ -320,6 +320,17 @@ func (r *Router) arvHuntFinish(h *arvHuntState, summary string) {
 func (r *Router) arvHuntRun(h *arvHuntState) {
 	defer func() {
 		if rec := recover(); rec != nil {
+			// Never leave paid servers behind after an unexpected crash.
+			h.mu.Lock()
+			items := append([]arvHuntItem{}, h.items...)
+			h.mu.Unlock()
+			if cli, ok := r.arvCli(h.acc); ok {
+				for _, it := range items {
+					if it.ID != "" {
+						_, _ = cli.Ecc(h.region, "DELETE", "/servers/"+it.ID, nil)
+					}
+				}
+			}
 			r.arvHuntFinish(h, "❌ خطای داخلی: "+fmt.Sprint(rec))
 		}
 	}()

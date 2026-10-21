@@ -28,6 +28,37 @@ func (r *Router) getWizard(chat int64) map[string]any {
 	return nil
 }
 
+// navScreens lists callback targets that render an ordinary page (menu, a
+// section home or a detail view) rather than a step of a text wizard. Opening
+// one drops any half-finished text wizard, otherwise the next plain message
+// would be swallowed by a stale prompt.
+var navScreensExact = map[string]bool{
+	"menu": true, "settings": true, "accounts": true, "favs": true, "zones": true,
+	"srv": true, "srvmon": true, "srvpw": true, "srvsubcancel": true,
+	"ln": true, "hz": true, "arvan": true, "arvanacc": true, "rem": true,
+	"nd": true, "pg": true, "zmail": true, "fmail": true, "domexp": true,
+	"sslm": true, "hub": true, "um": true, "fo": true, "hfd": true, "hfbk": true,
+	"hflist": true, "verlist": true, "promo": true, "admins_menu": true,
+	"qacancel": true, "qamenu": true, "pgdel": true, "hzdel": true, "lndel": true,
+}
+
+var navScreensPrefix = []string{
+	"cfr:", "cfz:", "lnsi:", "hzsi:", "hzs:", "arvs:", "srvopen:", "qap:",
+	"pgl:", "pnle:", "traz:",
+}
+
+func isNavScreen(data string) bool {
+	if navScreensExact[data] {
+		return true
+	}
+	for _, p := range navScreensPrefix {
+		if strings.HasPrefix(data, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Router) clearWizard(chat int64) {
 	r.Store.Delete(fmt.Sprintf("pend:%d", chat))
 }

@@ -316,9 +316,15 @@ func (r *Router) trafZeroDo(chat, mid int64, acc int, zid string) {
 		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("traf"))
 		return
 	}
+	zname := strings.ToLower(r.cfZoneName(acc, zid))
 	var zeros []cf.Record
 	for _, rec := range recs {
 		typ := strings.ToUpper(rec.Type)
+		// Never touch the zone apex: a root A/CNAME with no measured traffic
+		// is still the record that keeps the site online.
+		if zname != "" && strings.EqualFold(rec.Name, zname) {
+			continue
+		}
 		if (typ == "A" || typ == "AAAA" || typ == "CNAME") &&
 			t.Counts[strings.ToLower(rec.Name)] == 0 {
 			zeros = append(zeros, rec)

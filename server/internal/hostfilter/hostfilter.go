@@ -394,7 +394,9 @@ func blockedCities(ping map[string]pingRes, citiesSel []string, maxOk int) int {
 	type cc struct{ nodes, blocked int }
 	byCity := map[string]*cc{}
 	for _, r := range ping {
-		if !contains(citiesSel, r.City) {
+		if !contains(citiesSel, r.City) || r.Total <= 0 {
+			// A node that returned no samples (timeout/API hiccup) must not be
+			// counted as blocked, otherwise a healthy domain gets swapped.
 			continue
 		}
 		c := byCity[r.City]

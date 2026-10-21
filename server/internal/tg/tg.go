@@ -317,6 +317,11 @@ func (c *Client) Edit(chat, msgID int64, text string, kb any) bool {
 		params["reply_markup"] = m
 	}
 	_, err := c.call("editMessageText", params)
+	if err != nil && strings.Contains(err.Error(), "message is not modified") {
+		// Nothing changed: the existing message is already correct, so this is
+		// a success (otherwise Show would post a duplicate message).
+		return true
+	}
 	return err == nil
 }
 

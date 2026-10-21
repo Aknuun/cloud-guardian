@@ -22,10 +22,7 @@ func randHex(n int) string {
 }
 
 func (r *Router) publicBase() string {
-	if r.FO != nil {
-		return strings.TrimRight(r.FO["public_url"], "/")
-	}
-	return ""
+	return strings.TrimRight(r.foVal("public_url"), "/")
 }
 
 func pgTGUsername(token string) string {

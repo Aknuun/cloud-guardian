@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"net"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +33,29 @@ func (r *Router) lnSel() int {
 		return i
 	}
 	return 0
+}
+
+// lnDropServers invalidates the cached instance list after a mutation.
+func (r *Router) lnDropServers(i int) {
+	arvMem.Delete(fmt.Sprintf("mlnl:%d", i))
+	r.Store.Delete(fmt.Sprintf("lnsrv:%d", i))
+}
+
+// lnFlushIndex drops every cached Linode entry for an account index (used when
+// an account is removed and the following ones shift down).
+func (r *Router) lnFlushIndex(i int) {
+	arvMem.Delete(fmt.Sprintf("mlnl:%d", i))
+	r.Store.Delete(fmt.Sprintf("lnsrv:%d", i))
+}
+
+func (r *Router) lnServersCached(i int) []map[string]any {
+	accs := r.lnAccs()
+	if i < 0 || i >= len(accs) {
+		return nil
+	}
+	cli := ln.New(strv(accs[i]["token"]))
+	return r.arvCachedMaps(fmt.Sprintf("mlnl:%d", i), fmt.Sprintf("lnsrv:%d", i), 60*time.Second,
+		func() []map[string]any { return cli.All("/linode/instances") })
 }
 
 func lnStatusEmoji(st string) string {
@@ -91,13 +116,13 @@ func (r *Router) lnHome(chat, mid int64) {
 		kb = append(kb, gridBTN(ab, per)...)
 	}
 	lines = append(lines, fmt.Sprintf("«%s» انتخاب شده:", strv(accs[sel]["name"])), "")
-	servers := ln.New(strv(accs[sel]["token"])).All("/linode/instances")
+	servers := r.lnServersCached(sel)
 	var srvItems []Btn
 	for i, s := range servers {
 		if i >= 20 {
 			break
 		}
-		srvItems = append(srvItems, btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", sel, strv(s["id"]))))
+		srvItems = append(srvItems, btnS(lnListText(s), fmt.Sprintf("lnsi:%d:%s", sel, strv(s["id"])), "plain"))
 	}
 	kb = append(kb, gridBTN(srvItems, 2)...)
 	nm := strv(accs[sel]["name"])
@@ -171,6 +196,7 @@ func (r *Router) lnDelDo(chat, mid int64, idx string) {
 	}
 	accs = append(accs[:i], accs[i+1:]...)
 	r.lnSaveAccs(accs)
+	r.lnFlushIndex(i)
 	r.Bot.Send(chat, "✅ اکانت حذف شد.", nil)
 	r.lnHome(chat, 0)
 }
@@ -181,7 +207,7 @@ func (r *Router) lnServers(chat, mid int64, i int, pg int) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	servers := ln.New(strv(accs[i]["token"])).All("/linode/instances")
+	servers := r.lnServersCached(i)
 	per := 10
 	pages := (len(servers) + per - 1) / per
 	if pages < 1 {
@@ -374,9 +400,13 @@ func (r *Router) lnOp(chat, mid int64, i int, sid, step string) {
 			if strv(t["id"]) == strv(s["type"]) {
 				continue
 			}
-			if intOfAny(t["memory"]) > intOfAny(cur["memory"]) ||
+			bigger := intOfAny(t["memory"]) > intOfAny(cur["memory"]) ||
 				intOfAny(t["vcpus"]) > intOfAny(cur["vcpus"]) ||
-				intOfAny(t["disk"]) > intOfAny(cur["disk"]) {
+				intOfAny(t["disk"]) > intOfAny(cur["disk"])
+			notSmaller := intOfAny(t["memory"]) >= intOfAny(cur["memory"]) &&
+				intOfAny(t["vcpus"]) >= intOfAny(cur["vcpus"]) &&
+				intOfAny(t["disk"]) >= intOfAny(cur["disk"])
+			if bigger && notSmaller {
 				up = append(up, t)
 			}
 		}
@@ -456,6 +486,27 @@ func lnRegionPrice(t map[string]any, region string) map[string]any {
 	return map[string]any{}
 }
 
+// lnLabelPart keeps only characters Linode accepts in image labels.
+func lnLabelPart(s string) string {
+	var b strings.Builder
+	for _, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			b.WriteRune(c)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if len(out) > 32 {
+		out = out[:32]
+	}
+	if out == "" {
+		out = "srv"
+	}
+	return out
+}
+
 func lnRandomPass() string {
 	b := make([]byte, 18)
 	for k := range b {
@@ -501,6 +552,7 @@ func (r *Router) lnDo(chat, mid int64, i int, sid, step, arg string) {
 			fail(err)
 			return
 		}
+		r.lnDropServers(i)
 		r.Bot.Send(chat, "✅ سرور حذف شد.", nil)
 		r.lnServers(chat, 0, i, 0)
 	case "on", "off", "reboot", "reset":
@@ -535,7 +587,11 @@ func (r *Router) lnDo(chat, mid int64, i int, sid, step, arg string) {
 		r.Bot.Send(chat, "🔓 رمز جدید سرور:\n<code>"+Esc(pw)+"</code>\n\n⚠️ برای اعمال، سرور را خاموش و روشن کن.", nil)
 		r.lnInfo(chat, 0, i, sid)
 	case "snap":
-		s, _ := cli.Call("GET", "/linode/instances/"+sid, nil)
+		s, err := cli.Call("GET", "/linode/instances/"+sid, nil)
+		if err != nil {
+			fail(err)
+			return
+		}
 		disk, err := cli.Disk(sid)
 		if err != nil {
 			fail(err)
@@ -545,7 +601,7 @@ func (r *Router) lnDo(chat, mid int64, i int, sid, step, arg string) {
 			r.Show(chat, mid, "❌ دیسکی پیدا نشد.", back)
 			return
 		}
-		label := fmt.Sprintf("snap-%s-%d", strv(s["label"]), time.Now().Unix())
+		label := fmt.Sprintf("snap-%s-%d", lnLabelPart(strv(s["label"])), time.Now().Unix())
 		if _, err := cli.Call("POST", "/images", map[string]any{"disk_id": disk["id"], "label": label}); err != nil {
 			fail(err)
 			return
@@ -572,32 +628,41 @@ func (r *Router) lnDo(chat, mid int64, i int, sid, step, arg string) {
 		r.Bot.Send(chat, "✅ آی‌پی "+strings.ToUpper(typ)+" اضافه شد.", nil)
 		r.lnInfo(chat, 0, i, sid)
 	case "u4":
-		s, _ := cli.Call("GET", "/linode/instances/"+sid, nil)
-		v4 := selStrings(s["ipv4"])
-		if len(v4) < 2 {
+		s, err := cli.Call("GET", "/linode/instances/"+sid, nil)
+		if err != nil {
+			fail(err)
+			return
+		}
+		var extra []string
+		for _, a := range selStrings(s["ipv4"]) {
+			if ip := net.ParseIP(a); ip != nil && !ip.IsPrivate() {
+				extra = append(extra, a)
+			}
+		}
+		if len(extra) < 2 {
 			r.Show(chat, mid, "❌ آی‌پی IPv4 اضافه‌ای برای حذف وجود ندارد.", back)
 			return
 		}
-		addr := v4[len(v4)-1]
-		if _, err := cli.Call("DELETE", "/networking/ips/"+addr, nil); err != nil {
+		addr := extra[len(extra)-1]
+		if _, err := cli.Call("DELETE", "/networking/ips/"+url.PathEscape(addr), nil); err != nil {
 			fail(err)
 			return
 		}
 		r.Bot.Send(chat, "✅ آی‌پی حذف شد.", nil)
 		r.lnInfo(chat, 0, i, sid)
 	case "u6":
-		var addr string
+		var addrs []string
 		for _, x := range cli.All("/networking/ips") {
 			if strv(x["type"]) == "ipv6" && strv(x["linode_id"]) == sid {
-				addr = strv(x["address"])
-				break
+				addrs = append(addrs, strv(x["address"]))
 			}
 		}
-		if addr == "" {
+		if len(addrs) == 0 {
 			r.Show(chat, mid, "❌ آی‌پی IPv6 قابل حذف پیدا نشد.", back)
 			return
 		}
-		if _, err := cli.Call("DELETE", "/networking/ips/"+addr, nil); err != nil {
+		addr := addrs[len(addrs)-1]
+		if _, err := cli.Call("DELETE", "/networking/ips/"+url.PathEscape(addr), nil); err != nil {
 			fail(err)
 			return
 		}
@@ -810,13 +875,7 @@ func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	pass := ""
-	if pws := r.srvPwList(); len(pws) > 0 {
-		pass = strv(pws[0])
-	}
-	if pass == "" {
-		pass = lnRandomPass()
-	}
+	pass := lnRandomPass()
 	body := map[string]any{
 		"label": strv(pend["remark"]), "region": strv(pend["region"]),
 		"type": strv(pend["type"]), "image": imageID,
@@ -836,6 +895,7 @@ func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 		return
 	}
 	r.clearWizard(chat)
+	r.lnDropServers(i)
 	ip := lnFirstIP(res)
 	lst := r.srvList()
 	lst = append(lst, srvRec(fmt.Sprintf("s%d%d%d", time.Now().Unix(), rand.Intn(900)+100, len(lst)),

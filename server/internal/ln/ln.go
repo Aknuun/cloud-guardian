@@ -3,6 +3,7 @@ package ln
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -18,34 +19,74 @@ func (e *Error) Error() string { return e.Msg }
 
 type Client struct {
 	token string
+	base  string
 	hc    *http.Client
 }
 
 func New(token string) *Client {
-	return &Client{token: token, hc: &http.Client{Timeout: 20 * time.Second}}
+	return &Client{token: token, base: api, hc: &http.Client{Timeout: 20 * time.Second}}
 }
 
+var retryDelay = 2 * time.Second
+
 func (c *Client) Call(method, path string, body any) (map[string]any, error) {
-	var rdr io.Reader
+	var payload []byte
 	if body != nil {
-		b, _ := json.Marshal(body)
-		rdr = bytes.NewReader(b)
+		payload, _ = json.Marshal(body)
 	}
-	req, err := http.NewRequest(method, api+path, rdr)
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * retryDelay)
+		}
+		out, status, err := c.once(method, path, payload)
+		if status == http.StatusTooManyRequests || status >= 500 {
+			if err != nil {
+				lastErr = err
+			} else {
+				lastErr = &Error{fmt.Sprintf("HTTP %d", status)}
+			}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+	if lastErr == nil {
+		lastErr = &Error{"linode: request failed"}
+	}
+	return nil, lastErr
+}
+
+// once performs a single request. status is 0 when the request never reached
+// the API; a non-2xx response without a Linode error payload is reported as an
+// error so an empty body can never look like success.
+func (c *Client) once(method, path string, payload []byte) (map[string]any, int, error) {
+	var rdr io.Reader
+	if payload != nil {
+		rdr = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequest(method, c.base+path, rdr)
 	if err != nil {
-		return nil, &Error{err.Error()}
+		return nil, 0, &Error{err.Error()}
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return nil, &Error{trunc(err.Error(), 200)}
+		return nil, 0, &Error{trunc(err.Error(), 200)}
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
 	out := map[string]any{}
 	if len(b) > 0 {
-		_ = json.Unmarshal(b, &out)
+		if err := json.Unmarshal(b, &out); err != nil {
+			if resp.StatusCode >= 400 {
+				return nil, resp.StatusCode, &Error{fmt.Sprintf("HTTP %d", resp.StatusCode)}
+			}
+			return nil, resp.StatusCode, &Error{trunc(err.Error(), 200)}
+		}
 	}
 	if errs, ok := out["errors"].([]any); ok && len(errs) > 0 {
 		var msgs []string
@@ -56,9 +97,12 @@ func (c *Client) Call(method, path string, body any) (map[string]any, error) {
 				msgs = append(msgs, strAny(e))
 			}
 		}
-		return nil, &Error{trunc(strings.Join(msgs, "; "), 200)}
+		return nil, resp.StatusCode, &Error{trunc(strings.Join(msgs, "; "), 200)}
 	}
-	return out, nil
+	if resp.StatusCode >= 400 {
+		return nil, resp.StatusCode, &Error{fmt.Sprintf("HTTP %d", resp.StatusCode)}
+	}
+	return out, resp.StatusCode, nil
 }
 
 func (c *Client) All(path string) []map[string]any {
@@ -68,7 +112,7 @@ func (c *Client) All(path string) []map[string]any {
 	if strings.Contains(path, "?") {
 		sep = "&"
 	}
-	for {
+	for page <= 50 {
 		d, err := c.Call("GET", path+sep+"page="+strconv.Itoa(page)+"&page_size=500", nil)
 		if err != nil {
 			return out
@@ -80,6 +124,7 @@ func (c *Client) All(path string) []map[string]any {
 		}
 		page++
 	}
+	return out
 }
 
 func mapList(v any) []map[string]any {

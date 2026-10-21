@@ -30,6 +30,7 @@ func (r *Router) navPush(chat int64, data string) {
 // navBack pops the history and re-renders the previous screen. When there is
 // no history it falls back to the target encoded after "back:".
 func (r *Router) navBack(chat, mid int64, data string) {
+	r.clearWizard(chat)
 	fallback := strings.TrimPrefix(strings.TrimPrefix(data, "back"), ":")
 	v, _ := r.navStack.Load(chat)
 	st, _ := v.([]string)
@@ -52,6 +53,9 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	if data == "back" || strings.HasPrefix(data, "back:") {
 		r.navBack(chat, mid, data)
 		return
+	}
+	if isNavScreen(data) {
+		r.clearWizard(chat)
 	}
 	r.lastNav.Store(chat, data)
 	if _, skip := r.navSkip.LoadAndDelete(chat); !skip {
@@ -454,7 +458,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 			r.hfdPanel(chat, mid, intOrAny(arg))
 		}
 	case strings.HasPrefix(data, "hfdhf:"):
-		if p := strings.Split(data, ":"); len(p) == 5 {
+		if p := strings.Split(data, ":"); len(p) == 4 {
 			r.hfdHostField(chat, mid, intOrAny(p[1]), p[2], p[3])
 		}
 	case data == "hfdrun":

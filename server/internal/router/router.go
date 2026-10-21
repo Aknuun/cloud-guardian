@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.14"
+const Version = "4.6.15"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -74,6 +74,7 @@ type Router struct {
 	Bot      *tg.Client
 	Store    *store.Store
 	AdminID  int64
+	foMu     sync.RWMutex
 	FO       map[string]string
 	CFToken  string
 	BotToken string

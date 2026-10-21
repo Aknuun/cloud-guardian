@@ -57,10 +57,7 @@ func (r *Router) remHome(chat, mid int64) {
 				mark = "🟡"
 			}
 		}
-		txt := rm.Text
-		if len(txt) > 24 {
-			txt = txt[:24] + "…"
-		}
+		txt := Esc(truncRune(rm.Text, 24))
 		b.WriteString(fmt.Sprintf("%d) %s <code>%s</code> — %s\n", i+1, mark, txt, jalali.Fmt(rm.When)))
 		delItems = append(delItems, btn(fmt.Sprintf("🗑 %d", i+1), "remdelx:"+rm.ID))
 	}
