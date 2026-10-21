@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aknuun/cg-server/internal/arvan"
 )
@@ -44,6 +45,7 @@ func arvanName(d map[string]any) string {
 }
 
 func (r *Router) arvanHome(chat, mid int64) {
+	go r.arvWarmArvan()
 	accs := r.arvanAccList()
 	names := "—"
 	if len(accs) > 0 {
@@ -125,6 +127,33 @@ func (r *Router) arvanAccDelAsk(chat, mid int64, idx string) {
 			btn("❌ انصراف", "arvanacc")}})
 }
 
+// arvFlushIndex drops every cache entry keyed by an account index, so that
+// deleting an account does not leak its (now shifted) data to the next one.
+func (r *Router) arvFlushIndex(i int) {
+	heads := []string{
+		fmt.Sprintf("mdom:%d", i), fmt.Sprintf("msrv:%d", i),
+		fmt.Sprintf("mrec:%d:", i), fmt.Sprintf("mimg:%d:", i),
+		fmt.Sprintf("msz:%d:", i), fmt.Sprintf("mnet2:%d:", i),
+		fmt.Sprintf("mtrf:%d:", i),
+	}
+	arvMem.Range(func(k, v any) bool {
+		sk, _ := k.(string)
+		for _, h := range heads {
+			if sk == h || strings.HasPrefix(sk, h) {
+				arvMem.Delete(k)
+				break
+			}
+		}
+		return true
+	})
+	r.Store.Delete(fmt.Sprintf("arvall:%d", i))
+	r.Store.Delete(fmt.Sprintf("arvdoms:%d", i))
+	r.Store.Delete(fmt.Sprintf("arv_regs:%d", i))
+	for _, rg := range r.arvRegionsFast(i) {
+		r.Store.Delete(fmt.Sprintf("mszdb:msz:%d:%s", i, rg.Code))
+	}
+}
+
 func (r *Router) arvanAccDelDo(chat, mid int64, idx string) {
 	accs := r.arvanAccList()
 	i := atoiSafe(idx)
@@ -132,6 +161,7 @@ func (r *Router) arvanAccDelDo(chat, mid int64, idx string) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
+	r.arvFlushIndex(i)
 	accs = append(accs[:i], accs[i+1:]...)
 	r.arvanSaveAccs(accs)
 	r.Bot.Send(chat, "✅ اکانت حذف شد.", nil)
@@ -147,8 +177,18 @@ func (r *Router) arvanDoms(chat, mid int64) {
 		return
 	}
 	var items []Btn
+	cached := false
+	for i := range accs {
+		if _, ok := arvMem.Load(fmt.Sprintf("mdom:%d", i)); ok {
+			cached = true
+		}
+	}
+	if !cached {
+		r.Show(chat, mid, "⏳ در حال بارگذاری دامنه‌ها…", nil)
+	}
 	for i, a := range accs {
-		doms := arvan.New(strv(a["token"])).Domains()
+		doms := r.arvCachedMaps(fmt.Sprintf("mdom:%d", i), fmt.Sprintf("arvdoms:%d", i), 5*time.Minute,
+			func() []map[string]any { return arvan.New(strv(a["token"])).Domains() })
 		if len(doms) == 0 {
 			continue
 		}
@@ -157,7 +197,7 @@ func (r *Router) arvanDoms(chat, mid int64) {
 				break
 			}
 			dn := arvanName(d)
-			items = append(items, btn("🇮🇷 "+dn, fmt.Sprintf("arvdom:%d:%s", i, dn)))
+			items = append(items, btnS("🇮🇷 "+dn, fmt.Sprintf("arvdom:%d:%s", i, dn), "plain"))
 		}
 	}
 	kb := gridBTN(items, 2)
@@ -171,7 +211,7 @@ func (r *Router) arvanRecs(chat, mid int64, acc int, dom string, pg int) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	recs := arvan.New(strv(accs[acc]["token"])).Records(dom)
+	recs := r.arvDomainRecords(acc, dom)
 	results := map[string]any{}
 	for i, rec := range recs {
 		if i >= 100 {
@@ -205,8 +245,8 @@ func (r *Router) arvanRecs(chat, mid int64, acc int, dom string, pg int) {
 		if nm == "" {
 			nm = "?"
 		}
-		rows = append(rows, btn(fmt.Sprintf("%s-%s", nm, strv(rec["type"])),
-			fmt.Sprintf("arvrec:%d:%s:%s", acc, dom, strv(rec["id"]))))
+		rows = append(rows, btnS(fmt.Sprintf("%s-%s", nm, strv(rec["type"])),
+			fmt.Sprintf("arvrec:%d:%s:%s", acc, dom, strv(rec["id"])), "plain"))
 	}
 	kb := gridBTN(rows, 3)
 	kb = append(kb, []Btn{btn("➕ افزودن", fmt.Sprintf("arvaadd:%d:%s", acc, dom))})
@@ -231,7 +271,7 @@ func (r *Router) arvanRec(chat, mid int64, acc int, dom, rid string) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	recs := arvan.New(strv(accs[acc]["token"])).Records(dom)
+	recs := r.arvDomainRecords(acc, dom)
 	var found map[string]any
 	for _, rec := range recs {
 		if strv(rec["id"]) == strv(rid) {
@@ -273,6 +313,7 @@ func (r *Router) arvanDelDo(chat, mid int64, acc int, dom, rid string) {
 		r.Show(chat, mid, "❌ نشد: "+Esc(err.Error()), HomeKB())
 		return
 	}
+	r.arvDropRecords(acc, dom)
 	r.Bot.Send(chat, "✅ حذف شد.", nil)
 	r.arvanRecs(chat, 0, acc, dom, 0)
 }
@@ -284,7 +325,7 @@ func (r *Router) arvanCloud(chat, mid int64, acc int, dom, rid string) {
 		return
 	}
 	cli := arvan.New(strv(accs[acc]["token"]))
-	recs := cli.Records(dom)
+	recs := r.arvDomainRecords(acc, dom)
 	var found map[string]any
 	for _, rec := range recs {
 		if strv(rec["id"]) == strv(rid) {
@@ -302,12 +343,28 @@ func (r *Router) arvanCloud(chat, mid int64, acc int, dom, rid string) {
 		r.Show(chat, mid, "❌ نشد: "+Esc(err.Error()), HomeKB())
 		return
 	}
+	r.arvDropRecords(acc, dom)
 	state := "روشن"
 	if cur {
 		state = "خاموش"
 	}
 	r.Bot.Send(chat, "✅ ابری "+state+" شد.", nil)
 	r.arvanRec(chat, 0, acc, dom, rid)
+}
+
+func (r *Router) arvDropRecords(acc int, dom string) {
+	arvMem.Delete(fmt.Sprintf("mrec:%d:%s", acc, dom))
+	r.Store.Delete(fmt.Sprintf("arvrecs:%d:%s", acc, dom))
+}
+
+func (r *Router) arvDomainRecords(acc int, dom string) []map[string]any {
+	accs := r.arvanAccList()
+	if acc < 0 || acc >= len(accs) {
+		return nil
+	}
+	token := strv(accs[acc]["token"])
+	return r.arvCachedMaps(fmt.Sprintf("mrec:%d:%s", acc, dom), fmt.Sprintf("arvrecs:%d:%s", acc, dom), 2*time.Minute,
+		func() []map[string]any { return arvan.New(token).Records(dom) })
 }
 
 func (r *Router) arvanKeySave(chat, mid int64, text string) {
@@ -343,6 +400,7 @@ func (r *Router) arvanValueSave(chat, mid int64, pend map[string]any, text strin
 		r.Bot.Send(chat, "❌ نشد: "+Esc(err.Error()), nil)
 		return
 	}
+	r.arvDropRecords(acc, dom)
 	r.Bot.Send(chat, "✅ مقدار عوض شد.", nil)
 	r.clearWizard(chat)
 	r.arvanRec(chat, 0, acc, dom, rid)
@@ -367,6 +425,7 @@ func (r *Router) arvanAddSave(chat, mid int64, pend map[string]any, text string)
 		r.Bot.Send(chat, "❌ ثبت نشد: "+Esc(err.Error()), nil)
 		return
 	}
+	r.arvDropRecords(acc, dom)
 	r.Bot.Send(chat, "✅ رکورد ثبت شد.", nil)
 	r.clearWizard(chat)
 	r.arvanRecs(chat, 0, acc, dom, 0)

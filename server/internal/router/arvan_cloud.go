@@ -55,6 +55,13 @@ func arvEmoji(status string) string {
 	return "⚪"
 }
 
+func (r *Router) arvWarmArvan() {
+	for i := range r.arvAccounts() {
+		r.arvAllServersSWR(i)
+		r.arvRegionsFast(i)
+	}
+}
+
 func (r *Router) arvCloudHome(chat, mid int64) {
 	accs := r.arvAccounts()
 	if len(accs) == 0 {
@@ -66,7 +73,7 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 	lines := []string{"🖥 سرورهای ابری آروان", ""}
 	stale := false
 	for i, a := range accs {
-		regions := r.arvRegions(i, false)
+		regions := r.arvRegionsFast(i)
 		list, st := r.arvAllServersSWR(i)
 		if st {
 			stale = true
@@ -104,6 +111,13 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 		defer arvHomeBusy.Delete(chat)
 		for i := range accs {
 			r.arvAllServers(i, true)
+			regs := r.arvRegionsFast(i)
+			if len(regs) > 0 {
+				rg := regs[0].Code
+				r.arvSizes(i, rg)
+				r.arvImageGroups(i, rg)
+				r.arvPublicNetworkID(i, rg)
+			}
 		}
 		v, _ := r.lastNav.Load(chat)
 		if cur, _ := v.(string); cur == "arvsrv" || cur == "arvregrefresh" {
@@ -134,10 +148,11 @@ func arvNormalize(s map[string]any) map[string]any {
 	flavor, _ := s["flavor"].(map[string]any)
 	image, _ := s["image"].(map[string]any)
 	name := firstOf(s["name"], firstOf(s["hostname"], strv(s["id"])))
-	fl := ""
+	fl, flID := "", ""
 	cpu, ram, disk := 0, 0, 0
 	if flavor != nil {
 		fl = firstOf(flavor["name"], strv(flavor["id"]))
+		flID = strv(flavor["id"])
 		cpu = intOrAny(flavor["cpu"])
 		if cpu == 0 {
 			cpu = intOrAny(flavor["cpu_count"])
@@ -177,21 +192,22 @@ func arvNormalize(s map[string]any) map[string]any {
 	}
 	pub, priv := arvServerIPs(s)
 	return map[string]any{
-		"id":      strv(s["id"]),
-		"name":    name,
-		"status":  firstOf(s["status"], firstOf(s["state"], strv(s["power_state"]))),
-		"task":    strv(s["task_status"]),
-		"flavor":  fl,
-		"image":   im,
-		"cpu":     cpu,
-		"ram":     ram,
-		"disk":    disk,
-		"region":  firstOf(s["region"], strv(s["region_code"])),
-		"pub":     pub,
-		"priv":    priv,
-		"created": strv(s["created"]),
-		"os":      osName,
-		"ha":      boolVal(s["ha_enabled"]),
+		"id":       strv(s["id"]),
+		"name":     name,
+		"status":   firstOf(s["status"], firstOf(s["state"], strv(s["power_state"]))),
+		"task":     strv(s["task_status"]),
+		"flavor":   fl,
+		"flavorID": flID,
+		"image":    im,
+		"cpu":      cpu,
+		"ram":      ram,
+		"disk":     disk,
+		"region":   firstOf(s["region"], strv(s["region_code"])),
+		"pub":      pub,
+		"priv":     priv,
+		"created":  strv(s["created"]),
+		"os":       osName,
+		"ha":       boolVal(s["ha_enabled"]),
 	}
 }
 
@@ -277,18 +293,25 @@ func (r *Router) arvServerText(s map[string]any, region string, extra ...string)
 }
 
 func (r *Router) arvServerList(chat, mid int64, i int, region string) {
-	cli, ok := r.arvCli(i)
-	if !ok {
+	if _, ok := r.arvCli(i); !ok {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	r.Show(chat, mid, "⏳ لطفاً صبر کنید… در حال بارگذاری سرورها", nil)
-	raw := cli.EccList(region, "/servers")
 	var servers []any
-	for _, s := range raw {
-		n := arvNormalize(s)
-		if n != nil {
-			servers = append(servers, n)
+	var ch arvAllCache
+	if r.Store.GetJSON(fmt.Sprintf("arvall:%d", i), &ch) && ch.List != nil {
+		for _, s := range ch.List {
+			if strv(s["region"]) == region {
+				servers = append(servers, s)
+			}
+		}
+		go r.arvAllServersSWR(i)
+	} else {
+		r.Show(chat, mid, "⏳ لطفاً صبر کنید… در حال بارگذاری سرورها", nil)
+		for _, s := range r.arvAllServers(i, true) {
+			if strv(s["region"]) == region {
+				servers = append(servers, s)
+			}
 		}
 	}
 	sess := r.arvSess(chat)

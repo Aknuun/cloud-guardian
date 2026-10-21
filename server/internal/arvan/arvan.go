@@ -24,7 +24,7 @@ type Client struct {
 }
 
 func New(token string) *Client {
-	return &Client{token: token, hc: &http.Client{Timeout: 15 * time.Second}}
+	return &Client{token: token, hc: &http.Client{Timeout: 8 * time.Second}}
 }
 
 func NormKey(raw string) string {
@@ -60,8 +60,8 @@ func (c *Client) do(base, method, path string, body any) (map[string]any, error)
 		resp, err := c.hc.Do(req)
 		if err != nil {
 			lastErr = trunc(err.Error(), 200)
-			if attempt < 2 {
-				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+			if attempt < 2 && idempotent(method) {
+				time.Sleep(300 * time.Millisecond)
 				continue
 			}
 			return nil, &Error{lastErr}
@@ -70,8 +70,8 @@ func (c *Client) do(base, method, path string, body any) (map[string]any, error)
 		resp.Body.Close()
 		if resp.StatusCode == 429 || resp.StatusCode == 500 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
 			lastErr = trunc(string(b), 200)
-			if attempt < 2 {
-				time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+			if attempt < 2 && (idempotent(method) || resp.StatusCode == 429) {
+				time.Sleep(300 * time.Millisecond)
 				continue
 			}
 			return nil, &Error{fmt.Sprintf("HTTP %d: %s", resp.StatusCode, lastErr)}
@@ -248,6 +248,16 @@ func intOr(v any) int {
 		return n
 	}
 	return 0
+}
+
+// idempotent reports whether a request may be retried safely. Creating a
+// server is a POST and must never be replayed (duplicate billing).
+func idempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete:
+		return true
+	}
+	return false
 }
 
 func trunc(s string, n int) string {

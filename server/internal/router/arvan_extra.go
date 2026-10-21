@@ -226,6 +226,29 @@ func arvCached(key string, ttl time.Duration, load func() any) (any, bool) {
 	return nv, false
 }
 
+// arvCachedMaps is a DB-backed list cache: after a restart the last known
+// list is served instantly while a refresh runs in the background.
+func (r *Router) arvCachedMaps(key, dbKey string, ttl time.Duration, load func() []map[string]any) []map[string]any {
+	if _, ok := arvMem.Load(key); !ok {
+		var db []map[string]any
+		if r.Store.GetJSON(dbKey, &db) && db != nil {
+			arvMem.Store(key, &arvCacheBox{v: db, at: time.Now()})
+		}
+	}
+	v, _ := arvCached(key, ttl, func() any {
+		l := load()
+		if l == nil {
+			l = []map[string]any{}
+		}
+		if len(l) > 0 {
+			r.Store.PutJSON(dbKey, l, 0)
+		}
+		return l
+	})
+	out, _ := v.([]map[string]any)
+	return out
+}
+
 // arvCachedAsync serves a cached value without blocking; a missing value is
 // loaded in the background and the second return value is false until ready.
 func arvCachedAsync(key string, ttl time.Duration, load func() any) (any, bool) {
@@ -397,7 +420,7 @@ func (r *Router) arvNetworkIDs(i int, region string) []string {
 
 func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
 	var kb [][]Btn
-	for _, rg := range r.arvRegions(i, false) {
+	for _, rg := range r.arvRegionsFast(i) {
 		label := rg.Fa
 		if rg.Def {
 			label += " ✅"
@@ -420,7 +443,7 @@ func (r *Router) arvBrowseRegions(chat, mid int64, i int) {
 }
 
 func (r *Router) arvPick(chat, mid int64, i, j int) {
-	list := r.arvAllServers(i, false)
+	list, _ := r.arvAllServersSWR(i)
 	if j < 0 || j >= len(list) {
 		r.Show(chat, mid, "⏳ نشست منقضی شد؛ دوباره تلاش کن.", navKB("arvsrv"))
 		return
@@ -738,21 +761,25 @@ func (r *Router) arvUpgrade(chat, mid int64, i, idx int) {
 	}
 	sess["sizes"] = szl
 	r.arvSessSave(chat, sess)
-	curID := strv(s["flavor"])
-	var kb [][]Btn
+	curID := firstOf(strv(s["flavorID"]), strv(s["flavor"]))
+	var items []Btn
 	for j, sz := range sizes {
 		if j >= 30 {
 			break
 		}
-		label := fmt.Sprintf("%s · %dvCPU/%dGB/%dGB", sz.Name, sz.CPU, sz.RAM, sz.Disk)
-		if sz.ID == curID {
-			label = "✅ " + label + " (فعلی)"
+		label := fmt.Sprintf("%d/%d", sz.CPU, sz.RAM)
+		if sz.Disk > 0 {
+			label += fmt.Sprintf("/%dGB", sz.Disk)
 		}
-		if p := arvToman(sz.Price); p != "" {
+		if p := arvPriceShort(sz.Price); p != "" {
 			label += " · " + p
 		}
-		kb = append(kb, []Btn{btn(truncRune(label, 58), fmt.Sprintf("arvupd:%d:%d:%d", i, idx, j))})
+		if sz.ID == curID || sz.Name == curID {
+			label = "✅ " + label
+		}
+		items = append(items, btnS(truncRune(label, 26), fmt.Sprintf("arvupd:%d:%d:%d", i, idx, j), "plain"))
 	}
+	kb := gridBTN(items, 2)
 	kb = append(kb, navRow(fmt.Sprintf("arvs:%d:%d", i, idx)))
 	r.Show(chat, mid, fmt.Sprintf("⬆️ ارتقا/تغییر پلن «%s»\n📦 فعلی: <code>%s</code>\n\nپلن جدید را انتخاب کن:",
 		Esc(strv(s["name"])), Esc(orDash(curID))), kb)

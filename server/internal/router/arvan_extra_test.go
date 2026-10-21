@@ -1,6 +1,9 @@
 package router
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestArvServerIPsPublic201(t *testing.T) {
 	s := map[string]any{"addresses": map[string]any{
@@ -24,5 +27,29 @@ func TestArvServerIPsPublic201(t *testing.T) {
 	}
 	if intOrAny(n["cpu"]) != 0 {
 		t.Logf("cpu parsed from vcpus: %v", n["cpu"])
+	}
+}
+
+func TestArvCreditErr(t *testing.T) {
+	raw := `HTTP 402: {"data":{"balance":1638693,"required":4390000},"message":"You are required to have enough credit"}`
+	msg := arvCreditErr(raw)
+	if msg == "" || !strings.Contains(msg, "4,390,000") || !strings.Contains(msg, "1,638,693") {
+		t.Fatalf("bad credit message: %q", msg)
+	}
+	if arvCreditErr("HTTP 500: boom") != "" {
+		t.Fatal("non-402 must not produce a credit message")
+	}
+}
+
+func TestArvSanitizeName(t *testing.T) {
+	cases := map[string]string{
+		"my server_01": "my-server01",
+		"cg-۱۲۳":       "cg",
+		"  a.b  ":      "ab",
+	}
+	for in, want := range cases {
+		if got := arvSanitizeName(in); got != want {
+			t.Fatalf("%q -> %q want %q", in, got, want)
+		}
 	}
 }

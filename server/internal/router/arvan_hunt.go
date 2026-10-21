@@ -28,6 +28,7 @@ type arvHuntState struct {
 	fw        string
 	sizeID    string
 	sizeName  string
+	disk      int
 	imageID   string
 	imageName string
 	msgID     int64
@@ -272,7 +273,7 @@ func (r *Router) arvHuntStart(chat, mid int64, i int, region string, idx, rounds
 	}
 	h := &arvHuntState{
 		chat: chat, acc: i, region: region, fw: "Default",
-		sizeID: p.SizeID, sizeName: p.SizeLabel,
+		sizeID: p.SizeID, sizeName: p.SizeLabel, disk: p.Disk,
 		imageID: p.ImageID, imageName: p.ImageName,
 		maxRounds: rounds, batch: batch, started: time.Now(), stage: "create",
 	}
@@ -297,6 +298,7 @@ func (r *Router) arvHuntStop(chat int64) {
 }
 
 func (r *Router) arvHuntFinish(h *arvHuntState, summary string) {
+	defer arvHunts.Delete(h.chat)
 	h.set(func(h *arvHuntState) {
 		h.done = true
 		h.stage = "done"
@@ -360,7 +362,7 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 			go func(k int) {
 				defer wg.Done()
 				name := items[k].Name
-				d, err := r.arvCreateServer(h.acc, h.region, name, h.sizeID, h.imageID, h.fw, 0)
+				d, err := r.arvCreateServer(h.acc, h.region, name, h.sizeID, h.imageID, h.fw, h.disk)
 				if err != nil {
 					low := strings.ToLower(err.Error())
 					mu.Lock()

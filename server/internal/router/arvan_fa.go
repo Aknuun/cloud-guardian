@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aknuun/cg-server/internal/arvan"
@@ -126,10 +127,34 @@ func (r *Router) arvRegions(i int, force bool) []arvRegion {
 	}
 	regs := arvFetchRegions(strv(accs[i]["token"]))
 	if len(regs) == 0 {
-		return arvFallbackRegions()
+		regs = arvFallbackRegions()
+		// Cache the fallback briefly so a failing/throttled API does not add
+		// 8-16s of latency to every screen open.
+		r.Store.PutJSON(key, arvRegionCache{Regs: regs, T: time.Now().Unix()}, 600)
+		return regs
 	}
 	r.Store.PutJSON(key, arvRegionCache{Regs: regs, T: time.Now().Unix()}, 2*86400)
 	return regs
+}
+
+var arvRegBusy sync.Map
+
+// arvRegionsFast never blocks: it serves the cached regions (or the built-in
+// fallback) and refreshes them in the background.
+func (r *Router) arvRegionsFast(i int) []arvRegion {
+	var ch arvRegionCache
+	if r.Store.GetJSON(fmt.Sprintf("arv_regs:%d", i), &ch) && len(ch.Regs) > 0 {
+		if time.Now().Unix()-ch.T > 86400 {
+			if _, busy := arvRegBusy.LoadOrStore(i, true); !busy {
+				go func() { defer arvRegBusy.Delete(i); r.arvRegions(i, true) }()
+			}
+		}
+		return ch.Regs
+	}
+	if _, busy := arvRegBusy.LoadOrStore(i, true); !busy {
+		go func() { defer arvRegBusy.Delete(i); r.arvRegions(i, true) }()
+	}
+	return arvFallbackRegions()
 }
 
 // arvRegionName returns the Persian label for a region code (from any cached
