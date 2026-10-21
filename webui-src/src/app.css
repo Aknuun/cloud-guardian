@@ -1,0 +1,365 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--color-kumo-canvas, #0f1115);
+  color: var(--text-color-kumo-default, #f2f2f2);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Vazirmatn, Tahoma, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  isolation: isolate;
+}
+
+.cc-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: calc(8px + env(safe-area-inset-top)) 10px 8px;
+  background: color-mix(in srgb, var(--color-kumo-canvas) 86%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--color-kumo-hairline);
+}
+
+.cc-topbar button {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+}
+
+.cc-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-main {
+  padding: 12px 12px calc(28px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.cc-boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.cc-card {
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.cc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cc-tap {
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.cc-tap:active {
+  transform: scale(0.99);
+  opacity: 0.88;
+}
+
+.cc-grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cc-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-sub {
+  color: var(--text-color-kumo-subtle);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-small {
+  font-size: 12px;
+}
+
+.cc-end {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cc-chev {
+  color: var(--text-color-kumo-inactive);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.cc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-color-kumo-inactive);
+  flex: 0 0 auto;
+}
+.cc-dot.run {
+  background: var(--color-kumo-success);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-kumo-success) 18%, transparent);
+}
+.cc-dot.off {
+  background: var(--text-color-kumo-inactive);
+}
+.cc-dot.wait {
+  background: var(--color-kumo-warning);
+}
+.cc-dot.err {
+  background: var(--color-kumo-danger);
+}
+
+.cc-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+.cc-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.cc-kv > span:first-child {
+  color: var(--text-color-kumo-subtle);
+  flex: 0 0 auto;
+}
+.cc-kv > span:last-child,
+.cc-kv > button:last-child {
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cc-link {
+  border: 0;
+  background: transparent;
+  color: var(--text-color-kumo-link, var(--color-kumo-brand));
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.cc-section {
+  color: var(--text-color-kumo-subtle);
+  font-size: 12px;
+  margin: 16px 4px 8px;
+  letter-spacing: 0.2px;
+}
+
+.cc-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cc-mb {
+  margin-bottom: 10px;
+}
+.cc-mt {
+  margin-top: 14px;
+}
+.cc-mt4 {
+  margin-top: 3px;
+}
+
+.cc-hint {
+  color: var(--text-color-kumo-subtle);
+  font-size: 12.5px;
+}
+.cc-center {
+  text-align: center;
+}
+.cc-pad {
+  padding: 32px 0;
+}
+
+.cc-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cc-actions button {
+  width: 100%;
+  height: 44px;
+  font-size: 13px;
+}
+.cc-actions .cc-wide {
+  grid-column: 1 / -1;
+}
+
+.cc-wide {
+  width: 100%;
+}
+
+.cc-submit {
+  height: 46px !important;
+  margin-top: 4px;
+}
+
+.cc-input {
+  width: 100%;
+  height: 46px !important;
+  font-size: 15px !important;
+}
+
+.cc-steps {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 14px;
+}
+.cc-steps i {
+  height: 3px;
+  flex: 1;
+  border-radius: 3px;
+  background: var(--color-kumo-fill);
+}
+.cc-steps i.on {
+  background: var(--color-kumo-brand);
+}
+
+.cc-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--color-kumo-line);
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-default);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.cc-choice:active {
+  background: var(--color-kumo-tint);
+}
+.cc-choice .cc-grow {
+  gap: 1px;
+}
+
+.cc-dialog {
+  width: 100%;
+  max-width: min(430px, 92vw) !important;
+  padding: 18px !important;
+  box-sizing: border-box;
+}
+
+.cc-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.cc-dialog-desc {
+  color: var(--text-color-kumo-subtle);
+  font-size: 13px;
+  margin: 0 0 14px;
+}
+
+.cc-dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.cc-picker {
+  max-height: 52vh;
+  overflow: auto;
+  margin-top: 8px;
+  padding-bottom: 2px;
+}
+
+.cc-secret {
+  background: var(--color-kumo-recessed);
+  border: 1px dashed var(--color-kumo-line);
+  border-radius: 12px;
+  padding: 10px;
+  margin: 10px 0;
+  word-break: break-all;
+  text-align: center;
+  font-size: 13.5px;
+}
+
+.cc-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 26%, transparent);
+}
+
+.cc-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: 90vw;
+  background: var(--color-kumo-elevated);
+  color: var(--text-color-kumo-default);
+  border: 1px solid var(--color-kumo-line);
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  text-align: center;
+}
+.cc-toast.err {
+  background: var(--color-kumo-danger);
+  color: #fff;
+  border-color: transparent;
+}
