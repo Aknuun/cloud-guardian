@@ -2,6 +2,7 @@ package router
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -301,8 +302,8 @@ func (r *Router) arvCreateServer(i int, region, name, flavorID, imageID, fwName 
 		"enable_ipv4":     true,
 		"security_groups": []map[string]any{{"name": r.arvFwID(i, region, fwName)}},
 	}
-	if nids := r.arvNetworkIDs(i, region); len(nids) > 0 {
-		base["network_ids"] = nids
+	if nid := r.arvPublicNetworkID(i, region); nid != "" {
+		base["network_id"] = nid
 	}
 	if disk > 0 {
 		base["disk_size"] = disk
@@ -354,37 +355,43 @@ func (r *Router) arvFwID(i int, region, name string) string {
 	return name
 }
 
-func (r *Router) arvNetworkIDs(i int, region string) []string {
-	v, _ := arvCached(fmt.Sprintf("mnet:%d:%s", i, region), time.Hour, func() any {
+func (r *Router) arvPublicNetworkID(i int, region string) string {
+	v, _ := arvCached(fmt.Sprintf("mnet2:%d:%s", i, region), time.Hour, func() any {
 		cli, ok := r.arvCli(i)
 		if !ok {
-			return []string{}
+			return ""
 		}
-		out := []string{}
+		for _, m := range cli.EccList(region, "/networks?type=public") {
+			if id := strv(m["id"]); id != "" {
+				return id
+			}
+		}
 		for _, m := range cli.EccList(region, "/networks") {
 			if id := strv(m["id"]); id != "" {
-				out = append(out, id)
+				return id
 			}
 		}
-		if len(out) == 0 {
-			for _, s := range r.arvAllServers(i, false) {
-				if strv(s["region"]) != region {
-					continue
-				}
-				for _, n := range toList(s["networks"]) {
-					if id := strv(n); id != "" {
-						out = append(out, id)
-					}
+		for _, srv := range r.arvAllServers(i, false) {
+			if strv(srv["region"]) != region {
+				continue
+			}
+			for _, n := range toList(srv["networks"]) {
+				if id := strv(n); id != "" {
+					return id
 				}
 			}
 		}
-		if len(out) == 0 {
-			return nil
-		}
-		return out
+		return nil
 	})
-	out, _ := v.([]string)
-	return out
+	id, _ := v.(string)
+	return id
+}
+
+func (r *Router) arvNetworkIDs(i int, region string) []string {
+	if id := r.arvPublicNetworkID(i, region); id != "" {
+		return []string{id}
+	}
+	return nil
 }
 
 func (r *Router) arvRegionButtons(i int, cb string) [][]Btn {
@@ -558,12 +565,48 @@ func (r *Router) arvIPCheck(chat int64, i, idx int) {
 	}()
 }
 
+var arvBalRe = regexp.MustCompile(`"balance":\s*([0-9]+)`)
+var arvReqRe = regexp.MustCompile(`"required":\s*([0-9]+)`)
+
+func arvNum(n int) string {
+	s := fmt.Sprintf("%d", n)
+	var parts []string
+	for len(s) > 3 {
+		parts = append([]string{s[len(s)-3:]}, parts...)
+		s = s[:len(s)-3]
+	}
+	parts = append([]string{s}, parts...)
+	return strings.Join(parts, ",")
+}
+
+// arvCreditErr turns Arvan's 402 response into a readable message.
+func arvCreditErr(errStr string) string {
+	if !strings.Contains(errStr, "402") || !strings.Contains(errStr, "credit") {
+		return ""
+	}
+	bal, req := 0, 0
+	if m := arvBalRe.FindStringSubmatch(errStr); len(m) == 2 {
+		bal = atoiSafe(m[1])
+	}
+	if m := arvReqRe.FindStringSubmatch(errStr); len(m) == 2 {
+		req = atoiSafe(m[1])
+	}
+	msg := "❌ اعتبار اکانت آروان برای ساخت سرور کافی نیست."
+	if req > 0 {
+		msg += "\n💳 مورد نیاز (حدود ۷ روز): <b>" + arvNum(req) + " تومان</b>"
+	}
+	if bal > 0 {
+		msg += "\n💰 موجودی فعلی: <b>" + arvNum(bal) + " تومان</b>"
+	}
+	msg += "\n\nاز پنل آروان (بخش مالی/اعتبار) حساب را شارژ کن و دوباره تلاش کن."
+	return msg
+}
+
 func arvToman(v any) string {
 	n := intOrAny(v)
 	if n <= 0 {
 		return ""
 	}
-	n = n / 10
 	s := fmt.Sprintf("%d", n)
 	var parts []string
 	for len(s) > 3 {

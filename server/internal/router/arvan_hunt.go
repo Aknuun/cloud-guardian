@@ -16,6 +16,7 @@ type arvHuntItem struct {
 	ID    string
 	IP    string
 	Phase string
+	Err   string
 	Clean bool
 }
 
@@ -99,6 +100,9 @@ func (r *Router) arvHuntRender(h *arvHuntState) {
 		if it.IP != "" {
 			line += " · <code>" + Esc(it.IP) + "</code>"
 		}
+		if it.Err != "" {
+			line += "\n   ↳ " + Esc(truncRune(it.Err, 80))
+		}
 		b.WriteString(line + "\n")
 	}
 	b.WriteString(fmt.Sprintf("\n📊 ساخته‌شده: %d · حذف: %d · تمیز: %d", h.created, h.deleted, len(h.kept)))
@@ -126,17 +130,12 @@ func (r *Router) arvHuntTicker(h *arvHuntState) {
 
 type arvHuntPrep struct {
 	SizeID, SizeName, SizeLabel, ImageID, ImageName string
+	Price                                           int
+	Disk                                            int
 }
 
-func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, string) {
-	var p arvHuntPrep
-	if _, ok := r.arvCli(i); !ok {
-		return p, "اکانت پیدا نشد"
-	}
+func (r *Router) arvHuntSizes(i int, region string) []arvSize {
 	sizes := r.arvSizes(i, region)
-	if len(sizes) == 0 {
-		return p, "لیست پلن‌ها از آروان نیامد (خطای موقت API یا ریجن نامعتبر)"
-	}
 	sort.SliceStable(sizes, func(a, b int) bool {
 		if sizes[a].Price > 0 && sizes[b].Price > 0 {
 			return sizes[a].Price < sizes[b].Price
@@ -146,8 +145,23 @@ func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, string) {
 		}
 		return sizes[a].RAM < sizes[b].RAM
 	})
-	sz := sizes[0]
-	p.SizeID, p.SizeName = sz.ID, sz.Name
+	return sizes
+}
+
+func (r *Router) arvHuntPrep(i int, region string, idx int) (arvHuntPrep, string) {
+	var p arvHuntPrep
+	if _, ok := r.arvCli(i); !ok {
+		return p, "اکانت پیدا نشد"
+	}
+	sizes := r.arvHuntSizes(i, region)
+	if len(sizes) == 0 {
+		return p, "لیست پلن‌ها از آروان نیامد (خطای موقت API یا ریجن نامعتبر)"
+	}
+	if idx < 0 || idx >= len(sizes) {
+		idx = 0
+	}
+	sz := sizes[idx]
+	p.SizeID, p.SizeName, p.Price, p.Disk = sz.ID, sz.Name, sz.Price, sz.Disk
 	if sz.CPU > 0 || sz.RAM > 0 {
 		p.SizeLabel = fmt.Sprintf("%s (%dvCPU/%dGB)", sz.Name, sz.CPU, sz.RAM)
 	} else {
@@ -185,41 +199,79 @@ func (r *Router) arvHuntPrepare(i int, region string) (arvHuntPrep, string) {
 	return p, ""
 }
 
-func (r *Router) arvHuntConfirm(chat, mid int64, i int, region string) {
-	r.Show(chat, mid, "⏳ در حال آماده‌سازی (پلن/ایمیج)…", nil)
-	p, reason := r.arvHuntPrepare(i, region)
+// arvHuntPlans lets the user choose the plan (with price) before hunting.
+func (r *Router) arvHuntPlans(chat, mid int64, i int, region string) {
+	sizes := r.arvHuntSizes(i, region)
+	if len(sizes) == 0 {
+		r.Show(chat, mid, "❌ لیست پلن‌ها نیامد؛ چند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
+		return
+	}
+	var kb [][]Btn
+	for j, sz := range sizes {
+		if j >= 25 {
+			break
+		}
+		label := fmt.Sprintf("📦 %s (%dvCPU/%dGB", sz.Name, sz.CPU, sz.RAM)
+		if sz.Disk > 0 {
+			label += fmt.Sprintf("/%dGB", sz.Disk)
+		}
+		label += ")"
+		if p := arvToman(sz.Price); p != "" {
+			label += " · 💰 " + p
+		}
+		kb = append(kb, []Btn{btn(truncRune(label, 60), fmt.Sprintf("arvhuntp:%d:%s:%d", i, region, j))})
+	}
+	kb = append(kb, arvNav(i)...)
+	r.Show(chat, mid, fmt.Sprintf("🎯 شکار IP تمیز — %s\n\n📦 پلن مورد نظر را انتخاب کن (قیمت ماهانه):", Esc(r.arvRegionName(region))), kb)
+}
+
+func (r *Router) arvHuntPlanConfirm(chat, mid int64, i int, region string, idx int) {
+	p, reason := r.arvHuntPrep(i, region, idx)
 	if reason != "" {
 		r.Show(chat, mid, "❌ "+Esc(reason)+"\n\nچند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
 		return
 	}
+	price := ""
+	if t := arvToman(p.Price); t != "" {
+		price = "\n💰 قیمت: <b>" + Esc(t) + "</b>"
+	}
 	r.Show(chat, mid, fmt.Sprintf("🎯 <b>شکار IP تمیز — آروان</b>\n\n"+
-		"📍 ریجن: <code>%s</code>\n📦 پلن: <code>%s</code>\n💿 ایمیج: <code>%s</code>\n"+
-		"🛡 فایروال: <code>Default</code>\n🔢 هر دور: <b>۳ سرور</b> · حداکثر <b>۱۰ دور</b>\n\n"+
-		"🧪 معیار تمیزی: پینگ موفق از ایران و آلمان/هلند (check-host).\n\n"+
+		"📍 ریجن: <code>%s</code>\n📦 پلن: <code>%s</code>%s\n💿 ایمیج: <code>%s</code>\n"+
+		"🛡 فایروال: <code>Default</code>\n\n"+
+		"🧪 معیار تمیزی: پینگ موفق از ایران و آلمان/هلند (check-host).\n"+
 		"⚠️ هر دور ۳ سرور موقت ساخته می‌شود؛ کثیف‌ها خودکار حذف می‌شوند.\n"+
-		"✅ سرورهای تمیز می‌مانند (هزینهٔ ساعتی دارند) و جست‌وجو متوقف می‌شود.",
-		Esc(r.arvRegionName(region)), Esc(p.SizeLabel), Esc(p.ImageName)),
+		"✅ سرورهای تمیز می‌مانند (هزینهٔ ساعتی دارند) و جست‌وجو متوقف می‌شود.\n\n"+
+		"🔢 تعداد دورها را انتخاب کن:",
+		Esc(r.arvRegionName(region)), Esc(p.SizeLabel), price, Esc(p.ImageName)),
 		[][]Btn{
-			{btnS("🚀 شروع شکار", fmt.Sprintf("arvhuntgo:%d:%s", i, region), "success")},
-			arvNav(i)[0],
+			{btnS("۳ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:3", i, region, idx), "primary"),
+				btnS("۵ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:5", i, region, idx), "primary")},
+			{btnS("۱۰ دور", fmt.Sprintf("arvhuntgo:%d:%s:%d:10", i, region, idx), "success")},
+			{btn("🔙 پلن‌ها", fmt.Sprintf("arvhuntc:%d:%s", i, region)), btn("🖥 سرورها", "arvsrv")},
 		})
 }
 
-func (r *Router) arvHuntStart(chat, mid int64, i int, region string) {
+func (r *Router) arvHuntStart(chat, mid int64, i int, region string, idx, rounds int) {
 	if r.arvHuntRunning(chat) != nil {
 		r.Show(chat, mid, "⏳ یک شکار IP در حال اجراست؛ اول آن را متوقف کن.", navKB("arvsrv"))
 		return
 	}
-	p, reason := r.arvHuntPrepare(i, region)
+	p, reason := r.arvHuntPrep(i, region, idx)
 	if reason != "" {
 		r.Show(chat, mid, "❌ "+Esc(reason)+"\n\nچند لحظه بعد دوباره تلاش کن.", navKB("arvsrv"))
 		return
+	}
+	if rounds <= 0 {
+		rounds = 10
+	}
+	if rounds > 20 {
+		rounds = 20
 	}
 	h := &arvHuntState{
 		chat: chat, acc: i, region: region, fw: "Default",
 		sizeID: p.SizeID, sizeName: p.SizeLabel,
 		imageID: p.ImageID, imageName: p.ImageName,
-		maxRounds: 10, batch: 3, started: time.Now(), stage: "create",
+		maxRounds: rounds, batch: 3, started: time.Now(), stage: "create",
 	}
 	arvHunts.Store(chat, h)
 	msgID := r.Bot.Send(chat, "🎯 آماده‌سازی شکار IP…", [][]Btn{{btnS("⏹ توقف", "arvhuntstop", "danger")}})
@@ -298,6 +350,8 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 		fwErr := ""
+		lastErr := ""
+		roundCreated := 0
 		for k := range items {
 			wg.Add(1)
 			go func(k int) {
@@ -306,6 +360,9 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 				d, err := r.arvCreateServer(h.acc, h.region, name, h.sizeID, h.imageID, h.fw, 0)
 				if err != nil {
 					low := strings.ToLower(err.Error())
+					mu.Lock()
+					lastErr = err.Error()
+					mu.Unlock()
 					if strings.Contains(low, "firewall") {
 						mu.Lock()
 						fwErr = "آروان بدون گروه فایروال سرور نمی‌سازد. در پنل آروان یک گروه فایروال بساز و از صفحهٔ «ساخت سرور» نامش را وارد کن."
@@ -314,6 +371,7 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 					h.set(func(h *arvHuntState) {
 						if k < len(h.items) {
 							h.items[k].Phase = "❌ خطای ساخت"
+							h.items[k].Err = err.Error()
 						}
 					})
 					return
@@ -329,11 +387,22 @@ func (r *Router) arvHuntRun(h *arvHuntState) {
 					}
 					h.created++
 				})
+				mu.Lock()
+				roundCreated++
+				mu.Unlock()
 			}(k)
 		}
 		wg.Wait()
 		if fwErr != "" {
 			r.arvHuntFinish(h, "❌ "+fwErr)
+			return
+		}
+		if roundCreated == 0 {
+			if msg := arvCreditErr(lastErr); msg != "" {
+				r.arvHuntFinish(h, msg)
+				return
+			}
+			r.arvHuntFinish(h, "❌ هیچ سروری ساخته نشد (دور "+fmt.Sprint(round)+"): "+truncRune(lastErr, 300))
 			return
 		}
 

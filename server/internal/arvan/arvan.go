@@ -134,6 +134,19 @@ func (c *Client) EccList(region, path string) []map[string]any {
 		}
 		return nil
 	}
+	if strings.HasPrefix(path, "/networks?") {
+		if d, err := c.Ecc(region, "GET", path, nil); err == nil {
+			return eccList(d)
+		}
+		return nil
+	}
+	switch path {
+	case "/sizes", "/securities":
+		if d, err := c.Ecc(region, "GET", path, nil); err == nil {
+			return eccList(d)
+		}
+		return nil
+	}
 	page := 1
 	sep := "?"
 	if strings.Contains(path, "?") {

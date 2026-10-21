@@ -716,18 +716,34 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "arvsshman":
 		r.arvMkSshManual(chat, mid)
 	case strings.HasPrefix(data, "arvhuntgo:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "arvhuntgo:"), ":", 2); len(p) == 2 {
-			r.arvHuntStart(chat, mid, atoiSafe(p[0]), p[1])
+		if p := strings.Split(strings.TrimPrefix(data, "arvhuntgo:"), ":"); len(p) >= 2 {
+			idx, rounds := -1, 10
+			if len(p) >= 3 {
+				idx = atoiSafe(p[2])
+			}
+			if len(p) >= 4 {
+				rounds = atoiSafe(p[3])
+			}
+			r.arvHuntStart(chat, mid, atoiSafe(p[0]), p[1], idx, rounds)
 		}
 	case strings.HasPrefix(data, "arvhuntstop"):
 		r.arvHuntStop(chat)
-	case strings.HasPrefix(data, "arvhunt:"):
-		rest := strings.TrimPrefix(data, "arvhunt:")
-		if p := strings.SplitN(rest, ":", 2); len(p) == 1 {
-			r.arvHuntRegions(chat, mid, atoiSafe(p[0]))
-		} else if len(p) == 2 {
-			r.arvHuntConfirm(chat, mid, atoiSafe(p[0]), p[1])
+	case strings.HasPrefix(data, "arvhuntp:"):
+		if p := strings.Split(strings.TrimPrefix(data, "arvhuntp:"), ":"); len(p) == 3 {
+			r.arvHuntPlanConfirm(chat, mid, atoiSafe(p[0]), p[1], atoiSafe(p[2]))
 		}
+	case strings.HasPrefix(data, "arvhuntc:"):
+		if p := strings.Split(strings.TrimPrefix(data, "arvhuntc:"), ":"); len(p) == 2 {
+			r.arvHuntPlans(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case strings.HasPrefix(data, "arvhunt:"):
+		if p := strings.Split(strings.TrimPrefix(data, "arvhunt:"), ":"); len(p) == 1 {
+			r.arvHuntRegions(chat, mid, atoiSafe(p[0]))
+		} else if len(p) >= 2 {
+			r.arvHuntPlans(chat, mid, atoiSafe(p[0]), p[1])
+		}
+	case data == "arvmkauto":
+		r.arvMkNameSave(chat, mid, arvAutoName())
 	case data == "arvflvretry":
 		r.arvMkFlavors(chat, mid)
 	case data == "arvfwman":

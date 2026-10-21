@@ -44,13 +44,35 @@ func (r *Router) arvMkStart(chat, mid int64, i int, region string) {
 	}
 	r.arvMkSave(chat, map[string]any{"acc": i, "region": region, "firewall": "Default"})
 	r.setWizard(chat, map[string]any{"kind": "arvan_mk_name", "acc": i, "region": region})
+	kb := [][]Btn{{btn("🎲 نام خودکار", "arvmkauto")}}
+	kb = append(kb, arvMkBack(i, region)...)
 	r.Show(chat, mid,
-		fmt.Sprintf("➕ ساخت سرور جدید\n📍 %s\n\n📛 نام سرور را بفرست (۱ تا ۶۰ کاراکتر):", Esc(r.arvRegionName(region))),
-		arvMkBack(i, region))
+		fmt.Sprintf("➕ ساخت سرور جدید\n📍 %s\n\n📛 نام سرور را بفرست:\n"+
+			"• فقط حروف/اعداد انگلیسی، خط تیره و نقطه\n• ۱ تا ۶۰ کاراکتر\n• مثال: <code>my-server-01</code>",
+			Esc(r.arvRegionName(region))),
+		kb)
+}
+
+// arvSanitizeName keeps only characters accepted by the Arvan API.
+func arvSanitizeName(s string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		case r == ' ' || r == '\t':
+			b.WriteRune('-')
+		}
+	}
+	return strings.Trim(b.String(), "-._")
+}
+
+func arvAutoName() string {
+	return fmt.Sprintf("cg-%d", time.Now().UnixNano()%100000000)
 }
 
 func (r *Router) arvMkNameSave(chat, mid int64, text string) {
-	name := strings.TrimSpace(text)
+	name := arvSanitizeName(text)
 	sess := r.arvMkLoad(chat)
 	if sess == nil {
 		r.arvMkExpired(chat, mid)
@@ -58,8 +80,14 @@ func (r *Router) arvMkNameSave(chat, mid int64, text string) {
 	}
 	i := intOrAny(sess["acc"])
 	region := strv(sess["region"])
-	if name == "" || len([]rune(name)) > 60 {
-		r.Show(chat, mid, "❌ نام نامعتبر (۱ تا ۶۰ کاراکتر). دوباره بفرست:", arvMkBack(i, region))
+	if name == "" {
+		name = arvAutoName()
+	}
+	if len([]rune(name)) > 60 {
+		name = string([]rune(name)[:60])
+	}
+	if name == "" {
+		r.Show(chat, mid, "❌ نام نامعتبر. دوباره بفرست (مثال: <code>my-server-01</code>):", arvMkBack(i, region))
 		return
 	}
 	sess["name"] = name
@@ -228,6 +256,9 @@ func (r *Router) arvMkFlavors(chat, mid int64) {
 		label := "📦 " + strv(m["name"])
 		if len(sp) > 0 {
 			label += " (" + strings.Join(sp, " · ") + ")"
+		}
+		if pr := arvToman(m["price"]); pr != "" {
+			label += " · 💰 " + pr
 		}
 		kb = append(kb, []Btn{btn(truncRune(label, 55), fmt.Sprintf("arvflv:%d", j))})
 	}
@@ -436,8 +467,8 @@ func (r *Router) arvMkConfirm(chat, mid int64) {
 	i := intOrAny(sess["acc"])
 	region := strv(sess["region"])
 	price := ""
-	if p := strv(sess["flavorPrice"]); p != "" && p != "0" {
-		price = "\n💰 حدود " + Esc(p) + " /ماه"
+	if p := arvToman(sess["flavorPrice"]); p != "" {
+		price = "\n💰 " + Esc(p)
 	}
 	net := firstOf(strv(sess["networkName"]), "پیش‌فرض")
 	ssh := firstOf(strv(sess["sshKey"]), "—")
@@ -518,6 +549,10 @@ func (r *Router) arvMkCreate(chat, mid int64) {
 	r.Show(chat, mid, fmt.Sprintf("⏳ در حال ساخت سرور «%s»…", Esc(name)), nil)
 	d, err := r.arvCreateServer(i, region, name, flavorID, imageID, fw, disk)
 	if err != nil {
+		if msg := arvCreditErr(err.Error()); msg != "" {
+			r.Show(chat, mid, msg, arvMkBack(i, region))
+			return
+		}
 		low := strings.ToLower(err.Error())
 		if strings.Contains(low, "firewall") {
 			r.Show(chat, mid, "❌ آروان بدون «گروه فایروال» سرور نمی‌سازد.\n\n"+
