@@ -305,11 +305,12 @@ func (r *Router) arvCreateServer(i int, region, name, flavorID, imageID, fwName 
 	if nid := r.arvPublicNetworkID(i, region); nid != "" {
 		base["network_id"] = nid
 	}
-	if disk > 0 {
-		base["disk_size"] = disk
+	if disk <= 0 {
+		disk = 25
 	}
+	base["disk_size"] = disk
 	var last error
-	for _, keys := range [][2]string{{"flavorRef", "imageRef"}, {"flavor_id", "image_id"}} {
+	for _, keys := range [][2]string{{"flavor_id", "image_id"}, {"flavorRef", "imageRef"}} {
 		body := map[string]any{}
 		for k, v := range base {
 			body[k] = v
@@ -359,7 +360,7 @@ func (r *Router) arvPublicNetworkID(i int, region string) string {
 	v, _ := arvCached(fmt.Sprintf("mnet2:%d:%s", i, region), time.Hour, func() any {
 		cli, ok := r.arvCli(i)
 		if !ok {
-			return ""
+			return nil
 		}
 		for _, m := range cli.EccList(region, "/networks?type=public") {
 			if id := strv(m["id"]); id != "" {
@@ -687,7 +688,7 @@ func arvFallbackSizes() []arvSize {
 		{ID: "eco-2-2-0", Name: "eco-small4", CPU: 2, RAM: 2, Disk: 30},
 		{ID: "std-2-2-0", Name: "std-small1", CPU: 2, RAM: 2, Disk: 75},
 		{ID: "g4-2-2-0", Name: "g4-small2", CPU: 2, RAM: 2, Disk: 75},
-		{ID: "g4-4-2-0", Name: "c4-medium1", CPU: 4, RAM: 2, Disk: 25},
+		{ID: "g4-4-2-0", Name: "c4-medium1", CPU: 2, RAM: 4, Disk: 25},
 	}
 }
 
