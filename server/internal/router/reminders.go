@@ -103,7 +103,7 @@ func (r *Router) remRel(chat, mid int64) {
 	if len(row) > 0 {
 		kb = append(kb, row)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "remnew"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:remnew"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "⏱ واحد را انتخاب کن:", kb)
 }
 
@@ -156,7 +156,7 @@ func (r *Router) remAbsY(chat, mid int64, s string) {
 	if len(row) > 0 {
 		kb = append(kb, row)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "remabs"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:remabs"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "📅 ماه را انتخاب کن:", kb)
 }
 

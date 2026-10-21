@@ -113,7 +113,7 @@ func (r *Router) quotaCrons(chat, mid int64) {
 	} else {
 		kb = append(kb, []Btn{btn("⏸ توقف ۶ ساعت", "qcron:6"), btn("⏸ توقف ۲۴ ساعت", "qcron:24")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "quota"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:quota"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, txt, kb)
 }
 

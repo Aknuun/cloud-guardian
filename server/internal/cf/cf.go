@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -81,24 +82,47 @@ type Zone struct {
 }
 
 type Record struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	TTL     any    `json:"ttl"`
-	Proxied any    `json:"proxied"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Content  string `json:"content"`
+	TTL      any    `json:"ttl"`
+	Proxied  any    `json:"proxied"`
+	Priority any    `json:"priority,omitempty"`
 }
 
+// Zones returns every zone of the account (follows pagination).
 func (c *Client) Zones() ([]Zone, error) {
-	var z []Zone
-	err := req(c, "GET", "/zones?per_page=50", nil, &z)
-	return z, err
+	var all []Zone
+	for page := 1; page <= 20; page++ {
+		var z []Zone
+		err := req(c, "GET", fmt.Sprintf("/zones?per_page=50&page=%d", page), nil, &z)
+		if err != nil {
+			return all, err
+		}
+		all = append(all, z...)
+		if len(z) < 50 {
+			break
+		}
+	}
+	return all, nil
 }
 
+// Records returns every DNS record of a zone (follows pagination).
 func (c *Client) Records(zoneID string) ([]Record, error) {
-	var r []Record
-	err := req(c, "GET", "/zones/"+zoneID+"/dns_records?per_page=100", nil, &r)
-	return r, err
+	var all []Record
+	for page := 1; page <= 20; page++ {
+		var r []Record
+		err := req(c, "GET", fmt.Sprintf("/zones/%s/dns_records?per_page=100&page=%d", zoneID, page), nil, &r)
+		if err != nil {
+			return all, err
+		}
+		all = append(all, r...)
+		if len(r) < 100 {
+			break
+		}
+	}
+	return all, nil
 }
 
 func (c *Client) AddRecord(zoneID, rtype, name, content string, ttl int, proxied bool, priority *int) (*Record, error) {
@@ -121,9 +145,25 @@ func (c *Client) DelRecord(zoneID, recID string) error {
 func (c *Client) UpdateRecord(zoneID string, rec Record, changes map[string]any) (*Record, error) {
 	body := map[string]any{
 		"type": rec.Type, "name": rec.Name, "content": rec.Content,
-		"ttl": ttlOf(rec.TTL), "proxied": boolOf(rec.Proxied),
+		"ttl": ttlOf(rec.TTL),
+	}
+	// proxied is only valid for proxyable types; sending it for TXT/MX/NS is
+	// rejected by the API, so keep it conditional.
+	switch strings.ToUpper(rec.Type) {
+	case "A", "AAAA", "CNAME":
+		body["proxied"] = boolOf(rec.Proxied)
+	}
+	if rec.Priority != nil {
+		body["priority"] = rec.Priority
 	}
 	for k, v := range changes {
+		if k == "proxied" {
+			switch strings.ToUpper(fmt.Sprint(body["type"])) {
+			case "A", "AAAA", "CNAME":
+			default:
+				continue
+			}
+		}
 		body[k] = v
 	}
 	var r Record

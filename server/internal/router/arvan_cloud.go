@@ -66,7 +66,7 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 	accs := r.arvAccounts()
 	if len(accs) == 0 {
 		r.Show(chat, mid, "🖥 سرورهای ابری آروان\n\nاول یک اکانت آروان اضافه کن.",
-			[][]Btn{{btn("👤 اکانت‌ها", "arvanacc")}, {btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")}})
+			[][]Btn{{btn("👤 اکانت‌ها", "arvanacc")}, {btn("🔙 بازگشت", "back:arvan"), btn("🏠 خانه", "menu")}})
 		return
 	}
 	kb := [][]Btn{}
@@ -99,7 +99,7 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 		lines = append(lines, "", "🔄 در حال به‌روزرسانی در پس‌زمینه…")
 	}
 	kb = append(kb, []Btn{btn("🔄 تازه‌سازی", "arvregrefresh")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:arvan"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 	if !stale {
 		return
@@ -387,7 +387,7 @@ func (r *Router) arvServerDetail(chat, mid int64, i int, idx int) {
 	kb = append(kb, arvNav(i)...)
 	kb = append(kb,
 		[]Btn{btnS("🗑 حذف سرور", fmt.Sprintf("arvterm:%d:%d", i, idx), "danger")},
-		[]Btn{btn("🔙 بازگشت", fmt.Sprintf("arvreg:%d:%s", i, region)), btn("🏠 خانه", "menu")})
+		[]Btn{btn("🔙 بازگشت", "back:"+fmt.Sprintf("arvreg:%d:%s", i, region)), btn("🏠 خانه", "menu")})
 	traffic, ready := r.arvTrafficLineAsync(i, region, strv(s["id"]))
 	r.Show(chat, mid, r.arvServerText(s, region, traffic), kb)
 	if !ready {
@@ -488,7 +488,7 @@ func (r *Router) arvSnapList(chat, mid int64, i, idx int) {
 			btnS("📷 "+truncRune(nm, 24), "noop", "plain"),
 			btnS("🗑", fmt.Sprintf("arvsnapdel:%d:%d:%s", i, idx, strv(sn["id"])), "danger")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+fmt.Sprintf("arvs:%d:%d", i, idx))})
 	r.Show(chat, mid, fmt.Sprintf("📷 اسنپ‌شات‌ها (%d)", len(arr)), kb)
 }
 

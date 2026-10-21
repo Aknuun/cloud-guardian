@@ -555,7 +555,7 @@ func (r *Router) hfdHome(chat, mid int64) {
 		{btn("⏱ بازه", "hfdint"), btn("🕐 ساعت لنگر", "hfdat")},
 		{btn("🖥 هاست‌ها", "hfdhosts"), btn("⚡ اجرای دستی", "hfdrun")},
 		{btn("📜 گزارش", "hfdlog"), btn("↩️ بازگردانی", "hfdrvlist")},
-		{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:hf"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -582,7 +582,7 @@ func (r *Router) hfdIntervalMenu(chat, mid int64) {
 	}
 	kb := [][]Btn{row,
 		{btn("✏️ ساعت دلخواه", "hfdintc")},
-		{btn("🔙 بازگشت", "hfd")}}
+		{btn("🔙 بازگشت", "back:hfd")}}
 	r.Show(chat, mid, fmt.Sprintf("⏱ بازهٔ چرخش (فعلی: هر %d ساعت):", cfg.IntervalH), kb)
 }
 
@@ -698,7 +698,7 @@ func (r *Router) hfdPanel(chat, mid int64, pi int) {
 	if n == 0 {
 		lines = append(lines, "📭 هاستی نیست.")
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hfdhosts"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hfdhosts"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

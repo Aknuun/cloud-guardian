@@ -30,7 +30,7 @@ func (r *Router) sslmHome(chat, mid int64) {
 	if len(mons) > 0 {
 		kb = append(kb, []Btn{btn("🔄 بررسی دوباره", "sslm"), btn("🗑 حذف دامنه", "sslmd")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "dommon"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:dommon"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

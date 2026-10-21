@@ -62,7 +62,7 @@ func (r *Router) hfBackupHome(chat, mid int64) {
 			btn("↩️ "+hfBkTime(b.TS), "hfbkr:"+b.ID),
 			btnS("🗑", "hfbkdel:"+b.ID, "danger")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hf"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

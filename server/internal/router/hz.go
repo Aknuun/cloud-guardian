@@ -204,7 +204,7 @@ func (r *Router) hzAccsMenu(chat, mid int64) {
 	if len(r.hzAccs()) > 0 {
 		kb = append(kb, []Btn{btn("🗑 حذف اکانت", "hzdel")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hz"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "👤 اکانت‌های هتزنر:", kb)
 }
 
@@ -219,7 +219,7 @@ func (r *Router) hzDelList(chat, mid int64) {
 		items = append(items, btnS("🗑 "+strv(a["name"]), fmt.Sprintf("hzd:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
-	kb = append(kb, row(btn("🔙 بازگشت", "hz")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:hz")))
 	r.Show(chat, mid, "🗑 کدام اکانت حذف شود؟", kb)
 }
 
@@ -420,7 +420,7 @@ func (r *Router) hzInfo(chat, mid int64, i int, sid string) {
 	}, 2)
 	kb = append(kb, []Btn{btn("🔄 بروزرسانی", fmt.Sprintf("hzsi:%d:%s", i, sid))})
 	kb = append(kb, []Btn{btnS("🗑 حذف سرور", fmt.Sprintf("hzsu:%d:%s:del", i, sid), "danger")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("hzs:%d:0", i)), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+fmt.Sprintf("hzs:%d:0", i)), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, text, kb)
 }
 
@@ -487,7 +487,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 		return
 	}
 	back := fmt.Sprintf("hzsi:%d:%s", i, sid)
-	home := []Btn{btn("🔙 بازگشت", back), btn("🏠 خانه", "menu")}
+	home := []Btn{btn("🔙 بازگشت", "back:"+back), btn("🏠 خانه", "menu")}
 	if step == "rename" {
 		r.setWizard(chat, map[string]any{"kind": "hz_srv_rename", "acc": i, "sid": sid})
 		r.Show(chat, mid, "✏️ نام جدید سرور را بفرستید:", [][]Btn{{btn("🔙 انصراف", back)}})
@@ -779,7 +779,7 @@ func (r *Router) hzImageList(chat, mid int64, i int) {
 		rows = append(rows, btnS(label, fmt.Sprintf("hzsci:%d:%s", i, strv(im["id"])), "plain"))
 	}
 	kb := gridBTN(rows, 2)
-	kb = append(kb, row(btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:hz"), btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, "🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:\n\n💡 بعد از انتخاب تصویر، فقط پلن‌های سازگار با معماری آن (x86/ARM) نمایش داده می‌شوند.", kb)
 }
 
@@ -990,7 +990,7 @@ func (r *Router) hzPlanList(chat, mid int64, i int, notice, retryPlan string) {
 	if retryPlan != "" {
 		kb = append(kb, row(btn("🔁 به‌هرحال امتحان کن", fmt.Sprintf("hzscp:%d:%s", i, retryPlan))))
 	}
-	kb = append(kb, row(btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:hz"), btn("🏠 خانه", "menu")))
 	hd := fmt.Sprintf("💰 پلن سرور را انتخاب کن\n📍 لوکیشن: %s", Esc(loc))
 	if img := strv(pend["imageName"]); img != "" {
 		hd += " • 🖼️ " + Esc(img)

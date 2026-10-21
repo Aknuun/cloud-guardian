@@ -107,7 +107,7 @@ func (r *Router) lnHome(chat, mid int64) {
 	}
 	kb = append(kb, []Btn{btnS("➕ ساخت سرور", fmt.Sprintf("lnsc:%d", sel), "success")})
 	kb = append(kb, []Btn{btnS(label, fmt.Sprintf("lnacc:%d", sel), "plain")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "menu"), btn("👤 اکانت‌ها", "lnaccs"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:menu"), btn("👤 اکانت‌ها", "lnaccs"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -128,7 +128,7 @@ func (r *Router) lnAccSettings(chat, mid int64, i int) {
 			Esc(strv(acc["name"])), Esc(masked)),
 		[][]Btn{
 			{btn("🗑 حذف اکانت", fmt.Sprintf("lnd:%d", i))},
-			{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")}})
+			{btn("🔙 بازگشت", "back:ln"), btn("🏠 خانه", "menu")}})
 }
 
 func (r *Router) lnAccsMenu(chat, mid int64) {
@@ -136,7 +136,7 @@ func (r *Router) lnAccsMenu(chat, mid int64) {
 	if len(r.lnAccs()) > 0 {
 		kb = append(kb, []Btn{btn("🗑 حذف اکانت", "lndel")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:ln"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "👤 اکانت‌های لینود:", kb)
 }
 
@@ -147,7 +147,7 @@ func (r *Router) lnDelList(chat, mid int64) {
 		items = append(items, btnS("🗑 "+strv(a["name"]), fmt.Sprintf("lnd:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
-	kb = append(kb, row(btn("🔙 بازگشت", "ln")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:ln")))
 	r.Show(chat, mid, "🗑 کدام اکانت حذف شود؟", kb)
 }
 
@@ -217,7 +217,7 @@ func (r *Router) lnServers(chat, mid int64, i int, pg int) {
 		}
 		kb = append(kb, nav)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:ln"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, fmt.Sprintf("🖥 سرورهای «%s» (%d):", Esc(strv(accs[i]["name"])), len(servers)), kb)
 }
 
@@ -285,7 +285,7 @@ func (r *Router) lnInfo(chat, mid int64, i int, sid string) {
 		btn("❌ IPv6", fmt.Sprintf("lnsu:%d:%s:u6", i, sid)),
 		btnS("🗑 حذف سرور", fmt.Sprintf("lnsu:%d:%s:del", i, sid), "danger"),
 	}, 2)
-	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("lns:%d:0", i)), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+fmt.Sprintf("lns:%d:0", i)), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, text, kb)
 }
 
@@ -335,7 +335,7 @@ func (r *Router) lnOp(chat, mid int64, i int, sid, step string) {
 		return
 	}
 	back := fmt.Sprintf("lnsi:%d:%s", i, sid)
-	home := []Btn{btn("🔙 بازگشت", back), btn("🏠 خانه", "menu")}
+	home := []Btn{btn("🔙 بازگشت", "back:"+back), btn("🏠 خانه", "menu")}
 	if step == "rename" {
 		r.setWizard(chat, map[string]any{"kind": "ln_srv_rename", "acc": i, "sid": sid})
 		r.Show(chat, mid, "✏️ نام جدید سرور را بفرستید:", [][]Btn{{btn("🔙 انصراف", back)}})
@@ -761,7 +761,7 @@ func (r *Router) lnCreateRegion(chat, mid int64, i int, region string) {
 	pend["region"] = region
 	r.setWizard(chat, pend)
 	kb := gridBTN(rows, 2)
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:ln"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "💰 پلن سرور را انتخاب کنید:", kb)
 }
 
@@ -795,7 +795,7 @@ func (r *Router) lnCreatePlan(chat, mid int64, i int, region, typeID string) {
 	pend["type"] = typeID
 	r.setWizard(chat, pend)
 	kb := gridBTN(rows, 2)
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:ln"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "🖼️ تصویر (سیستم‌عامل) را انتخاب کنید:", kb)
 }
 

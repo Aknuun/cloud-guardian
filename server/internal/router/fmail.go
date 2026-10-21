@@ -23,17 +23,28 @@ func (r *Router) cfClientFor(acc int) (*cf.Client, bool) {
 }
 
 func (r *Router) cfAllZones() []cfZone {
+	zs, _ := r.cfAllZonesE()
+	return zs
+}
+
+// cfAllZonesE also reports the first API error so screens can distinguish
+// "no zones" from "token/permission problem".
+func (r *Router) cfAllZonesE() ([]cfZone, error) {
 	var out []cfZone
+	var firstErr error
 	for i, a := range r.cfAccs() {
 		zs, err := cf.New(a.Token).Zones()
 		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		for _, z := range zs {
 			out = append(out, cfZone{Zone: z, Acc: i})
 		}
 	}
-	return out
+	return out, firstErr
 }
 
 func mailDestsSorted(lst []map[string]any) []map[string]any {
@@ -219,7 +230,7 @@ func (r *Router) fmailMode(chat, mid int64, acc, zid string) {
 			"📧 آدرس‌ها به شکل <code>name@%s</code> هستند.", Esc(name), Esc(name)),
 		[][]Btn{
 			{btnS("📩 فوروارد به ایمیل مقصد", fmt.Sprintf("fmailfwd:%s:%s", acc, zid), "success")},
-			{btn("🔙 بازگشت", "fmail"), btn("🏠 خانه", "menu")}})
+			{btn("🔙 بازگشت", "back:fmail"), btn("🏠 خانه", "menu")}})
 }
 
 func (r *Router) fmailFwdPick(chat, mid int64, acc, zid string) {
@@ -268,7 +279,7 @@ func (r *Router) fmailFwdPick(chat, mid int64, acc, zid string) {
 		lines = append(lines, "هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.")
 	}
 	kb = append(kb, []Btn{btn("➕ مقصد جدید", fmt.Sprintf("fmailfwdnew:%s:%s", acc, zid))})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "fmail"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:fmail"), btn("🏠 خانه", "menu")})
 	r.Store.PutJSON(fmt.Sprintf("fmailctx:%d", chat),
 		map[string]any{"verified": verifiedEmails}, 600)
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)

@@ -498,7 +498,7 @@ func (r *Router) foDelete(chat, mid int64) {
 			"• اسکریپت <code>"+Esc(c["worker_name"])+"</code> حذف می‌شود\n"+
 			"• فضای KV <code>"+Esc(c["fo_namespace_id"])+"</code> حذف می‌شود\n\n"+
 			"مطمئنی؟",
-		[][]Btn{{btnS("🗑 بله، حذف کن", "fodelete_yes", "danger"), btn("🔙 بازگشت", "fo")}})
+		[][]Btn{{btnS("🗑 بله، حذف کن", "fodelete_yes", "danger"), btn("🔙 بازگشت", "back:fo")}})
 }
 
 func (r *Router) foDeleteYes(chat, mid int64) {
@@ -533,7 +533,7 @@ func (r *Router) foOldWorkers(chat, mid int64) {
 		r.Show(chat, mid,
 			"🧹 <b>پاک‌سازی ورکرهای قبلی</b>\n\nبرای فهرست‌کردن ورکرها اول باید توکن کلادفلر ست شود.\n"+
 				"اگر از نسخهٔ ورکری مهاجرت می‌کنی، ورکر قدیمی چون همان توکن بات را دارد ممکن است webhook را از سرور بدزدد؛ باید کرون/اسکریپتش را غیرفعال یا حذف کنی.",
-			[][]Btn{{btn("⚙️ راه‌اندازی فیلور", "fosetup"), btn("🔙 بازگشت", "fo")}})
+			[][]Btn{{btn("⚙️ راه‌اندازی فیلور", "fosetup"), btn("🔙 بازگشت", "back:fo")}})
 		return
 	}
 	r.Show(chat, mid, "⏳ در حال خواندن ورکرها…", nil)
@@ -555,7 +555,7 @@ func (r *Router) foOldWorkers(chat, mid int64) {
 			})
 		}
 		if len(kb) == 0 {
-			kb = append(kb, []Btn{btn("🔙 بازگشت", "fo")})
+			kb = append(kb, []Btn{btn("🔙 بازگشت", "back:fo")})
 		}
 		r.Bot.Send(chat,
 			"🧹 <b>ورکرهای اکانت</b>\n\n"+

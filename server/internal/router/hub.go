@@ -167,7 +167,7 @@ func (r *Router) hubHome(chat, mid int64) {
 		{btnS("📊 آمار نصب‌ها", "hubstats", "primary"), btn("📢 اعلان‌ها", "hubann")},
 		{btnS("✉️ پیام همگانی", "hubcast", "success")},
 		{btn("⚙️ تنظیم هاب", "hubcfg")},
-		{btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:settings"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid,
 		"📊 مرکز هاب\n\n"+r.hubURLLine()+"\n"+
@@ -219,7 +219,7 @@ func (r *Router) hubStats(chat, mid int64) {
 		}
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"),
-		[][]Btn{{btn("🔄 بروزرسانی", "hubstats"), btn("🔙 بازگشت", "hub")}, {btn("🏠 خانه", "menu")}})
+		[][]Btn{{btn("🔄 بروزرسانی", "hubstats"), btn("🔙 بازگشت", "back:hub")}, {btn("🏠 خانه", "menu")}})
 }
 
 // ---------- broadcast ----------
@@ -289,7 +289,7 @@ func (r *Router) hubAnn(chat, mid int64) {
 	list, err := r.hubAnnFetch()
 	if err != nil {
 		r.Show(chat, mid, "📢 اعلان‌ها\n\n❌ دریافت ناموفق:\n"+Esc(err.Error()),
-			[][]Btn{{btnS("🔗 منبع اعلان‌ها", "annurl", "primary")}, {btn("🔙 بازگشت", "hub")}})
+			[][]Btn{{btnS("🔗 منبع اعلان‌ها", "annurl", "primary")}, {btn("🔙 بازگشت", "back:hub")}})
 		return
 	}
 	lines := []string{"📢 اعلان‌ها", ""}
@@ -309,7 +309,7 @@ func (r *Router) hubAnn(chat, mid int64) {
 		kb = append(kb, []Btn{btnS("📄 "+truncRune(a.Text, 30), "hubannv:"+a.ID, "plain")})
 	}
 	kb = append(kb, []Btn{btnS("🔗 منبع اعلان‌ها", "annurl", "primary")})
-	kb = append(kb, []Btn{btn("🔄 بروزرسانی", "hubann"), btn("🔙 بازگشت", "hub")})
+	kb = append(kb, []Btn{btn("🔄 بروزرسانی", "hubann"), btn("🔙 بازگشت", "back:hub")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -327,7 +327,7 @@ func (r *Router) hubAnnView(chat, mid int64, id string) {
 		if a.Reply {
 			kb = append(kb, []Btn{btnS("💬 پاسخ / ثبت‌نام", "hubannreply:"+a.ID, "primary")})
 		}
-		kb = append(kb, []Btn{btn("🔙 بازگشت", "hubann"), btn("🏠 خانه", "menu")})
+		kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hubann"), btn("🏠 خانه", "menu")})
 		r.Show(chat, mid, "📢 اعلان\n\n"+Esc(a.Text), kb)
 		return
 	}
@@ -360,7 +360,7 @@ func (r *Router) hubContact(chat, mid int64) {
 	r.Show(chat, mid,
 		"📞 ارتباط با سازنده\n\nهر پیامی بفرستی به ادمین اصلی می‌رسد و می‌تونه جواب بده.\n"+
 			"🆔 ادمین اصلی: "+who,
-		[][]Btn{{btnS("✉️ فرستادن پیام", "hubctmsg", "primary")}, {btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")}})
+		[][]Btn{{btnS("✉️ فرستادن پیام", "hubctmsg", "primary")}, {btn("🔙 بازگشت", "back:settings"), btn("🏠 خانه", "menu")}})
 }
 
 func (r *Router) hubContactStart(chat, mid int64) {

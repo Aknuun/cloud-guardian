@@ -25,7 +25,7 @@ func (r *Router) adminsMenu(chat, mid int64) {
 	b.WriteString("\n🔗 شناسه: با <code>/myid</code>.")
 	kb := [][]Btn{
 		{btn("➕ افزودن ادمین", "adminadd"), btn("➖ حذف ادمین", "admindel")},
-		{btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:settings"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, b.String(), kb)
 }

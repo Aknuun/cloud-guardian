@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.13"
+const Version = "4.6.14"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -42,11 +42,14 @@ func HomeKB() [][]Btn                   { return navKB("") }
 func row(bs ...Btn) []Btn { return bs }
 
 // navRow is the standard back/home footer shown at the bottom of sub-screens.
+// navRow is the standard footer. The back button replays the previous screen
+// from the per-chat navigation history (see navBack), falling back to `back`
+// when the history is empty (e.g. after a restart).
 func navRow(back string) []Btn {
 	if back == "" {
 		return row(btn("🏠 خانه", "menu"))
 	}
-	return row(btn("🔙 بازگشت", back), btn("🏠 خانه", "menu"))
+	return row(btn("🔙 بازگشت", "back:"+"back:"+back), btn("🏠 خانه", "menu"))
 }
 
 // copyBtn is a tap-to-copy button (Telegram copy_text). It never carries a
@@ -66,6 +69,8 @@ func Esc(s any) string {
 
 type Router struct {
 	lastNav  sync.Map
+	navStack sync.Map
+	navSkip  sync.Map
 	Bot      *tg.Client
 	Store    *store.Store
 	AdminID  int64

@@ -62,7 +62,7 @@ func (r *Router) arvanHome(chat, mid int64) {
 			"با دسترسی‌های CDN و Cloud Server لازم است.",
 		[][]Btn{
 			{btn("🌐 دامنه‌ها (DNS)", "arvdoms"), btn("🖥 سرورهای ابری", "arvsrv")},
-			{btn("👤 اکانت‌ها", "arvanacc"), btn("🔙 بازگشت", "menu")}})
+			{btn("👤 اکانت‌ها", "arvanacc"), btn("🔙 بازگشت", "back:menu")}})
 }
 
 func arvKeyGuideKB() [][]Btn {
@@ -108,7 +108,7 @@ func (r *Router) arvanAccsPage(chat, mid int64) {
 			btnS("🗑", fmt.Sprintf("arvanaccdel:%d", i), "danger")})
 	}
 	kb = append(kb, []Btn{btn("➕ افزودن اکانت", "arvanaccadd"), btn("📘 راهنما", "arvanacchelp")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvan"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:arvan"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid,
 		"🇮🇷 آروان — اکانت‌ها\n\nکلید را از پنل آروان "+
 			"(Settings → Machine User) بسازید.", kb)
@@ -173,7 +173,7 @@ func (r *Router) arvanDoms(chat, mid int64) {
 	if len(accs) == 0 {
 		r.Show(chat, mid, "📭 اکانتی نیست.",
 			[][]Btn{{btn("➕ افزودن اکانت", "arvanaccadd"), btn("📘 راهنما", "arvanacchelp")},
-				{btn("🔙 بازگشت", "arvan")}})
+				{btn("🔙 بازگشت", "back:arvan")}})
 		return
 	}
 	var items []Btn
@@ -261,7 +261,7 @@ func (r *Router) arvanRecs(chat, mid int64, acc int, dom string, pg int) {
 		nav = append(nav, emptyBtn())
 		kb = append(kb, nav)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "arvdoms"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:arvdoms"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, fmt.Sprintf("📋 %s (%d رکورد):", dom, len(recs)), kb)
 }
 
@@ -298,7 +298,7 @@ func (r *Router) arvanRec(chat, mid int64, acc int, dom, rid string) {
 		{btn("✏️ تغییر مقدار", fmt.Sprintf("arvev:%d:%s:%s", acc, dom, rid)),
 			btn("☁️ ابری", fmt.Sprintf("arvcloud:%d:%s:%s", acc, dom, rid))},
 		{btnS("🗑 حذف", fmt.Sprintf("arvdel:%d:%s:%s", acc, dom, rid), "danger")},
-		{btn("🔙 بازگشت", fmt.Sprintf("arvdom:%d:%s", acc, dom)), btn("🏠 خانه", "menu")}}
+		{btn("🔙 بازگشت", "back:"+fmt.Sprintf("arvdom:%d:%s", acc, dom)), btn("🏠 خانه", "menu")}}
 	r.Show(chat, mid, txt, kb)
 }
 

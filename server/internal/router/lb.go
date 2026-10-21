@@ -85,15 +85,17 @@ func (r *Router) cfCtx(chat int64, rid string) (int, string) {
 	if !r.Store.GetJSON(fmt.Sprintf("cfctx:%d", chat), &sess) {
 		return 0, ""
 	}
-	if zid, _ := sess["zid"].(string); zid != "" {
-		return intOrAny(sess["acc"]), zid
-	}
-	if results, ok := sess["results"].(map[string]any); ok {
+	// Search/favorites results carry their own acc+zone; they must win over the
+	// last opened zone, otherwise the record id is resolved in the wrong zone.
+	if results, ok := sess["results"].(map[string]any); ok && rid != "" {
 		if res, ok := results[rid].(map[string]any); ok {
 			if zid, _ := res["zid"].(string); zid != "" {
 				return intOrAny(res["acc"]), zid
 			}
 		}
+	}
+	if zid, _ := sess["zid"].(string); zid != "" {
+		return intOrAny(sess["acc"]), zid
 	}
 	return 0, ""
 }
@@ -309,7 +311,7 @@ func (r *Router) lbZoneGroups(chat, mid int64, acc int, zid string, pg int) {
 		}
 		kb = append(kb, nav)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "lb"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:lb"), btn("🏠 خانه", "menu")})
 	txt := strings.Join(lines, "\n")
 	if len(txt) > 3500 {
 		txt = txt[:3500]
@@ -409,7 +411,7 @@ func (r *Router) lbRender(chat, mid int64, gid string) {
 	if s.Rid != "" {
 		back = "cfr:" + s.Rid
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", back)})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+back)})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -599,7 +601,7 @@ func (r *Router) lbSpareHomeGid(chat, mid int64, gid string) {
 	if s.Rid != "" {
 		back = "lbs:" + s.Rid
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", back), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+back), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -642,7 +644,7 @@ func (r *Router) lbSpareMenu(chat, mid int64, gid string, idx int) {
 		kb = append(kb, []Btn{btn("🔄 جایگزینی با "+sc, fmt.Sprintf("lbsgo:%s:%d", gid, fi))})
 		kb = append(kb, []Btn{btn("❌ حذف زاپاس", fmt.Sprintf("lbsdel:%s:%d", gid, fi))})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "lbsh:"+gid), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:"+"lbsh:"+gid), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 

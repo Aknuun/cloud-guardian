@@ -179,7 +179,7 @@ func (r *Router) versHome(chat, mid int64) {
 	kb := [][]Btn{
 		{btnS("⬆️ آپدیت به آخرین نسخه", "verlatest", "primary")},
 		{btn("📋 فهرست نسخه‌ها", "verlist")},
-		{btn("🔙 بازگشت", "settings"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:settings"), btn("🏠 خانه", "menu")},
 	}
 	if latest != "" && verGreater(latest, r.curTag()) {
 		kb[0] = []Btn{btnS("⬆️ آپدیت به "+latest, "verdo:"+latest, "primary")}
@@ -199,7 +199,7 @@ func (r *Router) verLatest(chat, mid int64) {
 	r.Store.Put("selfup_latest", tag, 0)
 	if !verGreater(tag, r.curTag()) {
 		r.Show(chat, mid, "✅ روی آخرین نسخه هستی (<code>"+r.curTag()+"</code>).",
-			[][]Btn{{btn("📋 فهرست نسخه‌ها", "verlist")}, {btn("🔙 بازگشت", "vers"), btn("🏠 خانه", "menu")}})
+			[][]Btn{{btn("📋 فهرست نسخه‌ها", "verlist")}, {btn("🔙 بازگشت", "back:vers"), btn("🏠 خانه", "menu")}})
 		return
 	}
 	r.verDo(chat, mid, tag)

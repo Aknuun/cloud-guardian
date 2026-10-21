@@ -103,7 +103,7 @@ func (r *Router) srvOpen(chat, mid int64, sid string) {
 		{btn("🔄 ریبوت", fmt.Sprintf("srvreboot:%s", strv(s["id"]))), btn("⏱ آپدیت و آپگرید", fmt.Sprintf("srvupd:%s", strv(s["id"])))},
 		{btn("ℹ️ مشخصات سیستم", fmt.Sprintf("srvinfo:%s", strv(s["id"]))), btn("💾 فضای دیسک", fmt.Sprintf("srvdisk:%s", strv(s["id"])))},
 		{btn("✏️ ویرایش", fmt.Sprintf("srvedit:%s", strv(s["id"]))), btnS("🗑 حذف", fmt.Sprintf("srvdelx:%s", strv(s["id"])), "danger")},
-		{btn("🔙 بازگشت", "srv"), btn("🏠 خانه", "menu")}}
+		{btn("🔙 بازگشت", "back:srv"), btn("🏠 خانه", "menu")}}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -192,7 +192,7 @@ func (r *Router) srvDelList(chat, mid int64) {
 	for _, s := range lst {
 		kb = append(kb, []Btn{btnS("🗑 "+strv(s["name"]), fmt.Sprintf("srvdelx:%s", strv(s["id"])), "danger")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "srv")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:srv")})
 	r.Show(chat, mid, "🗑 کدام سرور حذف شود؟", kb)
 }
 
@@ -271,7 +271,7 @@ func (r *Router) srvEditMenu(chat, mid int64, sid string) {
 		{btn("✏️ نام", fmt.Sprintf("srvedith:%s:name", sid)), btn("🌐 هاست/پورت", fmt.Sprintf("srvedith:%s:host", sid))},
 		{btn("👤 کاربر", fmt.Sprintf("srvedith:%s:user", sid)), btn("🔐 رمز/کلید", fmt.Sprintf("srvedith:%s:auth", sid))},
 		{btn("📝 یادداشت", fmt.Sprintf("srvedith:%s:note", sid))},
-		{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}}
+		{btn("🔙 بازگشت", "back:"+fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}}
 	r.Show(chat, mid, fmt.Sprintf("✏️ ویرایش «%s» — کدام مورد؟", Esc(strv(s["name"]))), kb)
 }
 
@@ -320,7 +320,7 @@ func (r *Router) srvPwHome(chat, mid int64) {
 		}
 		kb = append(kb, row)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "srv"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:srv"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
 
@@ -760,7 +760,7 @@ func (r *Router) srvStats(chat, mid int64, idx string) {
 	if e := strvVal(st["error"]); e != "" {
 		r.Show(chat, mid, fmt.Sprintf("❌ وصل نشد: <code>%s</code>", Esc(truncRune(e, 200))),
 			[][]Btn{{btn("🔄 بروزرسانی", fmt.Sprintf("srvstats:%d", i)), btn("⚙️ آستانه‌ها", "srvmon")},
-				{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", strv(s["id"]))), btn("🏠 خانه", "menu")}})
+				{btn("🔙 بازگشت", "back:"+fmt.Sprintf("srvopen:%s", strv(s["id"]))), btn("🏠 خانه", "menu")}})
 		return
 	}
 	uptime := intOfAny(st["uptimeS"])
@@ -779,7 +779,7 @@ func (r *Router) srvStats(chat, mid int64, idx string) {
 			btn(fmt.Sprintf("🗄 %s/%s", strv(disk["used"]), strv(disk["total"])), "noop"),
 			btn(fmt.Sprintf("⏱ %dr %dh", upD, upH), "noop")},
 		{btn("🔄 بروزرسانی", fmt.Sprintf("srvstats:%d", i)), btn("⚙️ آستانه‌ها", "srvmon")},
-		{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", strv(s["id"]))), btn("🏠 خانه", "menu")}}
+		{btn("🔙 بازگشت", "back:"+fmt.Sprintf("srvopen:%s", strv(s["id"]))), btn("🏠 خانه", "menu")}}
 	r.Show(chat, mid, txt, kb)
 }
 

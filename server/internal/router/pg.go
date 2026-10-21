@@ -45,7 +45,7 @@ func (r *Router) pnleList(chat, mid int64) {
 	panels := r.panels()
 	if len(panels) == 0 {
 		r.Show(chat, mid, "📭 پنلی ثبت نشده.",
-			[][]Btn{{btn("➕ افزودن پنل", "pga")}, {btn("🔙 بازگشت", "pg"), btn("🏠 خانه", "menu")}})
+			[][]Btn{{btn("➕ افزودن پنل", "pga")}, {btn("🔙 بازگشت", "back:pg"), btn("🏠 خانه", "menu")}})
 		return
 	}
 	var items []Btn
@@ -71,7 +71,7 @@ func (r *Router) pnlePanel(chat, mid int64, i int) {
 	kb := [][]Btn{
 		{btn("✏️ نام", fmt.Sprintf("pnleN:%d", i)), btn("🌐 آدرس", fmt.Sprintf("pnleU:%d", i))},
 		{btn("👤 نام‌کاربری", fmt.Sprintf("pnleP:%d", i)), btn("🔑 رمز", fmt.Sprintf("pnleW:%d", i))},
-		{btn("🔙 بازگشت", "pnle"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:pnle"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -169,7 +169,7 @@ func (r *Router) pgDelList(chat, mid int64) {
 		items = append(items, btnS("🗑 "+pname(p), "pgd:"+strconv.Itoa(i), "plain"))
 	}
 	kb := gridBTN(items, 2)
-	kb = append(kb, row(btn("🔙 بازگشت", "pg")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:pg")))
 	r.Show(chat, mid, "🗑 کدام پنل حذف شود؟", kb)
 }
 
@@ -273,7 +273,7 @@ func (r *Router) pgUsers(chat, mid int64, i, page int, q string) {
 		kb = append(kb, row(btn(fmt.Sprintf("%d/%d", page+1, pages),
 			fmt.Sprintf("pgl:%d:%d", i, (page+1)%pages))))
 	}
-	kb = append(kb, row(btn("🔍 جستجو", "pgq"), btn("🔙 بازگشت", "pg")))
+	kb = append(kb, row(btn("🔍 جستجو", "pgq"), btn("🔙 بازگشت", "back:pg")))
 	kb = append(kb, row(btn("🏠 خانه", "menu")))
 	r.Show(chat, mid, fmt.Sprintf("👥 کاربران «%s» (%d نفر):", Esc(pname(p)), len(users)), kb)
 }
@@ -338,7 +338,7 @@ func (r *Router) pgUser(chat, mid int64, idx int) {
 	txt := fmt.Sprintf("👤 <code>%s</code>\nوضعیت: %s\nمصرف: %g / %s گیگ%s\nانقضا: %s",
 		Esc(u), Esc(status), pg.GBOf(used), limStr, pctStr, dlStr)
 	r.Show(chat, mid, txt, [][]Btn{
-		{btn("🔙 بازگشت", fmt.Sprintf("pgl:%d:0", sess.Panel))},
+		{btn("🔙 بازگشت", "back:"+fmt.Sprintf("pgl:%d:0", sess.Panel))},
 		{btn("🏠 خانه", "menu")}})
 }
 

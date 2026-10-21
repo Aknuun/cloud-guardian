@@ -36,7 +36,7 @@ func (r *Router) qaHome(chat, mid int64) {
 	}
 	kb := [][]Btn{
 		{btn("🔍 جست‌وجوی نام", "qasearch")},
-		{btn("🔙 بازگشت", "menu"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:menu"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -85,7 +85,7 @@ func (r *Router) qaIPSearch(chat, mid int64, ip string) {
 	if len(hits) == 0 {
 		r.Show(chat, mid, fmt.Sprintf("🤷 آی‌پی <code>%s</code> در هیچ رکوردی پیدا نشد.", Esc(ip)),
 			[][]Btn{{btn("➕ افزودن ساب برای این آی‌پی", "qadd2:"+ipShort(ip))},
-				{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
+				{btn("🔙 بازگشت", "back:qamenu"), btn("🏠 خانه", "menu")}})
 		return
 	}
 	token := newBkID()

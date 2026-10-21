@@ -9,8 +9,54 @@ import (
 	"github.com/aknuun/cg-server/internal/hostfilter"
 )
 
+// navPush records a rendered screen in the per-chat history (deduplicating
+// consecutive entries) so the back button can really go back.
+func (r *Router) navPush(chat int64, data string) {
+	if data == "" || data == "noop" || strings.HasPrefix(data, "back") {
+		return
+	}
+	v, _ := r.navStack.Load(chat)
+	st, _ := v.([]string)
+	if n := len(st); n > 0 && st[n-1] == data {
+		return
+	}
+	st = append(st, data)
+	if len(st) > 30 {
+		st = st[len(st)-30:]
+	}
+	r.navStack.Store(chat, st)
+}
+
+// navBack pops the history and re-renders the previous screen. When there is
+// no history it falls back to the target encoded after "back:".
+func (r *Router) navBack(chat, mid int64, data string) {
+	fallback := strings.TrimPrefix(strings.TrimPrefix(data, "back"), ":")
+	v, _ := r.navStack.Load(chat)
+	st, _ := v.([]string)
+	if len(st) > 0 {
+		prev := st[len(st)-1]
+		r.navStack.Store(chat, st[:len(st)-1])
+		r.navSkip.Store(chat, true)
+		r.dispatch(chat, mid, prev)
+		return
+	}
+	if fallback != "" {
+		r.navSkip.Store(chat, true)
+		r.dispatch(chat, mid, fallback)
+		return
+	}
+	r.Menu(chat, mid)
+}
+
 func (r *Router) dispatch(chat, mid int64, data string) {
+	if data == "back" || strings.HasPrefix(data, "back:") {
+		r.navBack(chat, mid, data)
+		return
+	}
 	r.lastNav.Store(chat, data)
+	if _, skip := r.navSkip.LoadAndDelete(chat); !skip {
+		r.navPush(chat, data)
+	}
 	switch {
 	case data == "menu":
 		r.Menu(chat, mid)
@@ -1142,6 +1188,10 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		} else {
 			r.Show(chat, mid, "⏳ نشست منقضی شد؛ دامنه را دوباره باز کن.", HomeKB())
 		}
+	case strings.HasPrefix(data, "cfarp:"):
+		r.cfArProxy(chat, mid, strings.TrimPrefix(data, "cfarp:") == "1")
+	case data == "cfarforce":
+		r.cfArForce(chat, mid)
 	case strings.HasPrefix(data, "cfr:"):
 		rid := strings.TrimPrefix(data, "cfr:")
 		if acc, zid := r.cfCtx(chat, rid); zid == "" {

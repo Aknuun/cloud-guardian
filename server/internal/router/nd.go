@@ -102,7 +102,7 @@ func (r *Router) ndDetail(chat, mid int64, idStr string) {
 		{btn("🔄 همگام‌سازی", "ndsync:"+m.ID), btn("⏱ فاصله", "ndint:"+m.ID)},
 		{btn("🚫 استثناها", "ndexc:"+m.ID), btn("🔗 وب‌هوک", "ndhook:"+m.ID)},
 		{btn("🧪 تست هشدار", "ndtest:"+m.ID), btn(toggleLabel, "ndtg:"+m.ID)},
-		{btn("🔙 بازگشت", "nd"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:nd"), btn("🏠 خانه", "menu")},
 	}
 	names := make([]string, 0, len(nodes))
 	for name := range nodes {
@@ -182,7 +182,7 @@ func (r *Router) ndExc(chat, mid int64, idStr string) {
 	nodes := ndmon.Nodes(r.Store, m.ID)
 	if len(nodes) == 0 {
 		r.Show(chat, mid, "📭 نودی ثبت نشده (ابتدا همگام‌سازی کن).",
-			[][]Btn{{btn("🔄 همگام‌سازی", "ndsync:"+m.ID), btn("🔙 بازگشت", "ndd:"+m.ID)}})
+			[][]Btn{{btn("🔄 همگام‌سازی", "ndsync:"+m.ID), btn("🔙 بازگشت", "back:"+"ndd:"+m.ID)}})
 		return
 	}
 	exc := map[string]bool{}
@@ -276,7 +276,7 @@ func (r *Router) ndNode(chat, mid int64, idStr, name string) {
 	r.Show(chat, mid, strings.Join(lines, "\n"),
 		[][]Btn{
 			{btn("📡 آی‌پی", "ndip:"+m.ID+":"+name), btn(excLabel, "ndx:"+m.ID+":"+name)},
-			{btn("🔙 بازگشت", "ndd:"+m.ID), btn("🏠 خانه", "menu")}})
+			{btn("🔙 بازگشت", "back:"+"ndd:"+m.ID), btn("🏠 خانه", "menu")}})
 }
 
 func (r *Router) ndNodeIP(chat, mid int64, idStr, name string) {
@@ -322,7 +322,7 @@ func (r *Router) ndMkInterval(chat, mid int64, i int) {
 	if len(row) > 0 {
 		kb = append(kb, row)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "nd"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:nd"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, fmt.Sprintf("⏱ فاصله پایش نودهای «%s»؟", Esc(pname(panels[i]))), kb)
 }
 
@@ -391,7 +391,7 @@ func (r *Router) ndDelMenu(chat, mid int64) {
 		items = append(items, btnS("🗑 "+m.Label(), "nddel:"+m.ID, "plain"))
 	}
 	kb := gridBTN(items, 2)
-	kb = append(kb, row(btn("🔙 بازگشت", "nd")))
+	kb = append(kb, row(btn("🔙 بازگشت", "back:nd")))
 	r.Show(chat, mid, "🗑 کدام مانیتور حذف شود؟", kb)
 }
 

@@ -106,7 +106,7 @@ func (r *Router) domexpHome(chat, mid int64, page int) {
 	} else {
 		kb = append(kb, []Btn{btn("🔑 ثبت کلید API", "domexpkey")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "dommon"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:dommon"), btn("🏠 خانه", "menu")})
 	text := b.String()
 	if len(text) > 4000 {
 		text = text[:4000]
@@ -199,7 +199,7 @@ func containsInt(a []int, v int) bool {
 func (r *Router) domexpAddAll(chat, mid int64) {
 	r.Show(chat, mid,
 		"⚠️ «افزودن از اکانت‌ها» به لایهٔ کلودفلر نیاز دارد که در نسخهٔ Go هنوز پورت نشده.\nاز «✍️ ورود دستی» استفاده کن.",
-		[][]Btn{{btn("✍️ ورود دستی", "domexpa"), btn("🔙 بازگشت", "domexpp:0")}})
+		[][]Btn{{btn("✍️ ورود دستی", "domexpa"), btn("🔙 بازگشت", "back:domexpp:0")}})
 }
 
 func (r *Router) domexpAddStart(chat, mid int64) {
@@ -313,7 +313,7 @@ func (r *Router) domexpKeyPage(chat, mid int64) {
 		kb = append(kb, []Btn{btn("🧪 تست روی pcapps.ir", "domexptest")})
 		kb = append(kb, []Btn{btn("🗑 حذف کلید", "domexpkdel")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:domexpp:0"), btn("🏠 خانه", "menu")})
 	status := "ثبت‌نشده ❌"
 	if has {
 		status = "ثبت‌شده ✅"
@@ -392,7 +392,7 @@ func (r *Router) domexpWizardKey(chat int64, text string) {
 		r.Bot.Send(chat,
 			fmt.Sprintf("✅ کلید API معتبر است.\n🗓 انقضای pcapps.ir: %s\n⏳ باقی‌مانده: %s",
 				dateOnly(*res.Expiry), domexpiry.Remaining(res.Expiry, domexpiry.NowMS())),
-			[][]Btn{{btn("🗓 مانیتور انقضای دامنه", "domexpp:0"), btn("🔙 بازگشت", "menu")}})
+			[][]Btn{{btn("🗓 مانیتور انقضای دامنه", "domexpp:0"), btn("🔙 بازگشت", "back:menu")}})
 	case res.Status == "api_error":
 		r.Bot.Send(chat,
 			fmt.Sprintf("⚠️ کلید ذخیره شد اما تست ناموفق بود:\n<code>%s</code>", Esc(res.Message)),
@@ -471,7 +471,7 @@ func (r *Router) domexpWizardDomain(chat, mid int64, text string) {
 		r.Bot.Send(chat,
 			fmt.Sprintf("✅ <code>%s</code> به مانیتور اضافه شد.\n🗓 انقضا: %s\n⏳ باقی‌مانده: %s",
 				Esc(domain), dateOnly(*res.Expiry), domexpiry.Remaining(res.Expiry, domexpiry.NowMS())),
-			[][]Btn{{btn("🗓 مانیتور انقضای دامنه", "domexpp:0"), btn("🔙 بازگشت", "menu")}})
+			[][]Btn{{btn("🗓 مانیتور انقضای دامنه", "domexpp:0"), btn("🔙 بازگشت", "back:menu")}})
 		return
 	}
 	lst = append(lst, domexpiry.Item{Domain: domain, Status: res.Status, Added: added})

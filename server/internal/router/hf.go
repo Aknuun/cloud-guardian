@@ -118,7 +118,7 @@ func (r *Router) hfSettings(chat, mid int64) {
 		{btn("🎯 حداقل شهر", "hfnum:cities"), btn("📶 حداکثر پینگ موفق", "hfnum:maxOk")},
 		{btn("📦 تعداد هر اجرا", "hfnum:batch"), btn("🔁 حداکثر تعویض", "hfnum:maxChanges")},
 		{btn("♻️ تعداد بررسی مجدد", "hfnum:recheckCount"), btn("⏱ فاصلهٔ بررسی مجدد", "hfnum:recheckMin")},
-		{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")},
+		{btn("🔙 بازگشت", "back:hf"), btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -383,7 +383,7 @@ func (r *Router) hfHosts(chat, mid int64, note ...string) {
 		kb = append(kb, []Btn{btn("🗂 انتخاب گروهی", "hfgmode")})
 	}
 	kb = append(kb, []Btn{btn("📜 تاریخچه", "hfhist")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hf"), btn("🏠 خانه", "menu")})
 	txt := strings.Join(lines, "\n")
 	if len(txt) > 3500 {
 		txt = txt[:3500]
@@ -519,7 +519,7 @@ func (r *Router) hfRevertList(chat, mid int64) {
 		}
 		kb = append(kb, []Btn{btnS(lb, "hfrev:"+sid, "danger")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:hf"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, "↩️ بازگردانی تعویض‌ها\n\nکدام هاست به دامنهٔ قبلی برگردد؟", kb)
 }
 

@@ -72,7 +72,7 @@ func (r *Router) zmailHome(chat, mid int64) {
 		kb = append(kb, []Btn{btnS("➕ آدرس جدید", "zmailadd", "success")})
 		kb = append(kb, []Btn{btn("📥 catch-all", "zmailcatch"), btn("📧 مقصدها", "zmaildests")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:zset"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 	_ = acc
 }
@@ -230,7 +230,7 @@ func (r *Router) zmailDestListPick(chat, mid int64, forCatch bool) {
 		lines = append(lines, "هنوز مقصد تأییدشده‌ای نیست؛ اول یکی اضافه کن.")
 	}
 	kb = append(kb, []Btn{btn("➕ مقصد جدید", "zmaildestnew")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "zmail"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:zmail"), btn("🏠 خانه", "menu")})
 	r.Store.PutJSON(fmt.Sprintf("zmailctx:%d", chat), map[string]any{"verified": verifiedEmails}, 600)
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -302,7 +302,7 @@ func (r *Router) zmailDests(chat, mid int64) {
 		lines = append(lines, fmt.Sprintf("… و %d مورد دیگر", len(lst)-15))
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"),
-		[][]Btn{{btn("➕ مقصد جدید", "zmaildestnew")}, {btn("🔙 بازگشت", "zmail"), btn("🏠 خانه", "menu")}})
+		[][]Btn{{btn("➕ مقصد جدید", "zmaildestnew")}, {btn("🔙 بازگشت", "back:zmail"), btn("🏠 خانه", "menu")}})
 }
 
 func (r *Router) zmailDelAsk(chat, mid int64, rid string) {
@@ -334,7 +334,7 @@ func (r *Router) zmailCatch(chat, mid int64) {
 		fmt.Sprintf("📥 catch-all در %s (ایمیل‌هایی که قانون ندارند):\n\nوضعیت: %s",
 			Esc(zname), Esc(r.catchAllDesc(ca))),
 		[][]Btn{{btn("📩 فوروارد به مقصد", "zmailcpick")},
-			{btnS("⏸ غیرفعال", "zmailcoff", "danger"), btn("🔙 بازگشت", "zmail")}})
+			{btnS("⏸ غیرفعال", "zmailcoff", "danger"), btn("🔙 بازگشت", "back:zmail")}})
 }
 
 func (r *Router) zmailCatchOff(chat, mid int64) {

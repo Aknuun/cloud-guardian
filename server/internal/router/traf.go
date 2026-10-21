@@ -112,7 +112,7 @@ func (r *Router) trafZones(chat, mid int64, flt string, pg int) {
 		} else {
 			nav = append(nav, emptyBtn())
 		}
-		nav = append(nav, btn("🔙 بازگشت", "dommon"))
+		nav = append(nav, btn("🔙 بازگشت", "back:dommon"))
 		if pg < pages-1 {
 			nav = append(nav, btn("➡️", fmt.Sprintf("trazf:%s:%d", flt, pg+1)))
 		} else {
@@ -120,7 +120,7 @@ func (r *Router) trafZones(chat, mid int64, flt string, pg int) {
 		}
 		kb = append(kb, nav)
 	} else {
-		kb = append(kb, []Btn{btn("🔙 بازگشت", "dommon"), btn("🏠 خانه", "menu")})
+		kb = append(kb, []Btn{btn("🔙 بازگشت", "back:dommon"), btn("🏠 خانه", "menu")})
 	}
 	label := "همه"
 	if flt != "all" {
@@ -270,7 +270,7 @@ func (r *Router) trafZone(chat, mid int64, acc int, zid string, pg int) {
 	if zeros > 0 {
 		kb = append(kb, []Btn{btnS(fmt.Sprintf("🗑 حذف %d ساب صفر", zeros), fmt.Sprintf("trazdel:%d:%s", acc, zid), "danger")})
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "traf"), btn("🏠 خانه", "menu")})
+	kb = append(kb, []Btn{btn("🔙 بازگشت", "back:traf"), btn("🏠 خانه", "menu")})
 	txt := strings.Join(lines, "\n")
 	if len(txt) > 3500 {
 		txt = txt[:3500]
