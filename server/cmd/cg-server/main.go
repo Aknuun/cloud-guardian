@@ -50,7 +50,6 @@ func main() {
 		}
 	}
 	bot.DeleteWebhook()
-	bot.SetChatMenuButton(true)
 	if err := bot.SetMyCommands(router.BotCommands()); err != nil {
 		log.Printf("setMyCommands: %v", err)
 	}
@@ -58,6 +57,12 @@ func main() {
 	r := router.New(bot, st, cfg.AdminID, cfg.FailoverMap())
 	r.CFToken = cfg.CFToken
 	r.BotToken = cfg.BotToken
+	r.WebAppURL = getenv("CG_WEBAPP_URL", "")
+	if r.WebAppURL != "" {
+		bot.SetChatMenuButtonWebApp(r.WebAppURL, "هتزنر")
+	} else {
+		bot.SetChatMenuButton(true)
+	}
 	r.DBPath = dbPath
 
 	// health + webhook endpoints

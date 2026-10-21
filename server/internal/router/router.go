@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.7.1"
+const Version = "4.7.2"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -68,18 +68,19 @@ func Esc(s any) string {
 }
 
 type Router struct {
-	lastNav  sync.Map
-	navStack sync.Map
-	navSkip  sync.Map
-	Bot      *tg.Client
-	Store    *store.Store
-	AdminID  int64
-	foMu     sync.RWMutex
-	FO       map[string]string
-	CFToken  string
-	BotToken string
-	DBPath   string
-	curFrom  int64
+	lastNav   sync.Map
+	navStack  sync.Map
+	navSkip   sync.Map
+	Bot       *tg.Client
+	Store     *store.Store
+	AdminID   int64
+	foMu      sync.RWMutex
+	FO        map[string]string
+	CFToken   string
+	BotToken  string
+	WebAppURL string
+	DBPath    string
+	curFrom   int64
 }
 
 func New(bot *tg.Client, st *store.Store, adminID int64, fo map[string]string) *Router {

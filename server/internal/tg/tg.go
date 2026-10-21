@@ -355,6 +355,15 @@ func (c *Client) SetChatMenuButton(commands bool) {
 		"menu_button": map[string]any{"type": mode}})
 }
 
+// SetChatMenuButtonWebApp makes the chat menu button open the mini app.
+func (c *Client) SetChatMenuButtonWebApp(url, text string) {
+	_, _ = c.call("setChatMenuButton", map[string]any{
+		"menu_button": map[string]any{
+			"type": "web_app", "text": text,
+			"web_app": map[string]any{"url": url},
+		}})
+}
+
 func (c *Client) SetWebhook(u string) bool {
 	_, err := c.call("setWebhook", map[string]any{
 		"url": u, "drop_pending_updates": false})
