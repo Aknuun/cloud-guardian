@@ -588,7 +588,7 @@ func (r *Router) hfdIntervalMenu(chat, mid int64) {
 
 func (r *Router) hfdIntervalSet(chat, mid int64, h int) {
 	if h < 1 || h > 720 {
-		r.Show(chat, mid, "⚠️ بازه نامعتبر (۱ تا ۷۲۰).", [][]Btn{{btn("🔙 بازگشت", "hfd")}})
+		r.Show(chat, mid, "⚠️ بازه نامعتبر (۱ تا ۷۲۰).", navKB("hfd"))
 		return
 	}
 	cfg := r.hfdCfg()
@@ -609,7 +609,7 @@ func (r *Router) hfdAtSave(chat, mid int64, pend map[string]any, text string) {
 	r.clearWizard(chat)
 	a := strings.TrimSpace(jalali.ParseFA(text))
 	if !hfdAtOK(a) {
-		r.Show(chat, mid, "⚠️ قالب ساعت نامعتبر (مثل 03:00).", [][]Btn{{btn("🔙 بازگشت", "hfd")}})
+		r.Show(chat, mid, "⚠️ قالب ساعت نامعتبر (مثل 03:00).", navKB("hfd"))
 		return
 	}
 	cfg := r.hfdCfg()
@@ -628,7 +628,7 @@ func (r *Router) hfdIntSave(chat, mid int64, pend map[string]any, text string) {
 	r.clearWizard(chat)
 	h := intOrAny(strings.TrimSpace(jalali.ParseFA(text)))
 	if h < 1 || h > 720 {
-		r.Show(chat, mid, "⚠️ بازه نامعتبر (۱ تا ۷۲۰).", [][]Btn{{btn("🔙 بازگشت", "hfd")}})
+		r.Show(chat, mid, "⚠️ بازه نامعتبر (۱ تا ۷۲۰).", navKB("hfd"))
 		return
 	}
 	r.hfdIntervalSet(chat, mid, h)
@@ -637,12 +637,12 @@ func (r *Router) hfdIntSave(chat, mid int64, pend map[string]any, text string) {
 func (r *Router) hfdHostsHome(chat, mid int64) {
 	panels := r.panels()
 	if len(panels) == 0 {
-		r.Show(chat, mid, "📭 پنلی ثبت نشده.", [][]Btn{{btn("🔙 بازگشت", "hfd")}})
+		r.Show(chat, mid, "📭 پنلی ثبت نشده.", navKB("hfd"))
 		return
 	}
 	var items []Btn
 	for i, p := range panels {
-		items = append(items, btn("🖥 "+pname(p), fmt.Sprintf("hfdpanel:%d", i)))
+		items = append(items, btnS("🖥 "+pname(p), fmt.Sprintf("hfdpanel:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("hfd"))
@@ -659,12 +659,12 @@ func (r *Router) hfdPanel(chat, mid int64, pi int) {
 	c := panel.Client()
 	tok, err := c.Login()
 	if err != nil {
-		r.Show(chat, mid, "⚠️ ورود به پنل ناموفق.", [][]Btn{{btn("🔙 بازگشت", "hfdhosts")}})
+		r.Show(chat, mid, "⚠️ ورود به پنل ناموفق.", navKB("hfdhosts"))
 		return
 	}
 	hosts, err := c.Hosts(tok)
 	if err != nil {
-		r.Show(chat, mid, "⚠️ خواندن هاست‌ها ناموفق.", [][]Btn{{btn("🔙 بازگشت", "hfdhosts")}})
+		r.Show(chat, mid, "⚠️ خواندن هاست‌ها ناموفق.", navKB("hfdhosts"))
 		return
 	}
 	cfg := r.hfdCfg()
@@ -726,7 +726,7 @@ func (r *Router) hfdHostField(chat, mid int64, pi int, hid, field string) {
 }
 
 func (r *Router) hfdRunNow(chat, mid int64) {
-	r.Show(chat, mid, "⏳ در حال چرخش ساب‌ها…", [][]Btn{{btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, "⏳ در حال چرخش ساب‌ها…", navKB(""))
 	changed, skipped, lines := r.hfdRotate(true)
 	msg := fmt.Sprintf("✅ %d هاست چرخید", changed)
 	if skipped > 0 {
@@ -738,7 +738,7 @@ func (r *Router) hfdRunNow(chat, mid int64) {
 		}
 		msg += "\n\n" + strings.Join(lines, "\n")
 	}
-	r.Show(chat, mid, msg, [][]Btn{{btn("🔙 بازگشت", "hfd"), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, msg, navKB("hfd"))
 }
 
 func (r *Router) hfdLogView(chat, mid int64) {
@@ -762,7 +762,7 @@ func (r *Router) hfdLogView(chat, mid int64) {
 	if cnt == 0 {
 		lines = append(lines, "📭 چیزی ثبت نشده.")
 	}
-	r.Show(chat, mid, strings.Join(lines, "\n"), [][]Btn{{btn("🔙 بازگشت", "hfd"), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, strings.Join(lines, "\n"), navKB("hfd"))
 }
 
 func (r *Router) hfdRevertList(chat, mid int64) {
@@ -802,19 +802,19 @@ func (r *Router) hfdRevert(chat, mid int64, pi int, hid string) {
 	key := hfdKey(pi, hid)
 	it, ok := cfg.Items[key]
 	if !ok {
-		r.Show(chat, mid, "❌ موردی نیست.", [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "❌ موردی نیست.", navKB("hfdrvlist"))
 		return
 	}
 	panel := panels[pi]
 	c := panel.Client()
 	tok, err := c.Login()
 	if err != nil {
-		r.Show(chat, mid, "⚠️ ورود ناموفق.", [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "⚠️ ورود ناموفق.", navKB("hfdrvlist"))
 		return
 	}
 	hosts, err := c.Hosts(tok)
 	if err != nil {
-		r.Show(chat, mid, "⚠️ خواندن هاست‌ها ناموفق.", [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "⚠️ خواندن هاست‌ها ناموفق.", navKB("hfdrvlist"))
 		return
 	}
 	var host map[string]any
@@ -826,7 +826,7 @@ func (r *Router) hfdRevert(chat, mid int64, pi int, hid string) {
 		}
 	}
 	if host == nil {
-		r.Show(chat, mid, "❌ هاست پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "❌ هاست پیدا نشد.", navKB("hfdrvlist"))
 		return
 	}
 	fields := []string{}
@@ -838,16 +838,16 @@ func (r *Router) hfdRevert(chat, mid int64, pi int, hid string) {
 		}
 	}
 	if len(fields) == 0 {
-		r.Show(chat, mid, "📭 چیزی برای بازگردانی نیست.", [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "📭 چیزی برای بازگردانی نیست.", navKB("hfdrvlist"))
 		return
 	}
 	if err := c.PutHost(tok, strv(host["id"]), host); err != nil {
-		r.Show(chat, mid, "❌ بازگردانی ناموفق: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "hfdrvlist")}})
+		r.Show(chat, mid, "❌ بازگردانی ناموفق: "+Esc(err.Error()), navKB("hfdrvlist"))
 		return
 	}
 	cfg.Items[key] = it
 	r.hfdCfgSave(cfg)
 	r.hfdLogAdd(map[string]any{"kind": "revert", "key": key, "remark": strv(host["remark"])})
 	r.Show(chat, mid, "✅ بازگردانی انجام شد: "+strings.Join(fields, "، "),
-		[][]Btn{{btn("🔙 بازگشت", "hfdrvlist"), btn("🏠 خانه", "menu")}})
+		navKB("hfdrvlist"))
 }

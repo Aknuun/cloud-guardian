@@ -4,17 +4,17 @@ import "fmt"
 
 // Menu renders the home menu.
 func (r *Router) Menu(chat, mid int64) {
-	kb := [][]Btn{
-		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
-		{btnS("🟢 لینود", "ln", "success"), btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
-		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
-		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
-		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
-		{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")},
-		{btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
-		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
-	}
-	text := fmt.Sprintf("به ربات نگهبان ابری خوش اومدی ⚙️ نسخه v%s", Version)
+	kb := stdKB("",
+		row(btnS("➕ افزودن رکورد", "addrec", "success"), btnS("☁️ کلودفلر", "zones", "plain"), btnS("⚡ تغییر سریع", "qamenu", "primary")),
+		row(btnS("🟢 لینود", "ln", "plain"), btnS("🇩🇪 هتزنر", "hz", "plain"), btnS("🇮🇷 آروان", "arvan", "plain")),
+		row(btnS("🎛 پنل پاسارگارد", "pndef", "plain")),
+		row(btnS("🧭 تعویض خودکار ساب فیلتر", "hf", "plain"), btnS("📡 مانیتور نود پاسارگارد", "nd", "plain")),
+		row(btnS("🔔 هشدار انقضا و حجم", "pghook", "plain"), btnS("🔥 گزارش بد مصرف پاسارگارد", "um", "plain")),
+		row(btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")),
+		row(btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")),
+		row(btnS("⚙️ تنظیمات و راهنما و ...", "settings", "plain")),
+	)
+	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version)
 	if p := r.PromoText(); p != "" {
 		text += "\n\n" + p
 	}
@@ -22,23 +22,25 @@ func (r *Router) Menu(chat, mid int64) {
 }
 
 func (r *Router) settingsHome(chat, mid int64) {
-	kb := [][]Btn{
-		{btn("📖 راهنمای بخش‌ها", "help")},
-		{btn("🔄 نسخه‌ها و آپدیت", "vers")},
-		{btn("🛟 پشتیبان فیلور (Standby)", "fo")},
+	rows := [][]Btn{
+		row(btnS("📖 راهنمای بخش‌ها", "help", "primary")),
+		row(btnS("🔄 نسخه‌ها و آپدیت", "vers", "primary")),
+		row(btnS("🛟 پشتیبان فیلور (Standby)", "fo", "primary")),
 	}
 	if r.IsMain(r.curFrom) {
-		kb = append(kb, []Btn{btn("👥 مدیریت ادمین‌ها", "admins_menu")})
-		kb = append(kb,
-			[]Btn{btnS("📊 آمار نصب‌ها", "hubstats", "primary"), btnS("📢 پیام همگانی", "hubcast", "success")},
-			[]Btn{btn("📋 اعلان‌ها", "hubann"), btn("📢 تبلیغ منوی اصلی", "promo")},
-			[]Btn{btn("⚙️ تنظیم هاب", "hubcfg")})
+		rows = append(rows, row(btnS("👥 مدیریت ادمین‌ها", "admins_menu", "primary")))
+		rows = append(rows,
+			row(btnS("📊 آمار نصب‌ها", "hubstats", "primary"), btnS("📢 پیام همگانی", "hubcast", "success")),
+			row(btnS("📋 اعلان‌ها", "hubann", "plain"), btnS("📢 تبلیغ منوی اصلی", "promo", "primary")),
+			row(btnS("⚙️ تنظیم هاب", "hubcfg", "plain")))
 	}
-	kb = append(kb, []Btn{btn("📞 ارتباط با سازنده", "hubcontact")})
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "menu"), btn("🏠 خانه", "menu")})
+	rows = append(rows, row(btnS("📞 ارتباط با سازنده", "hubcontact", "plain")))
+	kb := stdKB("menu", rows...)
 	r.Show(chat, mid,
-		fmt.Sprintf("⚙️ تنظیمات و راهنما\n\n🤖 نسخه سرور: <code>%s</code>\n"+
-			"اجرا کامل روی سرور خودت؛ بدون KV و ورکر.", Version), kb)
+		uiBody(uiTitle("⚙️", "تنظیمات و راهنما", ""),
+			"",
+			"🤖 نسخه سرور: <code>"+Version+"</code>",
+			"اجرا کامل روی سرور خودت؛ بدون KV و ورکر."), kb)
 }
 
 var guides = map[string][2]string{
@@ -57,7 +59,7 @@ func (r *Router) helpList(chat, mid int64) {
 	var items []Btn
 	for _, k := range guideOrder {
 		if v, ok := guides[k]; ok {
-			items = append(items, btn(v[0], "help:"+k))
+			items = append(items, btnS(v[0], "help:"+k, "plain"))
 		}
 	}
 	kb := gridBTN(items, 2)
@@ -72,5 +74,5 @@ func (r *Router) helpShow(chat, mid int64, key string) {
 		return
 	}
 	r.Show(chat, mid, g[0]+"\n\n"+g[1],
-		[][]Btn{{btn("🔙 بازگشت", "help"), btn("🏠 خانه", "menu")}})
+		navKB("help"))
 }

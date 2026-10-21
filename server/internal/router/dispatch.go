@@ -789,7 +789,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "lna":
 		r.setWizard(chat, map[string]any{"kind": "ln_add_name"})
 		r.Show(chat, mid, "👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):",
-			[][]Btn{{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")}})
+			navKB("ln"))
 	case data == "lndel":
 		r.lnDelList(chat, mid)
 	case strings.HasPrefix(data, "lnd:"):
@@ -851,7 +851,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "hza":
 		r.setWizard(chat, map[string]any{"kind": "hz_add_name"})
 		r.Show(chat, mid, "👤 نام دلخواه اکانت هتزنر را بفرستید:",
-			[][]Btn{{btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")}})
+			navKB("hz"))
 	case data == "hzaccs":
 		r.hzAccsMenu(chat, mid)
 	case data == "hzdel":
@@ -1085,7 +1085,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "accadd":
 		r.setWizard(chat, map[string]any{"kind": "cr_cf_acc_name"})
 		r.Show(chat, mid, "👤 چه اسمی برای اکانت کلادفلر بزارم؟",
-			[][]Btn{{btn("🔙 بازگشت", "accounts"), btn("🏠 خانه", "menu")}})
+			navKB("accounts"))
 	case data == "accdel":
 		r.cfAccDelList(chat, mid)
 	case strings.HasPrefix(data, "accd:"):
@@ -1129,7 +1129,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		if zid := strvVal(sess["zid"]); zid != "" {
 			r.trafZone(chat, mid, intOrAny(sess["acc"]), zid, 0)
 		} else {
-			r.Show(chat, mid, "📊 ترافیک ساب‌ها", [][]Btn{{btn("🔙 بازگشت", "zones")}})
+			r.Show(chat, mid, "📊 ترافیک ساب‌ها", navKB("zones"))
 		}
 	case strings.HasPrefix(data, "cfz:"):
 		if p := strings.SplitN(data[4:], ":", 2); len(p) == 2 {

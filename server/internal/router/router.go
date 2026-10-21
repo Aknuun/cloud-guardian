@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.6.11"
+const Version = "4.6.12"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -25,7 +25,7 @@ type Btn = tg.Button
 func btn(text, data string) Btn         { return Btn{Text: text, Data: data} }
 func btnS(text, data, style string) Btn { return Btn{Text: text, Data: data, Style: style} }
 func btnURL(text, url string) Btn       { return Btn{Text: text, URL: url} }
-func HomeKB() [][]Btn                   { return [][]Btn{{btn("🏠 خانه", "menu")}} }
+func HomeKB() [][]Btn                   { return navKB("") }
 
 // Button layout standard (keep screens compact so they fit without scrolling):
 //   - 1 column  (full-width): long labels / primary actions / confirmations.

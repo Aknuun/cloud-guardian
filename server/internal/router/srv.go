@@ -59,7 +59,7 @@ func (r *Router) srvHome(chat, mid int64) {
 		lines = append(lines, fmt.Sprintf("🖧 سرورهای ثبت‌شده (%d): روی هرکدام بزنید:", len(lst)))
 		var rows []Btn
 		for _, s := range lst {
-			rows = append(rows, btn("🖧 "+strv(s["name"]), fmt.Sprintf("srvopen:%s", strv(s["id"]))))
+			rows = append(rows, btnS("🖧 "+strv(s["name"]), fmt.Sprintf("srvopen:%s", strv(s["id"])), "plain"))
 		}
 		kb = append(kb, gridBTN(rows, 2)...)
 	}
@@ -128,7 +128,7 @@ func (r *Router) srvInfo(chat, mid int64, sid string) {
 	res := r.srvSSH(s, sshop.InfoCmd)
 	if !res.Ok {
 		r.Show(chat, mid, fmt.Sprintf("❌ وصل نشد: <code>%s</code>", Esc(res.Err)),
-			[][]Btn{{btn("🔙 بازگشت", "srv")}})
+			navKB("srv"))
 		return
 	}
 	var out []string
@@ -138,7 +138,7 @@ func (r *Router) srvInfo(chat, mid int64, sid string) {
 		}
 	}
 	r.Show(chat, mid, fmt.Sprintf("🖥 %s\n\n%s", Esc(strv(s["name"])), strings.Join(out, "\n")),
-		[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}})
+		navKB(fmt.Sprintf("srvopen:%s", sid)))
 }
 
 func (r *Router) srvDisk(chat, mid int64, sid string) {
@@ -150,11 +150,11 @@ func (r *Router) srvDisk(chat, mid int64, sid string) {
 	res := r.srvSSH(s, sshop.DiskCmd)
 	if !res.Ok {
 		r.Show(chat, mid, fmt.Sprintf("❌ وصل نشد: <code>%s</code>", Esc(res.Err)),
-			[][]Btn{{btn("🔙 بازگشت", "srv")}})
+			navKB("srv"))
 		return
 	}
 	r.Show(chat, mid, fmt.Sprintf("💾 دیسک «%s»:\n<code>%s</code>", Esc(strv(s["name"])), Esc(res.Out)),
-		[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}})
+		navKB(fmt.Sprintf("srvopen:%s", sid)))
 }
 
 func (r *Router) srvRebootAsk(chat, mid int64, sid string) {
@@ -185,7 +185,7 @@ func (r *Router) srvRebootGo(chat, mid int64, sid string) {
 func (r *Router) srvDelList(chat, mid int64) {
 	lst := r.srvList()
 	if len(lst) == 0 {
-		r.Show(chat, mid, "📭 سروری ثبت نشده.", [][]Btn{{btn("🔙 بازگشت", "srv")}})
+		r.Show(chat, mid, "📭 سروری ثبت نشده.", navKB("srv"))
 		return
 	}
 	var kb [][]Btn
@@ -249,7 +249,7 @@ func (r *Router) srvUpdateGo(chat, mid int64, sid string) {
 			strv(sv["secret"]), intOfAny(sv["port"]), cmd, 300)
 		if !res.Ok {
 			r.Bot.Send(chat, fmt.Sprintf("❌ خطا: <code>%s</code>", Esc(res.Err)),
-				[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}})
+				navKB(fmt.Sprintf("srvopen:%s", sid)))
 			return
 		}
 		out := res.Out
@@ -257,7 +257,7 @@ func (r *Router) srvUpdateGo(chat, mid int64, sid string) {
 			out = out[len(out)-1200:]
 		}
 		r.Bot.Send(chat, "✅ آپدیت و آپگرید انجام شد.\n\n📄 انتهای خروجی:\n<pre>"+Esc(out)+"</pre>",
-			[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("srvopen:%s", sid)), btn("🏠 خانه", "menu")}})
+			navKB(fmt.Sprintf("srvopen:%s", sid)))
 	}()
 }
 
@@ -355,12 +355,12 @@ func (r *Router) srvSubZones(chat, mid int64) {
 	zs := r.cfAllZones()
 	if len(zs) == 0 {
 		r.Show(chat, mid, "📭 دامنه‌ای یافت نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "srvsub"), btn("🏠 خانه", "menu")}})
+			navKB("srvsub"))
 		return
 	}
 	var items []Btn
 	for _, z := range zs {
-		items = append(items, btn("📁 "+z.Zone.Name, fmt.Sprintf("srvsubz:%d:%s", z.Acc, z.Zone.ID)))
+		items = append(items, btnS("📁 "+z.Zone.Name, fmt.Sprintf("srvsubz:%d:%s", z.Acc, z.Zone.ID), "plain"))
 	}
 	rows := gridBTN(items, 2)
 	rows = append(rows, navRow("srvsub"))
@@ -379,7 +379,7 @@ func (r *Router) srvSubFavs(chat, mid int64) {
 	favs := r.favs()
 	if len(favs) == 0 {
 		r.Show(chat, mid, "📭 موردی در منتخب‌ها نیست.",
-			[][]Btn{{btn("🔙 بازگشت", "srvsub"), btn("🏠 خانه", "menu")}})
+			navKB("srvsub"))
 		return
 	}
 	byZone := map[string][]cf.Record{}
@@ -409,7 +409,7 @@ func (r *Router) srvSubFavs(chat, mid int64) {
 	}
 	if len(items) == 0 {
 		r.Show(chat, mid, "📭 رکوردی در منتخب‌ها نیست.",
-			[][]Btn{{btn("🔙 بازگشت", "srvsub"), btn("🏠 خانه", "menu")}})
+			navKB("srvsub"))
 		return
 	}
 	r.srvSubStore(chat, "⭐ منتخب‌ها", items)
@@ -426,12 +426,12 @@ func subItem(label, name, typ, content string) map[string]any {
 func (r *Router) srvSubPick(chat, mid int64, acc, zid string) {
 	cli, ok := r.cfClientFor(atoiSafe(acc))
 	if !ok {
-		r.Show(chat, mid, "❌ خطای کلادفلر", [][]Btn{{btn("🔙 بازگشت", "srvsubzone")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر", navKB("srvsubzone"))
 		return
 	}
 	recs, err := cli.Records(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "srvsubzone")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("srvsubzone"))
 		return
 	}
 	zname := ""
@@ -450,7 +450,7 @@ func (r *Router) srvSubPick(chat, mid int64, acc, zid string) {
 		items = append(items, subItem(x.Name, x.Name, t, x.Content))
 	}
 	if len(items) == 0 {
-		r.Show(chat, mid, "📭 رکورد A/AAAA/CNAME در این دامنه نیست.", [][]Btn{{btn("🔙 بازگشت", "srvsubzone")}})
+		r.Show(chat, mid, "📭 رکورد A/AAAA/CNAME در این دامنه نیست.", navKB("srvsubzone"))
 		return
 	}
 	r.srvSubStore(chat, "📁 "+zname, items)
@@ -582,13 +582,13 @@ func (r *Router) srvSubPage(chat, mid int64, page string) {
 func (r *Router) srvSubSave(chat, mid int64) {
 	st := r.srvSubGet(chat)
 	if st == nil || st["ids"] == nil || lenAny(st["ids"]) == 0 {
-		r.Show(chat, mid, "⚠️ هیچ سابی انتخاب نشده.", [][]Btn{{btn("🔙 بازگشت", "srvsub")}})
+		r.Show(chat, mid, "⚠️ هیچ سابی انتخاب نشده.", navKB("srvsub"))
 		return
 	}
 	cands, skipped := r.srvSubCandidates(st)
 	if len(cands) == 0 {
 		r.Show(chat, mid, "❌ هیچ آی‌پی قابل‌استفاده‌ای پیدا نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "srvsubcancel")}})
+			navKB("srvsubcancel"))
 		return
 	}
 	r.Store.PutJSON(fmt.Sprintf("srvsubsel:%d", chat),
@@ -655,7 +655,7 @@ func (r *Router) srvSubCandidates(st map[string]any) ([]map[string]any, int) {
 func (r *Router) srvSubFinish(chat, mid int64, sel string, stored bool, pwOverride *string) {
 	var st map[string]any
 	if !r.Store.GetJSON(fmt.Sprintf("srvsubsel:%d", chat), &st) {
-		r.Show(chat, mid, "⏳ نشست منقضی شده.", [][]Btn{{btn("🔙 بازگشت", "srv")}})
+		r.Show(chat, mid, "⏳ نشست منقضی شده.", navKB("srv"))
 		return
 	}
 	pw := ""

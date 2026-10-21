@@ -147,7 +147,7 @@ func (r *Router) hfHist(chat, mid int64) {
 		lines = append(lines, "📭 چیزی ثبت نشده.")
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"),
-		[][]Btn{{btn("🔙 بازگشت", "hflist"), btn("🏠 خانه", "menu")}})
+		navKB("hflist"))
 }
 
 // hfAllKeys returns "<pi>:<hid>:<field>" keys for every enabled host field.
@@ -507,7 +507,7 @@ func (r *Router) hfRevertList(chat, mid int64) {
 	entries := hostfilter.StateEntries(r.Store)
 	if len(entries) == 0 {
 		r.Show(chat, mid, "↩️ بازگردانی تعویض‌ها\n\n📭 تعویضی برای بازگردانی نیست.",
-			[][]Btn{{btn("🔙 بازگشت", "hf"), btn("🏠 خانه", "menu")}})
+			navKB("hf"))
 		return
 	}
 	var kb [][]Btn
@@ -527,7 +527,7 @@ func (r *Router) hfRevert(chat, mid int64, sid string) {
 	_, err := hostfilter.Revert(r.Store, r.panels(), sid)
 	if err != nil {
 		r.Show(chat, mid, "❌ بازگردانی ناموفق: "+Esc(hfErrFA(err)),
-			[][]Btn{{btn("🔙 بازگشت", "hfrevlist"), btn("🏠 خانه", "menu")}})
+			navKB("hfrevlist"))
 		return
 	}
 	r.Show(chat, mid, "✅ به دامنهٔ قبلی برگشت.",

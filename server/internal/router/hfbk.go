@@ -106,7 +106,7 @@ func (r *Router) hfBackupNow(chat, mid int64) {
 	}
 	r.hfBackupsStore(backups)
 	r.Show(chat, mid, fmt.Sprintf("✅ بکاپ «%s» با %d هاست ساخته شد.", hfBkTime(entry.TS), entry.Count),
-		[][]Btn{{btn("🔙 بازگشت", "hfbk"), btn("🏠 خانه", "menu")}})
+		navKB("hfbk"))
 }
 
 func (r *Router) hfBackupRestoreAsk(chat, mid int64, id string) {
@@ -128,7 +128,7 @@ func (r *Router) hfBackupRestoreDo(chat, mid int64, id string) {
 		}
 	}
 	if entry == nil {
-		r.Show(chat, mid, "❌ بکاپ پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "hfbk")}})
+		r.Show(chat, mid, "❌ بکاپ پیدا نشد.", navKB("hfbk"))
 		return
 	}
 	panels := r.panels()
@@ -180,7 +180,7 @@ func (r *Router) hfBackupRestoreDo(chat, mid int64, id string) {
 		}
 	}
 	r.Show(chat, mid, fmt.Sprintf("✅ بازگردانی انجام شد.\nموفق: %d — ناموفق: %d", ok, fail),
-		[][]Btn{{btn("🔙 بازگشت", "hfbk"), btn("🏠 خانه", "menu")}})
+		navKB("hfbk"))
 }
 
 func (r *Router) hfBackupDel(chat, mid int64, id string) {

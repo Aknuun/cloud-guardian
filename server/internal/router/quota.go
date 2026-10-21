@@ -120,7 +120,7 @@ func (r *Router) quotaCrons(chat, mid int64) {
 func (r *Router) quotaSetLimit(chat, mid int64) {
 	r.wizStart(chat, mid, map[string]any{"kind": "quota_limit"})
 	r.Show(chat, mid, "🔢 سقف درخواست روزانه را بفرستید (عدد):",
-		[][]Btn{{btn("🔙 بازگشت", "quota"), btn("🏠 خانه", "menu")}})
+		navKB("quota"))
 }
 
 func (r *Router) quotaLimitSave(chat, mid int64, text string) {

@@ -150,8 +150,8 @@ func (r *Router) fmailHome(chat, mid int64) {
 				break
 			}
 			lines = append(lines, "• "+Esc(strv(w["zname"])))
-			kb = append(kb, []Btn{btn("📥 "+truncRune(strv(w["zname"]), 24),
-				fmt.Sprintf("fmailoff:%d:%s", int(fany(w["acc"])), strv(w["zid"])))})
+			kb = append(kb, []Btn{btnS("📥 "+truncRune(strv(w["zname"]), 24),
+				fmt.Sprintf("fmailoff:%d:%s", int(fany(w["acc"])), strv(w["zid"])), "plain")})
 		}
 	}
 	kb = append(kb, []Btn{btnS("➕ افزودن ایمیل (وصل دامنه جدید)", "fmailadd", "success")})
@@ -225,13 +225,13 @@ func (r *Router) fmailMode(chat, mid int64, acc, zid string) {
 func (r *Router) fmailFwdPick(chat, mid int64, acc, zid string) {
 	cli, ok := r.cfClientFor(atoiSafe(acc))
 	if !ok {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("fmail"))
 		return
 	}
 	aid := cli.AccountID(zid)
 	lst, err := cli.EmailDests(aid)
 	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ "+Esc(err.Error()), navKB("fmail"))
 		return
 	}
 	lst = mailDestsSorted(lst)
@@ -250,8 +250,8 @@ func (r *Router) fmailFwdPick(chat, mid int64, acc, zid string) {
 		if i >= 10 {
 			break
 		}
-		kb = append(kb, []Btn{btn("✅ "+strv(d["email"]),
-			fmt.Sprintf("fmailfwdc:%s:%s:%d", acc, zid, i))})
+		kb = append(kb, []Btn{btnS("✅ "+strv(d["email"]),
+			fmt.Sprintf("fmailfwdc:%s:%s:%d", acc, zid, i), "plain")})
 		verifiedEmails = append(verifiedEmails, strv(d["email"]))
 	}
 	if len(pending) > 0 {
@@ -280,13 +280,13 @@ func (r *Router) fmailFwdDo(chat, mid int64, acc, zid, idx string) {
 	verified := selStrings(ctx["verified"])
 	i := atoiSafe(idx)
 	if i < 0 || i >= len(verified) {
-		r.Show(chat, mid, "❌ مقصد پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ مقصد پیدا نشد.", navKB("fmail"))
 		return
 	}
 	dest := verified[i]
 	cli, ok := r.cfClientFor(atoiSafe(acc))
 	if !ok {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("fmail"))
 		return
 	}
 	name := zid
@@ -298,7 +298,7 @@ func (r *Router) fmailFwdDo(chat, mid int64, acc, zid, idx string) {
 	if err := cli.EmailCatchAllSet(zid, map[string]any{
 		"enabled": true,
 		"actions": []any{map[string]any{"type": "forward", "value": []string{dest}}}}); err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB("fmail"))
 		return
 	}
 	r.Store.Delete(fmt.Sprintf("fmail_scan:%d", chat))
@@ -306,13 +306,13 @@ func (r *Router) fmailFwdDo(chat, mid int64, acc, zid, idx string) {
 		fmt.Sprintf("📩 %s به %s فوروارد می‌شود.\n\n"+
 			"⚠️ ایمیل‌های آینده مستقیم به مقصد می‌روند و وارد ربات نمی‌شوند.",
 			Esc(name), Esc(dest)),
-		[][]Btn{{btn("🔙 بازگشت", "fmail"), btn("🏠 خانه", "menu")}})
+		navKB("fmail"))
 }
 
 func (r *Router) fmailOff(chat, mid int64, acc, zid string) {
 	cli, ok := r.cfClientFor(atoiSafe(acc))
 	if !ok {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("fmail"))
 		return
 	}
 	name := zid
@@ -324,12 +324,12 @@ func (r *Router) fmailOff(chat, mid int64, acc, zid string) {
 	if err := cli.EmailCatchAllSet(zid, map[string]any{
 		"enabled": false,
 		"actions": []any{map[string]any{"type": "drop", "value": []string{}}}}); err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "fmail")}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB("fmail"))
 		return
 	}
 	r.Store.Delete(fmt.Sprintf("fmail_scan:%d", chat))
 	r.Show(chat, mid, fmt.Sprintf("📩 دریافت/فوروارد %s قطع شد.", Esc(name)),
-		[][]Btn{{btn("🔙 بازگشت", "fmail"), btn("🏠 خانه", "menu")}})
+		navKB("fmail"))
 }
 
 func (r *Router) fmailFwdNewAsk(chat, mid int64, acc, zid string) {

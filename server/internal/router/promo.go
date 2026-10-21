@@ -125,7 +125,7 @@ func (r *Router) promoSetSave(chat, mid int64, text string) {
 	r.clearWizard(chat)
 	v := strings.TrimSpace(text)
 	if v == "" {
-		r.Show(chat, mid, "⚠️ متن خالی است.", [][]Btn{{btn("🔙 بازگشت", "promo")}})
+		r.Show(chat, mid, "⚠️ متن خالی است.", navKB("promo"))
 		return
 	}
 	if len([]rune(v)) > promoMaxRunes {

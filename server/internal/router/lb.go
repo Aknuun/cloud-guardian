@@ -114,7 +114,7 @@ func (r *Router) lbZones(chat, mid int64, flt string, pg int) {
 	accs := r.cfAccs()
 	allz := r.cfAllZones()
 	if len(allz) == 0 {
-		r.Show(chat, mid, "⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "⚖️ لود بالانسر IP\n\n📭 دامنه‌ای پیدا نشد.", navKB(""))
 		return
 	}
 	var zones []cfZone
@@ -144,14 +144,14 @@ func (r *Router) lbZones(chat, mid int64, flt string, pg int) {
 	}
 	var rows []Btn
 	for _, z := range zones[lo:hi] {
-		rows = append(rows, btn("⚖️ "+z.Zone.Name, fmt.Sprintf("lbz:%d:%s", z.Acc, z.Zone.ID)))
+		rows = append(rows, btnS("⚖️ "+z.Zone.Name, fmt.Sprintf("lbz:%d:%s", z.Acc, z.Zone.ID), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	allLabel := "📁 همه اکانت‌ها"
 	if flt == "all" {
 		allLabel = "📁 ✅ همه اکانت‌ها"
 	}
-	kb = append(kb, []Btn{btn(allLabel, "lbzf:all:0")})
+	kb = append(kb, []Btn{btnS(allLabel, "lbzf:all:0", "plain")})
 	if len(accs) > 1 {
 		var ab []Btn
 		for j, a := range accs {
@@ -211,13 +211,13 @@ func lbShort(name, zname string) string {
 func (r *Router) lbZoneGroups(chat, mid int64, acc int, zid string, pg int) {
 	accs := r.cfAccs()
 	if acc < 0 || acc >= len(accs) {
-		r.Show(chat, mid, "❌ دامنه پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "lb"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ دامنه پیدا نشد.", navKB("lb"))
 		return
 	}
 	cli := cf.New(accs[acc].Token)
 	recs, err := cli.Records(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "lb")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("lb"))
 		return
 	}
 	zones, _ := cli.Zones()
@@ -229,7 +229,7 @@ func (r *Router) lbZoneGroups(chat, mid int64, acc int, zid string, pg int) {
 		}
 	}
 	if zname == "" {
-		r.Show(chat, mid, "❌ دامنه پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "lb"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ دامنه پیدا نشد.", navKB("lb"))
 		return
 	}
 	groups := map[string][]cf.Record{}
@@ -320,12 +320,12 @@ func (r *Router) lbZoneGroups(chat, mid int64, acc int, zid string, pg int) {
 func (r *Router) lbOpenGroup(chat, mid int64, acc int, zid, idx string) {
 	accs := r.cfAccs()
 	if acc < 0 || acc >= len(accs) {
-		r.Show(chat, mid, "❌ دامنه پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "lb")}})
+		r.Show(chat, mid, "❌ دامنه پیدا نشد.", navKB("lb"))
 		return
 	}
 	recs, err := cf.New(accs[acc].Token).Records(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "lb")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("lb"))
 		return
 	}
 	sset := map[string]bool{}
@@ -341,7 +341,7 @@ func (r *Router) lbOpenGroup(chat, mid int64, acc int, zid, idx string) {
 	sort.Strings(names)
 	i := atoiSafe(idx)
 	if i < 0 || i >= len(names) {
-		r.Show(chat, mid, "❌ پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "lb")}})
+		r.Show(chat, mid, "❌ پیدا نشد.", navKB("lb"))
 		return
 	}
 	name := names[i]
@@ -593,7 +593,7 @@ func (r *Router) lbSpareHomeGid(chat, mid int64, gid string) {
 		if len(label) > 20 {
 			label = label[:20]
 		}
-		kb = append(kb, []Btn{btn("🛟 "+label, fmt.Sprintf("lbsm:%s:%d", gid, i))})
+		kb = append(kb, []Btn{btnS("🛟 "+label, fmt.Sprintf("lbsm:%s:%d", gid, i), "plain")})
 	}
 	back := "zones"
 	if s.Rid != "" {

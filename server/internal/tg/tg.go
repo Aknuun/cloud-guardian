@@ -231,7 +231,7 @@ func styleRow(row []Button) []Button {
 			case isPlaceholder(b), !isBack(b) && b.Style != "plain":
 				out[i] = b
 			case isBack(b):
-				b.Style = "danger"
+				b.Style = ""
 				out[i] = b
 			default:
 				b.Style = ""
@@ -260,7 +260,7 @@ func styleRow(row []Button) []Button {
 		case isPlaceholder(b):
 			out[i] = b
 		case isBack(b):
-			b.Style = "danger"
+			b.Style = ""
 			out[i] = b
 		case b.Style == "plain":
 			b.Style = ""

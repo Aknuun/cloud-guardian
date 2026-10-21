@@ -214,7 +214,7 @@ func (r *Router) domexpCalList(chat, mid int64) {
 	lst := r.domexpList()
 	if len(lst) == 0 {
 		r.Show(chat, mid, "📭 دامنه‌ای ثبت نشده.",
-			[][]Btn{{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")}})
+			navKB("domexpp:0"))
 		return
 	}
 	var hidden []domexpiry.Item
@@ -232,7 +232,7 @@ func (r *Router) domexpCalList(chat, mid int64) {
 	}
 	var items []Btn
 	for _, x := range show {
-		items = append(items, btn("🗓 "+x.Domain, "domexpi:"+url.QueryEscape(x.Domain)))
+		items = append(items, btnS("🗓 "+x.Domain, "domexpi:"+url.QueryEscape(x.Domain), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("domexpp:0"))
@@ -246,7 +246,7 @@ func (r *Router) domexpCalDomain(chat, mid int64, dom string) {
 	item := r.findDomexp(dom)
 	if item == nil {
 		r.Show(chat, mid, "❌ دامنه پیدا نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")}})
+			navKB("domexpp:0"))
 		return
 	}
 	r.setWizard(chat, map[string]any{"kind": "domexp_date", "domain": dom})
@@ -263,7 +263,7 @@ func (r *Router) domexpDelList(chat, mid int64) {
 	lst := r.domexpList()
 	if len(lst) == 0 {
 		r.Show(chat, mid, "📭 دامنه‌ای ثبت نشده.",
-			[][]Btn{{btn("🔙 بازگشت", "domexpp:0"), btn("🏠 خانه", "menu")}})
+			navKB("domexpp:0"))
 		return
 	}
 	n := len(lst)
@@ -272,7 +272,7 @@ func (r *Router) domexpDelList(chat, mid int64) {
 	}
 	var items []Btn
 	for i := 0; i < n; i++ {
-		items = append(items, btn("🗑 "+lst[i].Domain, "domexpdy:"+strconv.Itoa(i)))
+		items = append(items, btnS("🗑 "+lst[i].Domain, "domexpdy:"+strconv.Itoa(i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("domexpp:0"))
@@ -337,14 +337,14 @@ func (r *Router) domexpKeyDel(chat, mid int64) {
 	r.Store.PutJSON("dom_expiry_cfg", map[string]any{
 		"provider": "whoisxmlapi_domaininfo", "key": ""}, 0)
 	r.Show(chat, mid, "🗑 کلید API حذف شد.",
-		[][]Btn{{btn("🔙 بازگشت", "domexpkey"), btn("🏠 خانه", "menu")}})
+		navKB("domexpkey"))
 }
 
 func (r *Router) domexpTest(chat, mid int64) {
 	_, key := r.domexpCfg()
 	if key == "" {
 		r.Show(chat, mid, "❌ کلیدی ثبت نشده.",
-			[][]Btn{{btn("🔙 بازگشت", "domexpkey"), btn("🏠 خانه", "menu")}})
+			navKB("domexpkey"))
 		return
 	}
 	r.Show(chat, mid, "⏳ در حال تست کلید روی pcapps.ir…", HomeKB())
@@ -353,11 +353,11 @@ func (r *Router) domexpTest(chat, mid int64) {
 		r.Show(chat, mid,
 			fmt.Sprintf("✅ کلید معتبر است.\n🗓 انقضای pcapps.ir: %s\n⏳ باقی‌مانده: %s",
 				dateOnly(*res.Expiry), domexpiry.Remaining(res.Expiry, domexpiry.NowMS())),
-			[][]Btn{{btn("🔙 بازگشت", "domexpkey"), btn("🏠 خانه", "menu")}})
+			navKB("domexpkey"))
 		return
 	}
 	r.Show(chat, mid, "⚠️ تست ناموفق بود: "+Esc(res.Status),
-		[][]Btn{{btn("🔙 بازگشت", "domexpkey"), btn("🏠 خانه", "menu")}})
+		navKB("domexpkey"))
 }
 
 func (r *Router) findDomexp(dom string) *domexpiry.Item {

@@ -106,7 +106,7 @@ func (r *Router) lnHome(chat, mid int64) {
 		label += " (" + nm + ")"
 	}
 	kb = append(kb, []Btn{btnS("➕ ساخت سرور", fmt.Sprintf("lnsc:%d", sel), "success")})
-	kb = append(kb, []Btn{btn(label, fmt.Sprintf("lnacc:%d", sel))})
+	kb = append(kb, []Btn{btnS(label, fmt.Sprintf("lnacc:%d", sel), "plain")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "menu"), btn("👤 اکانت‌ها", "lnaccs"), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, strings.Join(lines, "\n"), kb)
 }
@@ -144,7 +144,7 @@ func (r *Router) lnDelList(chat, mid int64) {
 	accs := r.lnAccs()
 	var items []Btn
 	for i, a := range accs {
-		items = append(items, btn("🗑 "+strv(a["name"]), fmt.Sprintf("lnd:%d", i)))
+		items = append(items, btnS("🗑 "+strv(a["name"]), fmt.Sprintf("lnd:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, row(btn("🔙 بازگشت", "ln")))
@@ -199,7 +199,7 @@ func (r *Router) lnServers(chat, mid int64, i int, pg int) {
 	}
 	var items []Btn
 	for _, s := range servers[lo:hi] {
-		items = append(items, btn(lnListText(s), fmt.Sprintf("lnsi:%d:%s", i, strv(s["id"]))))
+		items = append(items, btnS(lnListText(s), fmt.Sprintf("lnsi:%d:%s", i, strv(s["id"])), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	if pages > 1 {
@@ -361,7 +361,7 @@ func (r *Router) lnOp(chat, mid int64, i int, sid, step string) {
 			if j >= 60 {
 				break
 			}
-			rows = append(rows, btn(truncRune(strv(im["label"]), 28), fmt.Sprintf("lnsv:%d:%s:rebuild:%s", i, sid, strv(im["id"]))))
+			rows = append(rows, btnS(truncRune(strv(im["label"]), 28), fmt.Sprintf("lnsv:%d:%s:rebuild:%s", i, sid, strv(im["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -396,8 +396,8 @@ func (r *Router) lnOp(chat, mid int64, i int, sid, step string) {
 				break
 			}
 			price := lnRegionPrice(t, region)
-			rows = append(rows, btn(fmt.Sprintf("%s ($%s/m)", strv(t["label"]), orDash(strvVal(price["monthly"]))),
-				fmt.Sprintf("lnsv:%d:%s:upgrade:%s", i, sid, strv(t["id"]))))
+			rows = append(rows, btnS(fmt.Sprintf("%s ($%s/m)", strv(t["label"]), orDash(strvVal(price["monthly"]))),
+				fmt.Sprintf("lnsv:%d:%s:upgrade:%s", i, sid, strv(t["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -419,7 +419,7 @@ func (r *Router) lnOp(chat, mid int64, i int, sid, step string) {
 			if j >= 60 {
 				break
 			}
-			rows = append(rows, btn(truncRune(strv(im["label"]), 28), fmt.Sprintf("lnsv:%d:%s:dsnap:%s", i, sid, strv(im["id"]))))
+			rows = append(rows, btnS(truncRune(strv(im["label"]), 28), fmt.Sprintf("lnsv:%d:%s:dsnap:%s", i, sid, strv(im["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -486,7 +486,7 @@ func (r *Router) lnPick(chat, mid int64, i int, sid, step, arg string) {
 }
 
 func (r *Router) lnDo(chat, mid int64, i int, sid, step, arg string) {
-	back := [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("lnsi:%d:%s", i, sid)), btn("🏠 خانه", "menu")}}
+	back := navKB(fmt.Sprintf("lnsi:%d:%s", i, sid))
 	backList := [][]Btn{{btn("🖥 سرورها", fmt.Sprintf("lns:%d:0", i))}}
 	accs := r.lnAccs()
 	if i < 0 || i >= len(accs) {
@@ -715,7 +715,7 @@ func (r *Router) lnCreateRemark(chat, mid int64, pend map[string]any, text strin
 		if !ok {
 			continue
 		}
-		rows = append(rows, btn(strv(rg["label"]), fmt.Sprintf("lnscd:%d:%s", i, strv(rg["id"]))))
+		rows = append(rows, btnS(strv(rg["label"]), fmt.Sprintf("lnscd:%d:%s", i, strv(rg["id"])), "plain"))
 	}
 	if len(rows) == 0 {
 		r.clearWizard(chat)
@@ -731,7 +731,7 @@ func (r *Router) lnCreateRemark(chat, mid int64, pend map[string]any, text strin
 func (r *Router) lnCreateRegion(chat, mid int64, i int, region string) {
 	pend := r.getWizard(chat)
 	if pend == nil || strv(pend["kind"]) != "ln_srv_remark" || intOrAny(pend["acc"]) != i || strv(pend["remark"]) == "" {
-		r.Show(chat, mid, "⏳ عملیات منقضی شده.", [][]Btn{{btn("🔙 بازگشت", "ln")}})
+		r.Show(chat, mid, "⏳ عملیات منقضی شده.", navKB("ln"))
 		return
 	}
 	accs := r.lnAccs()
@@ -751,11 +751,11 @@ func (r *Router) lnCreateRegion(chat, mid int64, i int, region string) {
 		if m == "" {
 			m = "?"
 		}
-		rows = append(rows, btn(fmt.Sprintf("%s ($%s/m)", strv(t["label"]), m),
-			fmt.Sprintf("lnscp:%d:%s:%s", i, region, strv(t["id"]))))
+		rows = append(rows, btnS(fmt.Sprintf("%s ($%s/m)", strv(t["label"]), m),
+			fmt.Sprintf("lnscp:%d:%s:%s", i, region, strv(t["id"])), "plain"))
 	}
 	if len(rows) == 0 {
-		r.Show(chat, mid, "❌ پلنی پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "ln")}})
+		r.Show(chat, mid, "❌ پلنی پیدا نشد.", navKB("ln"))
 		return
 	}
 	pend["region"] = region
@@ -768,7 +768,7 @@ func (r *Router) lnCreateRegion(chat, mid int64, i int, region string) {
 func (r *Router) lnCreatePlan(chat, mid int64, i int, region, typeID string) {
 	pend := r.getWizard(chat)
 	if pend == nil || strv(pend["kind"]) != "ln_srv_remark" || strv(pend["remark"]) == "" {
-		r.Show(chat, mid, "⏳ عملیات منقضی شده.", [][]Btn{{btn("🔙 بازگشت", "ln")}})
+		r.Show(chat, mid, "⏳ عملیات منقضی شده.", navKB("ln"))
 		return
 	}
 	accs := r.lnAccs()
@@ -785,10 +785,10 @@ func (r *Router) lnCreatePlan(chat, mid int64, i int, region, typeID string) {
 		if len(rows) >= 60 {
 			break
 		}
-		rows = append(rows, btn(strv(im["label"]), fmt.Sprintf("lnsci:%d:%s", i, strv(im["id"]))))
+		rows = append(rows, btnS(strv(im["label"]), fmt.Sprintf("lnsci:%d:%s", i, strv(im["id"])), "plain"))
 	}
 	if len(rows) == 0 {
-		r.Show(chat, mid, "❌ تصویری پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ تصویری پیدا نشد.", navKB("ln"))
 		return
 	}
 	pend["region"] = region
@@ -802,7 +802,7 @@ func (r *Router) lnCreatePlan(chat, mid int64, i int, region, typeID string) {
 func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 	pend := r.getWizard(chat)
 	if pend == nil || strv(pend["kind"]) != "ln_srv_remark" || strv(pend["remark"]) == "" {
-		r.Show(chat, mid, "⏳ عملیات منقضی شده.", [][]Btn{{btn("🔙 بازگشت", "ln")}})
+		r.Show(chat, mid, "⏳ عملیات منقضی شده.", navKB("ln"))
 		return
 	}
 	accs := r.lnAccs()
@@ -824,7 +824,7 @@ func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 	}
 	res, err := ln.New(strv(accs[i]["token"])).Call("POST", "/linode/instances", body)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB("ln"))
 		return
 	}
 	if strv(res["id"]) == "" {
@@ -832,7 +832,7 @@ func (r *Router) lnCreateImage(chat, mid int64, i int, imageID string) {
 		if e, ok := res["errors"].([]any); ok && len(e) > 0 {
 			detail = truncRune(fmt.Sprintf("%v", e), 200)
 		}
-		r.Show(chat, mid, "❌ خطا: "+Esc(detail), [][]Btn{{btn("🔙 بازگشت", "ln"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(detail), navKB("ln"))
 		return
 	}
 	r.clearWizard(chat)

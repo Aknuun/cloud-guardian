@@ -19,7 +19,7 @@ func (r *Router) zmailHome(chat, mid int64) {
 		r.Show(chat, mid,
 			fmt.Sprintf("✉️ ایمیل %s\n\n❌ دسترسی به Email Routing نیست.\n\n"+
 				"به توکن دسترسی <b>Zone → Email Routing Rules → Edit</b> را اضافه کن.", Esc(zname)),
-			[][]Btn{{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")}})
+			navKB("zset"))
 		return
 	}
 	enabled, _ := st["enabled"].(bool)
@@ -164,7 +164,7 @@ func (r *Router) zmailAddrSave(chat, mid int64, text string) {
 	}
 	local = strings.TrimSpace(local)
 	if local == "" {
-		r.Show(chat, mid, "❌ آدرس نامعتبر.", [][]Btn{{btn("🔙 بازگشت", "zmail")}})
+		r.Show(chat, mid, "❌ آدرس نامعتبر.", navKB("zmail"))
 		return
 	}
 	addr := local + "@" + zname
@@ -184,7 +184,7 @@ func (r *Router) zmailDestListPick(chat, mid int64, forCatch bool) {
 	aid := cli.AccountID(zid)
 	lst, err := cli.EmailDests(aid)
 	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zmail")}})
+		r.Show(chat, mid, "❌ "+Esc(err.Error()), navKB("zmail"))
 		return
 	}
 	lst = mailDestsSorted(lst)
@@ -212,7 +212,7 @@ func (r *Router) zmailDestListPick(chat, mid int64, forCatch bool) {
 		if i >= 10 {
 			break
 		}
-		kb = append(kb, []Btn{btn("✅ "+strv(d["email"]), fmt.Sprintf("%s:%d", cb, i))})
+		kb = append(kb, []Btn{btnS("✅ "+strv(d["email"]), fmt.Sprintf("%s:%d", cb, i), "plain")})
 		verifiedEmails = append(verifiedEmails, strv(d["email"]))
 	}
 	if len(pending) > 0 {
@@ -246,7 +246,7 @@ func (r *Router) zmailDestPick(chat, mid int64, idx string, forCatch bool) {
 	dests := selStrings(zctx["verified"])
 	i := atoiSafe(idx)
 	if i < 0 || i >= len(dests) {
-		r.Show(chat, mid, "❌ مقصد پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "zmail")}})
+		r.Show(chat, mid, "❌ مقصد پیدا نشد.", navKB("zmail"))
 		return
 	}
 	dest := dests[i]
@@ -284,7 +284,7 @@ func (r *Router) zmailDests(chat, mid int64) {
 	aid := cli.AccountID(zid)
 	lst, err := cli.EmailDests(aid)
 	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zmail")}})
+		r.Show(chat, mid, "❌ "+Esc(err.Error()), navKB("zmail"))
 		return
 	}
 	lines := []string{fmt.Sprintf("📧 مقصدهای اکانت (%d):", len(lst)), ""}
@@ -359,7 +359,7 @@ func (r *Router) zmailDestNewAsk(chat, mid int64) {
 		return
 	}
 	if cli.AccountID(zid) == "" {
-		r.Show(chat, mid, "❌ شناسهٔ اکانت پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "zmail")}})
+		r.Show(chat, mid, "❌ شناسهٔ اکانت پیدا نشد.", navKB("zmail"))
 		return
 	}
 	r.setWizard(chat, map[string]any{"kind": "zmail_dest_new"})

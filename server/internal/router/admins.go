@@ -39,10 +39,10 @@ func (r *Router) adminDelList(chat, mid int64) {
 	extra := r.Admins()
 	var items []Btn
 	for _, id := range extra[1:] {
-		items = append(items, btn(fmt.Sprintf("➖ %d", id), "admindely:"+strconv.FormatInt(id, 10)))
+		items = append(items, btnS(fmt.Sprintf("➖ %d", id), "admindely:"+strconv.FormatInt(id, 10), "plain"))
 	}
 	if len(items) == 0 {
-		r.Show(chat, mid, "— ادمینی برای حذف نیست.", [][]Btn{{btn("🔙 بازگشت", "admins_menu")}})
+		r.Show(chat, mid, "— ادمینی برای حذف نیست.", navKB("admins_menu"))
 		return
 	}
 	kb := gridBTN(items, 2)

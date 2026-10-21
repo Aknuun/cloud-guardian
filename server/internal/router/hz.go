@@ -24,6 +24,91 @@ func (r *Router) hzSaveAccs(accs []map[string]any) {
 	r.Store.PutJSON("hz_accounts", accs, 0)
 }
 
+// ---------- cached Hetzner lookups (slow API, cached like Arvan) ----------
+
+func (r *Router) hzCli(i int) (*hz.Client, bool) {
+	accs := r.hzAccs()
+	if i < 0 || i >= len(accs) {
+		return nil, false
+	}
+	return hz.New(strv(accs[i]["token"])), true
+}
+
+// hzDropServers invalidates the cached server list after a mutation.
+func (r *Router) hzDropServers(i int) {
+	arvMem.Delete(fmt.Sprintf("mhzs:%d", i))
+	r.Store.Delete(fmt.Sprintf("hzsrv:%d", i))
+}
+
+// hzFlushIndex drops every cached Hetzner entry for an account index (used
+// when an account is removed and the following ones shift down).
+func (r *Router) hzFlushIndex(i int) {
+	heads := map[string]bool{
+		fmt.Sprintf("mhzs:%d", i): true, fmt.Sprintf("mhzi:%d", i): true,
+		fmt.Sprintf("mhzt:%d", i): true, fmt.Sprintf("mhzl:%d", i): true,
+	}
+	arvMem.Range(func(k, v any) bool {
+		if sk, ok := k.(string); ok && heads[sk] {
+			arvMem.Delete(k)
+		}
+		return true
+	})
+	for _, db := range []string{"hzsrv", "hzimg", "hztyp", "hzloc"} {
+		r.Store.Delete(fmt.Sprintf("%s:%d", db, i))
+	}
+}
+
+func (r *Router) hzServersCached(i int) []map[string]any {
+	cli, ok := r.hzCli(i)
+	if !ok {
+		return nil
+	}
+	return r.arvCachedMaps(fmt.Sprintf("mhzs:%d", i), fmt.Sprintf("hzsrv:%d", i), 60*time.Second,
+		func() []map[string]any { return cli.All("/servers") })
+}
+
+// hzServersQuick returns the cached server list without blocking. When there is
+// no cache at all it reports ok=false so the caller can show a loader.
+func (r *Router) hzServersQuick(i int) ([]map[string]any, bool) {
+	if _, ok := arvMem.Load(fmt.Sprintf("mhzs:%d", i)); ok {
+		return r.hzServersCached(i), true
+	}
+	if _, ok := r.Store.GetOK(fmt.Sprintf("hzsrv:%d", i)); ok {
+		return r.hzServersCached(i), true
+	}
+	return nil, false
+}
+
+func (r *Router) hzImagesCached(cli *hz.Client, i int) []map[string]any {
+	return r.arvCachedMaps(fmt.Sprintf("mhzi:%d", i), fmt.Sprintf("hzimg:%d", i), 6*time.Hour,
+		func() []map[string]any { return r.hzAllImages(cli) })
+}
+
+func (r *Router) hzTypesCached(cli *hz.Client, i int) []map[string]any {
+	return r.arvCachedMaps(fmt.Sprintf("mhzt:%d", i), fmt.Sprintf("hztyp:%d", i), 6*time.Hour,
+		func() []map[string]any { return cli.All("/server_types") })
+}
+
+func (r *Router) hzLocsCached(cli *hz.Client, i int) []map[string]any {
+	return r.arvCachedMaps(fmt.Sprintf("mhzl:%d", i), fmt.Sprintf("hzloc:%d", i), 24*time.Hour,
+		func() []map[string]any { return cli.All("/locations") })
+}
+
+// hzEuroCached never blocks: it returns the last known EUR rate and refreshes
+// it in the background.
+func (r *Router) hzEuroCached() float64 {
+	var v float64
+	if r.Store.GetJSON("hzeur", &v) && v > 0 {
+		return v
+	}
+	go func() {
+		if x := hz.EuroRate(); x > 0 {
+			r.Store.PutJSON("hzeur", x, 6*3600)
+		}
+	}()
+	return 0
+}
+
 func (r *Router) hzSel() int {
 	accs := r.hzAccs()
 	i, err := strconv.Atoi(strings.TrimSpace(r.Store.Get("hz_sel")))
@@ -66,16 +151,16 @@ func (r *Router) hzHome(chat, mid int64) {
 		}
 		kb = append(kb, row)
 	}
-	servers, err := hz.New(strv(accs[sel]["token"])).Call("/servers", "GET", nil)
-	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), [][]Btn{{btn("🏠 خانه", "menu")}})
-		return
+	slist, ready := r.hzServersQuick(sel)
+	if !ready {
+		r.Show(chat, mid, "⏳ در حال بارگذاری سرورها…", nil)
+		slist = r.hzServersCached(sel)
 	}
-	slist := hzList(servers, "servers")
 	lines := []string{fmt.Sprintf("🇩🇪 هتزنر — «%s»", Esc(strv(accs[sel]["name"]))), ""}
 	if len(slist) == 0 {
 		lines = append(lines, "📭 سروری نیست.")
 	}
+	var srvItems []Btn
 	for i, s := range slist {
 		if i >= 20 {
 			break
@@ -88,10 +173,10 @@ func (r *Router) hzHome(chat, mid int64) {
 		if label == "" {
 			label = strv(s["id"])
 		}
-		kb = append(kb, []Btn{
-			btn("🌐 "+ip, fmt.Sprintf("hzsi:%d:%s", sel, strv(s["id"]))),
-			btn(hz.StatusEmoji(strv(s["status"]))+" "+truncRune(label, 28), fmt.Sprintf("hzsi:%d:%s", sel, strv(s["id"])))})
+		srvItems = append(srvItems, btnS(fmt.Sprintf("%s %s · %s", hz.StatusEmoji(strv(s["status"])), truncRune(label, 16), ip),
+			fmt.Sprintf("hzsi:%d:%s", sel, strv(s["id"])), "plain"))
 	}
+	kb = append(kb, gridBTN(srvItems, 2)...)
 	kb = append(kb, []Btn{btn("🖥 سرورها", fmt.Sprintf("hzs:%d:0", sel)), btn("👤 اکانت‌ها", "hzaccs")})
 	createLabel := "➕ ساخت سرور"
 	if multi {
@@ -126,12 +211,12 @@ func (r *Router) hzAccsMenu(chat, mid int64) {
 func (r *Router) hzDelList(chat, mid int64) {
 	accs := r.hzAccs()
 	if len(accs) == 0 {
-		r.Show(chat, mid, "📭 اکانتی نیست.", [][]Btn{{btn("🔙 بازگشت", "hz")}})
+		r.Show(chat, mid, "📭 اکانتی نیست.", navKB("hz"))
 		return
 	}
 	var items []Btn
 	for i, a := range accs {
-		items = append(items, btn("🗑 "+strv(a["name"]), fmt.Sprintf("hzd:%d", i)))
+		items = append(items, btnS("🗑 "+strv(a["name"]), fmt.Sprintf("hzd:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, row(btn("🔙 بازگشت", "hz")))
@@ -156,6 +241,7 @@ func (r *Router) hzDelDo(chat, mid int64, idx string) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
+	r.hzFlushIndex(i)
 	accs = append(accs[:i], accs[i+1:]...)
 	r.hzSaveAccs(accs)
 	r.Bot.Send(chat, "✅ اکانت حذف شد.", nil)
@@ -168,12 +254,7 @@ func (r *Router) hzServers(chat, mid int64, i int, pg int) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	cli := hz.New(strv(accs[i]["token"]))
-	if _, err := cli.Call("/servers?per_page=1", "GET", nil); err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), HomeKB())
-		return
-	}
-	servers := cli.All("/servers")
+	servers := r.hzServersCached(i)
 	per := 10
 	pages := (len(servers) + per - 1) / per
 	if pages < 1 {
@@ -189,16 +270,32 @@ func (r *Router) hzServers(chat, mid int64, i int, pg int) {
 	if hi > len(servers) {
 		hi = len(servers)
 	}
-	var kb [][]Btn
+	var items []Btn
 	for _, s := range servers[lo:hi] {
-		kb = append(kb, []Btn{btn(hz.StatusEmoji(strv(s["status"]))+" "+strv(s["name"]),
-			fmt.Sprintf("hzsi:%d:%s", i, strv(s["id"])))})
+		name := strv(s["name"])
+		if ip := hzIP(s); ip != "" {
+			name += " · " + ip
+		}
+		items = append(items, btnS(hz.StatusEmoji(strv(s["status"]))+" "+truncRune(name, 24),
+			fmt.Sprintf("hzsi:%d:%s", i, strv(s["id"])), "plain"))
 	}
+	kb := gridBTN(items, 2)
 	if pages > 1 {
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%d/%d", pg+1, pages),
-			fmt.Sprintf("hzs:%d:%d", i, (pg+1)%pages))})
+		prow := []Btn{}
+		if pg > 0 {
+			prow = append(prow, btn("◀️", fmt.Sprintf("hzs:%d:%d", i, pg-1)))
+		} else {
+			prow = append(prow, emptyBtn())
+		}
+		prow = append(prow, btn(fmt.Sprintf("📄 %d/%d", pg+1, pages), "noop"))
+		if pg < pages-1 {
+			prow = append(prow, btn("▶️", fmt.Sprintf("hzs:%d:%d", i, pg+1)))
+		} else {
+			prow = append(prow, emptyBtn())
+		}
+		kb = append(kb, prow)
 	}
-	kb = append(kb, []Btn{btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")})
+	kb = append(kb, navRow("hz"))
 	r.Show(chat, mid, fmt.Sprintf("🖥 سرورهای «%s» (%d):", Esc(strv(accs[i]["name"])), len(servers)), kb)
 }
 
@@ -229,32 +326,40 @@ func (r *Router) hzInfo(chat, mid int64, i int, sid string) {
 		used = hzF(float64(int64(ob/incl*1000+0.5))/10) + "%"
 		bill = float64(int64(maxf(total-incl, 0)*1000+0.5)) / 1000
 	}
-	euro := hz.EuroRate()
+	euro := r.hzEuroCached()
 	st, _ := s["server_type"].(map[string]any)
 	location, _ := s["location"].(map[string]any)
 	locName := strv(location["name"])
 	var p map[string]any
 	// The server object embeds server_type without prices; fetch them.
 	if stid := strv(st["id"]); stid != "" {
-		if td, err := cli.Call("/server_types/"+stid, "GET", nil); err == nil {
-			if t2, _ := td["server_type"].(map[string]any); t2 != nil {
-				for _, x := range priceList(t2) {
-					if strv(x["location"]) == locName {
-						p = x
-						break
-					}
-				}
-				if p == nil {
-					if ps := priceList(t2); len(ps) > 0 {
-						p = ps[0]
-					}
+		for _, t2 := range r.hzTypesCached(cli, i) {
+			if strv(t2["id"]) != stid {
+				continue
+			}
+			for _, x := range priceList(t2) {
+				if strv(x["location"]) == locName {
+					p = x
+					break
 				}
 			}
+			if p == nil {
+				if ps := priceList(t2); len(ps) > 0 {
+					p = ps[0]
+				}
+			}
+			break
 		}
 	}
 	hourly := hz.PriceFmt(priceGross(p, "price_hourly"), euro)
 	monthly := hz.PriceFmt(priceGross(p, "price_monthly"), euro)
-	snaps := fmt.Sprint(hz.SnapCount(cli.All("/images?type=snapshot"), sid))
+	var snapList []map[string]any
+	for _, im := range r.hzImagesCached(cli, i) {
+		if strv(im["type"]) == "snapshot" {
+			snapList = append(snapList, im)
+		}
+	}
+	snaps := fmt.Sprint(hz.SnapCount(snapList, sid))
 	locs := "—"
 	if location != nil {
 		locs = fmt.Sprintf("%s, %s", orDash(strv(location["country"])), orDash(strv(location["city"])))
@@ -313,8 +418,8 @@ func (r *Router) hzInfo(chat, mid int64, i int, sid string) {
 		btn("❌ حذف IPv6", fmt.Sprintf("hzsu:%d:%s:u6", i, sid)),
 		btn("🔄 جایگزینی IPv4", fmt.Sprintf("hzsu:%d:%s:r4", i, sid)),
 	}, 2)
-	kb = append(kb, []Btn{btn("🔄 بروزرسانی", fmt.Sprintf("hzsi:%d:%s", i, sid)),
-		btn("🗑 حذف سرور", fmt.Sprintf("hzsu:%d:%s:del", i, sid))})
+	kb = append(kb, []Btn{btn("🔄 بروزرسانی", fmt.Sprintf("hzsi:%d:%s", i, sid))})
+	kb = append(kb, []Btn{btnS("🗑 حذف سرور", fmt.Sprintf("hzsu:%d:%s:del", i, sid), "danger")})
 	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("hzs:%d:0", i)), btn("🏠 خانه", "menu")})
 	r.Show(chat, mid, text, kb)
 }
@@ -389,7 +494,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 		return
 	}
 	if step == "rebuild" {
-		imgs := r.hzAllImages(cli)
+		imgs := r.hzImagesCached(cli, i)
 		arch := ""
 		if im, ok := s["image"].(map[string]any); ok {
 			arch = strv(im["architecture"])
@@ -422,7 +527,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 			if label == "" {
 				label = strv(im["id"])
 			}
-			rows = append(rows, btn(label, fmt.Sprintf("hzsv:%d:%s:rebuild:%s", i, sid, strv(im["id"]))))
+			rows = append(rows, btnS(label, fmt.Sprintf("hzsv:%d:%s:rebuild:%s", i, sid, strv(im["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -430,7 +535,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 		return
 	}
 	if step == "upgrade" {
-		types := r.hzAllTypes(cli)
+		types := r.hzTypesCached(cli, i)
 		cur, _ := s["server_type"].(map[string]any)
 		locName := ""
 		if lm, _ := s["location"].(map[string]any); lm != nil {
@@ -444,9 +549,13 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 			if !hzPlanInLoc(t, locName) {
 				continue
 			}
-			if intOfAny(t["memory"]) >= intOfAny(cur["memory"]) ||
-				intOfAny(t["cores"]) >= intOfAny(cur["cores"]) ||
-				intOfAny(t["disk"]) >= intOfAny(cur["disk"]) {
+			bigger := intOfAny(t["memory"]) > intOfAny(cur["memory"]) ||
+				intOfAny(t["cores"]) > intOfAny(cur["cores"]) ||
+				intOfAny(t["disk"]) > intOfAny(cur["disk"])
+			notSmaller := intOfAny(t["memory"]) >= intOfAny(cur["memory"]) &&
+				intOfAny(t["cores"]) >= intOfAny(cur["cores"]) &&
+				intOfAny(t["disk"]) >= intOfAny(cur["disk"])
+			if bigger && notSmaller {
 				up = append(up, t)
 			}
 		}
@@ -460,7 +569,8 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 			if j >= 40 {
 				break
 			}
-			rows = append(rows, btn(fmt.Sprintf("%dC/%dG", intOfAny(t["cores"]), intOfAny(t["memory"])), fmt.Sprintf("hzsv:%d:%s:upgrade:%s", i, sid, strv(t["id"]))))
+			rows = append(rows, btnS(fmt.Sprintf("%dC/%dG/%dGB", intOfAny(t["cores"]), intOfAny(t["memory"]), intOfAny(t["disk"])),
+				fmt.Sprintf("hzsv:%d:%s:upgrade:%s", i, sid, strv(t["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -499,7 +609,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 				break
 			}
 			label := strings.TrimSpace(strv(ip["name"]) + " " + strv(ip["ip"]))
-			rows = append(rows, btn(label, fmt.Sprintf("hzsv:%d:%s:%s:%s", i, sid, step, strv(ip["id"]))))
+			rows = append(rows, btnS(label, fmt.Sprintf("hzsv:%d:%s:%s:%s", i, sid, step, strv(ip["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -507,7 +617,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 		return
 	}
 	if step == "dsnap" {
-		imgs := r.hzAllImages(cli)
+		imgs := r.hzImagesCached(cli, i)
 		sidInt, _ := strconv.Atoi(sid)
 		var snaps []map[string]any
 		for _, im := range imgs {
@@ -534,7 +644,7 @@ func (r *Router) hzOp(chat, mid int64, i int, sid, step string) {
 			if label == "" {
 				label = strv(im["id"])
 			}
-			rows = append(rows, btn(label, fmt.Sprintf("hzsv:%d:%s:dsnap:%s", i, sid, strv(im["id"]))))
+			rows = append(rows, btnS(label, fmt.Sprintf("hzsv:%d:%s:dsnap:%s", i, sid, strv(im["id"])), "plain"))
 		}
 		kb := gridBTN(rows, 2)
 		kb = append(kb, home)
@@ -632,7 +742,8 @@ func (r *Router) hzImageList(chat, mid int64, i int) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.", HomeKB())
 		return
 	}
-	imgs := r.hzAllImages(hz.New(strv(accs[i]["token"])))
+	r.loading(chat, mid, "در حال بارگذاری تصاویر")
+	imgs := r.hzImagesCached(hz.New(strv(accs[i]["token"])), i)
 	var avail []map[string]any
 	for _, im := range imgs {
 		t := strv(im["type"])
@@ -665,7 +776,7 @@ func (r *Router) hzImageList(chat, mid int64, i int) {
 		case "x86":
 			label += " · x86"
 		}
-		rows = append(rows, btn(label, fmt.Sprintf("hzsci:%d:%s", i, strv(im["id"]))))
+		rows = append(rows, btnS(label, fmt.Sprintf("hzsci:%d:%s", i, strv(im["id"])), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	kb = append(kb, row(btn("🔙 بازگشت", "hz"), btn("🏠 خانه", "menu")))
@@ -686,13 +797,14 @@ func (r *Router) hzPickPlanForImage(chat, mid int64, i int, img string) {
 	}
 	cli := hz.New(strv(accs[i]["token"]))
 	arch, name := "", ""
-	if d, err := cli.Call("/images/"+img, "GET", nil); err == nil {
-		if im, _ := d["image"].(map[string]any); im != nil {
+	for _, im := range r.hzImagesCached(cli, i) {
+		if strv(im["id"]) == img {
 			arch = strv(im["architecture"])
 			name = strv(im["name"])
 			if name == "" {
 				name = strv(im["description"])
 			}
+			break
 		}
 	}
 	pend["image"] = img
@@ -703,6 +815,23 @@ func (r *Router) hzPickPlanForImage(chat, mid int64, i int, img string) {
 }
 
 // hzUsage returns the account's current server usage by core type.
+func hzUsageOf(servers []map[string]any) (shared, dedicated, count int) {
+	for _, s := range servers {
+		count++
+		st, _ := s["server_type"].(map[string]any)
+		if st == nil {
+			continue
+		}
+		c := intOfAny(st["cores"])
+		if strings.ToLower(strv(st["cpu_type"])) == "dedicated" {
+			dedicated += c
+		} else {
+			shared += c
+		}
+	}
+	return
+}
+
 func (r *Router) hzUsage(cli *hz.Client) (shared, dedicated, count int) {
 	for _, s := range cli.All("/servers") {
 		count++
@@ -799,8 +928,8 @@ func (r *Router) hzPlanList(chat, mid int64, i int, notice, retryPlan string) {
 	loc := strv(pend["location"])
 	arch := strv(pend["arch"])
 	cli := hz.New(strv(accs[i]["token"]))
-	types := r.hzAllTypes(cli)
-	shared, dedicated, count := r.hzUsage(cli)
+	types := r.hzTypesCached(cli, i)
+	shared, dedicated, count := hzUsageOf(r.hzServersCached(i))
 	caps := r.hzCapGet(strv(accs[i]["name"]))
 	var avail []map[string]any
 	for _, t := range types {
@@ -854,7 +983,7 @@ func (r *Router) hzPlanList(chat, mid int64, i int, notice, retryPlan string) {
 				mark, cb = "⛔", fmt.Sprintf("hzcap:%d:%s", i, strv(t["id"]))
 				anyBlocked = true
 			}
-			rows = append(rows, btn(fmt.Sprintf("%s %dC/%dG · %s", mark, intOfAny(t["cores"]), intOfAny(t["memory"]), eur), cb))
+			rows = append(rows, btnS(fmt.Sprintf("%s %dC/%dG · %s", mark, intOfAny(t["cores"]), intOfAny(t["memory"]), eur), cb, "plain"))
 		}
 		kb = append(kb, gridBTN(rows, 2)...)
 	}
@@ -976,6 +1105,7 @@ func (r *Router) hzCreate(chat, mid int64, i int) {
 		return
 	}
 	r.clearWizard(chat)
+	r.hzDropServers(i)
 	hs, _ := resp["server"].(map[string]any)
 	ip := ""
 	if hs != nil {
@@ -1036,7 +1166,8 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
-	back := [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("hzsi:%d:%s", i, sid)), btn("🏠 خانه", "menu")}}
+	r.hzDropServers(i)
+	back := navKB(fmt.Sprintf("hzsi:%d:%s", i, sid))
 	fail := func(err error) {
 		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), back)
 	}
@@ -1072,7 +1203,11 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 		if pw == "" {
 			pw = strv(res["root_password"])
 		}
-		r.Bot.Send(chat, "🔓 رمز root جدید:\n<code>"+Esc(pw)+"</code>\n\n⚠️ آن را امن نگه دار.", nil)
+		if pw == "" {
+			r.Bot.Send(chat, "🔓 درخواست ریست رمز ارسال شد، ولی هتزنر رمزی برنگرداند. از کنسول سرور رمز را عوض کن.", nil)
+		} else {
+			r.Bot.Send(chat, "🔓 رمز root جدید:\n<code>"+Esc(pw)+"</code>\n\n⚠️ آن را امن نگه دار.", nil)
+		}
 		r.hzInfo(chat, 0, i, sid)
 	case "snap":
 		name := fmt.Sprintf("snap-%s-%s", sid, time.Now().Format("20060102-1504"))
@@ -1118,7 +1253,8 @@ func (r *Router) hzDo(chat, mid int64, i int, sid, step, arg string) {
 			fail(err)
 			return
 		}
-		r.Bot.Send(chat, "✅ آی‌پی اختصاص یافت.", nil)
+		_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+		r.Bot.Send(chat, "✅ آی‌پی اختصاص یافت و سرور روشن شد.", nil)
 		r.hzInfo(chat, 0, i, sid)
 	case "u4", "u6":
 		d, err := cli.Call("/servers/"+sid, "GET", nil)
@@ -1269,7 +1405,7 @@ func (r *Router) hzRemark(chat, mid int64, pend map[string]any, text string) {
 		r.Bot.Send(chat, "❌ اکانت پیدا نشد.", nil)
 		return
 	}
-	locs := hz.New(strv(accs[i]["token"])).All("/locations")
+	locs := r.hzLocsCached(hz.New(strv(accs[i]["token"])), i)
 	if len(locs) == 0 {
 		r.clearWizard(chat)
 		r.Bot.Send(chat, "❌ لوکیشنی پیدا نشد.", nil)
@@ -1286,7 +1422,7 @@ func (r *Router) hzRemark(chat, mid int64, pend map[string]any, text string) {
 		if city == "" {
 			city = strv(l["name"])
 		}
-		rows = append(rows, btn(fmt.Sprintf("%s (%s)", city, strv(l["name"])), fmt.Sprintf("hzsl:%d:%s", i, strv(l["name"]))))
+		rows = append(rows, btnS(fmt.Sprintf("%s (%s)", city, strv(l["name"])), fmt.Sprintf("hzsl:%d:%s", i, strv(l["name"])), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	kb = append(kb, []Btn{btn("🔙 انصراف", fmt.Sprintf("hzs:%d:0", i))})

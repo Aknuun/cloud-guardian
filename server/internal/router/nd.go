@@ -55,7 +55,7 @@ func (r *Router) ndHome(chat, mid int64) {
 		if !m.IsEnabled() {
 			st = "⏸"
 		}
-		items = append(items, btn(fmt.Sprintf("%s %s", st, m.Label()), "ndd:"+m.ID))
+		items = append(items, btnS(fmt.Sprintf("%s %s", st, m.Label()), "ndd:"+m.ID, "plain"))
 	}
 	kb := gridBTN(items, 2)
 	if len(mons) > 0 {
@@ -118,7 +118,7 @@ func (r *Router) ndDetail(chat, mid int64, idStr string) {
 		if ndmon.NodeDir(nodes[name].Status) == "up" {
 			icon = "🟢"
 		}
-		items = append(items, btn(fmt.Sprintf("%s %s", icon, name), "ndi:"+m.ID+":"+name))
+		items = append(items, btnS(fmt.Sprintf("%s %s", icon, name), "ndi:"+m.ID+":"+name, "plain"))
 	}
 	nodeKB := gridBTN(items, 2)
 	kb = append(nodeKB, kb...)
@@ -170,7 +170,7 @@ func (r *Router) ndHook(chat, mid int64, idStr string) {
 			"این آدرس را روی سرور پنل تنظیم کن؛ هر تغییر وضعیت نود را به آن POST کن:\n\n"+
 			"آدرس: <code>"+Esc(url)+"</code>\n\n"+
 			"بدنه: <code>"+Esc(body)+"</code>",
-		[][]Btn{{btn("🔙 بازگشت", "ndd:"+m.ID), btn("🏠 خانه", "menu")}})
+		navKB("ndd:"+m.ID))
 }
 
 func (r *Router) ndExc(chat, mid int64, idStr string) {
@@ -200,7 +200,7 @@ func (r *Router) ndExc(chat, mid int64, idStr string) {
 		if exc[name] {
 			mark = "🚫"
 		}
-		items = append(items, btn(mark+" "+name, "ndx:"+m.ID+":"+name))
+		items = append(items, btnS(mark+" "+name, "ndx:"+m.ID+":"+name, "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("ndd:"+m.ID))
@@ -241,7 +241,7 @@ func (r *Router) ndNode(chat, mid int64, idStr, name string) {
 	nodes := ndmon.Nodes(r.Store, m.ID)
 	nd, ok := nodes[name]
 	if !ok {
-		r.Show(chat, mid, "❌ نود پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "ndd:"+m.ID)}})
+		r.Show(chat, mid, "❌ نود پیدا نشد.", navKB("ndd:"+m.ID))
 		return
 	}
 	healthy := ndmon.NodeDir(nd.Status) == "up"
@@ -290,7 +290,7 @@ func (r *Router) ndNodeIP(chat, mid int64, idStr, name string) {
 		addr = "—"
 	}
 	r.Show(chat, mid, fmt.Sprintf("🌐 آی‌پی نود «%s»:\n<code>%s</code>", Esc(name), Esc(addr)),
-		[][]Btn{{btn("🔙 بازگشت", "ndd:"+idStr), btn("🏠 خانه", "menu")}})
+		navKB("ndd:"+idStr))
 }
 
 func (r *Router) ndHelp(chat, mid int64) {
@@ -388,7 +388,7 @@ func (r *Router) ndDelMenu(chat, mid int64) {
 	mons := ndmon.Monitors(r.Store)
 	var items []Btn
 	for _, m := range mons {
-		items = append(items, btn("🗑 "+m.Label(), "nddel:"+m.ID))
+		items = append(items, btnS("🗑 "+m.Label(), "nddel:"+m.ID, "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, row(btn("🔙 بازگشت", "nd")))
@@ -399,7 +399,7 @@ func (r *Router) ndMkPanel(chat, mid int64) {
 	panels := r.panels()
 	var items []Btn
 	for i, p := range panels {
-		items = append(items, btn("🖥 "+pname(p), fmt.Sprintf("ndmk:%d", i)))
+		items = append(items, btnS("🖥 "+pname(p), fmt.Sprintf("ndmk:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("nd"))
@@ -409,7 +409,7 @@ func (r *Router) ndMkPanel(chat, mid int64) {
 func (r *Router) ndIntAsk(chat, mid int64, idStr string) {
 	r.wizStart(chat, mid, map[string]any{"kind": "nd_int", "id": idStr})
 	r.Show(chat, mid, "⏱ فاصلهٔ پایش را به دقیقه بفرستید (مثل ۱۰):",
-		[][]Btn{{btn("🔙 بازگشت", "ndd:"+idStr), btn("🏠 خانه", "menu")}})
+		navKB("ndd:"+idStr))
 }
 
 func (r *Router) ndIntSave(chat, mid int64, idStr, text string) {

@@ -49,7 +49,7 @@ func (r *Router) qaSearchStart(chat, mid int64) {
 
 func (r *Router) qaCancel(chat, mid int64) {
 	r.clearWizard(chat)
-	r.Show(chat, mid, "لغو شد.", [][]Btn{{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, "لغو شد.", navKB("qamenu"))
 }
 
 // qaIPSearch finds every DNS record (across all CF accounts) whose value is ip.
@@ -125,7 +125,7 @@ func (r *Router) qaResults(chat, mid int64, token string, page int) {
 	var items []Btn
 	for _, h := range s.Hits[start:end] {
 		results[h.RID] = map[string]any{"acc": h.Acc, "zid": h.ZID}
-		items = append(items, btn(cfRecLabel(h.Name, h.Type, h.ZName), "cfr:"+h.RID))
+		items = append(items, btnS(cfRecLabel(h.Name, h.Type, h.ZName), "cfr:"+h.RID, "plain"))
 	}
 	kb := gridBTN(items, 2)
 	r.cfSaveSession(chat, map[string]any{"results": results})
@@ -183,7 +183,7 @@ func (r *Router) qaDelAllDo(chat, mid int64, token string) {
 		msg += fmt.Sprintf(" ⚠️ %d ناموفق.", fail)
 	}
 	r.Bot.Send(chat, msg, nil)
-	r.Show(chat, mid, msg, [][]Btn{{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, msg, navKB("qamenu"))
 }
 
 func (r *Router) qaFavAll(chat, mid int64, token string) {
@@ -211,7 +211,7 @@ func (r *Router) qaFavAll(chat, mid int64, token string) {
 	}
 	r.Store.PutJSON("favs", toAnyList(favs), 0)
 	msg := fmt.Sprintf("⭐ %d ساب به منتخب‌ها اضافه شد.", added)
-	r.Show(chat, mid, msg, [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("qap:%s:0", token)), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, msg, navKB(fmt.Sprintf("qap:%s:0", token)))
 }
 
 // ---------- add sub for an IP ----------
@@ -243,7 +243,7 @@ func (r *Router) qaAddZones(chat, mid int64, token string) {
 			if z.Status != "active" {
 				continue
 			}
-			items = append(items, btn("📁 "+z.Name, fmt.Sprintf("qanz:%d:%s", i, z.ID)))
+			items = append(items, btnS("📁 "+z.Name, fmt.Sprintf("qanz:%d:%s", i, z.ID), "plain"))
 		}
 	}
 	if len(items) == 0 {
@@ -302,7 +302,7 @@ func (r *Router) qaAddSave(chat, mid int64, pend map[string]any, text string) {
 	}
 	if _, err := cli.AddRecord(zid, "A", name, ip, 1, false, nil); err != nil {
 		r.Show(chat, mid, "❌ ساخته نشد: "+Esc(err.Error()),
-			[][]Btn{{btn("🔙 بازگشت", "qamenu"), btn("🏠 خانه", "menu")}})
+			navKB("qamenu"))
 		return
 	}
 	full := name

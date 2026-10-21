@@ -237,7 +237,7 @@ func (r *Router) hubCastSave(chat, mid int64, text string) {
 	r.clearWizard(chat)
 	msg := strings.TrimSpace(text)
 	if msg == "" {
-		r.Show(chat, mid, "❌ متن خالی بود.", [][]Btn{{btn("🔙 بازگشت", "hub")}})
+		r.Show(chat, mid, "❌ متن خالی بود.", navKB("hub"))
 		return
 	}
 	targets := map[int64]bool{}
@@ -306,7 +306,7 @@ func (r *Router) hubAnn(chat, mid int64) {
 			tag = " ⏳" + string(a.Until)
 		}
 		lines = append(lines, "• "+Esc(truncRune(a.Text, 80))+tag)
-		kb = append(kb, []Btn{btn("📄 "+truncRune(a.Text, 30), "hubannv:"+a.ID)})
+		kb = append(kb, []Btn{btnS("📄 "+truncRune(a.Text, 30), "hubannv:"+a.ID, "plain")})
 	}
 	kb = append(kb, []Btn{btnS("🔗 منبع اعلان‌ها", "annurl", "primary")})
 	kb = append(kb, []Btn{btn("🔄 بروزرسانی", "hubann"), btn("🔙 بازگشت", "hub")})
@@ -316,7 +316,7 @@ func (r *Router) hubAnn(chat, mid int64) {
 func (r *Router) hubAnnView(chat, mid int64, id string) {
 	list, err := r.hubAnnFetch()
 	if err != nil {
-		r.Show(chat, mid, "❌ "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "hubann")}})
+		r.Show(chat, mid, "❌ "+Esc(err.Error()), navKB("hubann"))
 		return
 	}
 	for _, a := range list {
@@ -331,7 +331,7 @@ func (r *Router) hubAnnView(chat, mid int64, id string) {
 		r.Show(chat, mid, "📢 اعلان\n\n"+Esc(a.Text), kb)
 		return
 	}
-	r.Show(chat, mid, "❌ اعلان پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "hubann")}})
+	r.Show(chat, mid, "❌ اعلان پیدا نشد.", navKB("hubann"))
 }
 
 func (r *Router) hubAnnReplyStart(chat, mid int64, id string) {
@@ -344,12 +344,12 @@ func (r *Router) hubAnnReplySave(chat, mid int64, pend map[string]any, text stri
 	r.clearWizard(chat)
 	msg := strings.TrimSpace(text)
 	if msg == "" {
-		r.Show(chat, mid, "❌ متن خالی.", [][]Btn{{btn("🔙 بازگشت", "hubann")}})
+		r.Show(chat, mid, "❌ متن خالی.", navKB("hubann"))
 		return
 	}
 	id := strv(pend["annId"])
 	r.forwardSupport(chat, fmt.Sprintf("[پاسخ به اعلان %s]\n\n%s", id, msg))
-	r.Show(chat, mid, "✅ پاسخت به سازنده ارسال شد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, "✅ پاسخت به سازنده ارسال شد.", navKB(""))
 }
 
 // ---------- contact creator ----------
@@ -372,11 +372,11 @@ func (r *Router) hubContactSave(chat, mid int64, text string) {
 	r.clearWizard(chat)
 	msg := strings.TrimSpace(text)
 	if msg == "" {
-		r.Show(chat, mid, "❌ متن خالی.", [][]Btn{{btn("🔙 بازگشت", "hubcontact")}})
+		r.Show(chat, mid, "❌ متن خالی.", navKB("hubcontact"))
 		return
 	}
 	r.forwardSupport(chat, msg)
-	r.Show(chat, mid, "✅ پیامت به سازنده ارسال شد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, "✅ پیامت به سازنده ارسال شد.", navKB(""))
 }
 
 // forwardSupport sends a user message to the main admin with a reply button.
@@ -415,9 +415,9 @@ func (r *Router) hubReplySave(chat, mid int64, pend map[string]any, text string)
 	}
 	ok := r.Bot.Send(uid, "📞 پاسخ سازنده:\n\n"+Esc(text), nil) != 0
 	if ok {
-		r.Show(chat, mid, "✅ پاسخ ارسال شد.", [][]Btn{{btn("🔙 بازگشت", "hub")}})
+		r.Show(chat, mid, "✅ پاسخ ارسال شد.", navKB("hub"))
 	} else {
-		r.Show(chat, mid, "❌ ارسال ناموفق (شاید کاربر ربات را بلاک کرده).", [][]Btn{{btn("🔙 بازگشت", "hub")}})
+		r.Show(chat, mid, "❌ ارسال ناموفق (شاید کاربر ربات را بلاک کرده).", navKB("hub"))
 	}
 }
 

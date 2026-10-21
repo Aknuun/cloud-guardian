@@ -50,7 +50,7 @@ func (r *Router) pnleList(chat, mid int64) {
 	}
 	var items []Btn
 	for i, p := range panels {
-		items = append(items, btn("✏️ "+pname(p), fmt.Sprintf("pnle:%d", i)))
+		items = append(items, btnS("✏️ "+pname(p), fmt.Sprintf("pnle:%d", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("pg"))
@@ -113,7 +113,7 @@ func (r *Router) pnleSave(chat, mid int64, field string, i int, text string) {
 	}
 	t := strings.TrimSpace(text)
 	if t == "" {
-		r.Show(chat, mid, "⚠️ مقدار خالی است.", [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("pnle:%d", i))}})
+		r.Show(chat, mid, "⚠️ مقدار خالی است.", navKB(fmt.Sprintf("pnle:%d", i)))
 		return
 	}
 	switch field {
@@ -159,14 +159,14 @@ func pname(p pg.Panel) string {
 func (r *Router) pgAdd(chat, mid int64) {
 	r.setWizard(chat, map[string]any{"kind": "pg_add_url"})
 	r.Show(chat, mid, "🔗 آدرس پنل را بفرستید (مثل https://panel.example.com):",
-		[][]Btn{{btn("🔙 بازگشت", "pg"), btn("🏠 خانه", "menu")}})
+		navKB("pg"))
 }
 
 func (r *Router) pgDelList(chat, mid int64) {
 	panels := r.panels()
 	var items []Btn
 	for i, p := range panels {
-		items = append(items, btn("🗑 "+pname(p), "pgd:"+strconv.Itoa(i)))
+		items = append(items, btnS("🗑 "+pname(p), "pgd:"+strconv.Itoa(i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, row(btn("🔙 بازگشت", "pg")))
@@ -266,7 +266,7 @@ func (r *Router) pgUsers(chat, mid int64, i, page int, q string) {
 				flag = "🟡 "
 			}
 		}
-		items = append(items, btn(fmt.Sprintf("%s%s", flag, u.Username), "pgu:"+strconv.Itoa(idx)))
+		items = append(items, btnS(fmt.Sprintf("%s%s", flag, u.Username), "pgu:"+strconv.Itoa(idx), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	if pages > 1 {

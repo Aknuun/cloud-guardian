@@ -88,7 +88,7 @@ func (r *Router) arvCloudHome(chat, mid int64) {
 				label += " · " + ip
 			}
 			label += " · " + r.arvRegionName(strv(s["region"]))
-			kb = append(kb, []Btn{btn(truncRune(label, 58), fmt.Sprintf("arvpick:%d:%d", i, j))})
+			kb = append(kb, []Btn{btnS(truncRune(label, 58), fmt.Sprintf("arvpick:%d:%d", i, j), "plain")})
 		}
 		if len(list) == 0 {
 			lines = append(lines, "📭 سروری در این اکانت نیست.")
@@ -349,7 +349,7 @@ func (r *Router) arvServerDetail(chat, mid int64, i int, idx int) {
 	servers := asMapList(sess["servers"])
 	if idx < 0 || idx >= len(servers) {
 		r.Show(chat, mid, "⏳ نشست منقضی شد؛ از منو دوباره وارد شو.",
-			[][]Btn{{btn("🔙 بازگشت", "arvsrv"), btn("🏠 خانه", "menu")}})
+			navKB("arvsrv"))
 		return
 	}
 	s := servers[idx]
@@ -414,9 +414,9 @@ func (r *Router) arvRootReset(chat, mid int64, i, idx int) {
 	sess := r.arvSess(chat)
 	region := strv(sess["region"])
 	servers := asMapList(sess["servers"])
-	back := [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}}
+	back := navKB(fmt.Sprintf("arvs:%d:%d", i, idx))
 	if idx < 0 || idx >= len(servers) {
-		r.Show(chat, mid, "⏳ نشست منقضی شد.", [][]Btn{{btn("🔙 بازگشت", "arvsrv")}})
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
 		return
 	}
 	d, err := cli.Ecc(region, "POST", "/servers/"+strv(servers[idx]["id"])+"/reset-root-password", map[string]any{})
@@ -449,17 +449,17 @@ func (r *Router) arvAction(chat, mid int64, i, idx int, action string, body any,
 	region := strv(sess["region"])
 	servers := asMapList(sess["servers"])
 	if idx < 0 || idx >= len(servers) {
-		r.Show(chat, mid, "⏳ نشست منقضی شد.", [][]Btn{{btn("🔙 بازگشت", "arvsrv")}})
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
 		return
 	}
 	sid := strv(servers[idx]["id"])
 	d, err := cli.Ecc(region, "POST", "/servers/"+sid+"/"+action, body)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
 		return
 	}
 	if msg := strv(d["message"]); msg == "Unauthenticated." {
-		r.Show(chat, mid, "❌ کلید دسترسی این عمل را ندارد.", [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}})
+		r.Show(chat, mid, "❌ کلید دسترسی این عمل را ندارد.", navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
 		return
 	}
 	r.Show(chat, mid, okMsg, [][]Btn{{btn("🔄 تازه‌سازی", fmt.Sprintf("arvs:%d:%d", i, idx)), btn("🏠 خانه", "menu")}})
@@ -475,7 +475,7 @@ func (r *Router) arvSnapList(chat, mid int64, i, idx int) {
 	arr := cli.EccList(region, "/snapshots")
 	if len(arr) == 0 {
 		r.Show(chat, mid, "📭 اسنپ‌شاتی نیست.",
-			[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}})
+			navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
 		return
 	}
 	var kb [][]Btn
@@ -500,7 +500,7 @@ func (r *Router) arvSnapDel(chat, mid int64, i, idx int, snapID string) {
 	}
 	region := strv(r.arvSess(chat)["region"])
 	if _, err := cli.Ecc(region, "DELETE", "/snapshots/"+snapID, nil); err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
 		return
 	}
 	r.Show(chat, mid, "✅ درخواست حذف اسنپ‌شات ارسال شد.",
@@ -517,12 +517,12 @@ func (r *Router) arvDelServer(chat, mid int64, i, idx int) {
 	region := strv(sess["region"])
 	servers := asMapList(sess["servers"])
 	if idx < 0 || idx >= len(servers) {
-		r.Show(chat, mid, "⏳ نشست منقضی شد.", [][]Btn{{btn("🔙 بازگشت", "arvsrv")}})
+		r.Show(chat, mid, "⏳ نشست منقضی شد.", navKB("arvsrv"))
 		return
 	}
 	sid := strv(servers[idx]["id"])
 	if _, err := cli.Ecc(region, "DELETE", "/servers/"+sid, nil); err != nil {
-		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("arvs:%d:%d", i, idx))}})
+		r.Show(chat, mid, "❌ خطا: "+Esc(err.Error()), navKB(fmt.Sprintf("arvs:%d:%d", i, idx)))
 		return
 	}
 	r.Bot.Send(chat, "✅ سرور حذف شد.", nil)
@@ -541,7 +541,7 @@ func (r *Router) arvRegionSave(chat, mid int64, pend map[string]any, text string
 	r.clearWizard(chat)
 	region := strings.TrimSpace(text)
 	if region == "" {
-		r.Show(chat, mid, "❌ کد ریجن نامعتبر.", [][]Btn{{btn("🔙 بازگشت", "arvsrv")}})
+		r.Show(chat, mid, "❌ کد ریجن نامعتبر.", navKB("arvsrv"))
 		return
 	}
 	r.arvServerList(chat, mid, intOrAny(pend["acc"]), region)

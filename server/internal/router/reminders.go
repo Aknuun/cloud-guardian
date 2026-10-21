@@ -129,7 +129,7 @@ func (r *Router) remAbs(chat, mid int64) {
 	y, _, _ := jalali.JNow()
 	var items []Btn
 	for yy := y; yy <= y+1; yy++ {
-		items = append(items, btn(fmt.Sprintf("%d", yy), "remabsy:"+strconv.Itoa(yy)))
+		items = append(items, btnS(fmt.Sprintf("%d", yy), "remabsy:"+strconv.Itoa(yy), "plain"))
 	}
 	kb := gridBTN(items, 4)
 	kb = append(kb, navRow("remnew"))

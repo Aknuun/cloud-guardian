@@ -45,12 +45,12 @@ func (r *Router) sslDelList(chat, mid int64) {
 	mons := sslmon.GetMonitors(r.Store)
 	if len(mons) == 0 {
 		r.Show(chat, mid, "📭 دامنه‌ای ثبت نشده.",
-			[][]Btn{{btn("🔙 بازگشت", "sslm"), btn("🏠 خانه", "menu")}})
+			navKB("sslm"))
 		return
 	}
 	var items []Btn
 	for i, m := range mons {
-		items = append(items, btn("🗑 "+m.Host, "sslmdy:"+strconv.Itoa(i)))
+		items = append(items, btnS("🗑 "+m.Host, "sslmdy:"+strconv.Itoa(i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, navRow("sslm"))

@@ -245,7 +245,7 @@ func (r *Router) cfZones(chat, mid int64, flt string, pg int) {
 		if z.Zone.Status == "active" {
 			mark = "🟢"
 		}
-		rows = append(rows, btn(mark+" "+z.Zone.Name, fmt.Sprintf("cfz:%d:%s", z.Acc, z.Zone.ID)))
+		rows = append(rows, btnS(mark+" "+z.Zone.Name, fmt.Sprintf("cfz:%d:%s", z.Acc, z.Zone.ID), "plain"))
 	}
 	kb = append(kb, gridBTN(rows, 2)...)
 	allLabel := "📁 همه اکانت‌ها"
@@ -351,12 +351,12 @@ func (r *Router) cfRecords(chat, mid int64, acc int, zid string, pg int) {
 	var rows []Btn
 	for _, rec := range recs[pg*cfPageSize : min(len(recs), (pg+1)*cfPageSize)] {
 		if !hasSel {
-			rows = append(rows, btn(labels[rec.ID], "cfr:"+rec.ID))
+			rows = append(rows, btnS(labels[rec.ID], "cfr:"+rec.ID, "plain"))
 		} else {
 			if selHas(sel, rec.ID) {
-				rows = append(rows, btn("✅ "+labels[rec.ID], "sel:"+rec.ID))
+				rows = append(rows, btnS("✅ "+labels[rec.ID], "sel:"+rec.ID, "plain"))
 			} else {
-				rows = append(rows, btn("⬜ "+labels[rec.ID], "sel:"+rec.ID))
+				rows = append(rows, btnS("⬜ "+labels[rec.ID], "sel:"+rec.ID, "plain"))
 			}
 		}
 	}
@@ -619,7 +619,7 @@ func (r *Router) cfAddrecZones(chat, mid int64) {
 	}
 	var rows []Btn
 	for _, z := range zones[:min(len(zones), 40)] {
-		rows = append(rows, btn(z.Zone.Name, fmt.Sprintf("addrec:%d:%s", z.Acc, z.Zone.ID)))
+		rows = append(rows, btnS(z.Zone.Name, fmt.Sprintf("addrec:%d:%s", z.Acc, z.Zone.ID), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")})
@@ -630,7 +630,7 @@ func (r *Router) cfAddStart(chat, mid int64, acc int, zid string) {
 	types := []string{"A", "AAAA", "CNAME", "TXT", "MX", "NS"}
 	var rows []Btn
 	for _, t := range types {
-		rows = append(rows, btn(t, fmt.Sprintf("cfat:%d:%s:%s", acc, zid, t)))
+		rows = append(rows, btnS(t, fmt.Sprintf("cfat:%d:%s:%s", acc, zid, t), "plain"))
 	}
 	kb := gridBTN(rows, 3)
 	kb = append(kb, []Btn{btn("🔙 بازگشت", fmt.Sprintf("cfz:%d:%s", acc, zid)), btn("🏠 خانه", "menu")})
@@ -869,7 +869,7 @@ func (r *Router) cfSettingToggle(chat, mid int64, key string) {
 		err = cli.SetSetting(zid, key, next)
 	}
 	if err != nil {
-		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 		return
 	}
 	g, _ := cfSettingGroup(key)
@@ -923,7 +923,7 @@ func (r *Router) cfSettingSet(chat, mid int64, key, value string) {
 		return
 	}
 	if err := cli.SetSetting(zid, key, value); err != nil {
-		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 		return
 	}
 	g, _ := cfSettingGroup(key)
@@ -971,7 +971,7 @@ func (r *Router) cfZoneDetails(chat, mid int64) {
 		lines = append(lines, "• —")
 	}
 	r.Show(chat, mid, strings.Join(lines, "\n"),
-		[][]Btn{{btn("🔙 بازگشت", fmt.Sprintf("cfz:%d:%s", acc, zid)), btn("🏠 خانه", "menu")}})
+		navKB(fmt.Sprintf("cfz:%d:%s", acc, zid)))
 }
 
 func (r *Router) cfPurge(chat, mid int64) {
@@ -981,11 +981,11 @@ func (r *Router) cfPurge(chat, mid int64) {
 		return
 	}
 	if err := cli.PurgeCache(zid); err != nil {
-		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 		return
 	}
 	r.Show(chat, mid, "🧹 کل کش دامنه پاک شد.",
-		[][]Btn{{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")}})
+		navKB("zset"))
 }
 
 func (r *Router) cfDevToggle(chat, mid int64) {
@@ -1004,14 +1004,14 @@ func (r *Router) cfDevToggle(chat, mid int64) {
 		err = cli.SetSetting(zid, "development_mode", next)
 		if err == nil {
 			if next == "on" {
-				r.Show(chat, mid, "🚧 حالت توسعه روشن شد.", [][]Btn{{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")}})
+				r.Show(chat, mid, "🚧 حالت توسعه روشن شد.", navKB("zset"))
 			} else {
-				r.Show(chat, mid, "🚧 حالت توسعه خاموش شد.", [][]Btn{{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")}})
+				r.Show(chat, mid, "🚧 حالت توسعه خاموش شد.", navKB("zset"))
 			}
 			return
 		}
 	}
-	r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+	r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 }
 
 func (r *Router) cfZonePause(chat, mid int64) {
@@ -1022,19 +1022,19 @@ func (r *Router) cfZonePause(chat, mid int64) {
 	}
 	z, err := cli.Zone(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 		return
 	}
 	active := strvVal(z["status"]) == "active"
 	if err := cli.SetZonePaused(zid, active); err != nil {
-		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "zset")}})
+		r.Show(chat, mid, "❌ خطا:\n"+Esc(err.Error()), navKB("zset"))
 		return
 	}
 	msg := "▶️ دامنه فعال شد."
 	if active {
 		msg = "⏸️ دامنه متوقف شد."
 	}
-	r.Show(chat, mid, msg, [][]Btn{{btn("🔙 بازگشت", "zset"), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, msg, navKB("zset"))
 }
 
 func (r *Router) cfRecordTraffic(chat, mid int64) {
@@ -1067,7 +1067,7 @@ func (r *Router) cfRecordTraffic(chat, mid int64) {
 		if !t.NeedPerm {
 			body = "❌ خطا در آمار:\n" + Esc(t.Error)
 		}
-		r.Show(chat, mid, body, [][]Btn{{btn("🔙 بازگشت", "cfr:"+rid), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, body, navKB("cfr:"+rid))
 		return
 	}
 	var rec *cf.Record
@@ -1078,7 +1078,7 @@ func (r *Router) cfRecordTraffic(chat, mid int64) {
 		}
 	}
 	if rec == nil {
-		r.Show(chat, mid, "❌ رکورد پیدا نشد (شاید حذف شده).", [][]Btn{{btn("🔙 بازگشت", "zones")}})
+		r.Show(chat, mid, "❌ رکورد پیدا نشد (شاید حذف شده).", navKB("zones"))
 		return
 	}
 	n := t.Counts[strings.ToLower(rec.Name)]
@@ -1113,11 +1113,11 @@ func (r *Router) cfCnameRefs(chat, mid int64) {
 		}
 	}
 	if rec == nil {
-		r.Show(chat, mid, "❌ رکورد پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "zones")}})
+		r.Show(chat, mid, "❌ رکورد پیدا نشد.", navKB("zones"))
 		return
 	}
 	target := strings.ToLower(strings.TrimRight(rec.Name, "."))
-	r.Show(chat, mid, "⏳ در حال بررسی دامنه‌ها…", [][]Btn{{btn("🔙 بازگشت", "cfr:"+rid)}})
+	r.Show(chat, mid, "⏳ در حال بررسی دامنه‌ها…", navKB("cfr:"+rid))
 	type ref struct{ name, zone string }
 	var refs []ref
 	for _, z := range r.cfAllZones() {
@@ -1151,7 +1151,7 @@ func (r *Router) cfCnameRefs(chat, mid int64) {
 	if len(out) > 3500 {
 		out = out[:3500]
 	}
-	r.Show(chat, mid, out, [][]Btn{{btn("🔙 بازگشت", "cfr:"+rid), btn("🏠 خانه", "menu")}})
+	r.Show(chat, mid, out, navKB("cfr:"+rid))
 }
 
 // ---------- favorites ----------
@@ -1160,14 +1160,14 @@ func (r *Router) cfFavsPage(chat, mid int64) {
 	favs := r.favs()
 	if len(favs) == 0 {
 		r.Show(chat, mid, "⭐ ساب‌های منتخب\n\n📭 خالی است.",
-			[][]Btn{{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")}})
+			navKB("zones"))
 		return
 	}
 	var items []Btn
 	results := map[string]any{}
 	n := min(len(favs), 40)
 	for _, f := range favs[:n] {
-		items = append(items, btn(strvVal(f["name"]), "cfr:"+strvVal(f["rid"])))
+		items = append(items, btnS(strvVal(f["name"]), "cfr:"+strvVal(f["rid"]), "plain"))
 		results[strvVal(f["rid"])] = map[string]any{"acc": intOrAny(f["acc"]), "zid": strvVal(f["zid"])}
 	}
 	kb := gridBTN(items, 2)
@@ -1444,7 +1444,7 @@ func (r *Router) cfAccountsHome(chat, mid int64) {
 	accs := r.cfAccs()
 	var items []Btn
 	for i, a := range accs {
-		items = append(items, btn("👤 "+a.Name, fmt.Sprintf("zf:%d:0", i)))
+		items = append(items, btnS("👤 "+a.Name, fmt.Sprintf("zf:%d:0", i), "plain"))
 	}
 	kb := gridBTN(items, 2)
 	kb = append(kb, row(btn("➕ افزودن اکانت", "accadd"), btn("🗑 حذف اکانت", "accdel")))
@@ -1533,10 +1533,10 @@ func (r *Router) cfGsearch(chat, mid int64, q string) {
 	n := min(len(hits), 30)
 	for _, h := range hits[:n] {
 		if h.rec == nil {
-			items = append(items, btn("📁 "+h.zone.Name, fmt.Sprintf("cfz:%d:%s", h.acc, h.zone.ID)))
+			items = append(items, btnS("📁 "+h.zone.Name, fmt.Sprintf("cfz:%d:%s", h.acc, h.zone.ID), "plain"))
 		} else {
 			results[h.rec.ID] = map[string]any{"acc": h.acc, "zid": h.zone.ID}
-			items = append(items, btn(cfRecLabel(h.rec.Name, h.rec.Type, h.zone.Name), "cfr:"+h.rec.ID))
+			items = append(items, btnS(cfRecLabel(h.rec.Name, h.rec.Type, h.zone.Name), "cfr:"+h.rec.ID, "plain"))
 		}
 	}
 	kb := gridBTN(items, 2)
@@ -1580,7 +1580,7 @@ func (r *Router) cfZsearch(chat, mid int64, q string) {
 	labels := cfDupLabels(hits, zid)
 	var rows []Btn
 	for _, rc := range hits {
-		rows = append(rows, btn(labels[rc.ID], "cfr:"+rc.ID))
+		rows = append(rows, btnS(labels[rc.ID], "cfr:"+rc.ID, "plain"))
 	}
 	kb := gridBTN(rows, 3)
 	kb = append(kb, []Btn{btn("🔙 بازگشت", "zones"), btn("🏠 خانه", "menu")})
@@ -1592,17 +1592,17 @@ func (r *Router) cfZsearch(chat, mid int64, q string) {
 func (r *Router) cfAccName(chat, mid int64, text string) {
 	name := strings.TrimSpace(text)
 	if name == "" {
-		r.Show(chat, mid, "❌ اسم نامعتبر. دوباره بفرست:", [][]Btn{{btn("🔙 بازگشت", "accounts")}})
+		r.Show(chat, mid, "❌ اسم نامعتبر. دوباره بفرست:", navKB("accounts"))
 		return
 	}
 	r.setWizard(chat, map[string]any{"kind": "cr_cf_acc_token", "name": name})
-	r.Show(chat, mid, "🔑 توکن API کلادفلر را بفرستید:", [][]Btn{{btn("🔙 بازگشت", "accounts")}})
+	r.Show(chat, mid, "🔑 توکن API کلادفلر را بفرستید:", navKB("accounts"))
 }
 
 func (r *Router) cfAccToken(chat, mid int64, pend map[string]any, text string) {
 	tok := strings.TrimSpace(text)
 	if len(tok) < 20 {
-		r.Show(chat, mid, "❌ توکن نامعتبر. دوباره بفرست:", [][]Btn{{btn("🔙 بازگشت", "accounts")}})
+		r.Show(chat, mid, "❌ توکن نامعتبر. دوباره بفرست:", navKB("accounts"))
 		return
 	}
 	name := strvVal(pend["name"])

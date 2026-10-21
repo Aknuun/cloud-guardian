@@ -29,7 +29,7 @@ func (r *Router) arvMkClear(chat int64) {
 
 func (r *Router) arvMkExpired(chat, mid int64) {
 	r.Show(chat, mid, "⏳ نشست منقضی شد؛ از منو دوباره وارد شو.",
-		[][]Btn{{btn("🔙 بازگشت", "arvsrv"), btn("🏠 خانه", "menu")}})
+		navKB("arvsrv"))
 }
 
 func arvMkBack(i int, region string) [][]Btn {
@@ -328,7 +328,7 @@ func (r *Router) arvMkNetworks(chat, mid int64) {
 	var kb [][]Btn
 	for j, x := range nets {
 		m := x.(map[string]any)
-		kb = append(kb, []Btn{btn("🌐 "+truncRune(strv(m["name"]), 45), fmt.Sprintf("arvnet:%d", j))})
+		kb = append(kb, []Btn{btnS("🌐 "+truncRune(strv(m["name"]), 45), fmt.Sprintf("arvnet:%d", j), "plain")})
 	}
 	kb = append(kb, []Btn{btn("🌐 شبکهٔ پیش‌فرض", "arvnetdef")})
 	kb = append(kb, arvMkBack(i, region)...)
@@ -397,7 +397,7 @@ func (r *Router) arvMkSsh(chat, mid int64) {
 	var kb [][]Btn
 	for j, x := range keys {
 		m := x.(map[string]any)
-		kb = append(kb, []Btn{btn("🔑 "+truncRune(strv(m["name"]), 45), fmt.Sprintf("arvsshk:%d", j))})
+		kb = append(kb, []Btn{btnS("🔑 "+truncRune(strv(m["name"]), 45), fmt.Sprintf("arvsshk:%d", j), "plain")})
 	}
 	kb = append(kb, []Btn{btn("⌨️ نام کلید دستی", "arvsshman")})
 	kb = append(kb, []Btn{btn("⏭ بدون کلید", "arvsshskip")})

@@ -193,7 +193,7 @@ func (r *Router) verLatest(chat, mid int64) {
 	tag, err := latestTag()
 	if err != nil || tag == "" {
 		r.Show(chat, mid, "❌ بررسی آخرین نسخه ممکن نشد (گیت‌هاب در دسترس نیست).",
-			[][]Btn{{btn("🔙 بازگشت", "vers"), btn("🏠 خانه", "menu")}})
+			navKB("vers"))
 		return
 	}
 	r.Store.Put("selfup_latest", tag, 0)
@@ -217,7 +217,7 @@ func (r *Router) verList(chat, mid int64) {
 	vs, err := versionTags()
 	if err != nil {
 		r.Show(chat, mid, "❌ گرفتن فهرست نسخه‌ها ممکن نشد (گیت‌هاب در دسترس نیست).",
-			[][]Btn{{btn("🔙 بازگشت", "vers"), btn("🏠 خانه", "menu")}})
+			navKB("vers"))
 		return
 	}
 	r.Store.Put("selfup_latest", vs[0], 0)
@@ -232,7 +232,7 @@ func (r *Router) verList(chat, mid int64) {
 		} else {
 			mark = "⬇️ "
 		}
-		items = append(items, btn(mark+v, "verdo:"+v))
+		items = append(items, btnS(mark+v, "verdo:"+v, "plain"))
 	}
 	kb := gridBTN(items, 3)
 	kb = append(kb, navRow("vers"))
@@ -242,7 +242,7 @@ func (r *Router) verList(chat, mid int64) {
 // verDo asks for confirmation before installing a specific version.
 func (r *Router) verDo(chat, mid int64, tag string) {
 	if !tagRe.MatchString(tag) {
-		r.Show(chat, mid, "❌ نسخهٔ نامعتبر.", [][]Btn{{btn("🔙 بازگشت", "verlist")}})
+		r.Show(chat, mid, "❌ نسخهٔ نامعتبر.", navKB("verlist"))
 		return
 	}
 	word := "آپدیت"
@@ -260,17 +260,17 @@ func (r *Router) verDo(chat, mid int64, tag string) {
 // verDoYes runs the updater detached so it survives the service restart.
 func (r *Router) verDoYes(chat, mid int64, tag string) {
 	if !tagRe.MatchString(tag) {
-		r.Show(chat, mid, "❌ نسخهٔ نامعتبر.", [][]Btn{{btn("🔙 بازگشت", "verlist")}})
+		r.Show(chat, mid, "❌ نسخهٔ نامعتبر.", navKB("verlist"))
 		return
 	}
 	if err := startSelfUpdate(tag); err != nil {
 		r.Show(chat, mid, "❌ شروع آپدیت ممکن نشد:\n"+Esc(err.Error()),
-			[][]Btn{{btn("🔙 بازگشت", "vers"), btn("🏠 خانه", "menu")}})
+			navKB("vers"))
 		return
 	}
 	r.Show(chat, mid,
 		fmt.Sprintf("⏳ در حال آپدیت به <code>%s</code>…\nساخت و ری‌استارت ۱ تا ۳ دقیقه طول می‌کشد؛ ربات خودش برمی‌گردد.\nلاگ: <code>%s/update.log</code>", Esc(tag), installDir()),
-		[][]Btn{{btn("🏠 خانه", "menu")}})
+		navKB(""))
 }
 
 func installDir() string {

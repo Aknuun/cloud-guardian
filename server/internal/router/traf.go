@@ -55,7 +55,7 @@ func (r *Router) trafZones(chat, mid int64, flt string, pg int) {
 	allz := r.cfAllZones()
 	if len(allz) == 0 {
 		r.Show(chat, mid, "📊 ترافیک ساب‌ها\n\n📭 دامنه‌ای پیدا نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "dommon"), btn("🏠 خانه", "menu")}})
+			navKB("dommon"))
 		return
 	}
 	var zones []cfZone
@@ -86,14 +86,14 @@ func (r *Router) trafZones(chat, mid int64, flt string, pg int) {
 	}
 	var rows []Btn
 	for _, z := range zones[lo:hi] {
-		rows = append(rows, btn("📊 "+z.Zone.Name, fmt.Sprintf("traz:%d:%s:0", z.Acc, z.Zone.ID)))
+		rows = append(rows, btnS("📊 "+z.Zone.Name, fmt.Sprintf("traz:%d:%s:0", z.Acc, z.Zone.ID), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	allLabel := "📁 همه اکانت‌ها"
 	if flt == "all" {
 		allLabel = "📁 ✅ همه اکانت‌ها"
 	}
-	kb = append(kb, []Btn{btn(allLabel, "trazf:all:0")})
+	kb = append(kb, []Btn{btnS(allLabel, "trazf:all:0", "plain")})
 	if len(accs) > 1 {
 		var accBtns []Btn
 		for j, a := range accs {
@@ -154,14 +154,14 @@ func (r *Router) trafZone(chat, mid int64, acc int, zid string, pg int) {
 	accs := r.cfAccs()
 	if acc < 0 || acc >= len(accs) {
 		r.Show(chat, mid, "❌ اکانت پیدا نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "traf"), btn("🏠 خانه", "menu")}})
+			navKB("traf"))
 		return
 	}
 	token := accs[acc].Token
 	cli := cf.New(token)
 	zones, err := cli.Zones()
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "traf")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("traf"))
 		return
 	}
 	var zone *cf.Zone
@@ -173,7 +173,7 @@ func (r *Router) trafZone(chat, mid int64, acc int, zid string, pg int) {
 	}
 	if zone == nil {
 		r.Show(chat, mid, "❌ دامنه پیدا نشد.",
-			[][]Btn{{btn("🔙 بازگشت", "traf"), btn("🏠 خانه", "menu")}})
+			navKB("traf"))
 		return
 	}
 	t := cf.FetchTrafficCounts(token, zid, 7)
@@ -186,13 +186,13 @@ func (r *Router) trafZone(chat, mid int64, acc int, zid string, pg int) {
 				"کلودفلر ← 👤 اکانت‌ها ← حذف قدیمی + افزودن جدید"
 		}
 		r.Show(chat, mid, fmt.Sprintf("📊 ترافیک %s\n\n%s", Esc(zone.Name), body),
-			[][]Btn{{btn("🔙 بازگشت", "traf"), btn("🏠 خانه", "menu")}})
+			navKB("traf"))
 		return
 	}
 	counts := t.Counts
 	recs, err := cli.Records(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "traf")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("traf"))
 		return
 	}
 	type row struct {
@@ -301,19 +301,19 @@ func (r *Router) trafZeroConfirm(chat, mid int64, acc int, zid string) {
 func (r *Router) trafZeroDo(chat, mid int64, acc int, zid string) {
 	accs := r.cfAccs()
 	if acc < 0 || acc >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🔙 بازگشت", "traf")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB("traf"))
 		return
 	}
 	token := accs[acc].Token
 	t := cf.FetchTrafficCounts(token, zid, 7)
 	if t.NeedPerm || t.Error != "" {
-		r.Show(chat, mid, "❌ خطا در آمار.", [][]Btn{{btn("🔙 بازگشت", "traf"), btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ خطا در آمار.", navKB("traf"))
 		return
 	}
 	client := cf.New(token)
 	recs, err := client.Records(zid)
 	if err != nil {
-		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), [][]Btn{{btn("🔙 بازگشت", "traf")}})
+		r.Show(chat, mid, "❌ خطای کلادفلر: "+Esc(err.Error()), navKB("traf"))
 		return
 	}
 	var zeros []cf.Record

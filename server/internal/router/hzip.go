@@ -65,7 +65,7 @@ func (r *Router) hzPoolList(cli *hz.Client, i int) []hzPoolIP {
 func (r *Router) hzIPPool(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -112,7 +112,7 @@ func (r *Router) hzIPPool(chat, mid int64, i int) {
 func (r *Router) hzIPPoolFill(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -137,7 +137,7 @@ func (r *Router) hzIPPoolFill(chat, mid int64, i int) {
 	}
 	rows := make([]Btn, 0, len(locs))
 	for _, l := range locs {
-		rows = append(rows, btn("🌍 "+l, fmt.Sprintf("hzipl:%d:%s", i, l)))
+		rows = append(rows, btnS("🌍 "+l, fmt.Sprintf("hzipl:%d:%s", i, l), "plain"))
 	}
 	kb := gridBTN(rows, 2)
 	kb = append(kb, navRow(fmt.Sprintf("hzip:%d", i)))
@@ -158,7 +158,7 @@ func (r *Router) hzIPPoolFillLoc(chat, mid int64, i int, loc string) {
 func (r *Router) hzIPPoolFillDo(chat, mid int64, i int, loc string, n int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	if n < 1 {
@@ -186,6 +186,9 @@ func (r *Router) hzIPPoolFillDo(chat, mid int64, i int, loc string, n int) {
 		created = append(created, hzPoolIP{ID: intOfAny(p["id"]), IP: strv(p["ip"]), Loc: loc})
 	}
 
+	if len(created) > 0 {
+		r.Bot.Send(chat, fmt.Sprintf("⏳ %d آی‌پی ساخته شد؛ در حال بررسی تمیزی…", len(created)), nil)
+	}
 	checks := r.hzChecks(i)
 	runChecks(created, checks)
 	r.hzSaveChecks(i, checks)
@@ -229,7 +232,7 @@ func (r *Router) hzIPPoolFillDo(chat, mid int64, i int, loc string, n int) {
 func (r *Router) hzIPPoolRecheck(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -244,6 +247,7 @@ func (r *Router) hzIPPoolRecheck(chat, mid int64, i int) {
 		r.Show(chat, mid, "📭 آی‌پی آزادی برای بررسی نیست.", navKB(fmt.Sprintf("hzip:%d", i)))
 		return
 	}
+	r.loading(chat, mid, fmt.Sprintf("در حال بررسی %d آی‌پی", len(targets)))
 	checks := r.hzChecks(i)
 	runChecks(targets, checks)
 	r.hzSaveChecks(i, checks)
@@ -253,7 +257,7 @@ func (r *Router) hzIPPoolRecheck(chat, mid int64, i int) {
 func (r *Router) hzIPPoolSwap(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -271,7 +275,7 @@ func (r *Router) hzIPPoolSwap(chat, mid int64, i int) {
 		if label == "" {
 			label = strv(s["id"])
 		}
-		rows = append(rows, btn(label+" · "+hzIP(s), fmt.Sprintf("hzipsws:%d:%s", i, strv(s["id"]))))
+		rows = append(rows, btnS(label+" · "+hzIP(s), fmt.Sprintf("hzipsws:%d:%s", i, strv(s["id"])), "plain"))
 	}
 	if len(rows) == 0 {
 		r.Show(chat, mid, "📭 سروری نیست.", navKB(fmt.Sprintf("hzip:%d", i)))
@@ -285,7 +289,7 @@ func (r *Router) hzIPPoolSwap(chat, mid int64, i int) {
 func (r *Router) hzIPPoolSwapAsk(chat, mid int64, i int, sid string) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -318,7 +322,7 @@ func (r *Router) hzIPPoolSwapAsk(chat, mid int64, i int, sid string) {
 func (r *Router) hzIPPoolSwapDo(chat, mid int64, i int, sid string) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -371,6 +375,8 @@ func (r *Router) hzIPPoolSwapDo(chat, mid int64, i int, sid string) {
 		return
 	}
 	_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+	r.hzSyncIP(strv(s["name"]), pick.IP)
+	r.hzDropServers(i)
 	if oldID > 0 && oldIP != "" {
 		go r.hzRecheckOne(i, oldID, oldIP)
 	}
@@ -386,7 +392,7 @@ func (r *Router) hzIPPoolSwapDo(chat, mid int64, i int, sid string) {
 func (r *Router) hzIPPoolCleanupAsk(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -415,7 +421,7 @@ func (r *Router) hzIPPoolCleanupAsk(chat, mid int64, i int) {
 func (r *Router) hzIPPoolCleanupDo(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -437,7 +443,7 @@ func (r *Router) hzIPPoolCleanupDo(chat, mid int64, i int) {
 func (r *Router) hzIPPoolDeleteList(chat, mid int64, i int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -459,7 +465,8 @@ func (r *Router) hzIPPoolDeleteList(chat, mid int64, i int) {
 		} else if p.HasCheck && len(p.Check.Listed) > 0 {
 			mark = "❌"
 		}
-		kb = append(kb, []Btn{btn(fmt.Sprintf("%s %s · %s", mark, p.IP, truncRune(p.Loc, 20)), fmt.Sprintf("hzipdely:%d:%d", i, p.ID))})
+		kb = append(kb, []Btn{btnS(fmt.Sprintf("%s %s · %s", mark, p.IP, truncRune(p.Loc, 20)),
+			fmt.Sprintf("hzipdely:%d:%d", i, p.ID), "plain")})
 	}
 	kb = append(kb, navRow(fmt.Sprintf("hzip:%d", i)))
 	r.Show(chat, mid, "🗑 کدام آی‌پی حذف شود؟\n(فقط آی‌پی‌های آزاد قابل حذف‌اند)", kb)
@@ -468,7 +475,7 @@ func (r *Router) hzIPPoolDeleteList(chat, mid int64, i int) {
 func (r *Router) hzIPPoolDeleteAsk(chat, mid int64, i, ipID int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -495,7 +502,7 @@ func (r *Router) hzIPPoolDeleteAsk(chat, mid int64, i, ipID int) {
 func (r *Router) hzIPPoolDeleteDo(chat, mid int64, i, ipID int) {
 	accs := r.hzAccs()
 	if i < 0 || i >= len(accs) {
-		r.Show(chat, mid, "❌ اکانت پیدا نشد.", [][]Btn{{btn("🏠 خانه", "menu")}})
+		r.Show(chat, mid, "❌ اکانت پیدا نشد.", navKB(""))
 		return
 	}
 	cli := hz.New(strv(accs[i]["token"]))
@@ -532,6 +539,22 @@ func (r *Router) hzRecheckOne(i, ipID int, ip string) {
 	checks := r.hzChecks(i)
 	checks[strconv.Itoa(ipID)] = c
 	r.hzSaveChecks(i, checks)
+}
+
+// hzSyncIP updates the saved connection record of a Hetzner server after its
+// public IPv4 changed, so SSH shortcuts keep working.
+func (r *Router) hzSyncIP(name, ip string) {
+	lst := r.srvList()
+	changed := false
+	for _, rec := range lst {
+		if strv(rec["note"]) == "Hetzner: "+name && strv(rec["host"]) != ip {
+			rec["host"] = ip
+			changed = true
+		}
+	}
+	if changed {
+		r.srvSave(lst)
+	}
 }
 
 func navKB(back string) [][]Btn { return [][]Btn{navRow(back)} }

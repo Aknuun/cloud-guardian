@@ -42,6 +42,7 @@ var faCodes = []struct{ key, fa string }{
 	{"invalid_input", "ورودی نامعتبر است."},
 	{"not_found", "موردی پیدا نشد."},
 	{"insufficient", "موجودی/پرداخت اکانت کافی نیست."},
+	{"network_error", "ارتباط با هتزنر برقرار نشد."},
 }
 
 func ErrFa(payload map[string]any) string {
@@ -77,7 +78,8 @@ func (c *Client) raw(method, path string, body any) map[string]any {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return map[string]any{} // caller treats as empty
+		return map[string]any{"error": map[string]any{
+			"code": "network_error", "message": err.Error()}}
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(resp.Body)
@@ -93,8 +95,12 @@ func (c *Client) Call(path, method string, body any) (map[string]any, error) {
 	for k := 0; k < 4; k++ {
 		out := c.raw(method, path, body)
 		err, _ := out["error"].(map[string]any)
-		if err != nil && strAny(err["code"]) == "resource_locked" && k < 3 {
-			time.Sleep(time.Duration(1500*(k+1)) * time.Millisecond)
+		code := ""
+		if err != nil {
+			code = strAny(err["code"])
+		}
+		if (code == "resource_locked" || code == "rate_limit_exceeded") && k < 3 {
+			time.Sleep(time.Duration(1200*(k+1)) * time.Millisecond)
 			last = out
 			continue
 		}
