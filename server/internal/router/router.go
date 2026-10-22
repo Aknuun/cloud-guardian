@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.9.3"
+const Version = "4.9.4"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -82,6 +82,8 @@ type Router struct {
 	WebAppURL string
 	DBPath    string
 	curFrom   int64
+	syncMu    sync.Mutex
+	syncFP    string
 }
 
 func New(bot *tg.Client, st *store.Store, adminID int64, fo map[string]string) *Router {

@@ -19,7 +19,7 @@ export function Sidebar({
 }) {
   const { mode, toggle } = useTheme()
   return (
-    <aside className="cc-sidebar">
+    <aside className={'cc-sidebar p-' + provider}>
       <div className="cc-brand">
         <div className="cc-brand-mark">CG</div>
         <div className="cc-brand-text">
@@ -31,7 +31,7 @@ export function Sidebar({
         <div className="cc-sidenav-label">سرویس‌ها</div>
         <button
           type="button"
-          className={'cc-sideitem' + (provider === 'hz' ? ' on' : '')}
+          className={'cc-sideitem p-hz' + (provider === 'hz' ? ' on' : '')}
           aria-current={provider === 'hz' ? 'page' : undefined}
           onClick={() => onChange('hz')}
         >
@@ -40,7 +40,7 @@ export function Sidebar({
         </button>
         <button
           type="button"
-          className={'cc-sideitem' + (provider === 'cf' ? ' on' : '')}
+          className={'cc-sideitem p-cf' + (provider === 'cf' ? ' on' : '')}
           aria-current={provider === 'cf' ? 'page' : undefined}
           onClick={() => onChange('cf')}
         >
@@ -49,7 +49,7 @@ export function Sidebar({
         </button>
         <button
           type="button"
-          className={'cc-sideitem' + (provider === 'ln' ? ' on' : '')}
+          className={'cc-sideitem p-ln' + (provider === 'ln' ? ' on' : '')}
           aria-current={provider === 'ln' ? 'page' : undefined}
           onClick={() => onChange('ln')}
         >
@@ -58,7 +58,7 @@ export function Sidebar({
         </button>
         <button
           type="button"
-          className={'cc-sideitem' + (provider === 'arv' ? ' on' : '')}
+          className={'cc-sideitem p-arv' + (provider === 'arv' ? ' on' : '')}
           aria-current={provider === 'arv' ? 'page' : undefined}
           onClick={() => onChange('arv')}
         >
@@ -85,7 +85,7 @@ export function ProviderRail({
 }) {
   const { mode, toggle } = useTheme()
   return (
-    <nav className="cc-provider-rail" aria-label="بخش‌های اصلی ربات">
+    <nav className={"cc-provider-rail p-" + provider} aria-label="بخش‌های اصلی ربات">
       <div className="cc-rail-brand" aria-hidden="true">
         CG
       </div>
@@ -93,7 +93,7 @@ export function ProviderRail({
         <button
           key={it.id}
           type="button"
-          className={'cc-railitem' + (provider === it.id ? ' on' : '')}
+          className={'cc-railitem p-' + it.id + (provider === it.id ? ' on' : '')}
           aria-label={it.label}
           title={it.label}
           aria-current={provider === it.id ? 'page' : undefined}

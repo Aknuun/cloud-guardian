@@ -697,7 +697,7 @@ ${reason}`,
             className="cc-card cc-row cc-tap"
             onClick={() => openInZone(r.acc, r.zid, r.zone, r.id)}
           >
-            <Badge variant="secondary">{r.type}</Badge>
+            <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
             <div className="cc-grow">
               <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
               <div className="cc-sub cc-mono">{r.content}</div>
@@ -856,7 +856,7 @@ ${reason}`,
                   className="cc-card cc-row cc-tap"
                   onClick={() => openInZone(r.acc, r.zid, r.zone, r.id)}
                 >
-                  <Badge variant="secondary">{r.type}</Badge>
+                  <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
                   <div className="cc-grow">
                     <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
                     <div className="cc-sub cc-mono">{r.content}</div>
@@ -985,7 +985,12 @@ ${reason}`,
             {checked ? '✓' : ''}
           </span>
         ) : (
-          <Badge variant={PROXYABLE.includes(r.type) && r.proxied ? 'success' : 'secondary'}>{r.type}</Badge>
+          <Badge
+            variant={PROXYABLE.includes(r.type) && r.proxied ? 'success' : 'secondary'}
+            className={PROXYABLE.includes(r.type) && r.proxied ? undefined : 'cc-type cc-type-' + r.type.toLowerCase()}
+          >
+            {r.type}
+          </Badge>
         )}
         <div className="cc-grow">
           <div className="cc-name cc-mono">{relName(r.name, zone?.name || '')}</div>

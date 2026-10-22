@@ -543,3 +543,558 @@ html[data-mode='light'] * {
     display: none;
   }
 }
+
+/* ---------------- colourful glass theme ---------------- */
+
+body {
+  background-color: var(--ds-bg);
+  background-image:
+    radial-gradient(70rem 45rem at 108% -10%, color-mix(in srgb, var(--ds-brand) 8%, transparent), transparent 62%),
+    radial-gradient(56rem 40rem at -8% 106%, color-mix(in srgb, var(--ds-brand-2) 7%, transparent), transparent 66%);
+  background-attachment: fixed;
+}
+
+.cc-app {
+  position: relative;
+  background-color: var(--ds-bg);
+  background-image:
+    radial-gradient(70rem 48rem at 110% -12%, color-mix(in srgb, var(--pv-accent) 10%, transparent), transparent 62%),
+    radial-gradient(54rem 40rem at -12% 104%, color-mix(in srgb, var(--pv-accent-2) 8%, transparent), transparent 66%);
+  background-attachment: fixed;
+}
+
+.cc-topbar {
+  border-bottom-color: color-mix(in srgb, var(--pv-accent) 10%, var(--ds-hairline));
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--pv-accent) 5%, transparent), transparent);
+}
+
+.cc-app .cc-card {
+  position: relative;
+  border-radius: 16px;
+  border-color: color-mix(in srgb, var(--pv-accent) 11%, var(--ds-hairline));
+  background-color: var(--ds-card);
+  background-image:
+    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--pv-accent) 7%, transparent), transparent 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ds-text) 2.5%, transparent), transparent 38%);
+  box-shadow:
+    0 1px 1px rgba(16, 24, 40, 0.03),
+    0 10px 28px color-mix(in srgb, var(--pv-accent) 7%, transparent);
+  transition:
+    transform 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.cc-app .cc-card.cc-tap::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 5px;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--pv-accent), var(--pv-accent-2));
+  opacity: 0.86;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .cc-app .cc-card.cc-tap:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--pv-accent) 30%, var(--ds-line));
+    box-shadow:
+      0 1px 2px rgba(16, 24, 40, 0.04),
+      0 16px 36px color-mix(in srgb, var(--pv-accent) 13%, transparent);
+  }
+}
+
+.cc-app .cc-choice {
+  border-color: color-mix(in srgb, var(--pv-accent) 12%, var(--ds-line));
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--pv-accent) 5%, transparent), transparent 62%);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--pv-accent) 5%, transparent);
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease,
+    background-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+@media (hover: hover) {
+  .cc-app .cc-choice:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--pv-accent) 28%, var(--ds-line));
+    background-color: color-mix(in srgb, var(--ds-card) 94%, var(--pv-accent) 6%);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--pv-accent) 10%, transparent);
+  }
+}
+
+.cc-app .cc-avatar {
+  border: 1px solid color-mix(in srgb, var(--pv-accent) 13%, transparent);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pv-accent) 16%, var(--ds-card)),
+    color-mix(in srgb, var(--pv-accent-2) 11%, var(--ds-card))
+  );
+  color: var(--pv-accent);
+  box-shadow:
+    0 5px 14px color-mix(in srgb, var(--pv-accent) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--ds-text) 8%, transparent);
+}
+
+.cc-section,
+.cc-dialog .cc-section {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: color-mix(in srgb, var(--pv-accent) 58%, var(--ds-text));
+  font-weight: 600;
+}
+
+.cc-section::before,
+.cc-dialog .cc-section::before {
+  content: '';
+  width: 14px;
+  height: 3px;
+  flex: 0 0 auto;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--pv-accent), var(--pv-accent-2));
+  opacity: 0.9;
+}
+
+.cc-app .cc-kvbox,
+.cc-app .cc-secret,
+.cc-app .cc-provider,
+.cc-app .cc-tabs,
+.cc-app .cc-bulkbar,
+.cc-dialog .cc-kvbox,
+.cc-dialog .cc-secret {
+  border-color: color-mix(in srgb, var(--pv-accent) 12%, var(--ds-hairline)) !important;
+  background-color: color-mix(in srgb, var(--ds-panel) 92%, var(--pv-accent) 8%) !important;
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--pv-accent) 4%, transparent), transparent 70%);
+}
+
+.cc-app .cc-secret,
+.cc-dialog .cc-secret {
+  border-style: dashed;
+}
+
+.cc-app .cc-chip.on,
+.cc-app .cc-tab.on,
+.cc-app .cc-provider-btn.on {
+  border-color: color-mix(in srgb, var(--pv-accent) 25%, transparent) !important;
+  background-color: color-mix(in srgb, var(--pv-accent) 14%, var(--ds-card)) !important;
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--pv-accent) 9%, transparent), transparent 72%);
+  color: color-mix(in srgb, var(--pv-accent) 72%, var(--ds-text)) !important;
+  box-shadow:
+    0 3px 10px color-mix(in srgb, var(--pv-accent) 11%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--ds-text) 6%, transparent);
+}
+
+.cc-app .cc-chip:hover,
+.cc-app .cc-tab:hover,
+.cc-app .cc-provider-btn:hover {
+  color: color-mix(in srgb, var(--pv-accent) 78%, var(--ds-text));
+}
+
+.cc-app .cc-provider-btn.on {
+  border-color: transparent !important;
+}
+
+.cc-app .cc-badge-inline,
+.cc-dialog .cc-badge-inline {
+  background: color-mix(in srgb, var(--pv-accent) 13%, var(--ds-card));
+  color: color-mix(in srgb, var(--pv-accent) 70%, var(--ds-text));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pv-accent) 12%, transparent);
+}
+
+.cc-app .cc-link,
+.cc-dialog .cc-link {
+  color: color-mix(in srgb, var(--pv-accent) 72%, var(--ds-text));
+}
+
+.cc-app .cc-steps i.on {
+  background: linear-gradient(90deg, var(--pv-accent), var(--pv-accent-2));
+}
+
+.cc-progress {
+  background-image: linear-gradient(90deg, transparent, var(--pv-accent), var(--pv-accent-2), transparent);
+}
+
+.cc-rec-ico {
+  border-color: color-mix(in srgb, var(--pv-accent) 13%, var(--ds-line));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pv-accent) 13%, var(--ds-card)),
+    color-mix(in srgb, var(--pv-accent-2) 9%, var(--ds-card))
+  );
+  color: var(--pv-accent);
+  box-shadow: 0 4px 11px color-mix(in srgb, var(--pv-accent) 9%, transparent);
+}
+
+.cc-rec-row {
+  transition: background-color 0.12s ease, padding-inline 0.12s ease;
+}
+
+@media (hover: hover) {
+  .cc-rec-row:hover {
+    background: color-mix(in srgb, var(--pv-accent) 6%, transparent);
+  }
+}
+
+.cc-app :focus-visible,
+.cc-dialog :focus-visible {
+  outline-color: color-mix(in srgb, var(--pv-accent) 55%, transparent);
+}
+
+.cc-app .cc-input:focus,
+.cc-app .cc-select:focus,
+.cc-dialog .cc-input:focus,
+.cc-dialog .cc-select:focus {
+  border-color: color-mix(in srgb, var(--pv-accent) 55%, var(--ds-line)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pv-accent) 14%, transparent) !important;
+}
+
+.cc-history-chip {
+  border-color: color-mix(in srgb, var(--pv-accent) 16%, var(--ds-line));
+  background: color-mix(in srgb, var(--pv-accent) 7%, var(--ds-panel));
+  color: color-mix(in srgb, var(--pv-accent) 70%, var(--ds-text));
+}
+
+.cc-history-chip:hover,
+.cc-history-chip:active {
+  border-color: color-mix(in srgb, var(--pv-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--pv-accent) 13%, var(--ds-card));
+  color: var(--pv-accent);
+}
+
+.cc-tree-dot {
+  background: linear-gradient(145deg, var(--pv-accent), var(--pv-accent-2));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pv-accent) 9%, transparent);
+}
+
+.cc-tree .cc-tree {
+  border-inline-start-color: color-mix(in srgb, var(--pv-accent) 16%, var(--ds-line));
+}
+
+.cc-tree-row:hover {
+  background: color-mix(in srgb, var(--pv-accent) 6%, transparent);
+}
+
+.cc-app .cc-toast {
+  border-color: color-mix(in srgb, var(--pv-accent) 17%, var(--ds-line));
+  background-color: color-mix(in srgb, var(--ds-card) 93%, var(--pv-accent) 7%);
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--pv-accent) 7%, transparent), transparent 70%);
+}
+
+.cc-app .cc-toast.ok svg {
+  color: var(--pv-accent);
+}
+
+.cc-dialog {
+  border-color: color-mix(in srgb, var(--pv-accent) 16%, var(--ds-line)) !important;
+  background-color: var(--ds-card) !important;
+  background-image:
+    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--pv-accent) 10%, transparent), transparent 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ds-text) 2%, transparent), transparent 42%);
+  box-shadow:
+    0 24px 70px rgba(16, 24, 40, 0.22),
+    0 8px 24px color-mix(in srgb, var(--pv-accent) 10%, transparent) !important;
+}
+
+.cc-dialog-actions {
+  border-top-color: color-mix(in srgb, var(--pv-accent) 11%, var(--ds-hairline));
+  background-image: linear-gradient(180deg, transparent, color-mix(in srgb, var(--pv-accent) 4%, transparent));
+}
+
+/* ---------------- buttons ---------------- */
+
+button[data-kumo-component='Button'] .cc-btn-ico {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--pv-accent) 12%, transparent);
+  color: var(--pv-accent);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+button[data-kumo-component='Button'][data-variant='secondary'],
+button[data-kumo-component='Button'][data-variant='outline'] {
+  border-color: color-mix(in srgb, var(--pv-accent) 17%, var(--ds-line)) !important;
+  background-color: color-mix(in srgb, var(--ds-card) 93%, var(--pv-accent) 7%) !important;
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--pv-accent) 5%, transparent), transparent 68%);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.03),
+    inset 0 1px 0 color-mix(in srgb, var(--ds-text) 5%, transparent);
+}
+
+button[data-kumo-component='Button'][data-variant='secondary']:hover,
+button[data-kumo-component='Button'][data-variant='outline']:hover {
+  border-color: color-mix(in srgb, var(--pv-accent) 34%, var(--ds-line)) !important;
+  background-color: color-mix(in srgb, var(--ds-card) 88%, var(--pv-accent) 12%) !important;
+}
+
+button[data-kumo-component='Button'][data-variant='primary'],
+button[data-kumo-component='Button'].cc-green {
+  border-color: transparent !important;
+  background-color: var(--ds-primary) !important;
+  background-image: linear-gradient(135deg, var(--ds-primary) 0%, var(--ds-primary-2) 100%) !important;
+  color: #fff !important;
+  box-shadow:
+    0 7px 18px color-mix(in srgb, var(--ds-primary) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+}
+
+button[data-kumo-component='Button'][data-variant='primary']:hover {
+  filter: brightness(1.04) saturate(1.04);
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--ds-primary) 34%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26) !important;
+}
+
+button[data-kumo-component='Button'][data-variant='primary'] .cc-btn-ico,
+button[data-kumo-component='Button'].cc-green .cc-btn-ico {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+button[data-kumo-component='Button'][data-variant='ghost'] .cc-btn-ico {
+  background: color-mix(in srgb, var(--pv-accent) 8%, transparent);
+}
+
+button[data-kumo-component='Button'][data-variant='danger'] .cc-btn-ico,
+button[data-kumo-component='Button'][data-variant='destructive'] .cc-btn-ico,
+button[data-kumo-component='Button'][data-variant='secondary-destructive'] .cc-btn-ico {
+  background: color-mix(in srgb, var(--ds-danger) 13%, transparent);
+  color: var(--ds-danger);
+}
+
+/* ---------------- provider navigation ---------------- */
+
+.cc-brand-mark {
+  background: linear-gradient(135deg, var(--ds-brand), var(--ds-brand-2));
+  box-shadow:
+    0 5px 14px color-mix(in srgb, var(--ds-brand) 30%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+.cc-sidebar .cc-sideitem {
+  position: relative;
+  border-radius: 12px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.cc-sidebar .cc-sideitem:hover {
+  background: color-mix(in srgb, var(--pv-accent) 8%, transparent);
+  color: var(--pv-accent);
+}
+
+.cc-sidebar .cc-sideitem.on {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--pv-accent) 17%, transparent),
+    color-mix(in srgb, var(--pv-accent-2) 9%, transparent)
+  );
+  color: var(--pv-accent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--pv-accent) 15%, transparent),
+    0 6px 16px color-mix(in srgb, var(--pv-accent) 8%, transparent);
+}
+
+.cc-sidebar .cc-sideitem.on::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--pv-accent), var(--pv-accent-2));
+}
+
+.cc-sideitem:active {
+  transform: scale(0.985);
+}
+
+@media (min-width: 900px) {
+  .cc-sidebar {
+    top: 12px;
+    height: calc(100vh - 24px);
+    margin: 12px;
+    padding: 16px 10px;
+    border: 1px solid color-mix(in srgb, var(--pv-accent) 12%, var(--ds-hairline));
+    border-radius: 22px;
+    background-color: var(--ds-panel);
+    background-image:
+      radial-gradient(100% 70% at 100% 0%, color-mix(in srgb, var(--pv-accent) 9%, transparent), transparent 60%),
+      linear-gradient(180deg, color-mix(in srgb, var(--ds-text) 2%, transparent), transparent 42%);
+    box-shadow:
+      0 20px 50px rgba(16, 24, 40, 0.07),
+      inset 0 1px 0 color-mix(in srgb, var(--ds-text) 5%, transparent);
+  }
+}
+
+@media (max-width: 899px) {
+  .cc-provider-rail {
+    padding: 6px;
+    border-color: color-mix(in srgb, var(--pv-accent) 18%, var(--ds-hairline));
+    border-radius: 18px;
+    background-color: color-mix(in srgb, var(--ds-panel) 84%, transparent);
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--pv-accent) 9%, transparent),
+      transparent 58%,
+      color-mix(in srgb, var(--pv-accent-2) 5%, transparent)
+    );
+    box-shadow:
+      0 18px 44px rgba(16, 24, 40, 0.14),
+      0 6px 18px color-mix(in srgb, var(--pv-accent) 12%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ds-text) 7%, transparent);
+  }
+
+  .cc-rail-brand {
+    background: linear-gradient(135deg, var(--ds-brand), var(--ds-brand-2));
+    box-shadow:
+      0 5px 14px color-mix(in srgb, var(--ds-brand) 28%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
+
+  .cc-railitem {
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--pv-accent) 4%, transparent);
+    color: color-mix(in srgb, var(--pv-accent) 74%, var(--ds-muted));
+  }
+
+  .cc-railitem:hover {
+    border-color: color-mix(in srgb, var(--pv-accent) 15%, transparent);
+    background: color-mix(in srgb, var(--pv-accent) 10%, transparent);
+    color: var(--pv-accent);
+  }
+
+  .cc-railitem.on {
+    border-color: color-mix(in srgb, var(--pv-accent) 27%, transparent);
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--pv-accent) 21%, transparent),
+      color-mix(in srgb, var(--pv-accent-2) 12%, transparent)
+    );
+    color: var(--pv-accent);
+    box-shadow:
+      0 6px 16px color-mix(in srgb, var(--pv-accent) 17%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--ds-text) 9%, transparent);
+  }
+
+  .cc-rail-sep {
+    background: color-mix(in srgb, var(--pv-accent) 16%, var(--ds-hairline));
+  }
+}
+
+/* ---------------- record type colours ---------------- */
+
+.cc-type-a {
+  --type-accent: #2f6fed;
+}
+.cc-type-aaaa {
+  --type-accent: #7c3aed;
+}
+.cc-type-cname {
+  --type-accent: #d97706;
+}
+.cc-type-mx {
+  --type-accent: #8b5cf6;
+}
+.cc-type-txt {
+  --type-accent: #64748b;
+}
+.cc-type-ns {
+  --type-accent: #0d9488;
+}
+.cc-type-srv {
+  --type-accent: #db2777;
+}
+.cc-type-caa {
+  --type-accent: #e11d48;
+}
+.cc-type-ptr {
+  --type-accent: #0891b2;
+}
+.cc-type-soa {
+  --type-accent: #4f46e5;
+}
+
+html[data-mode='dark'] .cc-type-a {
+  --type-accent: #7aa2ff;
+}
+html[data-mode='dark'] .cc-type-aaaa {
+  --type-accent: #b69cff;
+}
+html[data-mode='dark'] .cc-type-cname {
+  --type-accent: #f7b955;
+}
+html[data-mode='dark'] .cc-type-mx {
+  --type-accent: #b69cff;
+}
+html[data-mode='dark'] .cc-type-txt {
+  --type-accent: #a9b4c4;
+}
+html[data-mode='dark'] .cc-type-ns {
+  --type-accent: #5eead4;
+}
+html[data-mode='dark'] .cc-type-srv {
+  --type-accent: #f9a8d4;
+}
+html[data-mode='dark'] .cc-type-caa {
+  --type-accent: #fda4af;
+}
+html[data-mode='dark'] .cc-type-ptr {
+  --type-accent: #67e8f9;
+}
+html[data-mode='dark'] .cc-type-soa {
+  --type-accent: #a5b4fc;
+}
+
+.cc-type {
+  border-color: transparent !important;
+  background-color: color-mix(in srgb, var(--type-accent, var(--pv-accent)) 13%, transparent) !important;
+  color: var(--type-accent, var(--pv-accent)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--type-accent, var(--pv-accent)) 13%, transparent);
+}
+
+.cc-badge-inline.cc-type {
+  background-color: color-mix(in srgb, var(--type-accent, var(--pv-accent)) 13%, var(--ds-card));
+  color: var(--type-accent, var(--pv-accent));
+}
+
+/* Keep dark surfaces from picking up a washed-out white veil. */
+html[data-mode='dark'] .cc-app .cc-card {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.28),
+    0 14px 34px color-mix(in srgb, var(--pv-accent) 7%, transparent);
+}
+
+html[data-mode='dark'] .cc-dialog {
+  box-shadow:
+    0 26px 74px rgba(0, 0, 0, 0.55),
+    0 8px 28px color-mix(in srgb, var(--pv-accent) 12%, transparent) !important;
+}
+
+html[data-mode='dark'] button[data-kumo-component='Button'][data-variant='secondary'],
+html[data-mode='dark'] button[data-kumo-component='Button'][data-variant='outline'] {
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 color-mix(in srgb, var(--ds-text) 6%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-app .cc-card,
+  .cc-app .cc-choice,
+  .cc-sidebar .cc-sideitem {
+    transition: none;
+  }
+}

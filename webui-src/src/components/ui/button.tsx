@@ -50,6 +50,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
   return (
     <button
       ref={ref}
+      data-kumo-component="Button"
+      data-variant={variant ?? 'secondary'}
       className={cn(
         buttonVariants({ variant, size: square ? 'icon' : size, shape }),
         square && 'rounded-lg',
@@ -57,7 +59,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       )}
       {...props}
     >
-      {Icon ? <Icon size={16} weight="bold" /> : null}
+      {Icon ? (
+        <span className="cc-btn-ico" aria-hidden="true">
+          <Icon size={16} weight="bold" />
+        </span>
+      ) : null}
       {children}
     </button>
   )

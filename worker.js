@@ -9,7 +9,7 @@ const ADMIN_ID = 0;
 //    BOT_VERSION را یک واحد زیاد کن (مثلاً 1.0.3 → 1.0.4) و بعد deploy.
 //    نسخه در منوی اصلی ربات نمایش داده می‌شود.
 // ============================================================
-const BOT_VERSION = "4.9.3";
+const BOT_VERSION = "4.9.4";
 
 // حالت سبک (نسخهٔ ورکری): رله/ایجنت/گاردین/پاسارگارد و جاب‌های سنگینِ دوره‌ای
 // خاموش می‌شوند تا مصرف Workers KV نزدیک صفر شود. با بایندینگ CG_LITE="1"
@@ -40,6 +40,13 @@ const KV_STORAGE_LIMIT = 1073741824; // ۱ گیگابایت (پلن رایگان
 //      جدید» همراه با دکمهٔ «استارت» می‌فرستد.
 // ============================================================
 const RELEASE_NOTES = {
+  "4.9.4": [
+    "مینی‌اپ: طراحی رنگی و شیشه‌ای یکپارچه در کل ربات با اکسنت اختصاصی هر سرویس",
+    "مینی‌اپ: کارت‌های برجسته‌تر با نوار رنگی، دکمه‌های آیکون‌دار و نوار کناری شناور در دسکتاپ",
+    "مینی‌اپ: گفت‌وگوها، فرم‌ها و فهرست رکوردها با همان زبان بصری نوار ثابت هماهنگ شدند",
+    "مینی‌اپ: رنگ‌بندی نوع رکوردها (A، CNAME و ...) برای خوانایی سریع‌تر",
+    "بهینه‌سازی نوشتن‌های KV در ورکر پشتیبان: حذف همگام‌سازی و شمارنده‌های تکراری",
+  ],
   "4.9.3": [
     "مینی‌اپ: نمایش سابقهٔ مقدارهای قبلی (A/AAAA/CNAME) در فرم ویرایش رکورد کلادفلر",
     "مینی‌اپ: تبدیل A و CNAME با دریافت مقدار جدید و انتخاب زیردامنه از فهرست رکوردهای موجود",
@@ -4350,7 +4357,8 @@ async function standbyWatchdog(env) {
   if (ok) {
     // سرور سالم است: اگر قبلاً وب‌هوک را گرفته بودیم، آزادش کن (پولینگ سرور)
     const owned = (await kv.get("fo_owned", "text")) === "1";
-    await kv.put("fo_fail", "0");
+    const prevFail = String((await kv.get("fo_fail", "text")) || "0");
+    if (prevFail !== "0") await kv.put("fo_fail", "0");
     if (owned) {
       try {
         await tg(botToken, "deleteWebhook", { drop_pending_updates: false });
@@ -4400,6 +4408,7 @@ async function foHydrate(kv) {
     if (!snap || !snap.ts) return;
     const last = Number((await kv.get("fo_hydrated_ts", "text")) || 0);
     if (Number(snap.ts) <= last) return;
+    let changed = last === 0;
     const pairs = [
       ["accounts", snap.cf_tokens],
       ["hz_accounts", snap.hz_tokens],
@@ -4407,9 +4416,16 @@ async function foHydrate(kv) {
       ["arvan_accounts", snap.arvan_tokens],
     ];
     for (const [k, v] of pairs) {
-      if (Array.isArray(v)) await kv.put(k, JSON.stringify(v));
+      if (!Array.isArray(v)) continue;
+      const next = JSON.stringify(v);
+      let cur = null;
+      try { cur = await kv.get(k, "text"); } catch (e) {}
+      if (cur !== next) {
+        await kv.put(k, next);
+        changed = true;
+      }
     }
-    await kv.put("fo_hydrated_ts", String(snap.ts));
+    if (changed) await kv.put("fo_hydrated_ts", String(snap.ts));
   } catch (e) {}
 }
 // ===================== محافظ بودجهٔ نوشتن (3.0.3) =====================

@@ -217,7 +217,7 @@ export function RecordEditor({
         </>
       ) : (
         <LayerCard className="cc-editor-context">
-          <Badge variant="secondary">{r.type}</Badge>
+          <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
           <div className="cc-grow">
             <div className="cc-name cc-mono">{relName(r.name, dlg.zone)}</div>
             <div className="cc-sub">نام این رکورد قابل تغییر نیست</div>
@@ -343,7 +343,7 @@ export function RecordSheet({
       <div className="cc-rec-head">
         <div className="cc-rec-headmain">
           <div className="cc-rec-meta">
-            <Badge variant="secondary">{r.type}</Badge>
+            <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
             {PROXYABLE.includes(r.type) && (
               <span className={'cc-rec-proxy' + (r.proxied ? ' on' : '')}>
                 {r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'}

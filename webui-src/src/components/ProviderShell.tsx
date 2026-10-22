@@ -28,7 +28,7 @@ export function ProviderShell({
   children: ReactNode
 }) {
   return (
-    <div className="cc-app">
+    <div className={"cc-app p-" + provider}>
       <Sidebar provider={provider} onChange={onChange} />
       <ProviderRail provider={provider} onChange={onChange} />
       <div className="cc-content">
@@ -87,7 +87,7 @@ export function ProviderSwitch({
       {items.map((it) => (
         <button
           key={it.id}
-          className={'cc-provider-btn' + (provider === it.id ? ' on' : '')}
+          className={'cc-provider-btn p-' + it.id + (provider === it.id ? ' on' : '')}
           aria-pressed={provider === it.id}
           onClick={() => onChange(it.id)}
         >

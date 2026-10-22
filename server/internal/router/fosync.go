@@ -1,6 +1,9 @@
 package router
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -35,7 +38,31 @@ func (r *Router) SyncPush() {
 		return
 	}
 	snap := r.foSnap()
-	fosync.PushAsync(func() { fosync.PushSnapshot(tok, acc, ns, snap) })
+	ts := snap["ts"]
+	delete(snap, "ts")
+	raw, err := json.Marshal(snap)
+	if err != nil {
+		return
+	}
+	sum := sha256.Sum256(append([]byte(ns+"\n"), raw...))
+	fp := hex.EncodeToString(sum[:])
+	r.syncMu.Lock()
+	if r.syncFP == fp {
+		r.syncMu.Unlock()
+		return
+	}
+	r.syncMu.Unlock()
+	snap["ts"] = ts
+	fosync.PushAsync(func() {
+		r.syncMu.Lock()
+		defer r.syncMu.Unlock()
+		if r.syncFP == fp {
+			return
+		}
+		if fosync.PushSnapshot(tok, acc, ns, snap) {
+			r.syncFP = fp
+		}
+	})
 }
 
 // SyncCredentials returns the credentials needed for a DB backup push.

@@ -601,7 +601,7 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
           <LayerCard key={r.id} className="cc-card cc-row">
             <div className="cc-grow">
               <div className="cc-name cc-mono">
-                <span className="cc-badge-inline">{r.type}</span> {r.name || '@'}
+                <span className={'cc-badge-inline cc-type cc-type-' + (r.type || '').toLowerCase()}>{r.type}</span> {r.name || '@'}
               </div>
               <div className="cc-sub cc-mono cc-break">{r.value}</div>
             </div>

@@ -138,6 +138,7 @@ export default function App() {
 
   useEffect(() => {
     sessionStorage.setItem('cg_provider', provider)
+    document.documentElement.dataset.provider = provider
   }, [provider])
 
   function bump(n: number) {
@@ -1140,7 +1141,7 @@ export default function App() {
   const showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
 
   return (
-    <div className="cc-app">
+    <div className={"cc-app p-" + provider}>
       <Sidebar provider={provider} onChange={setProvider} />
       <ProviderRail provider={provider} onChange={setProvider} />
       <div className="cc-content">
