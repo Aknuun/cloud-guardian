@@ -63,10 +63,10 @@ html[data-provider='hz'] {
 }
 .p-cf,
 html[data-provider='cf'] {
-  --pv-accent: #f38020;
-  --pv-accent-2: #ff9a1f;
-  --ds-primary: #f38020;
-  --ds-primary-2: #ff9a1f;
+  --pv-accent: #dc2626;
+  --pv-accent-2: #ef4444;
+  --ds-primary: #dc2626;
+  --ds-primary-2: #ef4444;
 }
 .p-ln,
 html[data-provider='ln'] {
@@ -85,10 +85,10 @@ html[data-mode='dark'][data-provider='hz'] {
 }
 html[data-mode='dark'] .p-cf,
 html[data-mode='dark'][data-provider='cf'] {
-  --pv-accent: #ff8a1f;
-  --pv-accent-2: #ffc247;
-  --ds-primary: #f38020;
-  --ds-primary-2: #ff9a1f;
+  --pv-accent: #ff5c5c;
+  --pv-accent-2: #ff8a8a;
+  --ds-primary: #dc2626;
+  --ds-primary-2: #ef4444;
 }
 html[data-mode='dark'] .p-ln,
 html[data-mode='dark'][data-provider='ln'] {
