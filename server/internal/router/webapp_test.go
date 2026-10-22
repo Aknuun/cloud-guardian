@@ -93,3 +93,32 @@ func TestWebHzTraffic(t *testing.T) {
 		t.Fatalf("extra_gb = %v, want 0", got)
 	}
 }
+
+func TestLnWebServerObj(t *testing.T) {
+	obj := lnWebServerObj(map[string]any{
+		"id": "123", "label": "web-1", "status": "running", "region": "de-fra-2",
+		"type": "g6-standard-1", "image": "linode/ubuntu24.04",
+		"ipv4":  []any{"1.2.3.4", "10.0.0.2"},
+		"ipv6":  "2001:db8::1/128",
+		"specs": map[string]any{"vcpus": float64(2), "memory": float64(4096), "disk": float64(81920)},
+	})
+	if obj["status"] != "running" || obj["ipv4"] != "1.2.3.4 · 10.0.0.2" {
+		t.Fatalf("unexpected server object: %#v", obj)
+	}
+	specs := obj["specs"].(map[string]any)
+	if specs["ram_mb"] != 4096 || specs["disk_gb"] != 80.0 {
+		t.Fatalf("unexpected specs: %#v", specs)
+	}
+}
+
+func TestLnWebTransferGB(t *testing.T) {
+	if got := lnWebTransferGB(500, 2000); got != 500 {
+		t.Fatalf("GB passthrough = %v", got)
+	}
+	if got := lnWebTransferGB(1024*1024, 2*1024*1024); got != 1024 {
+		t.Fatalf("MB conversion = %v", got)
+	}
+	if got := lnWebTransferGB(2*1024*1024*1024, 4*1024*1024*1024); got != 2 {
+		t.Fatalf("byte conversion = %v", got)
+	}
+}

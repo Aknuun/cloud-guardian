@@ -22,8 +22,12 @@ import {
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
+import type { Provider } from './components/Sidebar'
+import { ProviderSwitch } from './components/ProviderShell'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
+const Linode = lazy(() => import('./Linode'))
+const Arvan = lazy(() => import('./Arvan'))
 
 /* ---------------- types ---------------- */
 
@@ -108,10 +112,13 @@ export default function App() {
   const [phase, setPhase] = useState<'boot' | 'ready' | 'error'>('boot')
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
-  const [provider, setProvider] = useState<'hz' | 'cf'>(() =>
-    sessionStorage.getItem('cg_provider') === 'cf' ? 'cf' : 'hz',
-  )
+  const [provider, setProvider] = useState<Provider>(() => {
+    const p = sessionStorage.getItem('cg_provider')
+    return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
+  })
   const cfBack = useRef<() => void>(() => {})
+  const lnBack = useRef<() => void>(() => {})
+  const arvBack = useRef<() => void>(() => {})
   const [stack, setStack] = useState<View[]>([])
   const [q, setQ] = useState('')
   const [createName, setCreateName] = useState('')
@@ -212,7 +219,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     if (!TG || !TG.BackButton) return
-    if (provider === 'cf' || modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
+    if (provider !== 'hz' || modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
     else TG.BackButton.hide()
   }, [modal, cur, stack, provider])
 
@@ -288,8 +295,10 @@ export default function App() {
     requestAnimationFrame(() => window.scrollTo(0, 0))
   }
   function goBack() {
-    if (provider === 'cf') {
-      cfBack.current()
+    if (provider !== 'hz') {
+      if (provider === 'cf') cfBack.current()
+      else if (provider === 'ln') lnBack.current()
+      else arvBack.current()
       return
     }
     if (modal) {
@@ -1093,7 +1102,7 @@ export default function App() {
     )
   }
 
-  if (provider === 'cf') {
+  if (provider !== 'hz') {
     return (
       <Suspense
         fallback={
@@ -1102,12 +1111,28 @@ export default function App() {
           </div>
         }
       >
-        <Cloudflare
-          onSwitch={() => setProvider('hz')}
-          onBackRef={(f) => {
-            cfBack.current = f
-          }}
-        />
+        {provider === 'cf' ? (
+          <Cloudflare
+            onSwitch={setProvider}
+            onBackRef={(f) => {
+              cfBack.current = f
+            }}
+          />
+        ) : provider === 'ln' ? (
+          <Linode
+            onSwitch={setProvider}
+            onBackRef={(f) => {
+              lnBack.current = f
+            }}
+          />
+        ) : (
+          <Arvan
+            onSwitch={setProvider}
+            onBackRef={(f) => {
+              arvBack.current = f
+            }}
+          />
+        )}
       </Suspense>
     )
   }
@@ -1154,29 +1179,6 @@ export default function App() {
         )}
         <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
       </div>
-    </div>
-  )
-}
-
-/* ---------------- provider switch ---------------- */
-
-function ProviderSwitch({ provider, onChange }: { provider: 'hz' | 'cf'; onChange: (p: 'hz' | 'cf') => void }) {
-  return (
-    <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
-      <button
-        className={'cc-provider-btn' + (provider === 'hz' ? ' on' : '')}
-        aria-pressed={provider === 'hz'}
-        onClick={() => onChange('hz')}
-      >
-        هتزنر
-      </button>
-      <button
-        className={'cc-provider-btn' + (provider === 'cf' ? ' on' : '')}
-        aria-pressed={provider === 'cf'}
-        onClick={() => onChange('cf')}
-      >
-        کلادفلر
-      </button>
     </div>
   )
 }

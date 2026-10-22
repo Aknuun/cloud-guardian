@@ -1,12 +1,14 @@
-import { Cloud, HardDrives, Moon, Sun } from '@phosphor-icons/react'
+import { Cloud, Cube, Globe, HardDrives, Moon, Sun } from '@phosphor-icons/react'
 import { useTheme } from './theme'
+
+export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
 
 export function Sidebar({
   provider,
   onChange,
 }: {
-  provider: 'hz' | 'cf'
-  onChange: (p: 'hz' | 'cf') => void
+  provider: Provider
+  onChange: (p: Provider) => void
 }) {
   const { mode, toggle } = useTheme()
   return (
@@ -37,6 +39,24 @@ export function Sidebar({
         >
           <Cloud size={18} />
           <span>کلادفلر</span>
+        </button>
+        <button
+          type="button"
+          className={'cc-sideitem' + (provider === 'ln' ? ' on' : '')}
+          aria-current={provider === 'ln' ? 'page' : undefined}
+          onClick={() => onChange('ln')}
+        >
+          <Cube size={18} />
+          <span>لینود</span>
+        </button>
+        <button
+          type="button"
+          className={'cc-sideitem' + (provider === 'arv' ? ' on' : '')}
+          aria-current={provider === 'arv' ? 'page' : undefined}
+          onClick={() => onChange('arv')}
+        >
+          <Globe size={18} />
+          <span>آروان</span>
         </button>
       </nav>
       <div className="cc-sidefoot">

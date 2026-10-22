@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from './components/ui'
-import { Sidebar, ThemeToggle } from './components/Sidebar'
+import type { Provider } from './components/Sidebar'
+import { ProviderShell } from './components/ProviderShell'
 import {
   ArrowClockwise,
   ArrowRight,
@@ -225,7 +226,7 @@ function restoreCfState(): { view: View; stack: View[]; tab: Tab } | null {
   }
 }
 
-export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => void; onBackRef: (f: () => void) => void }) {
+export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef: (f: () => void) => void }) {
   const [boot] = useState(restoreCfState)
   const [view, setView] = useState<View>(boot?.view || { v: 'zones' })
   const [stack, setStack] = useState<View[]>(boot?.stack || [])
@@ -339,7 +340,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
       jumpTo(scrollPos.current[vkey(target)] || 0)
       return
     }
-    onSwitch()
+    onSwitch('hz')
   }
   function openTab(k: Tab) {
     saveScroll()
@@ -802,16 +803,6 @@ ${reason}`,
   function zonesPage() {
     return (
       <>
-        <div className="cc-mobile-only">
-          <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
-            <button className="cc-provider-btn" aria-pressed={false} onClick={onSwitch}>
-              هتزنر
-            </button>
-            <button className="cc-provider-btn on" aria-pressed={true}>
-              کلادفلر
-            </button>
-          </div>
-        </div>
         <div className="cc-toolbar">
           <Button
             variant="primary"
@@ -1954,39 +1945,22 @@ ${reason}`,
   const root = stack.length === 0 && view.v !== 'zones'
 
   return (
-    <div className="cc-app">
-      <Sidebar provider="cf" onChange={(p) => p === 'hz' && onSwitch()} />
-      <div className="cc-content">
-        <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
-        <header className="cc-topbar">
-          {(root || stack.length > 0) && (
-            <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
-          )}
-          <h1 className="cc-title">{title}</h1>
-          <span className="cc-mobile-only">
-            <ThemeToggle />
-          </span>
-          <Button
-            className={busy > 0 ? 'cc-spin' : ''}
-            variant="ghost"
-            shape="square"
-            icon={ArrowClockwise}
-            aria-label="بروزرسانی"
-            onClick={refresh}
-          />
-        </header>
-        <main className="cc-main" aria-busy={busy > 0}>
-          {body}
-        </main>
-        {toastMsg && (
-          <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
-            {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
-            <span>{toastMsg.t}</span>
-          </div>
-        )}
-        {renderDlg()}
-      </div>
-    </div>
+    <>
+      <ProviderShell
+        provider="cf"
+        title={title}
+        busy={busy > 0}
+        showBack={root || stack.length > 0}
+        showSwitch={view.v === 'zones' && stack.length === 0}
+        onBack={goBack}
+        onRefresh={refresh}
+        onChange={onSwitch}
+        toast={toastMsg}
+      >
+        {body}
+      </ProviderShell>
+      {renderDlg()}
+    </>
   )
 }
 
