@@ -1,11 +1,18 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@cloudflare/kumo/styles/standalone'
+import './index.css'
 import './app.css'
+import './deepseek.css'
+import './utilities.css'
+import { initMode, ThemeProvider } from './components/theme'
 import App from './App'
+
+initMode()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
   </StrictMode>,
 )

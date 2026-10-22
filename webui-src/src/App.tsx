@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader, Meter } from '@cloudflare/kumo'
+import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader, Meter } from './components/ui'
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
@@ -21,6 +21,7 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
+import { Sidebar, ThemeToggle } from './components/Sidebar'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
 
@@ -94,13 +95,6 @@ function addr(s: Server) {
   if (s.ipv4 && s.ipv6) return s.ipv4 + ' / ' + s.ipv6
   return s.ipv4 || s.ipv6 || 'بدون آی‌پی'
 }
-function dotClass(st: string) {
-  if (st === 'running') return 'run'
-  if (st === 'off') return 'off'
-  if (st === 'starting' || st === 'migrating' || st === 'rebuilding') return 'wait'
-  if (st === 'unknown') return 'err'
-  return ''
-}
 function badgeVariant(st: string): any {
   if (st === 'running') return 'success'
   if (st === 'off') return 'neutral'
@@ -168,7 +162,6 @@ export default function App() {
         TG.expand()
         TG.disableVerticalSwipes && TG.disableVerticalSwipes()
         TG.MainButton && TG.MainButton.hide()
-        document.documentElement.dataset.mode = TG.colorScheme === 'light' ? 'light' : 'dark'
       }
       if (!TG || !TG.initData) {
         if (!cancelled) {
@@ -611,7 +604,7 @@ export default function App() {
                 push({ v: 'servers', acc: a.i })
               }}
             >
-              <span className="cc-dot run" />
+              <span className="cc-avatar">{(a.name || 'C').trim().charAt(0)}</span>
               <div className="cc-grow">
                 <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
                 <div className="cc-sub">{a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}</div>
@@ -663,18 +656,19 @@ export default function App() {
               tabIndex={0}
               onClick={() => push({ v: 'server', acc: cur.acc, id: s.id })}
             >
-              <span className={'cc-dot ' + dotClass(s.status)} />
               <div className="cc-grow">
                 <div className="cc-name">{s.name}</div>
                 <div className="cc-sub">
                   {(s.type && s.type.name) || ''}
                   {s.type ? ` · ${s.type.cores}vCPU / ${mem(s.type.memory)} / ${s.type.disk}GB` : ''}
+                  {s.location ? ` · ${s.location.city || s.location.name}` : ''}
                 </div>
                 <div className="cc-sub cc-mono cc-mt4">{addr(s)}</div>
               </div>
               <div className="cc-end">
-                <Badge variant={badgeVariant(s.status)}>{STATUS[s.status] || s.status}</Badge>
-                <div className="cc-sub cc-mt4">{s.location ? s.location.city || s.location.name : ''}</div>
+                <Badge variant={badgeVariant(s.status)} dot>
+                  {STATUS[s.status] || s.status}
+                </Badge>
               </div>
             </LayerCard>
           ))}
@@ -691,14 +685,15 @@ export default function App() {
       return (
         <>
           <LayerCard className="cc-card cc-row">
-            <span className={'cc-dot ' + dotClass(s.status)} />
             <div className="cc-grow">
               <div className="cc-name">{s.name}</div>
               <div className="cc-sub">
                 {s.image || ''} · {s.location ? s.location.city || s.location.name : ''} · {s.type ? s.type.id : ''}
               </div>
             </div>
-            <Badge variant={badgeVariant(s.status)}>{STATUS[s.status] || s.status}</Badge>
+            <Badge variant={badgeVariant(s.status)} dot>
+              {STATUS[s.status] || s.status}
+            </Badge>
           </LayerCard>
 
           <LayerCard className="cc-card">
@@ -1121,34 +1116,44 @@ export default function App() {
 
   return (
     <div className="cc-app">
-      <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
-      <header className="cc-topbar">
-        {showBack && (
-          <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
+      <Sidebar provider={provider} onChange={setProvider} />
+      <div className="cc-content">
+        <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
+        <header className="cc-topbar">
+          {showBack && (
+            <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
+          )}
+          <h1 className="cc-title">{title}</h1>
+          <span className="cc-mobile-only">
+            <ThemeToggle />
+          </span>
+          {cur.v !== 'create' && (
+            <Button
+              className={busy > 0 ? 'cc-spin' : ''}
+              variant="ghost"
+              shape="square"
+              icon={ArrowClockwise}
+              aria-label="بروزرسانی"
+              onClick={reload}
+            />
+          )}
+        </header>
+        <main className="cc-main" aria-busy={busy > 0}>
+          <div className="cc-mobile-only">
+            {(cur.v === 'accounts' || cur.v === 'servers') && (
+              <ProviderSwitch provider={provider} onChange={setProvider} />
+            )}
+          </div>
+          {body()}
+        </main>
+        {toastMsg && (
+          <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
+            {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
+            <span>{toastMsg.t}</span>
+          </div>
         )}
-        <h1 className="cc-title">{title}</h1>
-        {cur.v !== 'create' && (
-          <Button
-            className={busy > 0 ? 'cc-spin' : ''}
-            variant="ghost"
-            shape="square"
-            icon={ArrowClockwise}
-            aria-label="بروزرسانی"
-            onClick={reload}
-          />
-        )}
-      </header>
-      <main className="cc-main" aria-busy={busy > 0}>
-        {(cur.v === 'accounts' || cur.v === 'servers') && <ProviderSwitch provider={provider} onChange={setProvider} />}
-        {body()}
-      </main>
-      {toastMsg && (
-        <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
-          {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
-          <span>{toastMsg.t}</span>
-        </div>
-      )}
-      <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
+        <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
+      </div>
     </div>
   )
 }

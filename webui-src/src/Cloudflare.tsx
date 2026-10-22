@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from '@cloudflare/kumo'
+import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from './components/ui'
+import { Sidebar, ThemeToggle } from './components/Sidebar'
 import {
   ArrowClockwise,
   ArrowRight,
@@ -753,12 +754,13 @@ ${reason}`,
             tabIndex={0}
             onClick={() => (onPick ? onPick(z) : push({ v: 'zone', acc: z.acc, zid: z.id }))}
           >
-            <span className={'cc-dot ' + (z.status === 'active' ? 'run' : z.status === 'paused' ? 'off' : 'wait')} />
             <div className="cc-grow">
               <div className="cc-name cc-mono">{z.name}</div>
               <div className="cc-sub">{z.accName || 'اکانت ' + (z.acc + 1)}</div>
             </div>
-            <Badge variant={ZONE_BADGE[z.status] || 'secondary'}>{statusLabel(z.status)}</Badge>
+            <Badge variant={ZONE_BADGE[z.status] || 'secondary'} dot>
+              {statusLabel(z.status)}
+            </Badge>
             <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
           </LayerCard>
         ))}
@@ -769,49 +771,48 @@ ${reason}`,
   function zonesPage() {
     return (
       <>
-        <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
-          <button className="cc-provider-btn" aria-pressed={false} onClick={onSwitch}>
-            هتزنر
-          </button>
-          <button className="cc-provider-btn on" aria-pressed={true}>
-            کلادفلر
-          </button>
+        <div className="cc-mobile-only">
+          <div className="cc-provider" role="group" aria-label="انتخاب سرویس">
+            <button className="cc-provider-btn" aria-pressed={false} onClick={onSwitch}>
+              هتزنر
+            </button>
+            <button className="cc-provider-btn on" aria-pressed={true}>
+              کلادفلر
+            </button>
+          </div>
         </div>
-        <div className="cc-grid2 cc-mb">
-          <Button variant="secondary" icon={Star} onClick={() => push({ v: 'favs' })}>
+        <div className="cc-toolbar">
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              const active = zones.filter((z) => z.status === 'active')
+              setDlg({
+                k: 'pick',
+                title: 'افزودن رکورد به کدام دامنه؟',
+                items: (active.length ? active : zones).map((z) => ({
+                  id: z.acc + '|' + z.id,
+                  title: z.name,
+                  sub: z.accName,
+                })),
+                onPick: (id) => {
+                  const [a, zid] = id.split('|')
+                  const z = zones.find((x) => x.id === zid)
+                  setDlg(null)
+                  setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
+                  push({ v: 'zone', acc: Number(a), zid })
+                },
+              })
+            }}
+          >
+            افزودن رکورد
+          </Button>
+          <Button variant="outline" icon={Star} onClick={() => push({ v: 'favs' })}>
             منتخب‌ها
           </Button>
-          <Button variant="secondary" icon={UsersThree} onClick={() => push({ v: 'accounts' })}>
+          <Button variant="outline" icon={UsersThree} onClick={() => push({ v: 'accounts' })}>
             اکانت‌ها
           </Button>
-        </div>
-        <Button
-          variant="primary"
-          icon={Plus}
-          className="cc-wide cc-mb"
-          onClick={() => {
-            const active = zones.filter((z) => z.status === 'active')
-            setDlg({
-              k: 'pick',
-              title: 'افزودن رکورد به کدام دامنه؟',
-              items: (active.length ? active : zones).map((z) => ({
-                id: z.acc + '|' + z.id,
-                title: z.name,
-                sub: z.accName,
-              })),
-              onPick: (id) => {
-                const [a, zid] = id.split('|')
-                const z = zones.find((x) => x.id === zid)
-                setDlg(null)
-                setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
-                push({ v: 'zone', acc: Number(a), zid })
-              },
-            })
-          }}
-        >
-          افزودن رکورد
-        </Button>
-        <div className="cc-grid2 cc-mb">
           <Button variant="outline" icon={MagnifyingGlass} onClick={() => push({ v: 'search' })}>
             جست‌وجوی رکورد
           </Button>
@@ -1462,14 +1463,15 @@ ${reason}`,
     return (
       <>
         <LayerCard className="cc-card cc-row">
-          <span className={'cc-dot ' + (zone?.status === 'active' ? 'run' : zone?.status === 'paused' ? 'off' : 'wait')} />
           <div className="cc-grow">
             <div className="cc-name cc-mono">{zone?.name || ''}</div>
             <div className="cc-sub">
               {zone?.account || ''} {zone?.plan ? ' · ' + zone.plan : ''}
             </div>
           </div>
-          <Badge variant={ZONE_BADGE[zone?.status || ''] || 'secondary'}>{statusLabel(zone?.status || '')}</Badge>
+          <Badge variant={ZONE_BADGE[zone?.status || ''] || 'secondary'} dot>
+            {statusLabel(zone?.status || '')}
+          </Badge>
         </LayerCard>
         <div className="cc-tabs" role="tablist" aria-label="بخش‌های دامنه">
           {(
@@ -1922,31 +1924,37 @@ ${reason}`,
 
   return (
     <div className="cc-app">
-      <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
-      <header className="cc-topbar">
-        {(root || stack.length > 0) && (
-          <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
+      <Sidebar provider="cf" onChange={(p) => p === 'hz' && onSwitch()} />
+      <div className="cc-content">
+        <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
+        <header className="cc-topbar">
+          {(root || stack.length > 0) && (
+            <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
+          )}
+          <h1 className="cc-title">{title}</h1>
+          <span className="cc-mobile-only">
+            <ThemeToggle />
+          </span>
+          <Button
+            className={busy > 0 ? 'cc-spin' : ''}
+            variant="ghost"
+            shape="square"
+            icon={ArrowClockwise}
+            aria-label="بروزرسانی"
+            onClick={refresh}
+          />
+        </header>
+        <main className="cc-main" aria-busy={busy > 0}>
+          {body}
+        </main>
+        {toastMsg && (
+          <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
+            {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
+            <span>{toastMsg.t}</span>
+          </div>
         )}
-        <h1 className="cc-title">{title}</h1>
-        <Button
-          className={busy > 0 ? 'cc-spin' : ''}
-          variant="ghost"
-          shape="square"
-          icon={ArrowClockwise}
-          aria-label="بروزرسانی"
-          onClick={refresh}
-        />
-      </header>
-      <main className="cc-main" aria-busy={busy > 0}>
-        {body}
-      </main>
-      {toastMsg && (
-        <div className={'cc-toast ' + (toastMsg.err ? 'err' : 'ok')} role="status" aria-live="polite">
-          {toastMsg.err ? <WarningCircle size={18} /> : <CheckCircle size={18} />}
-          <span>{toastMsg.t}</span>
-        </div>
-      )}
-      {renderDlg()}
+        {renderDlg()}
+      </div>
     </div>
   )
 }

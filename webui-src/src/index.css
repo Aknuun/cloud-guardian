@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+
+/* DeepSeek-inspired design tokens */
+:root,
+html[data-mode='light'] {
+  --ds-bg: #ffffff;
+  --ds-panel: #f7f8fa;
+  --ds-card: #ffffff;
+  --ds-tint: #f2f4f8;
+  --ds-line: #e5e7eb;
+  --ds-hairline: #eef0f3;
+  --ds-text: #18181b;
+  --ds-muted: #6b7280;
+  --ds-subtle: #8a8f98;
+  --ds-brand: #4d6bfe;
+  --ds-brand-soft: #eef1ff;
+  --ds-danger: #f04438;
+  --ds-success: #12b76a;
+  --ds-warning: #f59e0b;
+  --ds-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --ds-shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.14);
+  color-scheme: light;
+}
+
+html[data-mode='dark'] {
+  --ds-bg: #0e1116;
+  --ds-panel: #141920;
+  --ds-card: #171d25;
+  --ds-tint: #1d242e;
+  --ds-line: #262e39;
+  --ds-hairline: #212831;
+  --ds-text: #e7e9ec;
+  --ds-muted: #9aa3af;
+  --ds-subtle: #8b949e;
+  --ds-brand: #6b84ff;
+  --ds-brand-soft: #1b2440;
+  --ds-danger: #f97066;
+  --ds-success: #32d583;
+  --ds-warning: #fdb022;
+  --ds-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --ds-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+/* Kumo variable bridge: the legacy app.css still reads these names. */
+:root,
+html[data-mode='light'],
+html[data-mode='dark'] {
+  --color-kumo-canvas: var(--ds-bg);
+  --color-kumo-base: var(--ds-card);
+  --color-kumo-elevated: var(--ds-card);
+  --color-kumo-recessed: var(--ds-panel);
+  --color-kumo-fill: var(--ds-tint);
+  --color-kumo-tint: var(--ds-tint);
+  --color-kumo-line: var(--ds-line);
+  --color-kumo-hairline: var(--ds-hairline);
+  --color-kumo-brand: var(--ds-brand);
+  --color-kumo-danger: var(--ds-danger);
+  --text-color-kumo-default: var(--ds-text);
+  --text-color-kumo-subtle: var(--ds-muted);
+  --text-color-kumo-inactive: var(--ds-subtle);
+  --text-color-kumo-link: var(--ds-brand);
+  --cc-success: var(--ds-success);
+  --cc-success-strong: var(--ds-success);
+  --cc-danger: var(--ds-danger);
+  --cc-warning: var(--ds-warning);
+  --cc-primary: var(--ds-brand);
+  --cc-success-soft: color-mix(in srgb, var(--ds-success) 14%, var(--ds-card));
+  --cc-success-line: color-mix(in srgb, var(--ds-success) 34%, transparent);
+  --cc-danger-soft: color-mix(in srgb, var(--ds-danger) 12%, var(--ds-card));
+  --cc-danger-line: color-mix(in srgb, var(--ds-danger) 32%, transparent);
+  --cc-shadow: var(--ds-shadow-pop);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: Vazirmatn, system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--ds-brand) 24%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ds-brand);
+    outline-offset: 2px;
+  }
+}
