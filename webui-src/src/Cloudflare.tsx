@@ -462,7 +462,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: () => vo
     return () => clearTimeout(t)
   }, [newId, records])
   useEffect(() => {
-    if (view.v !== 'search') return
+    if (view.v !== 'search' && view.v !== 'zones') return
     const term = q.trim()
     setSearchErr('')
     if (term.length < 2) {
@@ -723,7 +723,7 @@ ${reason}`,
     const count = filtered.length
     return (
       <>
-        <SearchInput placeholder="جست‌وجوی دامنه…" value={q} onChange={setQ} />
+        <SearchInput placeholder="جست‌وجوی دامنه، زیردامنه یا آی‌پی…" value={q} onChange={setQ} />
         <div className="cc-chips" role="group" aria-label="فیلتر اکانت">
           <button
             className={'cc-chip' + (accFilter === -1 ? ' on' : '')}
@@ -743,8 +743,8 @@ ${reason}`,
             </button>
           ))}
         </div>
-        <div className="cc-section">{num(count)} دامنه</div>
-        {count === 0 && !busy && !err && <Empty title={emptyText} />}
+        {(count > 0 || !(view.v === 'zones' && ql.length >= 2)) && <div className="cc-section">{num(count)} دامنه</div>}
+        {count === 0 && !busy && !err && !(view.v === 'zones' && ql.length >= 2) && <Empty title={emptyText} />}
         {zones.length === 0 && busy > 0 && <SkeletonList />}
         {filtered.map((z) => (
           <LayerCard
@@ -762,6 +762,37 @@ ${reason}`,
               {statusLabel(z.status)}
             </Badge>
             <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
+          </LayerCard>
+        ))}
+        {view.v === 'zones' && ql.length >= 2 && recordHitsUI()}
+      </>
+    )
+  }
+
+  function recordHitsUI() {
+    const hits = (search?.records || []).filter((r) => accFilter === -1 || r.acc === accFilter)
+    return (
+      <>
+        <div className="cc-section">
+          {searchBusy && !search ? 'جست‌وجوی رکوردها…' : num(hits.length) + ' رکورد'}
+        </div>
+        {searchBusy && !search && <SkeletonList rows={2} />}
+        {searchErr && <div className="cc-hint cc-center">جست‌وجوی رکوردها ممکن نشد.</div>}
+        {!searchBusy && search && hits.length === 0 && (
+          <div className="cc-hint cc-center">رکوردی با این نام یا آی‌پی پیدا نشد.</div>
+        )}
+        {hits.map((r) => (
+          <LayerCard
+            key={r.zid + ':' + r.id}
+            className="cc-card cc-row cc-tap"
+            onClick={() => openInZone(r.acc, r.zid, r.zone, r.id)}
+          >
+            <Badge variant="secondary">{r.type}</Badge>
+            <div className="cc-grow">
+              <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
+              <div className="cc-sub cc-mono">{r.content}</div>
+            </div>
+            <div className="cc-sub">{r.zone}</div>
           </LayerCard>
         ))}
       </>
