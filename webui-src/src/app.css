@@ -336,6 +336,98 @@ body {
   width: 100%;
 }
 
+/* ---------------- load balancer ---------------- */
+
+.cc-lb-top {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cc-lb-top > button:first-child {
+  flex: 1;
+  width: auto !important;
+}
+.cc-lb-links {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 3px 14px;
+  color: var(--text-color-kumo-inactive);
+  font-size: 11.5px;
+}
+.cc-lb-links .cc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-color-kumo-subtle);
+  font-size: 11.5px;
+}
+.cc-lb-card {
+  padding: 14px;
+}
+.cc-lb-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 11px;
+}
+.cc-lb-act {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-kumo-recessed);
+  color: var(--text-color-kumo-default);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cc-lb-act span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-lb-act b {
+  font-weight: 600;
+  color: var(--text-color-kumo-subtle);
+}
+.cc-lb-act b.cc-lb-ok {
+  color: var(--cc-success);
+}
+.cc-lb-act b.cc-lb-muted {
+  color: var(--text-color-kumo-inactive);
+  font-weight: 500;
+}
+.cc-lb-act:active {
+  background: var(--color-kumo-tint);
+}
+.cc-lb-del {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-kumo-recessed);
+  color: var(--text-color-kumo-subtle);
+  cursor: pointer;
+}
+.cc-lb-del:active {
+  background: var(--cc-danger-soft);
+  color: var(--cc-danger);
+}
+.cc-lb-act:focus-visible,
+.cc-lb-del:focus-visible {
+  outline: 2px solid var(--cc-primary);
+  outline-offset: 2px;
+}
+
 /* ---------------- record sheet ---------------- */
 
 .cc-rec-head {

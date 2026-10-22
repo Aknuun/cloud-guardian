@@ -23,6 +23,7 @@ import {
   PencilSimple,
   Play,
   Plus,
+  SlidersHorizontal,
   Star,
   Trash,
   UsersThree,
@@ -319,12 +320,12 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
   }, [view, q, rev])
 
 
-  async function post(path: string, body: any, keep = false) {
+  async function post(path: string, body: any, keep = false, opts: { refresh?: boolean } = {}) {
     bump(1)
     try {
       const d = await api<any>(path, body)
       toast(d.message || 'انجام شد')
-      setRev((r) => r + 1)
+      if (opts.refresh !== false) setRev((r) => r + 1)
       if (!keep) setDlg(null)
       return d
     } catch (e: any) {
@@ -333,6 +334,48 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
     } finally {
       bump(-1)
     }
+  }
+
+  function patchRec(rec: CFRec) {
+    setRecords((list) => list.map((r) => (r.id === rec.id ? { ...r, ...rec } : r)))
+    setSearch((s) => (s ? { ...s, records: s.records.map((r) => (r.id === rec.id ? { ...r, ...rec } : r)) } : s))
+    setDlg((d) => (d && d.k === 'record' && d.rec.id === rec.id ? { ...d, rec: { ...d.rec, ...rec } } : d))
+  }
+
+  function addRec(rec: CFRec) {
+    setRecords((list) => [...list.filter((r) => r.id !== rec.id), rec])
+  }
+
+  function dropRec(rid: string) {
+    setRecords((list) => list.filter((r) => r.id !== rid))
+    setSearch((s) => (s ? { ...s, records: s.records.filter((r) => r.id !== rid) } : s))
+    setFavs((list) => list.filter((f) => f.rid !== rid))
+    setSel((s) => {
+      if (!s.has(rid)) return s
+      const n = new Set(s)
+      n.delete(rid)
+      return n
+    })
+  }
+
+  function fqdn(name: string, zname: string) {
+    const n = name.trim().toLowerCase()
+    if (!n) return ''
+    if (n === '@') return zname
+    if (n === zname || n.endsWith('.' + zname)) return n
+    return n + '.' + zname
+  }
+
+  function patchLb(content: string, patch: Partial<LbEntry>) {
+    setLbEntries((list) => list.map((e) => (e.content === content ? { ...e, ...patch } : e)))
+  }
+
+  function addLb(entry: LbEntry) {
+    setLbEntries((list) => [...list, entry])
+  }
+
+  function dropLb(content: string) {
+    setLbEntries((list) => list.filter((e) => e.content !== content))
   }
 
   /* ---------------- record actions ---------------- */
@@ -356,10 +399,8 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
     try {
       const d = await api<any>('/api/cf/record', { op: 'fav', acc, zid, rid })
       toast(d.message || (next ? 'به منتخب اضافه شد' : 'از منتخب حذف شد'))
-      setRev((r) => r + 1)
     } catch (e: any) {
       applyFav(rid, !next)
-      setRev((r) => r + 1)
       toast(e.message || 'خطا', true)
     } finally {
       favPending.current.delete(rid)
@@ -372,13 +413,21 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
   }
 
   async function toggleProxy(acc: number, zid: string, rec: CFRec) {
-    const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'proxy', proxied: !rec.proxied }, true)
-    if (d && d.record) setDlg((x) => (x && x.k === 'record' ? { ...x, rec: { ...x.rec, ...d.record } } : x))
+    const next = !rec.proxied
+    patchRec({ ...rec, proxied: next })
+    const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'proxy', proxied: next }, true, { refresh: false })
+    if (d && d.record) patchRec(d.record)
+    else if (!d) patchRec(rec)
   }
 
   async function cycleTTL(acc: number, zid: string, rec: CFRec) {
-    const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'ttl', ttl: 0 }, true)
-    if (d && d.record) setDlg((x) => (x && x.k === 'record' ? { ...x, rec: { ...x.rec, ...d.record } } : x))
+    const steps = [1, 120, 300, 1800, 3600, 21600, 86400]
+    const i = steps.indexOf(rec.ttl)
+    const next = i < 0 ? 1 : steps[(i + 1) % steps.length]
+    patchRec({ ...rec, ttl: next })
+    const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'ttl', ttl: 0 }, true, { refresh: false })
+    if (d && d.record) patchRec(d.record)
+    else if (!d) patchRec(rec)
   }
 
   async function showRecordTraffic(acc: number, zid: string, rec: CFRec, zname: string) {
@@ -1438,9 +1487,15 @@ ${reason}`,
 
   function lbGroupPage() {
     if (view.v !== 'lbgroup') return null
-    function entryAction(op: string, extra: any = {}) {
+    function entryAction(op: string, extra: any = {}, apply?: () => void, undo?: () => void) {
       if (view.v !== 'lbgroup') return
-      void post('/api/cf/lb', { op, acc: view.acc, zid: view.zid, name: view.name, ...extra })
+      setDlg(null)
+      apply?.()
+      void post('/api/cf/lb', { op, acc: view.acc, zid: view.zid, name: view.name, ...extra }, true, {
+        refresh: false,
+      }).then((d) => {
+        if (!d) undo?.()
+      })
     }
     function confirmProxy(on: boolean) {
       setDlg({
@@ -1461,7 +1516,7 @@ ${reason}`,
             می‌نشاند.
           </span>
         </div>
-        <div className="cc-grid2 cc-mb">
+        <div className="cc-lb-top">
           <Button
             variant="primary"
             icon={Plus}
@@ -1487,39 +1542,61 @@ ${reason}`,
                 ],
                 okText: 'افزودن',
                 onSubmit: async (v) => {
-                  if (view.v === 'lbgroup') {
-                    await post('/api/cf/lb', {
+                  if (view.v !== 'lbgroup') return
+                  const temp: LbEntry = {
+                    on: true,
+                    id: '',
+                    type: v.type,
+                    content: v.content,
+                    proxied: false,
+                    ttl: 1,
+                    weight: 1,
+                  }
+                  setDlg(null)
+                  addLb(temp)
+                  const d = await post(
+                    '/api/cf/lb',
+                    {
                       op: 'add',
                       acc: view.acc,
                       zid: view.zid,
                       name: view.name,
                       type: v.type,
                       content: v.content,
-                    })
-                  }
+                    },
+                    true,
+                    { refresh: false },
+                  )
+                  if (!d) setLbEntries((list) => list.filter((e) => e !== temp))
                 },
               })
             }
           >
             افزودن آی‌پی
           </Button>
-          <Button variant="outline" icon={Globe} onClick={() => confirmProxy(true)}>
+          <Button variant="secondary" icon={Globe} onClick={() => confirmProxy(true)}>
             پروکسی همه
           </Button>
         </div>
-        <div className="cc-grid2 cc-mb">
-          <Button variant="outline" icon={Globe} onClick={() => confirmProxy(false)}>
-            پروکسی خاموش
-          </Button>
-          <Button variant="outline" icon={ArrowRight} onClick={() => push({ v: 'lb', acc: view.acc, zid: view.zid })}>
-            گروه‌ها
-          </Button>
+        <div className="cc-lb-links">
+          <button type="button" className="cc-link" onClick={() => confirmProxy(false)}>
+            خاموش‌کردن پروکسی همه
+          </button>
+          <span aria-hidden="true">·</span>
+          <button
+            type="button"
+            className="cc-link"
+            onClick={() => push({ v: 'lb', acc: view.acc, zid: view.zid })}
+          >
+            <ArrowRight size={13} />
+            بازگشت به گروه‌ها
+          </button>
         </div>
         <div className="cc-section">{faNum(lbEntries.length)} آی‌پی</div>
         {lbEntries.length === 0 && busy > 0 && <SkeletonList />}
         {lbEntries.length === 0 && !busy && !err && <Empty title="آی‌پی‌ای نیست" />}
         {lbEntries.map((e) => (
-          <LayerCard key={e.content + e.type} className="cc-card">
+          <LayerCard key={e.content + e.type} className="cc-card cc-lb-card">
             <div className="cc-row">
               <span className={'cc-dot ' + (e.on ? 'run' : 'off')} />
               <div className="cc-grow">
@@ -1529,12 +1606,24 @@ ${reason}`,
                   {e.spare ? ' · زاپاس: ' + e.spare.content : ' · بدون زاپاس'}
                 </div>
               </div>
-              <Badge variant={e.on ? 'success' : 'neutral'}>{e.on ? 'فعال' : 'غیرفعال'}</Badge>
+              <Switch
+                checked={e.on}
+                aria-label={'فعال بودن ' + e.content}
+                onCheckedChange={() => {
+                  const next = !e.on
+                  entryAction(
+                    'toggle',
+                    { content: e.content, on: next },
+                    () => patchLb(e.content, { on: next }),
+                    () => patchLb(e.content, { on: e.on }),
+                  )
+                }}
+              />
             </div>
-            <div className="cc-grid2 cc-mt4">
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="cc-lb-actions">
+              <button
+                type="button"
+                className="cc-lb-act"
                 onClick={() =>
                   setDlg({
                     k: 'form',
@@ -1552,76 +1641,95 @@ ${reason}`,
                     ],
                     okText: 'ذخیره',
                     onSubmit: async (v) => {
-                      if (view.v === 'lbgroup')
-                        await post('/api/cf/lb', {
+                      if (view.v !== 'lbgroup') return
+                      const prev = e.weight
+                      const next = Number(v.weight || 0)
+                      patchLb(e.content, { weight: next })
+                      setDlg(null)
+                      const d = await post(
+                        '/api/cf/lb',
+                        {
                           op: 'weight',
                           acc: view.acc,
                           zid: view.zid,
                           name: view.name,
                           content: e.content,
-                          weight: Number(v.weight || 0),
-                        })
+                          weight: next,
+                        },
+                        true,
+                        { refresh: false },
+                      )
+                      if (!d) patchLb(e.content, { weight: prev })
                     },
                   })
                 }
               >
-                وزن
-              </Button>
-              <Button
-                variant={e.on ? 'secondary' : 'primary'}
-                size="sm"
-                icon={e.on ? Pause : Play}
-                onClick={() => entryAction('toggle', { content: e.content, on: !e.on })}
-              >
-                {e.on ? 'غیرفعال' : 'فعال'}
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={Lifebuoy}
-                className={e.spare ? '' : 'cc-wide'}
+                <SlidersHorizontal size={16} />
+                <span>وزن</span>
+                <b>{faNum(e.weight)}</b>
+              </button>
+              <button
+                type="button"
+                className="cc-lb-act"
                 onClick={() =>
                   setDlg({ k: 'spare', acc: view.acc, zid: view.zid, name: view.name, entry: e })
                 }
               >
-                زاپاس
-              </Button>
+                <Lifebuoy size={16} />
+                <span>زاپاس</span>
+                <b className={e.spare ? 'cc-lb-ok' : 'cc-lb-muted'}>{e.spare ? 'فعال' : 'ندارد'}</b>
+              </button>
               {e.spare && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={ArrowsClockwise}
+                <button
+                  type="button"
+                  className="cc-lb-act"
                   onClick={() =>
                     setDlg({
                       k: 'confirm',
                       title: 'جایگزینی با زاپاس',
                       desc: `آی‌پی زاپاس ${e.spare?.content} جای ${e.content} بنشیند؟`,
-                      onOk: () => entryAction('replace', { content: e.content }),
+                      onOk: () => {
+                        const sp = e.spare
+                        if (!sp) return
+                        const nextType = sp.type || e.type
+                        entryAction(
+                          'replace',
+                          { content: e.content },
+                          () => patchLb(e.content, { content: sp.content, type: nextType, spare: undefined }),
+                          () => patchLb(sp.content, { content: e.content, type: e.type, spare: e.spare }),
+                        )
+                      },
                     })
                   }
                 >
-                  جایگزینی
-                </Button>
+                  <ArrowsClockwise size={16} />
+                  <span>جایگزینی</span>
+                </button>
               )}
+              <button
+                type="button"
+                className="cc-lb-del"
+                aria-label={'حذف آی‌پی ' + e.content}
+                onClick={() =>
+                  setDlg({
+                    k: 'confirm',
+                    title: 'حذف آی‌پی از گروه',
+                    desc: `${e.type} · ${e.content} و تنظیمات وزن/زاپاس آن حذف شود؟ این کار رکورد DNS را هم پاک می‌کند.`,
+                    danger: true,
+                    okText: 'حذف',
+                    onOk: () =>
+                      entryAction(
+                        'del',
+                        { content: e.content },
+                        () => dropLb(e.content),
+                        () => addLb(e),
+                      ),
+                  })
+                }
+              >
+                <Trash size={16} />
+              </button>
             </div>
-            <Button
-              variant="secondary-destructive"
-              size="sm"
-              icon={Trash}
-              className="cc-wide cc-mt4"
-              onClick={() =>
-                setDlg({
-                  k: 'confirm',
-                  title: 'حذف آی‌پی از گروه',
-                  desc: `${e.type} · ${e.content} و تنظیمات وزن/زاپاس آن حذف شود؟ این کار رکورد DNS را هم پاک می‌کند.`,
-                  danger: true,
-                  okText: 'حذف',
-                  onOk: () => entryAction('del', { content: e.content }),
-                })
-              }
-            >
-              حذف آی‌پی
-            </Button>
           </LayerCard>
         ))}
       </>
@@ -1717,15 +1825,19 @@ ${reason}`,
                   title: 'تغییر نوع رکورد',
                   desc: `نوع از ${dlg.rec.type} به ${dlg.rec.type === 'A' ? 'CNAME' : 'A'} تغییر کند؟ مقدار باید با نوع جدید سازگار باشد.`,
                   onOk: async () => {
-                    if (view.v === 'zone') {
-                      await post('/api/cf/record', {
-                        op: 'type',
-                        acc: dlg.acc,
-                        zid: dlg.zid,
-                        rid: dlg.rec.id,
-                        type: dlg.rec.type === 'A' ? 'CNAME' : 'A',
-                      })
-                    }
+                    if (view.v !== 'zone') return
+                    const rec = dlg.rec
+                    const nextType = rec.type === 'A' ? 'CNAME' : 'A'
+                    setDlg(null)
+                    patchRec({ ...rec, type: nextType })
+                    const d = await post(
+                      '/api/cf/record',
+                      { op: 'type', acc: dlg.acc, zid: dlg.zid, rid: rec.id, type: nextType },
+                      true,
+                      { refresh: false },
+                    )
+                    if (d && d.record) patchRec(d.record)
+                    else if (!d) patchRec(rec)
                   },
                 })
               }
@@ -1744,14 +1856,17 @@ ${reason}`,
                   danger: true,
                   okText: 'حذف',
                   onOk: async () => {
-                    if (view.v === 'zone') {
-                      await post('/api/cf/record', {
-                        op: 'del',
-                        acc: dlg.acc,
-                        zid: dlg.zid,
-                        rid: dlg.rec.id,
-                      })
-                    }
+                    if (view.v !== 'zone') return
+                    const rec = dlg.rec
+                    setDlg(null)
+                    dropRec(rec.id)
+                    const d = await post(
+                      '/api/cf/record',
+                      { op: 'del', acc: dlg.acc, zid: dlg.zid, rid: rec.id },
+                      true,
+                      { refresh: false },
+                    )
+                    if (!d) refresh()
                   },
                 })
               }
@@ -1765,10 +1880,47 @@ ${reason}`,
               onSubmit={async (payload) => {
                 const path = '/api/cf/record'
                 const body = { ...payload, acc: dlg.acc, zid: dlg.zid, rid: dlg.rec?.id }
-                const d = await post(path, body)
-                if (d) {
-                  if (!dlg.rec && d.record?.id) setNewId(d.record.id)
-                  setDlg(null)
+                const prev = dlg.rec
+                let temp: CFRec | null = null
+                if (prev) {
+                  patchRec({
+                    ...prev,
+                    content: payload.content,
+                    ttl: payload.ttl,
+                    proxied: payload.proxied,
+                    priority: payload.priority,
+                  })
+                } else {
+                  const name = fqdn(payload.name, dlg.zone)
+                  temp = {
+                    id: 'tmp-' + Date.now(),
+                    type: payload.type,
+                    name,
+                    content: payload.content,
+                    ttl: payload.ttl,
+                    proxied: payload.proxied,
+                    priority: payload.priority,
+                    label: relName(name, dlg.zone) + '-' + payload.type,
+                    fav: false,
+                  }
+                  addRec(temp)
+                  setNewId(temp.id)
+                }
+                setDlg(null)
+                const d = await post(path, body, true, { refresh: false })
+                if (d && d.record) {
+                  if (prev) patchRec(d.record)
+                  else if (temp) {
+                    const tid = temp.id
+                    setRecords((list) => list.map((r) => (r.id === tid ? d.record : r)))
+                    if (d.record.id) setNewId(d.record.id)
+                  }
+                } else if (!d) {
+                  if (prev) patchRec(prev)
+                  else if (temp) {
+                    const tid = temp.id
+                    setRecords((list) => list.filter((r) => r.id !== tid))
+                  }
                 }
               }}
             />
@@ -1778,17 +1930,27 @@ ${reason}`,
               dlg={dlg}
               onClose={() => setDlg(null)}
               onSet={(spare) => {
+                if (view.v !== 'lbgroup') return
+                const entry = dlg.entry
+                const prev = entry.spare
+                const type = isIPv4(spare) ? 'A' : isIPv6(spare) ? 'AAAA' : 'CNAME'
+                patchLb(entry.content, { spare: { type, content: spare } })
                 setDlg(null)
-                if (view.v === 'lbgroup') {
-                  void post('/api/cf/lb', {
+                void post(
+                  '/api/cf/lb',
+                  {
                     op: 'spare_set',
                     acc: dlg.acc,
                     zid: dlg.zid,
                     name: dlg.name,
-                    content: dlg.entry.content,
+                    content: entry.content,
                     spare,
-                  })
-                }
+                  },
+                  true,
+                  { refresh: false },
+                ).then((d) => {
+                  if (!d) patchLb(entry.content, { spare: prev })
+                })
               }}
               onDel={() => {
                 const s = dlg
@@ -1799,13 +1961,22 @@ ${reason}`,
                   danger: true,
                   okText: 'حذف',
                   onOk: async () => {
-                    await post('/api/cf/lb', {
-                      op: 'spare_del',
-                      acc: s.acc,
-                      zid: s.zid,
-                      name: s.name,
-                      content: s.entry.content,
-                    })
+                    const prev = s.entry.spare
+                    setDlg(null)
+                    patchLb(s.entry.content, { spare: undefined })
+                    const d = await post(
+                      '/api/cf/lb',
+                      {
+                        op: 'spare_del',
+                        acc: s.acc,
+                        zid: s.zid,
+                        name: s.name,
+                        content: s.entry.content,
+                      },
+                      true,
+                      { refresh: false },
+                    )
+                    if (!d) patchLb(s.entry.content, { spare: prev })
                   },
                 })
               }}

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aknuun/cg-server/internal/cf"
 	"github.com/aknuun/cg-server/internal/lb"
@@ -103,8 +104,14 @@ func (r *Router) webCfZoneInfo(acc int, zid string, cli *cf.Client) map[string]a
 	if a, ok := z["account"].(map[string]any); ok {
 		accName = strv(a["name"])
 	}
+	name := strv(z["name"])
+	if name != "" {
+		cfZnMu.Lock()
+		cfZnCache[fmt.Sprintf("%d:%s", acc, zid)] = cfZnEntry{name: name, at: time.Now()}
+		cfZnMu.Unlock()
+	}
 	return map[string]any{
-		"id": zid, "name": strv(z["name"]), "status": strv(z["status"]),
+		"id": zid, "name": name, "status": strv(z["status"]),
 		"paused": strv(z["status"]) == "paused", "plan": strv(z["plan"]),
 		"created": created, "account": accName, "ns": ns,
 	}
@@ -285,8 +292,7 @@ func (r *Router) webCfRecordOp(w http.ResponseWriter, req *http.Request, uid int
 		webErr(w, http.StatusBadRequest, "شناسهٔ دامنه لازم است")
 		return
 	}
-	info := r.webCfZoneInfo(in.Acc, in.Zid, cli)
-	zname := strv(info["name"])
+	zname := r.cfZoneName(in.Acc, in.Zid)
 	msg := "انجام شد"
 	var rec *cf.Record
 
