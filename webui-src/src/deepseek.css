@@ -483,9 +483,8 @@ html[data-mode='light'] * {
     padding: 5px;
     border: 1px solid var(--ds-hairline);
     border-radius: 16px;
-    background: color-mix(in srgb, var(--ds-panel) 92%, transparent);
+    background: color-mix(in srgb, var(--ds-panel) 96%, transparent);
     box-shadow: var(--ds-shadow);
-    backdrop-filter: blur(14px);
     box-sizing: border-box;
   }
   .cc-rail-brand {
@@ -551,7 +550,6 @@ body {
   background-image:
     radial-gradient(70rem 45rem at 108% -10%, color-mix(in srgb, var(--ds-brand) 8%, transparent), transparent 62%),
     radial-gradient(56rem 40rem at -8% 106%, color-mix(in srgb, var(--ds-brand-2) 7%, transparent), transparent 66%);
-  background-attachment: fixed;
 }
 
 .cc-app {
@@ -560,7 +558,6 @@ body {
   background-image:
     radial-gradient(70rem 48rem at 110% -12%, color-mix(in srgb, var(--pv-accent) 10%, transparent), transparent 62%),
     radial-gradient(54rem 40rem at -12% 104%, color-mix(in srgb, var(--pv-accent-2) 8%, transparent), transparent 66%);
-  background-attachment: fixed;
 }
 
 .cc-topbar {
@@ -945,7 +942,7 @@ button[data-kumo-component='Button'][data-variant='secondary-destructive'] .cc-b
     padding: 6px;
     border-color: color-mix(in srgb, var(--pv-accent) 18%, var(--ds-hairline));
     border-radius: 18px;
-    background-color: color-mix(in srgb, var(--ds-panel) 84%, transparent);
+    background-color: color-mix(in srgb, var(--ds-panel) 96%, transparent);
     background-image: linear-gradient(
       180deg,
       color-mix(in srgb, var(--pv-accent) 9%, transparent),
