@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ArrowClockwise, ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react'
+import { AppVersion } from './AppVersion'
 import { Button } from './ui'
 import { ProviderRail, Sidebar, ThemeToggle } from './Sidebar'
 import type { Provider } from './Sidebar'
@@ -38,6 +39,7 @@ export function ProviderShell({
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={onBack} />
           )}
           <h1 className="cc-title">{title}</h1>
+          <AppVersion />
           <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}

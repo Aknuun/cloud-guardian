@@ -21,6 +21,7 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
+import { AppVersion } from './components/AppVersion'
 import { ProviderRail, Sidebar, ThemeToggle } from './components/Sidebar'
 import type { Provider } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
@@ -1151,6 +1152,7 @@ export default function App() {
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
           )}
           <h1 className="cc-title">{title}</h1>
+          <AppVersion />
           <ThemeToggle />
           {cur.v !== 'create' && (
             <Button

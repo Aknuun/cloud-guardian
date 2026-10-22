@@ -33,6 +33,24 @@
   color: var(--ds-text);
 }
 
+.cc-ver {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--pv-accent) 10%, transparent);
+  color: color-mix(in srgb, var(--pv-accent) 82%, var(--ds-text));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1;
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (min-width: 900px) {
   .cc-app {
     flex-direction: row;

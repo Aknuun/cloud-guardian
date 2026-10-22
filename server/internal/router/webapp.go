@@ -222,7 +222,9 @@ func (r *Router) webStatic() http.Handler {
 				return
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Cache-Control", "no-store, max-age=0")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
 			_, _ = w.Write(data)
 			return
 		}

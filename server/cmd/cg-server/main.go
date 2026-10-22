@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -57,7 +58,7 @@ func main() {
 	r := router.New(bot, st, cfg.AdminID, cfg.FailoverMap())
 	r.CFToken = cfg.CFToken
 	r.BotToken = cfg.BotToken
-	r.WebAppURL = getenv("CG_WEBAPP_URL", "")
+	r.WebAppURL = withVersion(getenv("CG_WEBAPP_URL", ""), router.Version)
 	if r.WebAppURL != "" {
 		bot.SetChatMenuButtonWebApp(r.WebAppURL, "هتزنر")
 	} else {
@@ -286,6 +287,21 @@ func srvStats(s map[string]any) map[string]any {
 		port = 22
 	}
 	return sshop.Stats(host, user, secret, port)
+}
+
+func withVersion(raw, ver string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || ver == "" {
+		return raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	q := u.Query()
+	q.Set("v", ver)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func getenv(k, def string) string {
