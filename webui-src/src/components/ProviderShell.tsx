@@ -38,9 +38,7 @@ export function ProviderShell({
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={onBack} />
           )}
           <h1 className="cc-title">{title}</h1>
-          <span className="cc-mobile-only">
-            <ThemeToggle />
-          </span>
+          <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}
             variant="ghost"

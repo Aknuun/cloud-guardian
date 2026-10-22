@@ -1151,9 +1151,7 @@ export default function App() {
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
           )}
           <h1 className="cc-title">{title}</h1>
-          <span className="cc-mobile-only">
-            <ThemeToggle />
-          </span>
+          <ThemeToggle />
           {cur.v !== 'create' && (
             <Button
               className={busy > 0 ? 'cc-spin' : ''}
