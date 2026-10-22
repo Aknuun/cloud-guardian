@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { ArrowClockwise, ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react'
 import { AppVersion } from './AppVersion'
 import { LogoutButton } from './LogoutButton'
+import { useSectionTheme } from './sectionTheme'
+import { ThemePicker } from './ThemePicker'
 import { Button } from './ui'
 import { ProviderRail, Sidebar, ThemeToggle } from './Sidebar'
 import type { Provider } from './Sidebar'
@@ -29,8 +31,9 @@ export function ProviderShell({
   toast: { t: string; err?: boolean } | null
   children: ReactNode
 }) {
+  const sectionTheme = useSectionTheme(provider)
   return (
-    <div className={"cc-app p-" + provider}>
+    <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar provider={provider} onChange={onChange} />
       <ProviderRail provider={provider} onChange={onChange} />
       <div className="cc-content">
@@ -41,6 +44,7 @@ export function ProviderShell({
           )}
           <h1 className="cc-title">{title}</h1>
           <AppVersion />
+          <ThemePicker provider={provider} />
           <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}

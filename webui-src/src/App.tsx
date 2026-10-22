@@ -24,6 +24,8 @@ import {
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
 import { AppVersion } from './components/AppVersion'
 import { LogoutButton } from './components/LogoutButton'
+import { useSectionTheme } from './components/sectionTheme'
+import { ThemePicker } from './components/ThemePicker'
 import { ProviderRail, Sidebar, ThemeToggle } from './components/Sidebar'
 import type { Provider } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
@@ -120,6 +122,7 @@ export default function App() {
     const p = sessionStorage.getItem('cg_provider')
     return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
   })
+  const sectionTheme = useSectionTheme(provider)
   const cfBack = useRef<() => void>(() => {})
   const lnBack = useRef<() => void>(() => {})
   const arvBack = useRef<() => void>(() => {})
@@ -1188,7 +1191,7 @@ export default function App() {
   const showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
 
   return (
-    <div className={"cc-app p-" + provider}>
+    <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar provider={provider} onChange={setProvider} />
       <ProviderRail provider={provider} onChange={setProvider} />
       <div className="cc-content">
@@ -1199,6 +1202,7 @@ export default function App() {
           )}
           <h1 className="cc-title">{title}</h1>
           <AppVersion />
+          <ThemePicker provider={provider} />
           <ThemeToggle />
           {cur.v !== 'create' && (
             <Button
