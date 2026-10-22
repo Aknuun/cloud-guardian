@@ -336,6 +336,196 @@ body {
   width: 100%;
 }
 
+/* ---------------- record sheet ---------------- */
+
+.cc-rec-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cc-rec-headmain {
+  flex: 1;
+  min-width: 0;
+}
+.cc-rec-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-color-kumo-subtle);
+  cursor: pointer;
+}
+.cc-rec-close:active {
+  background: var(--color-kumo-tint);
+  color: var(--text-color-kumo-default);
+}
+.cc-rec-close:focus-visible,
+.cc-rec-copy:focus-visible,
+.cc-rec-row:focus-visible,
+.cc-rec-danger:focus-visible {
+  outline: 2px solid var(--cc-primary);
+  outline-offset: 2px;
+}
+.cc-rec-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.cc-rec-proxy {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-color-kumo-subtle);
+  font-size: 11px;
+}
+.cc-rec-proxy::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-color-kumo-inactive);
+}
+.cc-rec-proxy.on::before {
+  background: var(--cc-success);
+}
+.cc-rec-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.cc-rec-desc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 0 0;
+  color: var(--text-color-kumo-subtle);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+.cc-rec-copy {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color-kumo-subtle);
+  cursor: pointer;
+}
+.cc-rec-copy:hover,
+.cc-rec-copy:active {
+  background: var(--color-kumo-tint);
+  color: var(--text-color-kumo-default);
+}
+.cc-rec-toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.cc-rec-toolbar > button:first-child {
+  flex: 1;
+  width: auto !important;
+}
+.cc-rec-toolbar > button:last-child {
+  width: 44px !important;
+  min-width: 44px;
+  height: 44px !important;
+  padding: 0 !important;
+}
+.cc-rec-details {
+  margin: 0 0 4px;
+}
+.cc-rec-group {
+  background: var(--color-kumo-recessed);
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.cc-rec-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+.cc-rec-row + .cc-rec-row {
+  border-top: 1px solid var(--color-kumo-hairline);
+}
+.cc-rec-row:active {
+  background: var(--color-kumo-tint);
+}
+.cc-rec-ico {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--color-kumo-base);
+  border: 1px solid var(--color-kumo-line);
+  color: var(--text-color-kumo-default);
+}
+.cc-rec-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cc-rec-rowtitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+.cc-rec-rowsub {
+  color: var(--text-color-kumo-subtle);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.cc-rec-chev {
+  flex: 0 0 auto;
+  color: var(--text-color-kumo-inactive);
+}
+.cc-rec-danger {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--cc-danger) 24%, transparent);
+  background: color-mix(in srgb, var(--cc-danger) 8%, transparent);
+  color: var(--cc-danger);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cc-rec-danger:active {
+  opacity: 0.86;
+}
+
 .cc-submit {
   height: 46px !important;
   margin-top: 4px;

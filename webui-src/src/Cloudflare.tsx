@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from '@cloudflare/kumo'
 import {
   ArrowClockwise,
@@ -2056,17 +2057,52 @@ function RecordSheet({
   const r = dlg.rec
   return (
     <>
-      <Dialog.Title className="cc-dialog-title">
-        {r.label}
-        {r.fav && <span className="cc-starred"> ★</span>}
-      </Dialog.Title>
-      <Dialog.Description className="cc-dialog-desc cc-mono">{r.content}</Dialog.Description>
-
-      <div className="cc-kvbox">
-        <div className="cc-kv">
-          <span>نوع</span>
-          <span>{r.type}</span>
+      <div className="cc-rec-head">
+        <div className="cc-rec-headmain">
+          <div className="cc-rec-meta">
+            <Badge variant="secondary">{r.type}</Badge>
+            {PROXYABLE.includes(r.type) && (
+              <span className={'cc-rec-proxy' + (r.proxied ? ' on' : '')}>
+                {r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'}
+              </span>
+            )}
+          </div>
+          <Dialog.Title className="cc-rec-title">
+            {r.label}
+            {r.fav && <Star size={14} weight="fill" className="cc-starred" />}
+          </Dialog.Title>
+          <Dialog.Description className="cc-rec-desc">
+            <span className="cc-mono">{r.content}</span>
+            <button
+              type="button"
+              className="cc-rec-copy"
+              aria-label="کپی مقدار"
+              onClick={() => onCopy(r.content, 'مقدار کپی شد')}
+            >
+              <Copy size={15} />
+            </button>
+          </Dialog.Description>
         </div>
+        <button type="button" className="cc-rec-close" aria-label="بستن" onClick={onClose}>
+          <X size={17} />
+        </button>
+      </div>
+
+      <div className="cc-rec-toolbar">
+        <Button variant="primary" icon={PencilSimple} onClick={onEdit}>
+          ویرایش رکورد
+        </Button>
+        <Button
+          variant="secondary"
+          shape="square"
+          icon={Star}
+          aria-label={r.fav ? 'حذف از منتخب' : 'افزودن به منتخب'}
+          aria-pressed={r.fav}
+          onClick={onFav}
+        />
+      </div>
+
+      <div className="cc-kvbox cc-rec-details">
         <div className="cc-kv">
           <span>TTL</span>
           <span>{ttlLabel(r.ttl)}</span>
@@ -2083,50 +2119,72 @@ function RecordSheet({
         </div>
       </div>
 
-      <div className="cc-section">عملیات</div>
-      <div className="cc-actions">
-        <Button variant="primary" icon={PencilSimple} className="cc-wide" onClick={onEdit}>
-          ویرایش مقدار
-        </Button>
-        <Button variant="secondary" icon={Star} onClick={onFav}>
-          {r.fav ? 'حذف از منتخب' : 'افزودن به منتخب'}
-        </Button>
-        <Button variant="secondary" icon={Clock} onClick={onTTL}>
-          TTL: {ttlLabel(r.ttl)}
-        </Button>
+      <div className="cc-section">مدیریت رکورد</div>
+      <div className="cc-rec-group">
+        <RecRow
+          icon={<Clock size={17} />}
+          title="زمان TTL"
+          sub={ttlLabel(r.ttl)}
+          onClick={onTTL}
+        />
         {(r.type === 'A' || r.type === 'CNAME') && (
-          <Button variant="secondary" icon={ArrowsClockwise} onClick={onType}>
-            تبدیل به {r.type === 'A' ? 'CNAME' : 'A'}
-          </Button>
+          <RecRow
+            icon={<ArrowsClockwise size={17} />}
+            title="نوع رکورد"
+            sub={'تبدیل به ' + (r.type === 'A' ? 'CNAME' : 'A')}
+            onClick={onType}
+          />
         )}
-        <Button variant="secondary" icon={Copy} onClick={() => onCopy(r.name, 'نام کپی شد')}>
-          کپی نام
-        </Button>
-        <Button variant="secondary" icon={Copy} onClick={() => onCopy(r.content, 'مقدار کپی شد')}>
-          کپی مقدار
-        </Button>
-        <Button variant="secondary" icon={ChartBar} onClick={onTraffic}>
-          ترافیک امروز
-        </Button>
-        <Button variant="secondary" icon={LinkIcon} onClick={onRefs}>
-          CNAMEهای وارده
-        </Button>
+        <RecRow
+          icon={<ChartBar size={17} />}
+          title="ترافیک امروز"
+          sub="درخواست‌های DNS این رکورد"
+          onClick={onTraffic}
+        />
+        <RecRow
+          icon={<LinkIcon size={17} />}
+          title="CNAMEهای وارده"
+          sub="دامنه‌هایی که به این رکورد اشاره می‌کنند"
+          onClick={onRefs}
+        />
         {PROXYABLE.includes(r.type) && (
-          <Button variant="secondary" icon={Gear} className="cc-wide" onClick={onLB}>
-            لود بالانسر و آی‌پی زاپاس
-          </Button>
+          <RecRow
+            icon={<Gear size={17} />}
+            title="لود بالانسر و آی‌پی زاپاس"
+            sub="مدیریت گروه و آدرس پشتیبان"
+            onClick={onLB}
+          />
         )}
-        <Button className="cc-wide" variant="secondary-destructive" icon={Trash} onClick={onDelete}>
-          حذف رکورد
-        </Button>
       </div>
 
-      <div className="cc-dialog-actions">
-        <Button variant="secondary" className="cc-wide" onClick={onClose}>
-          بستن
-        </Button>
-      </div>
+      <button type="button" className="cc-rec-danger" onClick={onDelete}>
+        <Trash size={17} />
+        <span>حذف رکورد</span>
+      </button>
     </>
+  )
+}
+
+function RecRow({
+  icon,
+  title,
+  sub,
+  onClick,
+}: {
+  icon: ReactNode
+  title: string
+  sub?: string
+  onClick: () => void
+}) {
+  return (
+    <button type="button" className="cc-rec-row" onClick={onClick}>
+      <span className="cc-rec-ico">{icon}</span>
+      <span className="cc-rec-text">
+        <span className="cc-rec-rowtitle">{title}</span>
+        {sub && <span className="cc-rec-rowsub">{sub}</span>}
+      </span>
+      <CaretLeft size={14} weight="bold" className="cc-rec-chev" />
+    </button>
   )
 }
 
