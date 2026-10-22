@@ -46,7 +46,18 @@ import {
   statusLabel,
   ttlLabel,
 } from './cloudflare/model'
-import { ErrorState, FavStar, FormDialog, RecordEditor, RecordSheet, SearchInput, SkeletonList, SpareSheet } from './cloudflare/components'
+import {
+  ConvertRecordDialog,
+  ErrorState,
+  FavStar,
+  FormDialog,
+  RecordEditor,
+  RecordSheet,
+  RefTreeDialog,
+  SearchInput,
+  SkeletonList,
+  SpareSheet,
+} from './cloudflare/components'
 
 export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef: (f: () => void) => void }) {
   const [boot] = useState(restoreCfState)
@@ -458,9 +469,11 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
     try {
       const d = await api<any>('/api/cf/refs?acc=' + acc + '&zid=' + encodeURIComponent(zid) + '&rid=' + encodeURIComponent(rec.id))
       setDlg({
-        k: 'list',
+        k: 'tree',
         title: 'CNAMEهای وارده',
-        rows: (d.refs || []).map((r: any) => ({ title: r.name, sub: r.zone })),
+        target: d.target || rec.name,
+        zone: d.zone || '',
+        nodes: d.tree || [],
         empty: 'هیچ دامنه‌ای به این رکورد CNAME نکرده است.',
       })
     } catch (e: any) {
@@ -688,6 +701,7 @@ ${reason}`,
             <div className="cc-grow">
               <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
               <div className="cc-sub cc-mono">{r.content}</div>
+              {r.match === 'cname' && <div className="cc-sub">CNAME مرتبط با این IP</div>}
             </div>
             <div className="cc-sub">{r.zone}</div>
           </LayerCard>
@@ -846,7 +860,10 @@ ${reason}`,
                   <div className="cc-grow">
                     <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
                     <div className="cc-sub cc-mono">{r.content}</div>
-                    <div className="cc-sub">{r.zone}</div>
+                    <div className="cc-sub">
+                      {r.zone}
+                      {r.match === 'cname' ? ' · CNAME مرتبط با این IP' : ''}
+                    </div>
                   </div>
                   <FavStar fav={r.fav} onClick={() => void setFav(r.acc, r.zid, r.id, !r.fav)} />
                 </LayerCard>
@@ -1809,6 +1826,32 @@ ${reason}`,
               </div>
             </>
           )}
+          {dlg.k === 'tree' && <RefTreeDialog dlg={dlg} onClose={() => setDlg(null)} />}
+          {dlg.k === 'convert' && (
+            <ConvertRecordDialog
+              dlg={dlg}
+              onClose={() => setDlg(null)}
+              onSubmit={async (content) => {
+                const rec = dlg.rec
+                const next = dlg.next
+                const d = await post(
+                  '/api/cf/record',
+                  { ...recBody(rec, dlg.acc, dlg.zid), op: 'type', type: next, content },
+                  true,
+                  { refresh: false },
+                )
+                if (!d) return false
+                if (d.record) {
+                  patchRec(d.record)
+                  setDlg({ k: 'record', acc: dlg.acc, zid: dlg.zid, zone: dlg.zone, rec: d.record })
+                } else {
+                  patchRec({ ...rec, type: next, content })
+                  setDlg(null)
+                }
+                return true
+              }}
+            />
+          )}
           {dlg.k === 'record' && (
             <RecordSheet
               key={dlg.rec.id}
@@ -1819,28 +1862,20 @@ ${reason}`,
               onFav={() => toggleFav(dlg.acc, dlg.zid, dlg.rec)}
               onProxy={() => toggleProxy(dlg.acc, dlg.zid, dlg.rec)}
               onTTL={() => cycleTTL(dlg.acc, dlg.zid, dlg.rec)}
-              onType={() =>
-                setDlg({
-                  k: 'confirm',
-                  title: 'تغییر نوع رکورد',
-                  desc: `نوع از ${dlg.rec.type} به ${dlg.rec.type === 'A' ? 'CNAME' : 'A'} تغییر کند؟ مقدار باید با نوع جدید سازگار باشد.`,
-                  onOk: async () => {
-                    if (view.v !== 'zone') return
-                    const rec = dlg.rec
-                    const nextType = rec.type === 'A' ? 'CNAME' : 'A'
-                    setDlg(null)
-                    patchRec({ ...rec, type: nextType })
-                    const d = await post(
-                      '/api/cf/record',
-                      { op: 'type', acc: dlg.acc, zid: dlg.zid, rid: rec.id, type: nextType },
-                      true,
-                      { refresh: false },
-                    )
-                    if (d && d.record) patchRec(d.record)
-                    else if (!d) patchRec(rec)
-                  },
-                })
-              }
+              onType={() => {
+                const rec = dlg.rec
+                const next = rec.type === 'A' ? 'CNAME' : 'A'
+                const seen = new Set<string>()
+                const candidates = records
+                  .filter((r) => {
+                    if (r.id === rec.id || seen.has(r.name)) return false
+                    if (!['A', 'AAAA', 'CNAME'].includes(r.type)) return false
+                    seen.add(r.name)
+                    return true
+                  })
+                  .map((r) => ({ name: r.name, type: r.type, content: r.content }))
+                setDlg({ k: 'convert', acc: dlg.acc, zid: dlg.zid, zone: dlg.zone, rec, next, candidates })
+              }}
               onTraffic={() => showRecordTraffic(dlg.acc, dlg.zid, dlg.rec, dlg.zone)}
               onRefs={() => showRefs(dlg.acc, dlg.zid, dlg.rec)}
               onLB={() => {

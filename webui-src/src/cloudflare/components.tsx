@@ -18,7 +18,7 @@ import {
   ArrowClockwise,
 } from '@phosphor-icons/react'
 import { haptic } from '../lib'
-import type { Dlg, Field } from './model'
+import type { Dlg, Field, RefNode } from './model'
 import { isHost, isIPv4, isIPv6, PROXYABLE, relName, TTL_STEPS, ttlLabel, TYPES, validateRecord } from './model'
 
 export function FavStar({
@@ -150,6 +150,7 @@ export function RecordEditor({
   const [formErr, setFormErr] = useState('')
   const [busy, setBusy] = useState(false)
   const canProxy = PROXYABLE.includes(type)
+  const history = (r?.history || []).filter((v) => v && v !== content)
 
   async function submit() {
     const problem = validateRecord(type, name, content, priority, !r)
@@ -236,6 +237,28 @@ export function RecordEditor({
           setFormErr('')
         }}
       />
+      {history.length > 0 && (
+        <>
+          <div className="cc-field-label">سابقهٔ مقدارهای قبلی</div>
+          <div className="cc-history" aria-label="سابقهٔ مقدارهای قبلی">
+            {history.map((v) => (
+              <button
+                key={v}
+                type="button"
+                className="cc-history-chip cc-mono"
+                title="استفاده از این مقدار"
+                onClick={() => {
+                  setContent(v)
+                  setFormErr('')
+                }}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <div className="cc-hint cc-mb">برای جایگذاری، روی مقدار قبلی بزن.</div>
+        </>
+      )}
       {type === 'MX' && (
         <>
           <div className="cc-field-label">اولویت (Priority)</div>
@@ -482,6 +505,160 @@ export function SpareSheet({
         )}
         <Button variant="primary" size="lg" className={dlg.entry.spare ? '' : 'cc-wide'} disabled={!v.trim()} onClick={save}>
           ذخیره
+        </Button>
+      </div>
+    </>
+  )
+}
+
+export function ConvertRecordDialog({
+  dlg,
+  onClose,
+  onSubmit,
+}: {
+  dlg: Extract<Dlg, { k: 'convert' }>
+  onClose: () => void
+  onSubmit: (content: string) => Promise<boolean>
+}) {
+  const toA = dlg.next === 'A'
+  const [value, setValue] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const picked = dlg.candidates.some((c) => c.name === value) ? value : ''
+
+  async function submit() {
+    const v = value.trim()
+    if (!v) {
+      setErr(toA ? 'آی‌پی جدید را وارد کن.' : 'دامنهٔ مقصد را انتخاب یا وارد کن.')
+      haptic('error')
+      return
+    }
+    if (toA && !isIPv4(v)) {
+      setErr('برای تبدیل به A باید یک آی‌پی معتبر IPv4 وارد کنی.')
+      haptic('error')
+      return
+    }
+    if (!toA && !isHost(v)) {
+      setErr('برای تبدیل به CNAME باید یک دامنهٔ معتبر وارد کنی.')
+      haptic('error')
+      return
+    }
+    setErr('')
+    setBusy(true)
+    try {
+      const ok = await onSubmit(v)
+      if (!ok) setErr('تبدیل انجام نشد؛ خطا را بررسی کن.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <DialogHead
+        title={toA ? 'تبدیل CNAME به A' : 'تبدیل A به CNAME'}
+        sub={`${dlg.rec.type} · ${dlg.rec.name}`}
+        onClose={onClose}
+      />
+      <div className="cc-kvbox">
+        <div className="cc-kv">
+          <span>مقدار فعلی</span>
+          <span className="cc-mono cc-small">{dlg.rec.content}</span>
+        </div>
+        <div className="cc-kv">
+          <span>نوع جدید</span>
+          <span>{dlg.next}</span>
+        </div>
+      </div>
+      {!toA && dlg.candidates.length > 0 && (
+        <>
+          <div className="cc-field-label">انتخاب از رکوردهای موجود</div>
+          <select
+            autoFocus
+            className="cc-select cc-mb"
+            value={picked}
+            aria-label="انتخاب ساب‌دامنه از رکوردهای موجود"
+            onChange={(e) => {
+              setValue(e.target.value)
+              setErr('')
+            }}
+          >
+            <option value="">انتخاب ساب‌دامنه…</option>
+            {dlg.candidates.map((c) => (
+              <option key={c.name} value={c.name}>
+                {relName(c.name, dlg.zone)} · {c.type}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      <div className="cc-field-label">{toA ? 'آی‌پی جدید (IPv4)' : 'یا دامنهٔ مقصد را وارد کن'}</div>
+      <Input
+        autoFocus={toA || dlg.candidates.length === 0}
+        className={'cc-input cc-mb cc-mono' + (err ? ' cc-invalid' : '')}
+        placeholder={toA ? '1.2.3.4' : 'target.example.com'}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value)
+          setErr('')
+        }}
+      />
+      {!toA && <div className="cc-hint cc-mb">می‌توانی از فهرست بالا انتخاب کنی یا دامنه را دستی وارد کنی.</div>}
+      {err && <div className="cc-field-err" role="alert">{err}</div>}
+      <div className="cc-dialog-actions">
+        <Button variant="secondary" size="lg" onClick={onClose}>
+          انصراف
+        </Button>
+        <Button variant="primary" size="lg" disabled={busy} onClick={() => void submit()}>
+          {busy ? 'در حال تبدیل…' : 'تبدیل و ذخیره'}
+        </Button>
+      </div>
+    </>
+  )
+}
+
+function RefTreeNodes({ nodes }: { nodes: RefNode[] }) {
+  return (
+    <ul className="cc-tree">
+      {nodes.map((n, i) => (
+        <li className="cc-tree-node" key={n.zone + '|' + n.name + '|' + i}>
+          <div className="cc-tree-row">
+            <span className="cc-tree-dot" aria-hidden="true" />
+            <span className="cc-mono cc-tree-name">{n.name}</span>
+            <span className="cc-tree-zone">{n.zone}</span>
+            {n.cycle && <span className="cc-tree-cycle">حلقه</span>}
+          </div>
+          {n.children && n.children.length > 0 && <RefTreeNodes nodes={n.children} />}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function RefTreeDialog({
+  dlg,
+  onClose,
+}: {
+  dlg: Extract<Dlg, { k: 'tree' }>
+  onClose: () => void
+}) {
+  return (
+    <>
+      <DialogHead
+        title={dlg.title}
+        sub={dlg.target + (dlg.zone && dlg.zone !== dlg.target ? ' · ' + dlg.zone : '')}
+        onClose={onClose}
+      />
+      {dlg.nodes.length === 0 ? (
+        <div className="cc-hint cc-center cc-pad">{dlg.empty || 'هیچ CNAME وارده‌ای پیدا نشد.'}</div>
+      ) : (
+        <div className="cc-tree-wrap">
+          <RefTreeNodes nodes={dlg.nodes} />
+        </div>
+      )}
+      <div className="cc-dialog-actions">
+        <Button variant="secondary" onClick={onClose}>
+          بستن
         </Button>
       </div>
     </>

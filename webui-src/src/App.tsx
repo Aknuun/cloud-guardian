@@ -21,7 +21,7 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
-import { Sidebar, ThemeToggle } from './components/Sidebar'
+import { ProviderRail, Sidebar, ThemeToggle } from './components/Sidebar'
 import type { Provider } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
 
@@ -1142,6 +1142,7 @@ export default function App() {
   return (
     <div className="cc-app">
       <Sidebar provider={provider} onChange={setProvider} />
+      <ProviderRail provider={provider} onChange={setProvider} />
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">

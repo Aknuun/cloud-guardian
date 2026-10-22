@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowClockwise, ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react'
 import { Button } from './ui'
-import { Sidebar, ThemeToggle } from './Sidebar'
+import { ProviderRail, Sidebar, ThemeToggle } from './Sidebar'
 import type { Provider } from './Sidebar'
 
 export function ProviderShell({
@@ -30,6 +30,7 @@ export function ProviderShell({
   return (
     <div className="cc-app">
       <Sidebar provider={provider} onChange={onChange} />
+      <ProviderRail provider={provider} onChange={onChange} />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">

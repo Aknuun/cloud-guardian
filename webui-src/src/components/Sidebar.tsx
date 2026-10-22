@@ -3,6 +3,13 @@ import { useTheme } from './theme'
 
 export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
 
+const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
+  { id: 'hz', label: 'هتزنر', Icon: HardDrives },
+  { id: 'cf', label: 'کلادفلر', Icon: Cloud },
+  { id: 'ln', label: 'لینود', Icon: Cube },
+  { id: 'arv', label: 'آروان', Icon: Globe },
+]
+
 export function Sidebar({
   provider,
   onChange,
@@ -66,6 +73,46 @@ export function Sidebar({
         </button>
       </div>
     </aside>
+  )
+}
+
+export function ProviderRail({
+  provider,
+  onChange,
+}: {
+  provider: Provider
+  onChange: (p: Provider) => void
+}) {
+  const { mode, toggle } = useTheme()
+  return (
+    <nav className="cc-provider-rail" aria-label="بخش‌های اصلی ربات">
+      <div className="cc-rail-brand" aria-hidden="true">
+        CG
+      </div>
+      {PROVIDERS.map((it) => (
+        <button
+          key={it.id}
+          type="button"
+          className={'cc-railitem' + (provider === it.id ? ' on' : '')}
+          aria-label={it.label}
+          title={it.label}
+          aria-current={provider === it.id ? 'page' : undefined}
+          onClick={() => onChange(it.id)}
+        >
+          <it.Icon size={20} weight={provider === it.id ? 'fill' : 'regular'} />
+        </button>
+      ))}
+      <div className="cc-rail-sep" />
+      <button
+        type="button"
+        className="cc-railitem cc-rail-theme"
+        aria-label="تغییر تم"
+        title={mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}
+        onClick={toggle}
+      >
+        {mode === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+    </nav>
   )
 }
 

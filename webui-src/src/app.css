@@ -1319,3 +1319,92 @@ html[data-mode='light'] .cc-app button[role='switch'][aria-checked='true'] > div
   border-radius: 9px !important;
   font-size: 13px !important;
 }
+
+/* ---------------- record history ---------------- */
+.cc-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 6px;
+}
+.cc-history-chip {
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 9px;
+  background: var(--color-kumo-recessed);
+  color: var(--text-color-kumo-default);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-history-chip:active {
+  border-color: var(--cc-primary);
+  color: var(--cc-primary);
+}
+
+/* ---------------- CNAME reference tree ---------------- */
+.cc-tree-wrap {
+  max-height: 52vh;
+  overflow: auto;
+  margin: 8px 0 2px;
+  padding: 6px 2px;
+}
+.cc-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cc-tree .cc-tree {
+  margin-inline-start: 10px;
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--color-kumo-line);
+}
+.cc-tree-node {
+  position: relative;
+  padding: 2px 0;
+}
+.cc-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+.cc-tree-row:hover {
+  background: var(--color-kumo-recessed);
+}
+.cc-tree-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--cc-primary);
+}
+.cc-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+.cc-tree-zone {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  color: var(--text-color-kumo-subtle);
+  font-size: 11px;
+}
+.cc-tree-cycle {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--cc-warning) 14%, transparent);
+  color: var(--cc-warning);
+  font-size: 10.5px;
+}

@@ -12,7 +12,10 @@ export type CFRec = {
   priority?: number | null
   label: string
   fav: boolean
+  history?: string[]
+  match?: string
 }
+export type RefNode = { name: string; zone: string; content?: string; children?: RefNode[]; cycle?: boolean }
 export type ZoneInfo = {
   id: string
   name: string
@@ -83,6 +86,16 @@ export type Dlg =
   | { k: 'list'; title: string; rows: { title: string; sub?: string }[]; empty?: string }
   | { k: 'record'; acc: number; zid: string; zone: string; rec: CFRec }
   | { k: 'editor'; acc: number; zid: string; zone: string; rec?: CFRec }
+  | {
+      k: 'convert'
+      acc: number
+      zid: string
+      zone: string
+      rec: CFRec
+      next: 'A' | 'CNAME'
+      candidates: { name: string; type: string; content: string }[]
+    }
+  | { k: 'tree'; title: string; target: string; zone: string; nodes: RefNode[]; empty?: string }
   | { k: 'spare'; acc: number; zid: string; name: string; entry: LbEntry }
 
 export const ZONE_BADGE: Record<string, 'success' | 'warning' | 'secondary' | 'neutral' | 'error'> = {
