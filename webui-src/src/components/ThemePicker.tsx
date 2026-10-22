@@ -50,6 +50,7 @@ export function ThemePicker({ provider }: { provider: Provider }) {
                   onClick={() => {
                     select(item.id)
                     haptic('light')
+                    setOpen(false)
                   }}
                 >
                   <span
