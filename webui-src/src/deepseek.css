@@ -33,6 +33,16 @@
   color: var(--ds-text);
 }
 
+.cc-signout {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 12px calc(24px + env(safe-area-inset-bottom));
+}
+.cc-signout .cc-error-card {
+  width: min(100%, 420px);
+}
+
 .cc-ver {
   flex: 0 0 auto;
   display: inline-flex;

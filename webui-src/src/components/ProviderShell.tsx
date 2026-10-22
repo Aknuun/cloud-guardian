@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowClockwise, ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react'
 import { AppVersion } from './AppVersion'
+import { LogoutButton } from './LogoutButton'
 import { Button } from './ui'
 import { ProviderRail, Sidebar, ThemeToggle } from './Sidebar'
 import type { Provider } from './Sidebar'
@@ -49,6 +50,7 @@ export function ProviderShell({
             aria-label="بروزرسانی"
             onClick={onRefresh}
           />
+          <LogoutButton />
         </header>
         <main className="cc-main" aria-busy={busy}>
           {showSwitch && (

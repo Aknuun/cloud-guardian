@@ -16,12 +16,14 @@ import {
   Plus,
   Power,
   Scissors,
+  SignIn,
   Trash,
   WarningCircle,
   Wrench,
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
 import { AppVersion } from './components/AppVersion'
+import { LogoutButton } from './components/LogoutButton'
 import { ProviderRail, Sidebar, ThemeToggle } from './components/Sidebar'
 import type { Provider } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
@@ -110,7 +112,8 @@ function badgeVariant(st: string): any {
 /* ---------------- app ---------------- */
 
 export default function App() {
-  const [phase, setPhase] = useState<'boot' | 'ready' | 'error'>('boot')
+  const [phase, setPhase] = useState<'boot' | 'ready' | 'error' | 'signedout'>('boot')
+  const [authNonce, setAuthNonce] = useState(0)
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
   const [provider, setProvider] = useState<Provider>(() => {
@@ -172,6 +175,10 @@ export default function App() {
         TG.disableVerticalSwipes && TG.disableVerticalSwipes()
         TG.MainButton && TG.MainButton.hide()
       }
+      if (localStorage.getItem('cg_signed_out') === '1') {
+        if (!cancelled) setPhase('signedout')
+        return
+      }
       if (!TG || !TG.initData) {
         if (!cancelled) {
           setAuthErr('این مینی‌اپ فقط از داخل ربات تلگرام کار می‌کند.')
@@ -209,6 +216,15 @@ export default function App() {
       cancelled = true
       clearTimeout(toastTimer.current)
     }
+  }, [authNonce])
+
+  useEffect(() => {
+    const onSignedOut = () => {
+      setToken('')
+      setPhase('signedout')
+    }
+    window.addEventListener('cg:signed-out', onSignedOut)
+    return () => window.removeEventListener('cg:signed-out', onSignedOut)
   }, [])
 
   /* telegram back button */
@@ -1087,6 +1103,36 @@ export default function App() {
       </div>
     )
   }
+  if (phase === 'signedout') {
+    return (
+      <div className="cc-main cc-signout">
+        <div className="cc-card cc-error-card" role="status">
+          <div className="cc-error-ico">
+            <SignIn size={24} />
+          </div>
+          <div className="cc-name">از حساب خارج شدید</div>
+          <div className="cc-sub">برای ورود دوباره، دکمه زیر را بزنید.</div>
+          <Button
+            variant="primary"
+            icon={SignIn}
+            onClick={() => {
+              try {
+                localStorage.removeItem('cg_signed_out')
+              } catch {
+                /* ignore */
+              }
+              setToken('')
+              setAuthErr('')
+              setPhase('boot')
+              setAuthNonce((n) => n + 1)
+            }}
+          >
+            ورود دوباره
+          </Button>
+        </div>
+      </div>
+    )
+  }
   if (phase === 'error') {
     return (
       <div className="cc-main">
@@ -1164,6 +1210,7 @@ export default function App() {
               onClick={reload}
             />
           )}
+          <LogoutButton />
         </header>
         <main className="cc-main" aria-busy={busy > 0}>
           <div className="cc-mobile-only">
