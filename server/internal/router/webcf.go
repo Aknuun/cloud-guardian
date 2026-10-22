@@ -1208,6 +1208,36 @@ func (r *Router) webCfLb(w http.ResponseWriter, req *http.Request, uid int64) {
 				})
 				msg = "آی‌پی غیرفعال شد"
 			}
+		case "del":
+			content := strings.TrimSpace(in.Content)
+			if content == "" {
+				webErr(w, http.StatusBadRequest, "مقدار آی‌پی لازم است")
+				return
+			}
+			group, err := cli.Records(in.Zid)
+			if err != nil {
+				webErr(w, http.StatusBadGateway, err.Error())
+				return
+			}
+			for _, rec := range group {
+				if rec.Name != in.Name || rec.Content != content || !lb.IsLbRec(rec.Type) {
+					continue
+				}
+				if err := cli.DelRecord(in.Zid, rec.ID); err != nil {
+					webErr(w, http.StatusBadGateway, err.Error())
+					return
+				}
+			}
+			nd := make([]lb.Disabled, 0, len(cfg.Disabled))
+			for _, d := range cfg.Disabled {
+				if d.Content != content {
+					nd = append(nd, d)
+				}
+			}
+			cfg.Disabled = nd
+			delete(cfg.Weights, content)
+			delete(cfg.Spares, content)
+			msg = "آی‌پی حذف شد"
 		case "weight":
 			if cfg.Weights == nil {
 				cfg.Weights = map[string]float64{}

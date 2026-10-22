@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Switch } from './components/ui'
+import { Badge, Button, Dialog, Empty, LayerCard, Switch } from './components/ui'
 import type { Provider } from './components/Sidebar'
 import { ProviderShell } from './components/ProviderShell'
 import {
-  ArrowClockwise,
   ArrowRight,
   ArrowsClockwise,
   Broom,
   CaretDown,
   CaretLeft,
   ChartBar,
-  CheckCircle,
   CheckSquare,
   Clock,
   Copy,
@@ -29,202 +26,26 @@ import {
   Star,
   Trash,
   UsersThree,
-  WarningCircle,
   X,
 } from '@phosphor-icons/react'
 import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
-
-/* ---------------- types ---------------- */
-
-type CFAcc = { i: number; name: string; zones?: number }
-type CFZone = { id: string; name: string; status: string; acc: number; accName: string }
-type CFRec = {
-  id: string
-  type: string
-  name: string
-  content: string
-  ttl: number
-  proxied: boolean
-  priority?: number | null
-  label: string
-  fav: boolean
-}
-type ZoneInfo = {
-  id: string
-  name: string
-  status: string
-  paused: boolean
-  plan: string
-  created: string
-  account: string
-  ns: string[]
-}
-type SetItem = { key: string; label: string; value: string; kind: 'bool' | 'enum'; values?: { v: string; l: string }[] }
-type SetGroup = { key: string; title: string; items: SetItem[] }
-type EmailRule = { id: string; label: string; dest: string; enabled?: boolean }
-type EmailData = {
-  available: boolean
-  enabled: boolean
-  status?: string
-  rules: EmailRule[]
-  catchAll: string
-  dests: { email: string; verified: boolean }[]
-}
-type FavItem = {
-  acc: number
-  zid: string
-  rid: string
-  zone: string
-  label: string
-  type?: string
-  content?: string
-  name?: string
-  missing: boolean
-}
-type LbGroup = { name: string; on: number; off: number; total: number }
-type LbEntry = {
-  on: boolean
-  id: string
-  type: string
-  content: string
-  proxied: boolean
-  ttl: number
-  weight: number
-  spare?: { type: string; content: string }
-}
-type View =
-  | { v: 'zones' }
-  | { v: 'accounts' }
-  | { v: 'favs' }
-  | { v: 'search' }
-  | { v: 'zone'; acc: number; zid: string }
-  | { v: 'lbzones' }
-  | { v: 'lb'; acc: number; zid: string }
-  | { v: 'lbgroup'; acc: number; zid: string; name: string }
-type Field = {
-  key: string
-  label: string
-  placeholder?: string
-  value?: string
-  password?: boolean
-  select?: { value: string; label: string }[]
-  hint?: string
-  validate?: (v: string) => string | undefined
-}
-type PickItem = { id: string; title: string; sub?: string }
-type Dlg =
-  | { k: 'confirm'; title: string; desc?: string; danger?: boolean; okText?: string; onOk: () => void | Promise<void> }
-  | { k: 'form'; title: string; desc?: string; fields: Field[]; okText?: string; onSubmit: (v: Record<string, string>) => void | Promise<void> }
-  | { k: 'pick'; title: string; items: PickItem[]; onPick: (id: string) => void }
-  | { k: 'list'; title: string; rows: { title: string; sub?: string }[]; empty?: string }
-  | { k: 'record'; acc: number; zid: string; zone: string; rec: CFRec }
-  | { k: 'editor'; acc: number; zid: string; zone: string; rec?: CFRec }
-  | { k: 'spare'; acc: number; zid: string; name: string; entry: LbEntry }
-
-const ZONE_BADGE: Record<string, any> = {
-  active: 'success',
-  paused: 'warning',
-  pending: 'warning',
-  initializing: 'secondary',
-  moved: 'neutral',
-  deleted: 'error',
-}
-const TTL_STEPS = [1, 120, 300, 1800, 3600, 21600, 86400]
-const TYPES = ['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV']
-const PROXYABLE = ['A', 'AAAA', 'CNAME']
-const TAB_KEYS = ['records', 'settings', 'email', 'traffic'] as const
-type Tab = (typeof TAB_KEYS)[number]
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const HOST_RE = /^(?=.{1,253}$)(?!-)[a-z0-9_-]{1,63}(?:\.(?!-)[a-z0-9_-]{1,63})*\.?$/i
-const NAME_RE = /^(@|\*|(?=.{1,253}$)(?!-)[a-z0-9_*-]{1,63}(?:\.(?!-)[a-z0-9_*-]{1,63})*)$/i
-
-function statusLabel(s: string) {
-  switch (s) {
-    case 'active':
-      return 'فعال'
-    case 'paused':
-      return 'متوقف'
-    case 'pending':
-      return 'در انتظار'
-    case 'initializing':
-      return 'راه‌اندازی'
-    case 'moved':
-      return 'منتقل‌شده'
-    case 'deleted':
-      return 'حذف‌شده'
-  }
-  return s
-}
-function ttlLabel(t: number) {
-  if (!t || t === 1) return 'خودکار'
-  if (t < 3600) return faNum(t / 60) + ' دقیقه'
-  return faNum(t / 3600) + ' ساعت'
-}
-function relName(name: string, zone: string) {
-  if (!zone) return name
-  if (name === zone) return '@'
-  if (name.endsWith('.' + zone)) return name.slice(0, -(zone.length + 1))
-  return name
-}
-function isIPv4(v: string) {
-  const p = v.split('.')
-  return p.length === 4 && p.every((x) => /^\d{1,3}$/.test(x) && Number(x) <= 255)
-}
-function isIPv6(v: string) {
-  return v.includes(':') && /^[0-9a-f:]+$/i.test(v)
-}
-function validateRecord(type: string, name: string, content: string, priority: string, isNew: boolean) {
-  if (isNew && !name.trim()) return 'نام رکورد را وارد کن.'
-  if (isNew && !NAME_RE.test(name.trim())) return 'نام معتبر نیست؛ از حروف، عدد، خط تیره و نقطه استفاده کن.'
-  if (!content.trim()) return 'مقدار رکورد را وارد کن.'
-  if (type === 'A' && !isIPv4(content.trim())) return 'آی‌پی IPv4 معتبر نیست (مثلاً 1.2.3.4).'
-  if (type === 'AAAA' && !isIPv6(content.trim())) return 'آی‌پی IPv6 معتبر نیست.'
-  if (['CNAME', 'MX', 'NS'].includes(type) && !HOST_RE.test(content.trim()))
-    return 'میزبان معتبر نیست (مثلاً host.example.com).'
-  if (type === 'TXT' && content.length > 2048) return 'متن TXT حداکثر ۲۰۴۸ کاراکتر است.'
-  if (type === 'MX' && priority !== '') {
-    const n = Number(priority)
-    if (!Number.isInteger(n) || n < 0 || n > 65535) return 'اولویت باید عددی بین ۰ تا ۶۵۵۳۵ باشد.'
-  }
-  return ''
-}
-function riskySetting(key: string, value: string, current: string) {
-  if (key === 'ssl' && ['off', 'flexible'].includes(value))
-    return 'با این حالت، ارتباط بین کلادفلر و سرور شما رمزنگاری نمی‌شود و ممکن است سایت از دسترس خارج شود.'
-  if (key === 'min_tls_version' && ['1.0', '1.1'].includes(value))
-    return 'نسخه‌های قدیمی TLS امنیت سایت را کاهش می‌دهند.'
-  if (key === 'security_level' && ['off', 'low'].includes(value))
-    return 'با کاهش سطح امنیت، حملات خودکار کمتر مسدود می‌شوند.'
-  if (key === 'always_use_https' && value === 'off')
-    return 'با خاموش‌شدن این گزینه، بازدید بدون HTTPS ممکن می‌شود.'
-  if (key === 'automatic_https_rewrites' && value === 'off')
-    return 'لینک‌های HTTP به‌صورت خودکار به HTTPS تبدیل نمی‌شوند.'
-  if (key === 'tls_1_3' && value === 'off' && current === 'on')
-    return 'TLS 1.3 امن‌ترین نسخه است؛ خاموش‌کردن آن توصیه نمی‌شود.'
-  return ''
-}
-
-function isView(v: any): v is View {
-  if (!v || typeof v !== 'object') return false
-  if (!['zones', 'accounts', 'favs', 'search', 'zone', 'lbzones', 'lb', 'lbgroup'].includes(v.v)) return false
-  if (['zone', 'lb', 'lbgroup'].includes(v.v) && (typeof v.acc !== 'number' || typeof v.zid !== 'string')) return false
-  if (v.v === 'lbgroup' && typeof v.name !== 'string') return false
-  return true
-}
-function restoreCfState(): { view: View; stack: View[]; tab: Tab } | null {
-  try {
-    const raw = sessionStorage.getItem('cg_cf_state')
-    if (!raw) return null
-    const d = JSON.parse(raw)
-    if (!isView(d.view)) return null
-    const stack = Array.isArray(d.stack) ? d.stack.filter(isView) : []
-    const tab: Tab = TAB_KEYS.includes(d.tab) ? d.tab : 'records'
-    return { view: d.view, stack, tab }
-  } catch {
-    return null
-  }
-}
+import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
+import {
+  PROXYABLE,
+  TAB_KEYS,
+  ZONE_BADGE,
+  isEmail,
+  isHost,
+  isIPv4,
+  isIPv6,
+  relName,
+  restoreCfState,
+  riskySetting,
+  splitFavorites,
+  statusLabel,
+  ttlLabel,
+} from './cloudflare/model'
+import { ErrorState, FavStar, FormDialog, RecordEditor, RecordSheet, SearchInput, SkeletonList, SpareSheet } from './cloudflare/components'
 
 export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef: (f: () => void) => void }) {
   const [boot] = useState(restoreCfState)
@@ -267,6 +88,7 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const scrollPos = useRef<Record<string, number>>({})
+  const favPending = useRef<Set<string>>(new Set())
   const bump = (n: number) => setBusy((b) => Math.max(0, b + n))
   function toast(t: string, isErr = false) {
     setToastMsg({ t, err: isErr })
@@ -519,9 +341,34 @@ export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Prov
     return { acc, zid, rid: rec.id }
   }
 
-  async function toggleFav(acc: number, zid: string, rec: CFRec) {
-    const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'fav' })
-    if (d) setDlg(null)
+  function applyFav(rid: string, fav: boolean) {
+    setRecords((list) => list.map((r) => (r.id === rid ? { ...r, fav } : r)))
+    setSearch((s) => (s ? { ...s, records: s.records.map((r) => (r.id === rid ? { ...r, fav } : r)) } : s))
+    setDlg((d) => (d && d.k === 'record' && d.rec.id === rid ? { ...d, rec: { ...d.rec, fav } } : d))
+    if (!fav) setFavs((list) => list.filter((f) => f.rid !== rid))
+  }
+
+  async function setFav(acc: number, zid: string, rid: string, next: boolean) {
+    if (favPending.current.has(rid)) return
+    favPending.current.add(rid)
+    applyFav(rid, next)
+    bump(1)
+    try {
+      const d = await api<any>('/api/cf/record', { op: 'fav', acc, zid, rid })
+      toast(d.message || (next ? 'به منتخب اضافه شد' : 'از منتخب حذف شد'))
+      setRev((r) => r + 1)
+    } catch (e: any) {
+      applyFav(rid, !next)
+      setRev((r) => r + 1)
+      toast(e.message || 'خطا', true)
+    } finally {
+      favPending.current.delete(rid)
+      bump(-1)
+    }
+  }
+
+  function toggleFav(acc: number, zid: string, rec: CFRec) {
+    void setFav(acc, zid, rec.id, !rec.fav)
   }
 
   async function toggleProxy(acc: number, zid: string, rec: CFRec) {
@@ -803,43 +650,45 @@ ${reason}`,
   function zonesPage() {
     return (
       <>
-        <div className="cc-toolbar">
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() => {
-              const active = zones.filter((z) => z.status === 'active')
-              setDlg({
-                k: 'pick',
-                title: 'افزودن رکورد به کدام دامنه؟',
-                items: (active.length ? active : zones).map((z) => ({
-                  id: z.acc + '|' + z.id,
-                  title: z.name,
-                  sub: z.accName,
-                })),
-                onPick: (id) => {
-                  const [a, zid] = id.split('|')
-                  const z = zones.find((x) => x.id === zid)
-                  setDlg(null)
-                  setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
-                  push({ v: 'zone', acc: Number(a), zid })
-                },
-              })
-            }}
-          >
-            افزودن رکورد
-          </Button>
+        <Button
+          className="cc-primary-action"
+          variant="primary"
+          size="lg"
+          icon={Plus}
+          onClick={() => {
+            const active = zones.filter((z) => z.status === 'active')
+            setDlg({
+              k: 'pick',
+              title: 'افزودن رکورد به کدام دامنه؟',
+              items: (active.length ? active : zones).map((z) => ({
+                id: z.acc + '|' + z.id,
+                title: z.name,
+                sub: z.accName,
+              })),
+              onPick: (id) => {
+                const [a, zid] = id.split('|')
+                const z = zones.find((x) => x.id === zid)
+                setDlg(null)
+                setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
+                push({ v: 'zone', acc: Number(a), zid })
+              },
+            })
+          }}
+        >
+          افزودن رکورد
+        </Button>
+        <div className="cc-action-grid cc-mb">
           <Button variant="outline" icon={Star} onClick={() => push({ v: 'favs' })}>
             منتخب‌ها
-          </Button>
-          <Button variant="outline" icon={UsersThree} onClick={() => push({ v: 'accounts' })}>
-            اکانت‌ها
           </Button>
           <Button variant="outline" icon={MagnifyingGlass} onClick={() => push({ v: 'search' })}>
             جست‌وجوی رکورد
           </Button>
           <Button variant="outline" icon={Lifebuoy} onClick={() => push({ v: 'lbzones' })}>
             لود بالانسر
+          </Button>
+          <Button variant="outline" icon={UsersThree} onClick={() => push({ v: 'accounts' })}>
+            اکانت‌ها
           </Button>
         </div>
         {zonesBody(zones)}
@@ -862,12 +711,20 @@ ${reason}`,
   function favsPage() {
     return (
       <>
+        <div className="cc-section">رکوردهای ستاره‌دار</div>
         {favs.length === 0 && !busy && !err && (
-          <Empty title="منتخب‌ها خالی است" description="از داخل رکورد، ستاره را بزن." />
+          <Empty title="منتخب‌ها خالی است" description="از فهرست رکوردها یا داخل رکورد، ستاره را بزن." />
         )}
         {favs.length === 0 && busy > 0 && <SkeletonList />}
         {favs.map((f) => (
-          <LayerCard key={f.rid} className="cc-card cc-row">
+          <LayerCard
+            key={f.rid}
+            className={'cc-card cc-row' + (f.missing ? '' : ' cc-tap')}
+            onClick={() => {
+              if (!f.missing) openInZone(f.acc, f.zid, f.zone, f.rid)
+            }}
+          >
+            <Badge variant="secondary">{f.type || '—'}</Badge>
             <div className="cc-grow">
               <div className="cc-name">
                 {f.label || f.rid}
@@ -877,19 +734,25 @@ ${reason}`,
                 {f.zone || ''} {f.content ? ' · ' + f.content : ''}
               </div>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                if (f.missing) {
+            {f.missing ? (
+              <Button
+                variant="secondary-destructive"
+                size="sm"
+                icon={Trash}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  applyFav(f.rid, false)
                   void post('/api/cf/favs', { rid: f.rid })
-                  return
-                }
-                openInZone(f.acc, f.zid, f.zone, f.rid)
-              }}
-            >
-              {f.missing ? 'حذف' : 'بازکردن'}
-            </Button>
+                }}
+              >
+                پاک کردن
+              </Button>
+            ) : (
+              <>
+                <FavStar fav onClick={() => void setFav(f.acc, f.zid, f.rid, false)} label="حذف از منتخب" />
+                <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
+              </>
+            )}
           </LayerCard>
         ))}
       </>
@@ -922,20 +785,23 @@ ${reason}`,
             ))}
             <div className="cc-section">{num(search.records.length)} رکورد</div>
             {search.records.length === 0 && search.zones.length === 0 && <Empty title="چیزی پیدا نشد" />}
-            {search.records.map((r) => (
-              <LayerCard
-                key={r.id}
-                className="cc-card cc-row cc-tap"
-                onClick={() => openInZone(r.acc, r.zid, r.zone, r.id)}
-              >
-                <Badge variant="secondary">{r.type}</Badge>
-                <div className="cc-grow">
-                  <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
-                  <div className="cc-sub cc-mono">{r.content}</div>
-                </div>
-                <div className="cc-sub">{r.zone}</div>
-              </LayerCard>
-            ))}
+            {[...search.records]
+              .sort((a, b) => Number(b.fav) - Number(a.fav))
+              .map((r) => (
+                <LayerCard
+                  key={r.id}
+                  className="cc-card cc-row cc-tap"
+                  onClick={() => openInZone(r.acc, r.zid, r.zone, r.id)}
+                >
+                  <Badge variant="secondary">{r.type}</Badge>
+                  <div className="cc-grow">
+                    <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
+                    <div className="cc-sub cc-mono">{r.content}</div>
+                    <div className="cc-sub">{r.zone}</div>
+                  </div>
+                  <FavStar fav={r.fav} onClick={() => void setFav(r.acc, r.zid, r.id, !r.fav)} />
+                </LayerCard>
+              ))}
           </>
         )}
       </>
@@ -1018,6 +884,7 @@ ${reason}`,
   /* ---------------- zone ---------------- */
 
   function recordRow(r: CFRec) {
+    if (view.v !== 'zone') return null
     const checked = sel.has(r.id)
     return (
       <LayerCard
@@ -1055,10 +922,7 @@ ${reason}`,
           <Badge variant={PROXYABLE.includes(r.type) && r.proxied ? 'success' : 'secondary'}>{r.type}</Badge>
         )}
         <div className="cc-grow">
-          <div className="cc-name cc-mono">
-            {relName(r.name, zone?.name || '')}
-            {r.fav && <span className="cc-star"> ★</span>}
-          </div>
+          <div className="cc-name cc-mono">{relName(r.name, zone?.name || '')}</div>
           <div className="cc-sub cc-mono">{r.content}</div>
           {PROXYABLE.includes(r.type) && (
             <div className="cc-sub">
@@ -1066,6 +930,7 @@ ${reason}`,
             </div>
           )}
         </div>
+        {!selMode && <FavStar fav={r.fav} onClick={() => void setFav(view.acc, view.zid, r.id, !r.fav)} />}
         {!selMode && <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>}
       </LayerCard>
     )
@@ -1082,6 +947,7 @@ ${reason}`,
           r.content.toLowerCase().includes(ql) ||
           r.type.toLowerCase() === ql),
     )
+    const { favs: favList, rest } = splitFavorites(list)
     const types = Array.from(new Set(records.map((r) => r.type)))
     function selectAll() {
       if (sel.size === list.length) setSel(new Set())
@@ -1149,7 +1015,10 @@ ${reason}`,
         </div>
         {records.length === 0 && busy > 0 && <SkeletonList />}
         {list.length === 0 && !busy && !err && <Empty title="رکوردی نیست" />}
-        {list.map(recordRow)}
+        {favList.length > 0 && <div className="cc-section cc-section-fav">ستاره‌دار</div>}
+        {favList.map(recordRow)}
+        {favList.length > 0 && rest.length > 0 && <div className="cc-section">بقیه رکوردها</div>}
+        {rest.map(recordRow)}
       </>
     )
   }
@@ -1367,7 +1236,7 @@ ${reason}`,
                     ? verified.map((d) => ({ value: d.email, label: d.email }))
                     : undefined,
                   placeholder: 'you@gmail.com',
-                  validate: (v) => (EMAIL_RE.test(v.trim()) ? undefined : 'ایمیل مقصد معتبر نیست.'),
+                  validate: (v) => (isEmail(v.trim()) ? undefined : 'ایمیل مقصد معتبر نیست.'),
                 },
               ],
               okText: 'ساختن',
@@ -1416,7 +1285,7 @@ ${reason}`,
                   key: 'dest',
                   label: 'ایمیل مقصد',
                   placeholder: 'you@gmail.com',
-                  validate: (v) => (EMAIL_RE.test(v.trim()) ? undefined : 'ایمیل معتبر نیست.'),
+                  validate: (v) => (isEmail(v.trim()) ? undefined : 'ایمیل معتبر نیست.'),
                 },
               ],
               okText: 'افزودن',
@@ -1611,7 +1480,7 @@ ${reason}`,
                     label: 'مقدار',
                     placeholder: '1.2.3.4 یا host.example.com',
                     validate: (v) =>
-                      isIPv4(v.trim()) || isIPv6(v.trim()) || HOST_RE.test(v.trim())
+                      isIPv4(v.trim()) || isIPv6(v.trim()) || isHost(v.trim())
                         ? undefined
                         : 'آی‌پی یا میزبان معتبر نیست.',
                   },
@@ -1735,6 +1604,24 @@ ${reason}`,
                 </Button>
               )}
             </div>
+            <Button
+              variant="secondary-destructive"
+              size="sm"
+              icon={Trash}
+              className="cc-wide cc-mt4"
+              onClick={() =>
+                setDlg({
+                  k: 'confirm',
+                  title: 'حذف آی‌پی از گروه',
+                  desc: `${e.type} · ${e.content} و تنظیمات وزن/زاپاس آن حذف شود؟ این کار رکورد DNS را هم پاک می‌کند.`,
+                  danger: true,
+                  okText: 'حذف',
+                  onOk: () => entryAction('del', { content: e.content }),
+                })
+              }
+            >
+              حذف آی‌پی
+            </Button>
           </LayerCard>
         ))}
       </>
@@ -1960,560 +1847,6 @@ ${reason}`,
         {body}
       </ProviderShell>
       {renderDlg()}
-    </>
-  )
-}
-
-/* ---------------- shared ui ---------------- */
-
-function SearchInput({
-  value,
-  onChange,
-  placeholder,
-  autoFocus,
-}: {
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  autoFocus?: boolean
-}) {
-  return (
-    <div className="cc-search">
-      <Input
-        autoFocus={autoFocus}
-        className="cc-input"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={placeholder}
-      />
-      {value && (
-        <Button
-          className="cc-search-clear"
-          variant="ghost"
-          shape="square"
-          icon={X}
-          aria-label="پاک کردن جست‌وجو"
-          onClick={() => onChange('')}
-        />
-      )}
-    </div>
-  )
-}
-
-function SkeletonList({ rows = 3 }: { rows?: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, i) => (
-        <LayerCard key={i} className="cc-card cc-skel" aria-hidden="true">
-          <span className="cc-skel-line" style={{ width: 38 + ((i * 13) % 24) + '%' }} />
-          <span className="cc-skel-line" style={{ width: 62 + ((i * 7) % 20) + '%', height: 8 }} />
-        </LayerCard>
-      ))}
-    </>
-  )
-}
-
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  const analytics = /analytics|آنالیتیکس|Zone → Analytics/i.test(message)
-  return (
-    <div className="cc-card cc-error-card" role="alert">
-      <div className="cc-error-ico">
-        <WarningCircle size={24} />
-      </div>
-      <div className="cc-name">مشکلی پیش آمد</div>
-      <div className="cc-sub">{message}</div>
-      {analytics && (
-        <div className="cc-hintbox" style={{ textAlign: 'right' }}>
-          <Info size={17} />
-          <span>
-            برای دیدن ترافیک، به توکن کلادفلر دسترسی Zone → Analytics → Read بده و دوباره تلاش کن.
-          </span>
-        </div>
-      )}
-      <Button variant="primary" icon={ArrowClockwise} onClick={onRetry}>
-        تلاش دوباره
-      </Button>
-    </div>
-  )
-}
-
-/* ---------------- record sheet ---------------- */
-
-function RecordSheet({
-  dlg,
-  onClose,
-  onEdit,
-  onCopy,
-  onFav,
-  onProxy,
-  onTTL,
-  onType,
-  onTraffic,
-  onRefs,
-  onLB,
-  onDelete,
-}: {
-  dlg: Extract<Dlg, { k: 'record' }>
-  onClose: () => void
-  onEdit: () => void
-  onCopy: (v: string, l?: string) => void
-  onFav: () => void
-  onProxy: () => void
-  onTTL: () => void
-  onType: () => void
-  onTraffic: () => void
-  onRefs: () => void
-  onLB: () => void
-  onDelete: () => void
-}) {
-  const r = dlg.rec
-  return (
-    <>
-      <div className="cc-rec-head">
-        <div className="cc-rec-headmain">
-          <div className="cc-rec-meta">
-            <Badge variant="secondary">{r.type}</Badge>
-            {PROXYABLE.includes(r.type) && (
-              <span className={'cc-rec-proxy' + (r.proxied ? ' on' : '')}>
-                {r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'}
-              </span>
-            )}
-          </div>
-          <Dialog.Title className="cc-rec-title">
-            {r.label}
-            {r.fav && <Star size={14} weight="fill" className="cc-starred" />}
-          </Dialog.Title>
-          <Dialog.Description className="cc-rec-desc">
-            <span className="cc-mono">{r.content}</span>
-            <button
-              type="button"
-              className="cc-rec-copy"
-              aria-label="کپی مقدار"
-              onClick={() => onCopy(r.content, 'مقدار کپی شد')}
-            >
-              <Copy size={15} />
-            </button>
-          </Dialog.Description>
-        </div>
-        <button type="button" className="cc-rec-close" aria-label="بستن" onClick={onClose}>
-          <X size={17} />
-        </button>
-      </div>
-
-      <div className="cc-rec-toolbar">
-        <Button variant="primary" icon={PencilSimple} onClick={onEdit}>
-          ویرایش رکورد
-        </Button>
-        <Button
-          variant="secondary"
-          shape="square"
-          icon={Star}
-          aria-label={r.fav ? 'حذف از منتخب' : 'افزودن به منتخب'}
-          aria-pressed={r.fav}
-          onClick={onFav}
-        />
-      </div>
-
-      <div className="cc-kvbox cc-rec-details">
-        <div className="cc-kv">
-          <span>TTL</span>
-          <span>{ttlLabel(r.ttl)}</span>
-        </div>
-        {PROXYABLE.includes(r.type) && (
-          <div className="cc-kv">
-            <span>پروکسی کلادفلر</span>
-            <Switch checked={r.proxied} onCheckedChange={onProxy} aria-label="پروکسی کلادفلر" />
-          </div>
-        )}
-        <div className="cc-kv">
-          <span>نام کامل</span>
-          <span className="cc-mono cc-small">{r.name}</span>
-        </div>
-      </div>
-
-      <div className="cc-section">مدیریت رکورد</div>
-      <div className="cc-rec-group">
-        <RecRow
-          icon={<Clock size={17} />}
-          title="زمان TTL"
-          sub={ttlLabel(r.ttl)}
-          onClick={onTTL}
-        />
-        {(r.type === 'A' || r.type === 'CNAME') && (
-          <RecRow
-            icon={<ArrowsClockwise size={17} />}
-            title="نوع رکورد"
-            sub={'تبدیل به ' + (r.type === 'A' ? 'CNAME' : 'A')}
-            onClick={onType}
-          />
-        )}
-        <RecRow
-          icon={<ChartBar size={17} />}
-          title="ترافیک امروز"
-          sub="درخواست‌های DNS این رکورد"
-          onClick={onTraffic}
-        />
-        <RecRow
-          icon={<LinkIcon size={17} />}
-          title="CNAMEهای وارده"
-          sub="دامنه‌هایی که به این رکورد اشاره می‌کنند"
-          onClick={onRefs}
-        />
-        {PROXYABLE.includes(r.type) && (
-          <RecRow
-            icon={<Gear size={17} />}
-            title="لود بالانسر و آی‌پی زاپاس"
-            sub="مدیریت گروه و آدرس پشتیبان"
-            onClick={onLB}
-          />
-        )}
-      </div>
-
-      <button type="button" className="cc-rec-danger" onClick={onDelete}>
-        <Trash size={17} />
-        <span>حذف رکورد</span>
-      </button>
-    </>
-  )
-}
-
-function RecRow({
-  icon,
-  title,
-  sub,
-  onClick,
-}: {
-  icon: ReactNode
-  title: string
-  sub?: string
-  onClick: () => void
-}) {
-  return (
-    <button type="button" className="cc-rec-row" onClick={onClick}>
-      <span className="cc-rec-ico">{icon}</span>
-      <span className="cc-rec-text">
-        <span className="cc-rec-rowtitle">{title}</span>
-        {sub && <span className="cc-rec-rowsub">{sub}</span>}
-      </span>
-      <CaretLeft size={14} weight="bold" className="cc-rec-chev" />
-    </button>
-  )
-}
-
-/* ---------------- record editor ---------------- */
-
-function RecordEditor({
-  dlg,
-  onClose,
-  onSubmit,
-}: {
-  dlg: Extract<Dlg, { k: 'editor' }>
-  onClose: () => void
-  onSubmit: (v: any) => Promise<void>
-}) {
-  const r = dlg.rec
-  const [type, setType] = useState(r?.type || 'A')
-  const [name, setName] = useState(r ? relName(r.name, dlg.zone) : '')
-  const [content, setContent] = useState(r?.content || '')
-  const [ttl, setTTL] = useState(r?.ttl || 1)
-  const [proxied, setProxied] = useState(!!r?.proxied)
-  const [priority, setPriority] = useState(r?.priority != null ? String(r.priority) : '')
-  const [formErr, setFormErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const canProxy = PROXYABLE.includes(type)
-
-  async function submit() {
-    const problem = validateRecord(type, name, content, priority, !r)
-    if (problem) {
-      setFormErr(problem)
-      haptic('error')
-      return
-    }
-    setFormErr('')
-    setBusy(true)
-    try {
-      await onSubmit({
-        op: r ? 'edit' : 'add',
-        type,
-        name: r ? undefined : name.trim(),
-        content: content.trim(),
-        ttl: Number(ttl || 1),
-        proxied: canProxy && proxied,
-        priority: type === 'MX' && priority !== '' ? Number(priority) : undefined,
-        force: false,
-      })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <>
-      <Dialog.Title className="cc-dialog-title">{r ? 'ویرایش رکورد' : 'رکورد جدید'}</Dialog.Title>
-      {!r && (
-        <>
-          <div className="cc-section">نوع</div>
-          <div className="cc-chips" role="group" aria-label="نوع رکورد">
-            {TYPES.map((t) => (
-              <button
-                key={t}
-                className={'cc-chip' + (type === t ? ' on' : '')}
-                aria-pressed={type === t}
-                onClick={() => {
-                  setType(t)
-                  setFormErr('')
-                }}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-          <div className="cc-section">نام (نسبت به دامنه)</div>
-          <Input
-            autoFocus
-            className={'cc-input cc-mb' + (formErr && !name.trim() ? ' cc-invalid' : '')}
-            placeholder={dlg.zone ? 'مثلاً sub یا @' : 'sub'}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value)
-              setFormErr('')
-            }}
-          />
-        </>
-      )}
-      <div className="cc-section">مقدار</div>
-      <Input
-        autoFocus={!!r}
-        className={'cc-input cc-mb cc-mono' + (formErr ? ' cc-invalid' : '')}
-        placeholder={
-          type === 'CNAME' ? 'host.example.com' : type === 'MX' ? 'mail.example.com' : type === 'TXT' ? 'متن رکورد' : '1.2.3.4'
-        }
-        value={content}
-        onChange={(e) => {
-          setContent(e.target.value)
-          setFormErr('')
-        }}
-      />
-      {formErr && <div className="cc-field-err" role="alert">{formErr}</div>}
-      {type === 'MX' && (
-        <>
-          <div className="cc-section">اولویت (Priority)</div>
-          <Input
-            className={'cc-input cc-mb' + (formErr && priority ? ' cc-invalid' : '')}
-            placeholder="10"
-            value={priority}
-            onChange={(e) => {
-              setPriority(e.target.value)
-              setFormErr('')
-            }}
-          />
-        </>
-      )}
-      <div className="cc-section">TTL</div>
-      <select className="cc-select cc-mb" value={ttl} onChange={(e) => setTTL(Number(e.target.value))}>
-        {TTL_STEPS.map((t) => (
-          <option key={t} value={t}>
-            {ttlLabel(t)}
-          </option>
-        ))}
-      </select>
-      {canProxy && (
-        <LayerCard className="cc-card cc-row">
-          <div className="cc-grow">
-            <div className="cc-name">پروکسی کلادفلر</div>
-            <div className="cc-sub">ترافیک از شبکهٔ کلادفلر عبور کند.</div>
-          </div>
-          <Switch checked={proxied} aria-label="پروکسی کلادفلر" onCheckedChange={setProxied} />
-        </LayerCard>
-      )}
-      <div className="cc-dialog-actions">
-        <Button variant="secondary" onClick={onClose}>
-          انصراف
-        </Button>
-        <Button className="cc-green" disabled={busy} onClick={() => void submit()}>
-          {r ? 'ذخیره' : 'افزودن'}
-        </Button>
-      </div>
-    </>
-  )
-}
-
-/* ---------------- spare sheet ---------------- */
-
-function SpareSheet({
-  dlg,
-  onClose,
-  onSet,
-  onDel,
-}: {
-  dlg: Extract<Dlg, { k: 'spare' }>
-  onClose: () => void
-  onSet: (v: string) => void
-  onDel: () => void
-}) {
-  const [v, setV] = useState(dlg.entry.spare?.content || '')
-  const [vErr, setVErr] = useState('')
-  function save() {
-    const val = v.trim()
-    if (!val) {
-      setVErr('آی‌پی یا دامنهٔ زاپاس را وارد کن.')
-      return
-    }
-    if (!isIPv4(val) && !isIPv6(val) && !HOST_RE.test(val)) {
-      setVErr('آی‌پی یا میزبان معتبر نیست.')
-      haptic('error')
-      return
-    }
-    setVErr('')
-    onSet(val)
-  }
-  return (
-    <>
-      <Dialog.Title className="cc-dialog-title">آی‌پی زاپاس</Dialog.Title>
-      <Dialog.Description className="cc-dialog-desc">
-        زاپاس برای <span className="cc-mono">{dlg.entry.content}</span>
-      </Dialog.Description>
-      <div className="cc-hintbox">
-        <Info size={17} />
-        <span>
-          اگر آی‌پی اصلی از کار بیفتد، در صورت پشتیبانی گروه، زاپاس جای آن استفاده می‌شود. «جایگزینی» در صفحهٔ گروه،
-          زاپاس را دائمی می‌کند.
-        </span>
-      </div>
-      {dlg.entry.spare && (
-        <div className="cc-kv">
-          <span>زاپاس فعلی</span>
-          <span className="cc-mono">{dlg.entry.spare.content}</span>
-        </div>
-      )}
-      <div className="cc-section">آی‌پی یا دامنهٔ زاپاس</div>
-      <Input
-        autoFocus
-        className={'cc-input cc-mb cc-mono' + (vErr ? ' cc-invalid' : '')}
-        placeholder="1.2.3.4 یا backup.example.com"
-        value={v}
-        onChange={(e) => {
-          setV(e.target.value)
-          setVErr('')
-        }}
-      />
-      {vErr && <div className="cc-field-err" role="alert">{vErr}</div>}
-      <div className="cc-grid2">
-        <Button className="cc-green" disabled={!v.trim()} onClick={save}>
-          ذخیره
-        </Button>
-        {dlg.entry.spare && (
-          <Button variant="secondary-destructive" icon={Trash} onClick={onDel}>
-            حذف زاپاس
-          </Button>
-        )}
-      </div>
-      <div className="cc-dialog-actions">
-        <Button variant="secondary" onClick={onClose}>
-          بستن
-        </Button>
-      </div>
-    </>
-  )
-}
-
-/* ---------------- form dialog ---------------- */
-
-function FormDialog({
-  fields,
-  title,
-  desc,
-  okText,
-  onSubmit,
-  onClose,
-}: {
-  fields: Field[]
-  title: string
-  desc?: string
-  okText?: string
-  onSubmit: (v: Record<string, string>) => void | Promise<void>
-  onClose: () => void
-}) {
-  const [vals, setVals] = useState<Record<string, string>>(() => {
-    const o: Record<string, string> = {}
-    for (const f of fields) o[f.key] = f.value || f.select?.[0]?.value || ''
-    return o
-  })
-  const [errs, setErrs] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState(false)
-  async function go() {
-    const next: Record<string, string> = {}
-    for (const f of fields) {
-      const e = f.validate ? f.validate(vals[f.key] || '') : undefined
-      if (e) next[f.key] = e
-    }
-    if (Object.keys(next).length) {
-      setErrs(next)
-      haptic('error')
-      return
-    }
-    setErrs({})
-    setBusy(true)
-    try {
-      await onSubmit(vals)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <>
-      <Dialog.Title className="cc-dialog-title">{title}</Dialog.Title>
-      {desc && <Dialog.Description className="cc-dialog-desc">{desc}</Dialog.Description>}
-      {fields.map((f) => (
-        <div key={f.key}>
-          <div className="cc-section">{f.label}</div>
-          {f.select ? (
-            <select
-              className={'cc-select cc-mb' + (errs[f.key] ? ' cc-invalid' : '')}
-              value={vals[f.key]}
-              aria-invalid={!!errs[f.key]}
-              onChange={(e) => {
-                setVals({ ...vals, [f.key]: e.target.value })
-                setErrs({ ...errs, [f.key]: '' })
-              }}
-            >
-              {f.select.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <Input
-              autoFocus
-              type={f.password ? 'password' : 'text'}
-              className={'cc-input cc-mb' + (errs[f.key] ? ' cc-invalid' : '')}
-              placeholder={f.placeholder}
-              aria-invalid={!!errs[f.key]}
-              value={vals[f.key]}
-              onChange={(e) => {
-                setVals({ ...vals, [f.key]: e.target.value })
-                setErrs({ ...errs, [f.key]: '' })
-              }}
-            />
-          )}
-          {errs[f.key] && (
-            <div className="cc-field-err" role="alert">
-              {errs[f.key]}
-            </div>
-          )}
-          {f.hint && !errs[f.key] && <div className="cc-hint cc-mb">{f.hint}</div>}
-        </div>
-      ))}
-      <div className="cc-dialog-actions">
-        <Button variant="secondary" onClick={onClose}>
-          انصراف
-        </Button>
-        <Button className="cc-green" disabled={busy} onClick={() => void go()}>
-          {okText || 'تأیید'}
-        </Button>
-      </div>
     </>
   )
 }

@@ -1051,3 +1051,179 @@ html[data-mode='light'] .cc-app button[role='switch'][aria-checked='true'] > div
 .cc-tab {
   flex: 1 0 auto;
 }
+
+/* ---------------- cloudflare refresh: favorites and larger actions ---------------- */
+
+.cc-mb {
+  margin-bottom: 12px;
+}
+.cc-primary-action {
+  width: 100% !important;
+  height: 50px !important;
+  margin-bottom: 10px;
+  border-radius: 13px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+}
+.cc-action-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cc-action-grid > button {
+  width: 100% !important;
+  height: 46px !important;
+  border-radius: 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+}
+.cc-section-fav {
+  color: var(--cc-warning);
+  font-weight: 700;
+}
+.cc-row-star {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-color-kumo-inactive);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.cc-row-star:hover {
+  background: var(--color-kumo-tint);
+  color: var(--cc-warning);
+}
+.cc-row-star:active {
+  transform: scale(0.94);
+}
+.cc-row-star.on {
+  background: color-mix(in srgb, var(--cc-warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--cc-warning) 32%, transparent);
+  color: var(--cc-warning);
+}
+.cc-row-star:focus-visible {
+  outline: 2px solid var(--cc-primary);
+  outline-offset: 2px;
+}
+.cc-rec-toolbar > button,
+.cc-rec-toolbar > button:last-child {
+  flex: 1 1 0;
+  width: auto !important;
+  min-width: 0;
+  height: 48px !important;
+  padding: 0 14px !important;
+  border-radius: 12px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+}
+.cc-star-on {
+  background: color-mix(in srgb, var(--cc-warning) 14%, transparent) !important;
+  border-color: color-mix(in srgb, var(--cc-warning) 34%, transparent) !important;
+  color: var(--cc-warning) !important;
+}
+.cc-dialog-actions > button {
+  height: 48px !important;
+  border-radius: 12px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+.cc-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cc-dialog-headtext {
+  flex: 1;
+  min-width: 0;
+}
+.cc-dialog-sub {
+  margin: 0;
+  color: var(--text-color-kumo-subtle);
+  font-size: 12.5px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.cc-field-label {
+  margin: 14px 2px 7px;
+  color: var(--text-color-kumo-subtle);
+  font-size: 12px;
+  font-weight: 600;
+}
+.cc-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.cc-type-btn {
+  height: 42px;
+  border: 1.5px solid var(--color-kumo-line);
+  border-radius: 11px;
+  background: var(--color-kumo-base);
+  color: var(--text-color-kumo-subtle);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.cc-type-btn.on {
+  border-color: var(--cc-primary);
+  background: color-mix(in srgb, var(--cc-primary) 12%, transparent);
+  color: var(--cc-primary);
+}
+.cc-type-btn:active {
+  transform: scale(0.97);
+}
+.cc-editor-context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.cc-editor-settings {
+  margin: 6px 0 4px;
+  border: 1px solid var(--color-kumo-line);
+  border-radius: 14px;
+  background: var(--color-kumo-recessed);
+  overflow: hidden;
+}
+.cc-editor-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 13px;
+}
+.cc-editor-setting + .cc-editor-setting {
+  border-top: 1px solid var(--color-kumo-hairline);
+}
+.cc-editor-setting-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.cc-editor-setting-sub {
+  display: block;
+  color: var(--text-color-kumo-subtle);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.cc-select-sm {
+  width: auto !important;
+  min-width: 104px;
+  height: 38px !important;
+  padding: 0 10px !important;
+  border-radius: 9px !important;
+  font-size: 13px !important;
+}
