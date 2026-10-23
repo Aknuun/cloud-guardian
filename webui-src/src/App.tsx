@@ -414,7 +414,7 @@ export default function App() {
         kind: 'confirm',
         title: o.title || 'تأیید عملیات',
         desc: o.desc,
-        danger: op === 'delete',
+        danger: op === 'delete' || op === 'ip_delete',
         onOk: () => doAction({ op, id, arg: o.arg, ipId: o.ipId }),
       })
     } else {
@@ -878,7 +878,7 @@ export default function App() {
                   id: s.id,
                   confirm: true,
                   title: 'جایگزینی IPv4',
-                  desc: `عملیات «جایگزینی IPv4» روی «${s.name}» انجام شود؟`,
+                  desc: `سرور «${s.name}» خاموش می‌شود، IPv4 قبلی جدا می‌شود، IPv4 تازه ساخته و متصل می‌شود و بعد سرور روشن می‌شود. ادامه؟`,
                 })
               }
             >
@@ -1005,9 +1005,26 @@ export default function App() {
                 </div>
                 {badge}
                 {!busyIp && (
-                  <Button variant="outline" size="sm" onClick={() => void ipFreeFlow(p.id)}>
-                    اتصال
-                  </Button>
+                  <div className="cc-row-actions">
+                    <Button variant="outline" size="sm" onClick={() => void ipFreeFlow(p.id)}>
+                      اتصال
+                    </Button>
+                    <Button
+                      variant="secondary-destructive"
+                      size="sm"
+                      icon={Trash}
+                      aria-label="حذف آی‌پی"
+                      onClick={() =>
+                        runAction('ip_delete', {
+                          id: String(p.id),
+                          ipId: p.id,
+                          confirm: true,
+                          title: 'حذف آی‌پی',
+                          desc: `آی‌پی «${p.ip}» از حساب هتزنر حذف شود؟ این عمل بازگشت‌پذیر نیست.`,
+                        })
+                      }
+                    />
+                  </div>
                 )}
               </LayerCard>
             )

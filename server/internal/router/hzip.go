@@ -360,18 +360,26 @@ func (r *Router) hzIPPoolSwapDo(chat, mid int64, i int, sid string) {
 	}
 	if oldID > 0 {
 		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", oldID), "POST", map[string]any{})
+		if !hzWaitPrimaryState(cli, oldID, 0, 45000) {
+			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", oldID), "POST", map[string]any{
+				"assignee_id": atoiSafe(sid), "assignee_type": "server",
+			})
+			_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+			r.Show(chat, mid, "⚠️ IP قبلی در زمان مقرر جدا نشد؛ دوباره تلاش کن.", navKB(fmt.Sprintf("hzipsw:%d", i)))
+			return
+		}
 	}
 	if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", pick.ID), "POST", map[string]any{
 		"assignee_id": atoiSafe(sid), "assignee_type": "server",
 	}); err != nil {
 		// roll back: put the original IP back so the server keeps connectivity
-		if oldID > 0 {
-			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", oldID), "POST", map[string]any{
-				"assignee_id": atoiSafe(sid), "assignee_type": "server",
-			})
-		}
-		_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+		hzRestorePrimary(cli, sid, oldID, pick.ID)
 		r.Show(chat, mid, "❌ اتصال IP تازه ناموفق بود (IP قبلی برگردانده شد):\n"+Esc(err.Error()), navKB(fmt.Sprintf("hzipsw:%d", i)))
+		return
+	}
+	if !hzWaitPrimaryState(cli, pick.ID, atoiSafe(sid), 45000) || !hzWaitServerPrimary(cli, sid, pick.ID, 45000) {
+		hzRestorePrimary(cli, sid, oldID, pick.ID)
+		r.Show(chat, mid, "⚠️ IP تازه در زمان مقرر روی سرور فعال نشد؛ IP قبلی برگردانده شد.", navKB(fmt.Sprintf("hzipsw:%d", i)))
 		return
 	}
 	_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})

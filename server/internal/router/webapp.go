@@ -609,6 +609,60 @@ func (r *Router) webHzIPs(w http.ResponseWriter, req *http.Request, uid int64) {
 	webOK(w, map[string]any{"ips": out})
 }
 
+func hzPrimaryIP(cli *hz.Client, id int) (map[string]any, error) {
+	d, err := cli.Call(fmt.Sprintf("/primary_ips/%d", id), "GET", nil)
+	if err != nil {
+		return nil, err
+	}
+	p, _ := d["primary_ip"].(map[string]any)
+	if p == nil {
+		return nil, fmt.Errorf("آی‌پی پیدا نشد")
+	}
+	return p, nil
+}
+
+func hzWaitPrimaryState(cli *hz.Client, id, assignee int, maxMs int) bool {
+	start := time.Now()
+	for time.Since(start).Milliseconds() < int64(maxMs) {
+		p, err := hzPrimaryIP(cli, id)
+		if err == nil && intOfAny(p["assignee_id"]) == assignee {
+			return true
+		}
+		time.Sleep(700 * time.Millisecond)
+	}
+	return false
+}
+
+func hzWaitServerPrimary(cli *hz.Client, sid string, ipID int, maxMs int) bool {
+	start := time.Now()
+	for time.Since(start).Milliseconds() < int64(maxMs) {
+		d, err := cli.Call("/servers/"+sid, "GET", nil)
+		if err == nil {
+			s, _ := d["server"].(map[string]any)
+			pn, _ := s["public_net"].(map[string]any)
+			if intOfAny(hz.PrimaryIPID(pn["ipv4"])) == ipID {
+				return true
+			}
+		}
+		time.Sleep(700 * time.Millisecond)
+	}
+	return false
+}
+
+func hzRestorePrimary(cli *hz.Client, sid string, oldID, newID int) {
+	sidInt := atoiSafe(sid)
+	if newID > 0 {
+		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", newID), "POST", map[string]any{})
+		hzWaitPrimaryState(cli, newID, 0, 30000)
+	}
+	if oldID > 0 {
+		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", oldID), "POST",
+			map[string]any{"assignee_id": sidInt, "assignee_type": "server"})
+		hzWaitPrimaryState(cli, oldID, sidInt, 30000)
+	}
+	_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+}
+
 func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64) {
 	if req.Method != http.MethodPost {
 		webErr(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -637,7 +691,7 @@ func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64
 	}
 	destructive := map[string]bool{
 		"reset_password": true, "rename": true, "rebuild": true, "resize": true,
-		"delete": true, "ip_assign": true, "ip_unassign": true, "ip_replace": true,
+		"delete": true, "ip_assign": true, "ip_unassign": true, "ip_replace": true, "ip_delete": true,
 		"snapshot_create": true, "snapshot_delete": true,
 	}
 	if destructive[in.Action] && !in.Confirm {
@@ -746,18 +800,45 @@ func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64
 		}
 		r.hzDropServers(in.Acc)
 		webOK(w, map[string]any{"message": "سرور حذف شد"})
+	case "ip_delete":
+		if in.IPID <= 0 {
+			webErr(w, http.StatusBadRequest, "آی‌پی لازم است")
+			return
+		}
+		p, err := hzPrimaryIP(cli, in.IPID)
+		if err != nil {
+			webErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		if intOfAny(p["assignee_id"]) > 0 {
+			webErr(w, http.StatusConflict, "این آی‌پی به یک سرور متصل است؛ اول آن را جدا کن")
+			return
+		}
+		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d", in.IPID), "DELETE", nil); err != nil {
+			webErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		checks := r.hzChecks(in.Acc)
+		delete(checks, strconv.Itoa(in.IPID))
+		r.hzSaveChecks(in.Acc, checks)
+		webOK(w, map[string]any{"message": "آی‌پی حذف شد"})
 	case "ip_assign":
 		if in.IPID <= 0 {
 			webErr(w, http.StatusBadRequest, "آی‌پی لازم است")
 			return
 		}
-		if !hz.EnsureOff(cli, sid, 30000) {
-			webErr(w, http.StatusConflict, "سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
+		if !hz.EnsureOff(cli, sid, 60000) {
+			webErr(w, http.StatusConflict, "سرور در ۶۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
 			return
 		}
 		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", in.IPID), "POST",
 			map[string]any{"assignee_id": atoiSafe(sid), "assignee_type": "server"}); err != nil {
 			webErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		if !hzWaitPrimaryState(cli, in.IPID, atoiSafe(sid), 45000) ||
+			!hzWaitServerPrimary(cli, sid, in.IPID, 45000) {
+			webErr(w, http.StatusGatewayTimeout, "آی‌پی به سرور متصل نشد؛ وضعیت را بررسی کن")
 			return
 		}
 		_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
@@ -783,13 +864,17 @@ func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64
 			webErr(w, http.StatusNotFound, "آی‌پی اختصاصی برای حذف وجود ندارد")
 			return
 		}
-		if !hz.EnsureOff(cli, sid, 30000) {
-			webErr(w, http.StatusConflict, "سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
+		if !hz.EnsureOff(cli, sid, 60000) {
+			webErr(w, http.StatusConflict, "سرور در ۶۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
 			return
 		}
 		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", ipid), "POST",
 			map[string]any{}); err != nil {
 			webErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		if !hzWaitPrimaryState(cli, ipid, 0, 45000) {
+			webErr(w, http.StatusGatewayTimeout, "آی‌پی در زمان مقرر جدا نشد؛ دوباره تلاش کن")
 			return
 		}
 		r.hzDropServers(in.Acc)
@@ -809,16 +894,34 @@ func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64
 		}
 		pn, _ := s["public_net"].(map[string]any)
 		oldID := 0
+		oldIP := ""
 		if m, _ := pn["ipv4"].(map[string]any); m != nil {
 			oldID = intOfAny(m["id"])
+			oldIP = strv(m["ip"])
 		}
-		if !hz.EnsureOff(cli, sid, 30000) {
-			webErr(w, http.StatusConflict, "سرور در ۳۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
+		sidInt := atoiSafe(sid)
+		if !hz.EnsureOff(cli, sid, 60000) {
+			webErr(w, http.StatusConflict, "سرور در ۶۰ ثانیه خاموش نشد؛ دوباره تلاش کن")
 			return
+		}
+		if oldID > 0 {
+			if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", oldID), "POST", map[string]any{}); err != nil {
+				_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+				webErr(w, http.StatusBadGateway, "جدا کردن IPv4 قبلی ناموفق بود: "+err.Error())
+				return
+			}
+			if !hzWaitPrimaryState(cli, oldID, 0, 45000) {
+				_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", oldID), "POST",
+					map[string]any{"assignee_id": sidInt, "assignee_type": "server"})
+				_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
+				webErr(w, http.StatusGatewayTimeout, "IPv4 قبلی در زمان مقرر جدا نشد؛ دوباره تلاش کن")
+				return
+			}
 		}
 		c, err := cli.Call("/primary_ips", "POST", map[string]any{
 			"type": "ipv4", "name": "replace-" + sid, "location": locName, "auto_delete": true})
 		if err != nil {
+			hzRestorePrimary(cli, sid, oldID, 0)
 			webErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
@@ -828,20 +931,37 @@ func (r *Router) webHzAction(w http.ResponseWriter, req *http.Request, uid int64
 			newID = intOfAny(nip["id"])
 		}
 		if newID <= 0 {
+			hzRestorePrimary(cli, sid, oldID, 0)
 			webErr(w, http.StatusBadGateway, "ساخت IPv4 تازه ناموفق شد")
 			return
 		}
-		if oldID > 0 {
-			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/unassign", oldID), "POST", map[string]any{})
+		if _, err := cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", newID), "POST",
+			map[string]any{"assignee_id": sidInt, "assignee_type": "server"}); err != nil {
+			hzRestorePrimary(cli, sid, oldID, newID)
+			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d", newID), "DELETE", nil)
+			webErr(w, http.StatusBadGateway, "اتصال IPv4 تازه ناموفق بود: "+err.Error())
+			return
 		}
-		_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d/actions/assign", newID), "POST",
-			map[string]any{"assignee_id": atoiSafe(sid), "assignee_type": "server"})
+		if !hzWaitPrimaryState(cli, newID, sidInt, 45000) || !hzWaitServerPrimary(cli, sid, newID, 45000) {
+			hzRestorePrimary(cli, sid, oldID, newID)
+			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d", newID), "DELETE", nil)
+			webErr(w, http.StatusGatewayTimeout, "IPv4 تازه در زمان مقرر روی سرور فعال نشد؛ IPv4 قبلی برگردانده شد")
+			return
+		}
 		if oldID > 0 {
 			_, _ = cli.Call(fmt.Sprintf("/primary_ips/%d", oldID), "DELETE", nil)
+			checks := r.hzChecks(in.Acc)
+			delete(checks, strconv.Itoa(oldID))
+			r.hzSaveChecks(in.Acc, checks)
 		}
 		_, _ = cli.Call("/servers/"+sid+"/actions/poweron", "POST", map[string]any{})
 		r.hzDropServers(in.Acc)
-		webOK(w, map[string]any{"message": "جایگزینی انجام شد: " + strv(nip["ip"]), "ip": strv(nip["ip"])})
+		newIP := strv(nip["ip"])
+		msg := "IPv4 سرور تعویض شد: " + newIP
+		if oldIP != "" {
+			msg += " (قبلی: " + oldIP + ")"
+		}
+		webOK(w, map[string]any{"message": msg, "ip": newIP})
 	default:
 		webErr(w, http.StatusBadRequest, "عملیات ناشناخته")
 	}
