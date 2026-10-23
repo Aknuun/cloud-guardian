@@ -18,6 +18,7 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { Badge, Button, Empty, Input, LayerCard, Loader, Meter } from './components/ui'
+import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider } from './components/Sidebar'
@@ -460,7 +461,22 @@ export default function Linode({ onSwitch, onBackRef }: { onSwitch: (p: Provider
               <div className="cc-sub cc-ltr">
                 {s.type} · {num(s.specs.vcpus)} vCPU / {mem(s.specs.ram_mb)} / {num(s.specs.disk_gb)}GB
               </div>
-              <div className="cc-sub cc-mono cc-mt4">{s.ipv4 || s.ipv6 || 'بدون آی‌پی'} · {s.region}</div>
+              <div className="cc-sub cc-mono cc-mt4 cc-copyline">
+                {s.ipv4 ? (
+                  <>
+                    <span className="cc-copyval">{s.ipv4}</span>
+                    <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={14} />
+                  </>
+                ) : s.ipv6 ? (
+                  <>
+                    <span className="cc-copyval">{s.ipv6}</span>
+                    <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={14} />
+                  </>
+                ) : (
+                  <span>بدون آی‌پی</span>
+                )}
+                <span>· {s.region}</span>
+              </div>
             </div>
             <div className="cc-end">
               <Badge variant={badgeVariant(s.status)} dot>{STATUS[s.status] || s.status}</Badge>
@@ -491,11 +507,18 @@ export default function Linode({ onSwitch, onBackRef }: { onSwitch: (p: Provider
         <LayerCard className="cc-card">
           <div className="cc-kv">
             <span>IPv4</span>
-            <button className="cc-link cc-mono" onClick={() => copy((s.ipv4_list || []).filter((x) => !x.includes(':'))[0] || '')}>
-              {s.ipv4 || '—'}
-            </button>
+            <span className="cc-mono cc-copyline">
+              <span className="cc-copyval">{s.ipv4 || '—'}</span>
+              {s.ipv4 && <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={14} />}
+            </span>
           </div>
-          <div className="cc-kv"><span>IPv6</span><span className="cc-mono cc-small">{s.ipv6 || '—'}</span></div>
+          <div className="cc-kv">
+            <span>IPv6</span>
+            <span className="cc-mono cc-small cc-copyline">
+              <span className="cc-copyval">{s.ipv6 || '—'}</span>
+              {s.ipv6 && <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={14} />}
+            </span>
+          </div>
           <div className="cc-kv"><span>پلن</span><span className="cc-ltr">{s.prices?.label || s.type} · {num(s.specs.vcpus)} vCPU / {mem(s.specs.ram_mb)} / {num(s.specs.disk_gb)}GB</span></div>
           <div className="cc-kv"><span>منطقه</span><span>{s.region}</span></div>
           <div className="cc-kv"><span>ساخت</span><span>{faDate(s.created)}</span></div>

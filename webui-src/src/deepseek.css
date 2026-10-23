@@ -459,6 +459,49 @@ body {
   font-weight: 500;
 }
 
+.cc-copybtn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ds-subtle);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cc-copybtn:hover,
+.cc-copybtn:active {
+  background: var(--ds-tint);
+  color: var(--ds-text);
+}
+
+.cc-copybtn.on {
+  color: var(--ds-success);
+}
+
+.cc-copybtn:focus-visible {
+  outline: 2px solid var(--ds-brand);
+  outline-offset: 1px;
+}
+
+.cc-copyline {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+.cc-copyline .cc-copyval {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .cc-chev {
   color: var(--ds-subtle);
 }

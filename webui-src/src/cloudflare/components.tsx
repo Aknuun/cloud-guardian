@@ -6,7 +6,6 @@ import {
   CaretLeft,
   ChartBar,
   Clock,
-  Copy,
   Gear,
   Info,
   Link as LinkIcon,
@@ -18,6 +17,7 @@ import {
   ArrowClockwise,
 } from '@phosphor-icons/react'
 import { haptic } from '../lib'
+import { CopyBtn } from '../components/CopyBtn'
 import type { Dlg, Field, RefNode } from './model'
 import { isHost, isIPv4, isIPv6, PROXYABLE, relName, TTL_STEPS, ttlLabel, TYPES, validateRecord } from './model'
 
@@ -353,17 +353,11 @@ export function RecordSheet({
           <Dialog.Title className="cc-rec-title">
             {r.label}
             {r.fav && <Star size={15} weight="fill" className="cc-starred" />}
+            <CopyBtn value={r.name} onCopy={(v) => onCopy(v, 'زیردامنه کپی شد')} label="کپی زیردامنه" />
           </Dialog.Title>
           <Dialog.Description className="cc-rec-desc">
             <span className="cc-mono">{r.content}</span>
-            <button
-              type="button"
-              className="cc-rec-copy"
-              aria-label="کپی مقدار"
-              onClick={() => onCopy(r.content, 'مقدار کپی شد')}
-            >
-              <Copy size={15} />
-            </button>
+            <CopyBtn value={r.content} onCopy={(v) => onCopy(v, 'مقدار کپی شد')} label="کپی مقدار" />
           </Dialog.Description>
         </div>
         <button type="button" className="cc-rec-close" aria-label="بستن" onClick={onClose}>
@@ -399,7 +393,10 @@ export function RecordSheet({
         )}
         <div className="cc-kv">
           <span>نام کامل</span>
-          <span className="cc-mono cc-small">{r.name}</span>
+          <span className="cc-mono cc-small cc-copyline">
+            <span>{r.name}</span>
+            <CopyBtn value={r.name} onCopy={(v) => onCopy(v, 'زیردامنه کپی شد')} label="کپی زیردامنه" size={14} />
+          </span>
         </div>
       </div>
 
@@ -447,11 +444,13 @@ export function SpareSheet({
   onClose,
   onSet,
   onDel,
+  onCopy,
 }: {
   dlg: Extract<Dlg, { k: 'spare' }>
   onClose: () => void
   onSet: (v: string) => void
   onDel: () => void
+  onCopy: (v: string, l?: string) => void
 }) {
   const [v, setV] = useState(dlg.entry.spare?.content || '')
   const [vErr, setVErr] = useState('')
@@ -482,7 +481,15 @@ export function SpareSheet({
       {dlg.entry.spare && (
         <div className="cc-kv">
           <span>زاپاس فعلی</span>
-          <span className="cc-mono">{dlg.entry.spare.content}</span>
+          <span className="cc-mono cc-copyline">
+            <span>{dlg.entry.spare.content}</span>
+            <CopyBtn
+              value={dlg.entry.spare.content}
+              onCopy={(v) => onCopy(v, 'آی‌پی زاپاس کپی شد')}
+              label="کپی آی‌پی زاپاس"
+              size={14}
+            />
+          </span>
         </div>
       )}
       <div className="cc-field-label">آی‌پی یا دامنهٔ زاپاس</div>
@@ -617,18 +624,21 @@ export function ConvertRecordDialog({
   )
 }
 
-function RefTreeNodes({ nodes }: { nodes: RefNode[] }) {
+function RefTreeNodes({ nodes, onCopy }: { nodes: RefNode[]; onCopy: (v: string) => void }) {
   return (
     <ul className="cc-tree">
       {nodes.map((n, i) => (
         <li className="cc-tree-node" key={n.zone + '|' + n.name + '|' + i}>
           <div className="cc-tree-row">
             <span className="cc-tree-dot" aria-hidden="true" />
-            <span className="cc-mono cc-tree-name">{n.name}</span>
+            <span className="cc-mono cc-tree-name cc-copyline">
+              <span>{n.name}</span>
+              <CopyBtn value={n.name} onCopy={onCopy} label="کپی زیردامنه" size={14} />
+            </span>
             <span className="cc-tree-zone">{n.zone}</span>
             {n.cycle && <span className="cc-tree-cycle">حلقه</span>}
           </div>
-          {n.children && n.children.length > 0 && <RefTreeNodes nodes={n.children} />}
+          {n.children && n.children.length > 0 && <RefTreeNodes nodes={n.children} onCopy={onCopy} />}
         </li>
       ))}
     </ul>
@@ -638,9 +648,11 @@ function RefTreeNodes({ nodes }: { nodes: RefNode[] }) {
 export function RefTreeDialog({
   dlg,
   onClose,
+  onCopy,
 }: {
   dlg: Extract<Dlg, { k: 'tree' }>
   onClose: () => void
+  onCopy: (v: string) => void
 }) {
   return (
     <>
@@ -653,7 +665,7 @@ export function RefTreeDialog({
         <div className="cc-hint cc-center cc-pad">{dlg.empty || 'هیچ CNAME وارده‌ای پیدا نشد.'}</div>
       ) : (
         <div className="cc-tree-wrap">
-          <RefTreeNodes nodes={dlg.nodes} />
+          <RefTreeNodes nodes={dlg.nodes} onCopy={onCopy} />
         </div>
       )}
       <div className="cc-dialog-actions">

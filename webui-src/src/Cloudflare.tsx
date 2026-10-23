@@ -11,7 +11,6 @@ import {
   ChartBar,
   CheckSquare,
   Clock,
-  Copy,
   EnvelopeSimple,
   Gear,
   Globe,
@@ -30,6 +29,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
+import { CopyBtn } from './components/CopyBtn'
 import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
 import {
   PROXYABLE,
@@ -699,8 +699,14 @@ ${reason}`,
           >
             <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
             <div className="cc-grow">
-              <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
-              <div className="cc-sub cc-mono">{r.content}</div>
+              <div className="cc-name cc-mono cc-copyline">
+                <span>{relName(r.name, r.zone)}</span>
+                <CopyBtn value={r.name} onCopy={copy} label="کپی زیردامنه" />
+              </div>
+              <div className="cc-sub cc-mono cc-copyline">
+                <span className="cc-copyval">{r.content}</span>
+                <CopyBtn value={r.content} onCopy={copy} label="کپی مقدار" size={14} />
+              </div>
               {r.match === 'cname' && <div className="cc-sub">CNAME مرتبط با این IP</div>}
             </div>
             <div className="cc-sub">{r.zone}</div>
@@ -789,12 +795,22 @@ ${reason}`,
           >
             <Badge variant="secondary">{f.type || '—'}</Badge>
             <div className="cc-grow">
-              <div className="cc-name">
-                {f.label || f.rid}
+              <div className="cc-name cc-copyline">
+                <span>{f.label || f.rid}</span>
+                {!f.missing && (
+                  <CopyBtn value={f.name || f.label} onCopy={copy} label="کپی زیردامنه" />
+                )}
                 {f.missing && <Badge variant="error">حذف‌شده</Badge>}
               </div>
-              <div className="cc-sub">
-                {f.zone || ''} {f.content ? ' · ' + f.content : ''}
+              <div className="cc-sub cc-copyline">
+                <span>{f.zone || ''}</span>
+                {f.content && (
+                  <>
+                    <span>·</span>
+                    <span className="cc-mono cc-copyval">{f.content}</span>
+                    <CopyBtn value={f.content} onCopy={copy} label="کپی مقدار" size={14} />
+                  </>
+                )}
               </div>
             </div>
             {f.missing ? (
@@ -858,8 +874,14 @@ ${reason}`,
                 >
                   <Badge variant="secondary" className={'cc-type cc-type-' + r.type.toLowerCase()}>{r.type}</Badge>
                   <div className="cc-grow">
-                    <div className="cc-name cc-mono">{relName(r.name, r.zone)}</div>
-                    <div className="cc-sub cc-mono">{r.content}</div>
+                    <div className="cc-name cc-mono cc-copyline">
+                      <span>{relName(r.name, r.zone)}</span>
+                      <CopyBtn value={r.name} onCopy={copy} label="کپی زیردامنه" />
+                    </div>
+                    <div className="cc-sub cc-mono cc-copyline">
+                      <span className="cc-copyval">{r.content}</span>
+                      <CopyBtn value={r.content} onCopy={copy} label="کپی مقدار" size={14} />
+                    </div>
                     <div className="cc-sub">
                       {r.zone}
                       {r.match === 'cname' ? ' · CNAME مرتبط با این IP' : ''}
@@ -993,8 +1015,14 @@ ${reason}`,
           </Badge>
         )}
         <div className="cc-grow">
-          <div className="cc-name cc-mono">{relName(r.name, zone?.name || '')}</div>
-          <div className="cc-sub cc-mono">{r.content}</div>
+          <div className="cc-name cc-mono cc-copyline">
+            <span>{relName(r.name, zone?.name || '')}</span>
+            {!selMode && <CopyBtn value={r.name} onCopy={copy} label="کپی زیردامنه" />}
+          </div>
+          <div className="cc-sub cc-mono cc-copyline">
+            <span className="cc-copyval">{r.content}</span>
+            {!selMode && <CopyBtn value={r.content} onCopy={copy} label="کپی مقدار" size={14} />}
+          </div>
           {PROXYABLE.includes(r.type) && (
             <div className="cc-sub">
               {r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'} · TTL {ttlLabel(r.ttl)}
@@ -1408,7 +1436,10 @@ ${reason}`,
             {traffic.top.map((r) => (
               <LayerCard key={r.name} className="cc-card cc-row">
                 <div className="cc-grow">
-                  <div className="cc-name cc-mono">{relName(r.name, zone?.name || '')}</div>
+                  <div className="cc-name cc-mono cc-copyline">
+                    <span>{relName(r.name, zone?.name || '')}</span>
+                    <CopyBtn value={r.name} onCopy={copy} label="کپی زیردامنه" />
+                  </div>
                   <div className="cc-sub cc-mono">{r.name}</div>
                 </div>
                 <span className="cc-sub">{num(r.count)}</span>
@@ -1495,7 +1526,10 @@ ${reason}`,
             onClick={() => push({ v: 'lbgroup', acc: view.acc, zid: view.zid, name: g.name })}
           >
             <div className="cc-grow">
-              <div className="cc-name cc-mono">{relName(g.name, zone?.name || '')}</div>
+              <div className="cc-name cc-mono cc-copyline">
+                <span>{relName(g.name, zone?.name || '')}</span>
+                <CopyBtn value={g.name} onCopy={copy} label="کپی زیردامنه" />
+              </div>
               <div className="cc-sub">
                 {faNum(g.on)} فعال · {faNum(g.off)} غیرفعال
               </div>
@@ -1622,10 +1656,21 @@ ${reason}`,
             <div className="cc-row">
               <span className={'cc-dot ' + (e.on ? 'run' : 'off')} />
               <div className="cc-grow">
-                <div className="cc-name cc-mono">{e.content}</div>
-                <div className="cc-sub">
-                  {e.type} · وزن {faNum(e.weight)}
-                  {e.spare ? ' · زاپاس: ' + e.spare.content : ' · بدون زاپاس'}
+                <div className="cc-name cc-mono cc-copyline">
+                  <span>{e.content}</span>
+                  <CopyBtn value={e.content} onCopy={copy} label="کپی آی‌پی" />
+                </div>
+                <div className="cc-sub cc-copyline">
+                  <span>{e.type} · وزن {faNum(e.weight)}</span>
+                  {e.spare ? (
+                    <>
+                      <span>· زاپاس:</span>
+                      <span className="cc-mono cc-copyval">{e.spare.content}</span>
+                      <CopyBtn value={e.spare.content} onCopy={copy} label="کپی آی‌پی زاپاس" size={14} />
+                    </>
+                  ) : (
+                    <span>· بدون زاپاس</span>
+                  )}
                 </div>
               </div>
               <Switch
@@ -1831,7 +1876,7 @@ ${reason}`,
               </div>
             </>
           )}
-          {dlg.k === 'tree' && <RefTreeDialog dlg={dlg} onClose={() => setDlg(null)} />}
+          {dlg.k === 'tree' && <RefTreeDialog dlg={dlg} onClose={() => setDlg(null)} onCopy={copy} />}
           {dlg.k === 'convert' && (
             <ConvertRecordDialog
               dlg={dlg}
@@ -1969,6 +2014,7 @@ ${reason}`,
             <SpareSheet
               dlg={dlg}
               onClose={() => setDlg(null)}
+              onCopy={copy}
               onSet={(spare) => {
                 if (view.v !== 'lbgroup') return
                 const entry = dlg.entry

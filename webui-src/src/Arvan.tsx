@@ -16,6 +16,7 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 import { Badge, Button, Empty, Input, LayerCard, Loader } from './components/ui'
+import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider } from './components/Sidebar'
@@ -72,6 +73,13 @@ function statusVariant(s: string): 'success' | 'neutral' | 'warning' | 'error' |
 function isOn(s: string) {
   const x = s.toLowerCase()
   return (x.includes('run') || x.includes('active')) && !x.includes('off')
+}
+
+function recHost(name: string, domain: string) {
+  const n = (name || '').trim().replace(/\.$/, '')
+  if (!n || n === '@') return domain
+  if (n === domain || n.endsWith('.' + domain)) return n
+  return n + '.' + domain
 }
 
 export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef?: (f: () => void) => void }) {
@@ -559,7 +567,10 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
           <LayerCard key={d.id || d.name} className="cc-card cc-row cc-tap" role="button" tabIndex={0} onClick={() => push({ v: 'records', domain: d.name })}>
             <span className="cc-avatar"><Globe size={17} /></span>
             <div className="cc-grow">
-              <div className="cc-name cc-mono">{d.name}</div>
+              <div className="cc-name cc-mono cc-copyline">
+                <span>{d.name}</span>
+                <CopyBtn value={d.name} onCopy={copy} label="کپی دامنه" />
+              </div>
               <div className="cc-sub">{d.status ? `وضعیت: ${d.status}` : 'مدیریت رکوردهای DNS'}</div>
             </div>
             <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
@@ -571,6 +582,7 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
 
   function recordsPage() {
     if (view.v !== 'records') return null
+    const domain = view.domain
     const types = ['all', ...Array.from(new Set(records.map((r) => r.type)))]
     const ql = recQ.trim().toLowerCase()
     const list = records.filter(
@@ -600,10 +612,16 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
         {list.map((r) => (
           <LayerCard key={r.id} className="cc-card cc-row">
             <div className="cc-grow">
-              <div className="cc-name cc-mono">
-                <span className={'cc-badge-inline cc-type cc-type-' + (r.type || '').toLowerCase()}>{r.type}</span> {r.name || '@'}
+              <div className="cc-name cc-mono cc-copyline">
+                <span>
+                  <span className={'cc-badge-inline cc-type cc-type-' + (r.type || '').toLowerCase()}>{r.type}</span> {r.name || '@'}
+                </span>
+                <CopyBtn value={recHost(r.name, domain)} onCopy={copy} label="کپی زیردامنه" />
               </div>
-              <div className="cc-sub cc-mono cc-break">{r.value}</div>
+              <div className="cc-sub cc-mono cc-break cc-copyline">
+                <span className="cc-copyval">{r.value}</span>
+                <CopyBtn value={r.value} onCopy={copy} label="کپی مقدار" size={14} />
+              </div>
             </div>
             <div className="cc-end">
               {r.cloud && <Badge variant="success" dot>ابری</Badge>}
@@ -690,7 +708,16 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
                 {num(s.cpu)} vCPU · {num(s.ram)}GB RAM · {num(s.disk)}GB
                 {s.region_name ? ' · ' + s.region_name : ''}
               </div>
-              <div className="cc-sub cc-mono cc-mt4">{s.pub[0] || s.priv[0] || 'بدون آی‌پی'}</div>
+              <div className="cc-sub cc-mono cc-mt4 cc-copyline">
+                {s.pub[0] || s.priv[0] ? (
+                  <>
+                    <span className="cc-copyval">{s.pub[0] || s.priv[0]}</span>
+                    <CopyBtn value={s.pub[0] || s.priv[0]} onCopy={copy} label="کپی آی‌پی" size={14} />
+                  </>
+                ) : (
+                  <span>بدون آی‌پی</span>
+                )}
+              </div>
             </div>
             <div className="cc-end">
               <Badge variant={statusVariant(s.status)} dot>{s.status_fa || s.status}</Badge>
@@ -719,11 +746,32 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
         <LayerCard className="cc-card">
           <div className="cc-kv">
             <span>IPv4</span>
-            <button className="cc-link cc-mono" onClick={() => copy((s.pub || []).find((x) => !x.includes(':')) || '')}>
-              {(s.pub || []).find((x) => !x.includes(':')) || '—'}
-            </button>
+            <span className="cc-mono cc-copyline">
+              <span className="cc-copyval">{(s.pub || []).find((x) => !x.includes(':')) || '—'}</span>
+              {(s.pub || []).find((x) => !x.includes(':')) && (
+                <CopyBtn
+                  value={(s.pub || []).find((x) => !x.includes(':')) || ''}
+                  onCopy={copy}
+                  label="کپی IPv4"
+                  size={14}
+                />
+              )}
+            </span>
           </div>
-          <div className="cc-kv"><span>IPv6</span><span className="cc-mono cc-small">{(s.pub || []).find((x) => x.includes(':')) || '—'}</span></div>
+          <div className="cc-kv">
+            <span>IPv6</span>
+            <span className="cc-mono cc-small cc-copyline">
+              <span className="cc-copyval">{(s.pub || []).find((x) => x.includes(':')) || '—'}</span>
+              {(s.pub || []).find((x) => x.includes(':')) && (
+                <CopyBtn
+                  value={(s.pub || []).find((x) => x.includes(':')) || ''}
+                  onCopy={copy}
+                  label="کپی IPv6"
+                  size={14}
+                />
+              )}
+            </span>
+          </div>
           <div className="cc-kv"><span>پلن</span><span>{s.flavor || '—'}</span></div>
           <div className="cc-kv"><span>مشخصات</span><span className="cc-ltr">{num(s.cpu)} vCPU · {num(s.ram)}GB RAM · {num(s.disk)}GB</span></div>
           <div className="cc-kv"><span>سیستم</span><span>{s.os || '—'}</span></div>

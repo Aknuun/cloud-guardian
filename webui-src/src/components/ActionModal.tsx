@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Copy } from '@phosphor-icons/react'
 import { Button, Dialog, Input } from './ui'
+import { CopyBtn } from './CopyBtn'
 
 export type FormField = {
   key: string
@@ -171,7 +172,13 @@ export function ActionModalHost({
               این اطلاعات را ذخیره کن؛ رمز روت فقط یک‌بار نشان داده می‌شود.
             </Dialog.Description>
             <div className="cc-kv"><span>نام</span><span>{modal.name}</span></div>
-            <div className="cc-kv"><span>IPv4</span><span className="cc-mono">{modal.ip || '—'}</span></div>
+            <div className="cc-kv">
+              <span>IPv4</span>
+              <span className="cc-mono cc-copyline">
+                <span className="cc-copyval">{modal.ip || '—'}</span>
+                {modal.ip && <CopyBtn value={modal.ip} onCopy={onCopy} label="کپی IPv4" size={14} />}
+              </span>
+            </div>
             <div className="cc-secret cc-mono">{modal.password}</div>
             <div className="cc-dialog-actions">
               <Button variant="secondary" icon={Copy} onClick={() => onCopy(`${modal.ip} root ${modal.password}`)}>

@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
 import { AppVersion } from './components/AppVersion'
+import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { ThemePicker } from './components/ThemePicker'
@@ -693,7 +694,22 @@ export default function App() {
                   {s.type ? ` · ${s.type.cores}vCPU / ${mem(s.type.memory)} / ${s.type.disk}GB` : ''}
                   {s.location ? ` · ${s.location.city || s.location.name}` : ''}
                 </div>
-                <div className="cc-sub cc-mono cc-mt4">{addr(s)}</div>
+                <div className="cc-sub cc-mono cc-mt4 cc-copyline">
+                  {s.ipv4 && (
+                    <>
+                      <span className="cc-copyval">{s.ipv4}</span>
+                      <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={14} />
+                    </>
+                  )}
+                  {s.ipv6 && (
+                    <>
+                      {s.ipv4 && <span>/</span>}
+                      <span className="cc-copyval">{s.ipv6}</span>
+                      <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={14} />
+                    </>
+                  )}
+                  {!s.ipv4 && !s.ipv6 && <span>بدون آی‌پی</span>}
+                </div>
               </div>
               <div className="cc-end">
                 <Badge variant={badgeVariant(s.status)} dot>
@@ -729,13 +745,17 @@ export default function App() {
           <LayerCard className="cc-card">
             <div className="cc-kv">
               <span>IPv4</span>
-              <button className="cc-link cc-mono" onClick={() => copy(s.ipv4)}>
-                {s.ipv4 || '—'}
-              </button>
+              <span className="cc-mono cc-copyline">
+                <span className="cc-copyval">{s.ipv4 || '—'}</span>
+                {s.ipv4 && <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={14} />}
+              </span>
             </div>
             <div className="cc-kv">
               <span>IPv6</span>
-              <span className="cc-mono cc-small">{s.ipv6 || '—'}</span>
+              <span className="cc-mono cc-small cc-copyline">
+                <span className="cc-copyval">{s.ipv6 || '—'}</span>
+                {s.ipv6 && <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={14} />}
+              </span>
             </div>
             <div className="cc-kv">
               <span>پلن</span>
@@ -973,7 +993,10 @@ export default function App() {
             return (
               <LayerCard key={p.id} className="cc-card cc-row">
                 <div className="cc-grow">
-                  <div className="cc-name cc-mono">{p.ip}</div>
+                  <div className="cc-name cc-mono cc-copyline">
+                    <span>{p.ip}</span>
+                    <CopyBtn value={p.ip} onCopy={copy} label="کپی آی‌پی" />
+                  </div>
                   <div className="cc-sub">
                     {p.loc || ''}
                     {busyIp ? ' · ' + p.assignee : ' · آزاد'}
@@ -1344,7 +1367,10 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
             </div>
             <div className="cc-kv">
               <span>IPv4</span>
-              <span className="cc-mono">{modal.ip || '—'}</span>
+              <span className="cc-mono cc-copyline">
+                <span className="cc-copyval">{modal.ip || '—'}</span>
+                {modal.ip && <CopyBtn value={modal.ip} onCopy={onCopy} label="کپی IPv4" size={14} />}
+              </span>
             </div>
             <div className="cc-secret cc-mono">{modal.password}</div>
             <div className="cc-dialog-actions">
