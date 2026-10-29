@@ -1713,9 +1713,9 @@ function HfView() {
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
               </div>
-              <div className="cc-sub">{h.address.join('، ') || '—'}</div>
-              {h.sni.length > 0 && <div className="cc-sub">sni: {h.sni.join('، ')}</div>}
-              {h.host.length > 0 && <div className="cc-sub">host: {h.host.join('، ')}</div>}
+              <div className="cc-sub">{(h.address || []).join('، ') || '—'}</div>
+              {(h.sni || []).length > 0 && <div className="cc-sub">sni: {(h.sni || []).join('، ')}</div>}
+              {(h.host || []).length > 0 && <div className="cc-sub">host: {(h.host || []).join('، ')}</div>}
               <div className="cc-btnrow">
                 {FIELDS.map(([f, l]) => (
                   <Button
@@ -1867,7 +1867,7 @@ function HookView() {
         items={[
           { label: 'وضعیت', value: d.enabled ? 'فعال' : 'خاموش' },
           { label: 'پنل‌های متصل', value: faNum(d.panels.filter((p) => p.set).length) + '/' + faNum(d.panels.length) },
-          { label: 'آستانهٔ حجم', value: d.usage.map((u) => faNum(u) + '٪').join(' · ') },
+          { label: 'آستانهٔ حجم', value: (d.usage || []).map((u) => faNum(u) + '٪').join(' · ') || '—' },
         ]}
       />
       <div className="cc-hint cc-mb">
@@ -1887,14 +1887,14 @@ function HookView() {
           <label className="cc-field">
             <span>آستانهٔ روز (با کاما)</span>
             <Input
-              value={d.days.join(', ')}
+              value={(d.days || []).join(', ')}
               onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
             />
           </label>
           <label className="cc-field">
             <span>آستانهٔ حجم ٪ (با کاما)</span>
             <Input
-              value={d.usage.join(', ')}
+              value={(d.usage || []).join(', ')}
               onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
             />
           </label>

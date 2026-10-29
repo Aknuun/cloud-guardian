@@ -11,13 +11,12 @@ import (
 
 // webHookBase is the public origin used to build PasarGuard webhook URLs.
 func (r *Router) webHookBase() string {
-	if b := r.publicBase(); b != "" {
-		return b
-	}
+	// The mini app origin is the public HTTPS entry; public_url may point at a
+	// loopback port PasarGuard cannot reach.
 	if u, err := url.Parse(r.WebAppURL); err == nil && u.Host != "" {
 		return u.Scheme + "://" + u.Host
 	}
-	return ""
+	return r.publicBase()
 }
 
 func (r *Router) webHookPanelCfg(cfg alerts.Cfg, pid string) *alerts.PanelCfg {

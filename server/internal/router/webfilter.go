@@ -25,6 +25,13 @@ func hfExcList(set map[string]bool) []string {
 	return out
 }
 
+func hfList(v any) []string {
+	if out := selStrings(v); len(out) > 0 {
+		return out
+	}
+	return []string{}
+}
+
 func sortStrings(a []string) {
 	for i := 1; i < len(a); i++ {
 		for j := i; j > 0 && a[j] < a[j-1]; j-- {
@@ -134,8 +141,8 @@ func (r *Router) webHfHosts(w http.ResponseWriter, req *http.Request, uid int64)
 		out = append(out, map[string]any{
 			"id": hid, "remark": strv(h["remark"]),
 			"disabled": boolVal(h["is_disabled"]), "reality": hfReality(h),
-			"address": selStrings(h["address"]), "sni": selStrings(h["sni"]),
-			"host": selStrings(h["host"]), "skip": skip,
+			"address": hfList(h["address"]), "sni": hfList(h["sni"]),
+			"host": hfList(h["host"]), "skip": skip,
 			"all": exc[base],
 		})
 	}
