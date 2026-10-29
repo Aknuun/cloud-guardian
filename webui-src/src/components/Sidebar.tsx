@@ -52,7 +52,8 @@ export function Sidebar({
           {PROVIDERS.map((it) => {
             const on = provider === it.id
             const isOpen = expanded === it.id
-            const items = on && isOpen ? sections || [] : []
+            const hasSub = on && !!(sections && sections.length)
+            const items = hasSub && isOpen ? sections || [] : []
             return (
               <div key={it.id} className="cc-navgroup">
                 <button
@@ -72,7 +73,9 @@ export function Sidebar({
                 >
                   <it.Icon size={19} weight={on ? 'fill' : 'regular'} />
                   <span className="cc-sideitem-label">{it.label}</span>
-                  <CaretDown size={14} className={'cc-caret' + (isOpen ? ' open' : '')} aria-hidden="true" />
+                  {hasSub && (
+                    <CaretDown size={14} className={'cc-caret' + (isOpen ? ' open' : '')} aria-hidden="true" />
+                  )}
                 </button>
                 {items.length > 0 && (
                   <div className="cc-subnav">
