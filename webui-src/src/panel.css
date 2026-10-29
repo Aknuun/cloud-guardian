@@ -1028,3 +1028,6 @@ html[data-mode='dark'] .cc-stat {
 .cc-section-head { flex-wrap: wrap; gap: 8px; }
 .cc-name { overflow-wrap: anywhere; }
 .cc-btnrow .cc-btn { white-space: nowrap; }
+
+/* deepseek.css renders .cc-section as an inline flex label; sections here stack rows */
+.cc-section { display: block; }
