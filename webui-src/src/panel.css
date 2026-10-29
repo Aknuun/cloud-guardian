@@ -831,3 +831,48 @@ html[data-mode='dark'] .cc-stat {
   font-style: normal;
   color: var(--ds-muted);
 }
+
+/* server section extras */
+.cc-btnrow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cc-btnrow button[data-kumo-component='Button'] {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px !important;
+  padding: 0 8px !important;
+}
+.cc-pre {
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ds-tint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 46vh;
+  overflow: auto;
+  direction: ltr;
+  text-align: left;
+}
+.cc-checkline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--ds-tint);
+  font-size: 13px;
+  cursor: pointer;
+}
+.cc-checkline input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ds-brand);
+  flex: 0 0 auto;
+}

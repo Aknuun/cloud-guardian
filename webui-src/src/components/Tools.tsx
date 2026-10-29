@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Pulse, ArrowClockwise, BellRinging, Check, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
-import { api, faDate, faNum, invalidateCache } from '../lib'
+import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 
@@ -110,7 +110,14 @@ function SrvView() {
   const [monErr, setMonErr] = useState('')
   const [monBusy, setMonBusy] = useState(false)
   const [act, setAct] = useState<'reboot' | 'upd' | null>(null)
+  const [actSrv, setActSrv] = useState<Srv | null>(null)
   const [notice, setNotice] = useState('')
+  const [detail, setDetail] = useState<Srv | null>(null)
+  const [info, setInfo] = useState<{ s: Srv; kind: 'info' | 'disk' } | null>(null)
+  const [cfgOpen, setCfgOpen] = useState(false)
+  const [impOpen, setImpOpen] = useState(false)
+  const [pwOpen, setPwOpen] = useState(false)
+  const [subOpen, setSubOpen] = useState(false)
 
   const loadMon = async (s: Srv) => {
     setMonBusy(true)
@@ -125,15 +132,15 @@ function SrvView() {
   }
 
   const runAct = async () => {
-    if (!mon || !act) return
+    if (!actSrv || !act) return
     try {
-      await api(act === 'reboot' ? '/api/tools/srv/reboot' : '/api/tools/srv/upd', { id: mon.id })
+      await api(act === 'reboot' ? '/api/tools/srv/reboot' : '/api/tools/srv/upd', { id: actSrv.id })
       setNotice(act === 'reboot' ? 'دستور ریبوت ارسال شد.' : 'آپدیت شروع شد؛ نتیجه در تلگرام می‌آید.')
     } catch (e: any) {
       setNotice(e.message || 'انجام نشد')
     }
     setAct(null)
-    setMon(null)
+    setActSrv(null)
   }
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
@@ -166,10 +173,21 @@ function SrvView() {
           افزودن سرور
         </Button>
       </div>
+      <div className="cc-btnrow">
+        <Button variant="outline" onClick={() => setImpOpen(true)}>
+          افزودن گروهی
+        </Button>
+        <Button variant="outline" onClick={() => setSubOpen(true)}>
+          از ساب‌دامنه
+        </Button>
+        <Button variant="outline" onClick={() => setPwOpen(true)}>
+          رمزهای ذخیره‌شده
+        </Button>
+      </div>
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {list.length === 0 && <Empty title="سروری ثبت نشده" description="با دکمهٔ «افزودن سرور» یکی اضافه کن." />}
       {list.map((s) => (
-        <div key={s.id} className="cc-trow">
+        <div key={s.id} className="cc-trow cc-tap" onClick={() => setDetail(s)}>
           <div className="cc-avatar">{(s.name || 'S').slice(0, 1).toUpperCase()}</div>
           <div className="cc-grow">
             <div className="cc-name">{s.name || s.host}</div>
@@ -179,27 +197,144 @@ function SrvView() {
             {s.note && <div className="cc-sub">{s.note}</div>}
           </div>
           <Badge>{s.key ? 'کلید' : 'رمز'}</Badge>
-          <div className="cc-rowbtns">
-            <button
-              type="button"
-              aria-label="آمار"
-              onClick={() => {
-                setMon(s)
-                loadMon(s)
-              }}
-            >
-              <Pulse size={17} />
-            </button>
-            <button type="button" aria-label="ویرایش" onClick={() => setEdit({ ...s, secret: '' })}>
-              <PencilSimple size={17} />
-            </button>
-            <button type="button" aria-label="حذف" className="danger" onClick={() => setDel(s)}>
-              <Trash size={17} />
-            </button>
-          </div>
         </div>
       ))}
 
+      {detail && (
+        <Dialog.Root open onOpenChange={(o) => !o && setDetail(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">{detail.name || detail.host}</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {detail.user}@{detail.host}:{detail.port}
+            </Dialog.Description>
+            <div className="cc-actions">
+              <Button
+                variant="outline"
+                icon={Pulse}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setMon(s)
+                  loadMon(s)
+                }}
+              >
+                مانیتورینگ
+              </Button>
+              <Button
+                variant="outline"
+                icon={Info}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setInfo({ s, kind: 'info' })
+                }}
+              >
+                مشخصات سیستم
+              </Button>
+              <Button
+                variant="outline"
+                icon={HardDrive}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setInfo({ s, kind: 'disk' })
+                }}
+              >
+                فضای دیسک
+              </Button>
+              <Button
+                variant="outline"
+                icon={Gear}
+                onClick={() => {
+                  setDetail(null)
+                  setCfgOpen(true)
+                }}
+              >
+                آستانه‌های هشدار
+              </Button>
+              <Button
+                variant="outline"
+                icon={Copy}
+                onClick={() => {
+                  fallbackCopy(`ssh ${detail.user}@${detail.host} -p ${detail.port}`)
+                  setNotice('دستور SSH کپی شد.')
+                }}
+              >
+                کپی دستور SSH
+              </Button>
+              <Button
+                variant="outline"
+                icon={Power}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setActSrv(s)
+                  setAct('reboot')
+                }}
+              >
+                ریبوت
+              </Button>
+              <Button
+                variant="outline"
+                icon={ArrowClockwise}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setActSrv(s)
+                  setAct('upd')
+                }}
+              >
+                آپدیت
+              </Button>
+              <Button
+                variant="outline"
+                icon={PencilSimple}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setEdit({ ...s, secret: '' })
+                }}
+              >
+                ویرایش
+              </Button>
+              <Button
+                variant="destructive"
+                icon={Trash}
+                onClick={() => {
+                  const s = detail
+                  setDetail(null)
+                  setDel(s)
+                }}
+              >
+                حذف
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {info && <TextDialog s={info.s} kind={info.kind} onClose={() => setInfo(null)} />}
+      {cfgOpen && <MonCfgDialog onClose={() => setCfgOpen(false)} />}
+      {impOpen && (
+        <ImportDialog
+          onClose={() => setImpOpen(false)}
+          done={() => {
+            setImpOpen(false)
+            reload()
+          }}
+        />
+      )}
+      {pwOpen && <PwDialog onClose={() => setPwOpen(false)} />}
+      {subOpen && (
+        <SubDialog
+          onClose={() => setSubOpen(false)}
+          done={() => {
+            setSubOpen(false)
+            reload()
+          }}
+        />
+      )}
       {mon && (
         <Dialog.Root open onOpenChange={(o) => !o && setMon(null)}>
           <Dialog className="cc-dialog" size="base">
@@ -257,7 +392,7 @@ function SrvView() {
         </Dialog.Root>
       )}
 
-      {act && mon && (
+      {act && actSrv && (
         <Dialog.Root open onOpenChange={(o) => !o && setAct(null)}>
           <Dialog className="cc-dialog" size="base">
             <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
@@ -266,8 +401,8 @@ function SrvView() {
             </Dialog.Title>
             <Dialog.Description className="cc-dialog-desc">
               {act === 'reboot'
-                ? `«${mon.name || mon.host}» ریبوت شود؟ اتصال چند لحظه قطع می‌شود.`
-                : `apt update && apt upgrade روی «${mon.name || mon.host}» اجرا شود؟`}
+                ? `«${actSrv.name || actSrv.host}» ریبوت شود؟ اتصال چند لحظه قطع می‌شود.`
+                : `apt update && apt upgrade روی «${actSrv.name || actSrv.host}» اجرا شود؟`}
             </Dialog.Description>
             <div className="cc-dialog-actions">
               <Button variant="secondary" onClick={() => setAct(null)}>
@@ -418,29 +553,6 @@ function RemView() {
             </div>
           </div>
           <Badge>{r.ack ? 'انجام شد' : r.notified ? 'اطلاع داده شد' : 'در انتظار'}</Badge>
-          <div className="cc-rowbtns">
-            {!r.ack && (
-              <button
-                type="button"
-                aria-label="انجام شد"
-                onClick={async () => {
-                  await save('/api/tools/rem/done', { id: r.id }, reload)
-                }}
-              >
-                <Check size={17} />
-              </button>
-            )}
-            <button
-              type="button"
-              aria-label="حذف"
-              className="danger"
-              onClick={async () => {
-                await save('/api/tools/rem/del', { id: r.id }, reload)
-              }}
-            >
-              <Trash size={17} />
-            </button>
-          </div>
         </div>
       ))}
 
@@ -509,5 +621,360 @@ function PgView() {
         </div>
       ))}
     </>
+  )
+}
+
+/* ---------------- server extras ---------------- */
+
+function TextDialog({ s, kind, onClose }: { s: Srv; kind: 'info' | 'disk'; onClose: () => void }) {
+  const [text, setText] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(true)
+  const load = () => {
+    setBusy(true)
+    setErr('')
+    api<{ text: string }>(`/api/tools/srv/${kind}?id=${encodeURIComponent(s.id)}&t=${Date.now()}`)
+      .then((d) => setText(d.text))
+      .catch((e) => setErr(e.message || 'خطا'))
+      .finally(() => setBusy(false))
+  }
+  useEffect(load, [])
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">{kind === 'info' ? 'مشخصات سیستم' : 'فضای دیسک'}</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">{s.name || s.host}</Dialog.Description>
+        {busy && (
+          <div className="cc-center cc-mb">
+            <Loader size="lg" />
+          </div>
+        )}
+        {err && <div className="cc-form-err">{err}</div>}
+        {!busy && !err && <pre className="cc-pre">{text || '—'}</pre>}
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" icon={ArrowClockwise} onClick={load}>
+            تازه‌سازی
+          </Button>
+          <Button variant="primary" onClick={onClose}>
+            بستن
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
+function MonCfgDialog({ onClose }: { onClose: () => void }) {
+  const [cfg, setCfg] = useState<any>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    api<any>('/api/tools/srv/moncfg')
+      .then(setCfg)
+      .catch((e) => setErr(e.message || 'خطا'))
+  }, [])
+  const submit = async () => {
+    setErr('')
+    try {
+      await save('/api/tools/srv/moncfg', cfg, onClose)
+    } catch (e: any) {
+      setErr(e.message || 'ذخیره نشد')
+    }
+  }
+  const num = (k: string, label: string, hint: string) => (
+    <label className="cc-field">
+      <span>{label}</span>
+      <Input
+        type="number"
+        value={String(cfg?.[k] ?? '')}
+        onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) })}
+        placeholder={hint}
+      />
+    </label>
+  )
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">آستانه‌های هشدار</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">وقتی از این عددها بگذرد در تلگرام خبر می‌دهد.</Dialog.Description>
+        {!cfg && !err && (
+          <div className="cc-center cc-mb">
+            <Loader size="lg" />
+          </div>
+        )}
+        {err && <div className="cc-form-err">{err}</div>}
+        {cfg && (
+          <div className="cc-form">
+            <label className="cc-checkline">
+              <input
+                type="checkbox"
+                checked={!!cfg.enabled}
+                onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+              />
+              <span>پایش فعال باشد</span>
+            </label>
+            {num('cpuPct', 'CPU (٪)', '90')}
+            {num('memPct', 'RAM (٪)', '90')}
+            {num('diskPct', 'دیسک (٪)', '90')}
+            {num('cooldownMin', 'فاصلهٔ هشدار (دقیقه)', '60')}
+          </div>
+        )}
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" onClick={onClose}>
+            انصراف
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!cfg}>
+            ذخیره
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
+function ImportDialog({ onClose, done }: { onClose: () => void; done: () => void }) {
+  const [lines, setLines] = useState('')
+  const [err, setErr] = useState('')
+  const [msg, setMsg] = useState('')
+  const submit = async () => {
+    setErr('')
+    try {
+      const r = await api<{ added: number; skipped: number }>('/api/tools/srv/import', { lines })
+      setMsg(`${faNum(r.added)} سرور اضافه شد.`)
+      invalidateCache()
+      setTimeout(done, 600)
+    } catch (e: any) {
+      setErr(e.message || 'اضافه نشد')
+    }
+  }
+  return (
+    <FormDialog title="افزودن گروهی" sub="هر خط: هاست کاربر رمز [پورت]" onClose={onClose} onSave={submit} error={err}>
+      <label className="cc-field">
+        <span>لیست سرورها</span>
+        <textarea
+          className="cc-input cc-textarea"
+          rows={6}
+          value={lines}
+          onChange={(e) => setLines(e.target.value)}
+          placeholder={'1.2.3.4 root MyPass\n5.6.7.8 root - 2222'}
+        />
+      </label>
+      <div className="cc-hint">رمز `-` یعنی بدون رمز. خطی که با # شروع شود نادیده گرفته می‌شود.</div>
+      {msg && <div className="cc-hint">{msg}</div>}
+    </FormDialog>
+  )
+}
+
+function PwDialog({ onClose }: { onClose: () => void }) {
+  const [list, setList] = useState<string[] | null>(null)
+  const [val, setVal] = useState('')
+  const [err, setErr] = useState('')
+  const load = () =>
+    api<{ masked: string[] }>('/api/tools/srv/pw')
+      .then((d) => setList(d.masked || []))
+      .catch((e) => setErr(e.message || 'خطا'))
+  useEffect(() => {
+    load()
+  }, [])
+  const add = async () => {
+    if (!val.trim()) return
+    try {
+      await save('/api/tools/srv/pw', { secret: val }, () => {
+        setVal('')
+        load()
+      })
+    } catch (e: any) {
+      setErr(e.message || 'ذخیره نشد')
+    }
+  }
+  const del = async (i: number) => {
+    try {
+      await save('/api/tools/srv/pw', { del: i }, load)
+    } catch (e: any) {
+      setErr(e.message || 'حذف نشد')
+    }
+  }
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">رمزهای ذخیره‌شده</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">در افزودن گروهی و از ساب‌دامنه قابل انتخاب‌اند.</Dialog.Description>
+        {err && <div className="cc-form-err">{err}</div>}
+        {!list && (
+          <div className="cc-center cc-mb">
+            <Loader size="lg" />
+          </div>
+        )}
+        {list && list.length === 0 && <div className="cc-hint cc-center cc-mb">رمزی ذخیره نشده.</div>}
+        {list?.map((m, i) => (
+          <div key={i} className="cc-trow">
+            <div className="cc-avatar">{i + 1}</div>
+            <div className="cc-grow">
+              <div className="cc-name">{m}</div>
+            </div>
+            <div className="cc-rowbtns">
+              <button type="button" className="danger" aria-label="حذف" onClick={() => del(i)}>
+                <Trash size={17} />
+              </button>
+            </div>
+          </div>
+        ))}
+        <div className="cc-field">
+          <span>رمز جدید</span>
+          <Input value={val} onChange={(e) => setVal(e.target.value)} placeholder="رمز" type="password" />
+        </div>
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" onClick={onClose}>
+            بستن
+          </Button>
+          <Button variant="primary" icon={Plus} onClick={add}>
+            افزودن
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
+type Zone = { acc: number; id: string; name: string }
+type Rec = { type: string; name: string; content: string }
+
+function SubDialog({ onClose, done }: { onClose: () => void; done: () => void }) {
+  const [zones, setZones] = useState<Zone[] | null>(null)
+  const [zone, setZone] = useState<Zone | null>(null)
+  const [recs, setRecs] = useState<Rec[] | null>(null)
+  const [picked, setPicked] = useState<Record<string, boolean>>({})
+  const [pws, setPws] = useState<string[]>([])
+  const [pwIdx, setPwIdx] = useState<number | null>(null)
+  const [custom, setCustom] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api<any>('/api/cf/zones')
+      .then((d) => setZones(d.zones || []))
+      .catch((e) => setErr(e.message || 'خطا'))
+    api<{ masked: string[] }>('/api/tools/srv/pw')
+      .then((d) => setPws(d.masked || []))
+      .catch(() => {})
+  }, [])
+
+  const pickZone = (z: Zone) => {
+    setZone(z)
+    setRecs(null)
+    setPicked({})
+    api<any>(`/api/cf/records?acc=${z.acc}&zid=${encodeURIComponent(z.id)}`)
+      .then((d) => setRecs((d.records || []).filter((r: Rec) => r.type === 'A' || r.type === 'AAAA')))
+      .catch((e) => setErr(e.message || 'خطا'))
+  }
+
+  const submit = async () => {
+    if (!zone || !recs) return
+    const items = recs
+      .map((r, i) => ({ r, key: `${r.type}|${r.name}|${r.content}|${i}` }))
+      .filter((x) => picked[x.key])
+      .map(({ r }) => ({ name: r.name === '@' ? zone.name : `${r.name}.${zone.name}`, host: r.content }))
+    if (items.length === 0) {
+      setErr('هیچ رکوردی انتخاب نشده')
+      return
+    }
+    setBusy(true)
+    setErr('')
+    try {
+      await api('/api/tools/srv/subadd', {
+        items,
+        password: pwIdx === null ? custom : '',
+        pwIndex: pwIdx,
+      })
+      invalidateCache()
+      setBusy(false)
+      done()
+    } catch (e: any) {
+      setErr(e.message || 'اضافه نشد')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">از ساب‌دامنه</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">دامنه را انتخاب کن و رکوردهای A/AAAA را تیک بزن.</Dialog.Description>
+        {err && <div className="cc-form-err">{err}</div>}
+        {!zones && (
+          <div className="cc-center cc-mb">
+            <Loader size="lg" />
+          </div>
+        )}
+        {zones && !zone && (
+          <div className="cc-form">
+            {zones.length === 0 && <div className="cc-hint">زونی در کلادفلر نیست.</div>}
+            {zones.map((z) => (
+              <button key={z.id} type="button" className="cc-choice" onClick={() => pickZone(z)}>
+                <span className="cc-choice-label">{z.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {zone && (
+          <>
+            <div className="cc-hint cc-mb">{zone.name}</div>
+            {!recs && (
+              <div className="cc-center cc-mb">
+                <Loader size="lg" />
+              </div>
+            )}
+            {recs && recs.length === 0 && <div className="cc-hint cc-mb">رکورد A/AAAA ندارد.</div>}
+            {recs?.map((r, i) => {
+              const key = `${r.type}|${r.name}|${r.content}|${i}`
+              return (
+                <label key={key} className="cc-checkline">
+                  <input
+                    type="checkbox"
+                    checked={!!picked[key]}
+                    onChange={(e) => setPicked({ ...picked, [key]: e.target.checked })}
+                  />
+                  <span>
+                    {r.name} · {r.type} · {r.content}
+                  </span>
+                </label>
+              )
+            })}
+            <div className="cc-field">
+              <span>رمز پیش‌فرض</span>
+              <select
+                className="cc-input"
+                value={pwIdx === null ? 'c' : String(pwIdx)}
+                onChange={(e) => setPwIdx(e.target.value === 'c' ? null : Number(e.target.value))}
+              >
+                {pws.map((m, i) => (
+                  <option key={i} value={i}>
+                    ذخیره‌شده #{i + 1} ({m})
+                  </option>
+                ))}
+                <option value="c">رمز دلخواه</option>
+              </select>
+            </div>
+            {pwIdx === null && (
+              <label className="cc-field">
+                <span>رمز</span>
+                <Input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="خالی = بدون رمز" />
+              </label>
+            )}
+          </>
+        )}
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" onClick={onClose}>
+            انصراف
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={!zone || busy}>
+            افزودن
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
   )
 }
