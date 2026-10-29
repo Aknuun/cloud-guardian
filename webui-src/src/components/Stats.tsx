@@ -10,7 +10,7 @@ export function StatGrid({ items }: { items: Stat[] }) {
             <b className="cc-stat-value">{s.value}</b>
             <div
               className="cc-stat-ring"
-              style={{ '--pct': s.pct === undefined ? 100 : Math.max(0, Math.min(100, s.pct)) } as any}
+              style={{ '--pct': s.pct === undefined ? 0 : Math.max(0, Math.min(100, s.pct)) } as any}
               aria-hidden="true"
             >
               <span />
