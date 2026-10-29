@@ -43,6 +43,9 @@ export function ActionModalHost({
   return (
     <Dialog.Root open onOpenChange={(o: boolean) => !o && onClose()}>
       <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x" aria-label="بستن">
+          ✕
+        </Dialog.Close>
         {modal.kind === 'confirm' && (
           <>
             <Dialog.Title className="cc-dialog-title">{modal.title}</Dialog.Title>

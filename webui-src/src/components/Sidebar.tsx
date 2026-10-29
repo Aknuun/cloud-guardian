@@ -1,7 +1,10 @@
-import { Cloud, Cube, Globe, HardDrives, Moon, Sun, X } from '@phosphor-icons/react'
+import { Cloud, Cube, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
+import { useState } from 'react'
 import { useTheme } from './theme'
 
 export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
+
+export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'hz', label: 'هتزنر', Icon: HardDrives },
@@ -15,62 +18,89 @@ export function Sidebar({
   onChange,
   open,
   onClose,
+  sections,
 }: {
   provider: Provider
   onChange: (p: Provider) => void
   open: boolean
   onClose: () => void
+  sections?: SubItem[]
 }) {
   const { mode, toggle } = useTheme()
+  const [expanded, setExpanded] = useState<Provider | null>(provider)
+
   return (
     <>
       <div className={'cc-scrim' + (open ? ' on' : '')} onClick={onClose} aria-hidden="true" />
-      <aside className={'cc-sidebar p-' + provider + (open ? ' open' : '')}>
-        <div className="cc-brand">
-          <div className="cc-brand-mark">CG</div>
-          <div className="cc-brand-text">
-            <div className="cc-brand-name">Cloud Guardian</div>
-            <div className="cc-brand-sub">کنسول ابری</div>
+      <aside className={'cc-sidebar p-' + provider + (open ? ' open' : '')} aria-label="منوی اصلی">
+        <div className="cc-sidebrand">
+          <div className="cc-sidebrand-mark">CG</div>
+          <div className="cc-sidebrand-text">
+            <div className="cc-sidebrand-name">Cloud Guardian</div>
+            <div className="cc-sidebrand-sub">کنسول ابری</div>
           </div>
           <button type="button" className="cc-drawer-x" aria-label="بستن منو" onClick={onClose}>
-            <X size={18} />
+            ✕
           </button>
         </div>
 
         <nav className="cc-sidenav" aria-label="سرویس‌ها">
           <div className="cc-sidenav-label">سرویس‌ها</div>
-          {PROVIDERS.map((it) => (
-            <button
-              key={it.id}
-              type="button"
-              className={'cc-sideitem p-' + it.id + (provider === it.id ? ' on' : '')}
-              aria-current={provider === it.id ? 'page' : undefined}
-              onClick={() => {
-                onChange(it.id)
-                onClose()
-              }}
-            >
-              <it.Icon size={19} weight={provider === it.id ? 'fill' : 'regular'} />
-              <span>{it.label}</span>
-            </button>
-          ))}
+          {PROVIDERS.map((it) => {
+            const on = provider === it.id
+            const isOpen = expanded === it.id
+            const items = on && isOpen ? sections || [] : []
+            return (
+              <div key={it.id} className="cc-navgroup">
+                <button
+                  type="button"
+                  className={'cc-sideitem' + (on ? ' on' : '')}
+                  aria-current={on ? 'page' : undefined}
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    if (!on) onChange(it.id)
+                    setExpanded(isOpen ? null : it.id)
+                  }}
+                >
+                  <it.Icon size={19} weight={on ? 'fill' : 'regular'} />
+                  <span className="cc-sideitem-label">{it.label}</span>
+                  <CaretDown size={14} className={'cc-caret' + (isOpen ? ' open' : '')} aria-hidden="true" />
+                </button>
+                {items.length > 0 && (
+                  <div className="cc-subnav">
+                    {items.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={'cc-subitem' + (s.active ? ' on' : '')}
+                        onClick={() => {
+                          s.onSelect()
+                          onClose()
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </nav>
 
         <nav className="cc-sidenav" aria-label="تنظیمات">
           <div className="cc-sidenav-label">تنظیمات</div>
           <button type="button" className="cc-sideitem" onClick={toggle}>
             {mode === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
-            <span>{mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}</span>
+            <span className="cc-sideitem-label">{mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}</span>
           </button>
         </nav>
 
-        <div className="cc-sidefoot">
-          <div className="cc-profile">
-            <div className="cc-profile-ava">م</div>
-            <div className="cc-profile-meta">
-              <div className="cc-profile-name">مدیر</div>
-              <div className="cc-profile-role">دسترسی کامل</div>
-            </div>
+        <div className="cc-profile">
+          <div className="cc-profile-avatar">م</div>
+          <div className="cc-grow">
+            <div className="cc-profile-name">مدیر</div>
+            <div className="cc-profile-role">دسترسی کامل</div>
           </div>
         </div>
       </aside>

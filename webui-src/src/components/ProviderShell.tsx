@@ -6,6 +6,7 @@ import { LogoutButton } from './LogoutButton'
 import { useSectionTheme } from './sectionTheme'
 import { Button } from './ui'
 import { Sidebar, ThemeToggle } from './Sidebar'
+import type { SubItem } from './Sidebar'
 import type { Provider } from './Sidebar'
 
 export function ProviderShell({
@@ -18,6 +19,7 @@ export function ProviderShell({
   onRefresh,
   onChange,
   toast,
+  sections,
   children,
 }: {
   provider: Provider
@@ -29,13 +31,20 @@ export function ProviderShell({
   onRefresh: () => void
   onChange: (p: Provider) => void
   toast: { t: string; err?: boolean } | null
+  sections?: SubItem[]
   children: ReactNode
 }) {
   const sectionTheme = useSectionTheme(provider)
   const [navOpen, setNavOpen] = useState(false)
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
-      <Sidebar provider={provider} onChange={onChange} open={navOpen} onClose={() => setNavOpen(false)} />
+      <Sidebar
+        provider={provider}
+        onChange={onChange}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        sections={sections}
+      />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">

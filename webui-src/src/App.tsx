@@ -31,6 +31,7 @@ import { WebLogin } from './components/WebLogin'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
 import type { Provider } from './components/Sidebar'
+import type { SubItem } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
@@ -1259,9 +1260,31 @@ export default function App() {
 
   const showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
 
+  const accId = 'acc' in cur ? cur.acc : null
+  const sections: SubItem[] = [
+    { id: 'accounts', label: 'اکانت‌ها', active: cur.v === 'accounts', onSelect: () => setCur({ v: 'accounts' }) },
+  ]
+  if (accId != null) {
+    sections.push(
+      {
+        id: 'servers',
+        label: 'سرورها',
+        active: cur.v === 'servers' || cur.v === 'server',
+        onSelect: () => setCur({ v: 'servers', acc: accId }),
+      },
+      { id: 'ips', label: 'آی‌پی‌ها', active: cur.v === 'ips', onSelect: () => setCur({ v: 'ips', acc: accId }) },
+    )
+  }
+
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
-      <Sidebar provider={provider} onChange={setProvider} open={navOpen} onClose={() => setNavOpen(false)} />
+      <Sidebar
+        provider={provider}
+        onChange={setProvider}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        sections={sections}
+      />
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
@@ -1317,6 +1340,9 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
   return (
     <Dialog.Root open onOpenChange={(o: boolean) => !o && onClose()}>
       <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x" aria-label="بستن">
+          ✕
+        </Dialog.Close>
         {modal.kind === 'confirm' && (
           <>
             <Dialog.Title className="cc-dialog-title">{modal.title}</Dialog.Title>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, LayerCard, Switch } from './components/ui'
-import type { Provider } from './components/Sidebar'
+import type { Provider, SubItem } from './components/Sidebar'
 import { ProviderShell } from './components/ProviderShell'
 import {
   ArrowRight,
@@ -2088,10 +2088,22 @@ ${reason}`,
 
   const root = stack.length === 0 && view.v !== 'zones'
 
+  function goRoot(v: View) {
+    setStack([])
+    setView(v)
+  }
+  const cfSections: SubItem[] = [
+    { id: 'zones', label: 'زون‌ها', active: view.v === 'zones', onSelect: () => goRoot({ v: 'zones' }) },
+    { id: 'accounts', label: 'اکانت‌ها', active: view.v === 'accounts', onSelect: () => goRoot({ v: 'accounts' }) },
+    { id: 'lbzones', label: 'لودبالانسر', active: view.v === 'lbzones', onSelect: () => goRoot({ v: 'lbzones' }) },
+    { id: 'favs', label: 'موردعلاقه', active: view.v === 'favs', onSelect: () => goRoot({ v: 'favs' }) },
+  ]
+
   return (
     <>
       <ProviderShell
         provider="cf"
+        sections={cfSections}
         title={title}
         busy={busy > 0}
         showBack={root || stack.length > 0}

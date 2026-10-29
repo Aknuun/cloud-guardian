@@ -21,7 +21,7 @@ import { Badge, Button, Empty, Input, LayerCard, Loader, Meter } from './compone
 import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
-import type { Provider } from './components/Sidebar'
+import type { Provider, SubItem } from './components/Sidebar'
 import { api, fallbackCopy, faDate, faNum, haptic, mem, num, TG } from './lib'
 
 type Account = { i: number; name: string; count?: number }
@@ -744,12 +744,30 @@ export default function Linode({ onSwitch, onBackRef }: { onSwitch: (p: Provider
   else body = createPage()
 
   const showBack = !!modal || view.v !== 'accounts' || stack.length > 0
+
+  function goRoot(v: View) {
+    setStack([])
+    setView(v)
+  }
+  const accId = 'acc' in view ? view.acc : null
+  const sections: SubItem[] = [
+    { id: 'accounts', label: 'اکانت‌ها', active: view.v === 'accounts', onSelect: () => goRoot({ v: 'accounts' }) },
+  ]
+  if (accId != null) {
+    sections.push({
+      id: 'servers',
+      label: 'سرورها',
+      active: view.v === 'servers' || view.v === 'server',
+      onSelect: () => goRoot({ v: 'servers', acc: accId }),
+    })
+  }
   const showSwitch = view.v === 'accounts' || view.v === 'servers'
   onBackRef?.(goBack)
 
   return (
     <>
       <ProviderShell
+        sections={sections}
         provider="ln"
         title={title}
         busy={busy > 0}

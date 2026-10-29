@@ -19,7 +19,7 @@ import { Badge, Button, Empty, Input, LayerCard, Loader } from './components/ui'
 import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
-import type { Provider } from './components/Sidebar'
+import type { Provider, SubItem } from './components/Sidebar'
 import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 
 type Account = { i: number; name: string; domains?: number; servers?: number }
@@ -958,10 +958,21 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
   else body = createPage()
   onBackRef?.(goBack)
 
+  function goRoot(v: View) {
+    setStack([])
+    setView(v)
+  }
+  const arvSections: SubItem[] = [
+    { id: 'accounts', label: 'اکانت‌ها', active: view.v === 'accounts', onSelect: () => goRoot({ v: 'accounts' }) },
+    { id: 'dns', label: 'DNS', active: view.v === 'dns', onSelect: () => goRoot({ v: 'dns' }) },
+    { id: 'servers', label: 'سرورها', active: view.v === 'servers', onSelect: () => goRoot({ v: 'servers' }) },
+  ]
+
   return (
     <>
       <ProviderShell
         provider="arv"
+        sections={arvSections}
         title={title}
         busy={busy > 0}
         showBack={!!modal || acc !== null || stack.length > 0}
