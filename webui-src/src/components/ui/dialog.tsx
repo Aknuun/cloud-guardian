@@ -10,7 +10,7 @@ function DialogContent({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { size?: 'sm' | 'base' | 'lg' }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/35 backdrop-blur-[2px]" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/35" />
       <DialogPrimitive.Content
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-full max-w-[min(440px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card text-foreground shadow-pop outline-none',
