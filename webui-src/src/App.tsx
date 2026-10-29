@@ -33,6 +33,7 @@ import type { ToolId } from './components/Tools'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
 import { GlobalSearch } from './components/GlobalSearch'
+import { FilterBar } from './components/FilterBar'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
@@ -147,6 +148,8 @@ export default function App() {
     const arvBack = useRef<() => void>(() => {})
   const [stack, setStack] = useState<View[]>([])
   const [q, setQ] = useState('')
+  const [aflt, setAflt] = useState('all')
+  const [sflt, setSflt] = useState('all')
   const [createName, setCreateName] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
@@ -664,6 +667,10 @@ export default function App() {
       )
     }
     if (cur.v === 'accounts') {
+      const aq = q.trim().toLowerCase()
+      const list0 = accounts.filter(
+        (a) => (!aq || a.name.toLowerCase().includes(aq)) && (aflt === 'has' ? (a.count || 0) > 0 : aflt === 'none' ? (a.count || 0) === 0 : true),
+      )
       const known = accounts.some((a) => a.count !== undefined)
       const totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
       return (
@@ -686,11 +693,24 @@ export default function App() {
               افزودن اکانت
             </Button>
           </div>
-          {!accounts.length && busy > 0 && <AppSkeleton />}
-          {!accounts.length && busy === 0 && (
-            <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن." />
+          <FilterBar
+            q={q}
+            onQ={setQ}
+            placeholder="جستجوی اکانت…"
+            filters={[
+              { id: 'all', label: 'همه اکانت‌ها' },
+              { id: 'has', label: 'دارای سرور' },
+              { id: 'none', label: 'بدون سرور' },
+            ]}
+            value={aflt}
+            onValue={setAflt}
+            onRefresh={reload}
+          />
+          {!list0.length && busy > 0 && <AppSkeleton />}
+          {!list0.length && busy === 0 && (
+            <Empty title="اکانتی پیدا نشد" description={aq ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن.'} />
           )}
-          {accounts.map((a) => (
+          {list0.map((a) => (
             <LayerCard
               key={a.i}
               className="cc-trow cc-tap"
@@ -796,9 +816,9 @@ export default function App() {
 
     if (cur.v === 'servers') {
       const ql = q.trim().toLowerCase()
-      const list = servers.filter(
-        (s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type && s.type.name)).toLowerCase().includes(ql),
-      )
+      const list = servers
+        .filter((s) => (sflt === 'run' ? s.status === 'running' : sflt === 'off' ? s.status !== 'running' : true))
+        .filter((s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type && s.type.name)).toLowerCase().includes(ql))
       const running = list.filter((s) => s.status === 'running').length
       return (
         <>
@@ -809,11 +829,18 @@ export default function App() {
               { label: 'خاموش', value: faNum(list.length - running), pct: list.length ? ((list.length - running) / list.length) * 100 : 0 },
             ]}
           />
-          <Input
-            className="cc-input cc-mb"
+          <FilterBar
+            q={q}
+            onQ={setQ}
             placeholder="جست‌وجوی نام یا آی‌پی…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            filters={[
+              { id: 'all', label: 'همه سرورها' },
+              { id: 'run', label: 'روشن' },
+              { id: 'off', label: 'خاموش' },
+            ]}
+            value={sflt}
+            onValue={setSflt}
+            onRefresh={reload}
           />
           <div className="cc-grid2 cc-mb">
             <Button variant="outline" icon={GlobeHemisphereWest} onClick={() => push({ v: 'ips', acc: cur.acc })}>

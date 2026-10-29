@@ -4,6 +4,7 @@ import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
+import { FilterBar } from './FilterBar'
 
 export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hook'
 
@@ -126,6 +127,7 @@ function SrvView() {
   const [pwOpen, setPwOpen] = useState(false)
   const [subOpen, setSubOpen] = useState(false)
   const [q, setQ] = useState('')
+  const [flt, setFlt] = useState('all')
   const [sel, setSel] = useState<string[]>([])
   const [bulkDel, setBulkDel] = useState(false)
 
@@ -156,9 +158,9 @@ function SrvView() {
   if (!loaded) return <Loader size="lg" />
   const list = data || []
   const needle = q.trim().toLowerCase()
-  const shown = needle
-    ? list.filter((s) => (s.name + ' ' + s.host + ' ' + s.user + ' ' + s.note).toLowerCase().includes(needle))
-    : list
+  const shown = list
+    .filter((s) => (flt === 'key' ? s.key : flt === 'pw' ? !s.key : true))
+    .filter((s) => !needle || (s.name + ' ' + s.host + ' ' + s.user + ' ' + s.note).toLowerCase().includes(needle))
   const toggle = (id: string) => setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]))
   const bulkRun = async (kind: 'reboot' | 'upd') => {
     const ids = [...sel]
@@ -217,23 +219,34 @@ function SrvView() {
           افزودن سرور
         </Button>
       </div>
-      <div className="cc-btnrow">
-        <Button variant="outline" onClick={() => setImpOpen(true)}>
-          افزودن گروهی
-        </Button>
-        <Button variant="outline" onClick={() => setSubOpen(true)}>
-          از ساب‌دامنه
-        </Button>
-        <Button variant="outline" onClick={() => setPwOpen(true)}>
-          رمزهای ذخیره‌شده
-        </Button>
-      </div>
-      <div className="cc-searchbar">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در سرورها…" />
-        <Button variant="outline" icon={Gear} onClick={() => setCfgOpen(true)}>
-          آستانه‌ها
-        </Button>
-      </div>
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="جستجو در سرورها…"
+        filters={[
+          { id: 'all', label: 'همه سرورها' },
+          { id: 'key', label: 'با کلید' },
+          { id: 'pw', label: 'با رمز' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+        menu={[
+          { id: 'cfg', label: 'آستانه‌های هشدار' },
+          { id: 'imp', label: 'افزودن گروهی' },
+          { id: 'sub', label: 'از ساب‌دامنه' },
+          { id: 'pw', label: 'رمزهای ذخیره‌شده' },
+        ]}
+        onMenu={(id) => {
+          if (id === 'cfg') setCfgOpen(true)
+          if (id === 'imp') setImpOpen(true)
+          if (id === 'sub') setSubOpen(true)
+          if (id === 'pw') setPwOpen(true)
+        }}
+        onRefresh={() => {
+          invalidateCache()
+          reload()
+        }}
+      />
       {sel.length > 0 && (
         <div className="cc-bulkbar">
           <span>{faNum(sel.length)} انتخاب شده</span>
@@ -607,12 +620,15 @@ function RemView() {
   const [server, setServer] = useState('')
   const [formErr, setFormErr] = useState('')
   const [q, setQ] = useState('')
+  const [flt, setFlt] = useState('all')
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const list = data || []
   const pending = list.filter((r) => !r.ack).length
   const needle = q.trim().toLowerCase()
-  const shown = needle ? list.filter((r) => (r.text + ' ' + r.server).toLowerCase().includes(needle)) : list
+  const shown = list
+    .filter((r) => (flt === 'pending' ? !r.ack : flt === 'done' ? r.ack : true))
+    .filter((r) => !needle || (r.text + ' ' + r.server).toLowerCase().includes(needle))
 
   const submit = async () => {
     setFormErr('')
@@ -643,9 +659,22 @@ function RemView() {
           یادآور جدید
         </Button>
       </div>
-      <div className="cc-searchbar">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در یادآورها…" />
-      </div>
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="جستجو در یادآورها…"
+        filters={[
+          { id: 'all', label: 'همه' },
+          { id: 'pending', label: 'در انتظار' },
+          { id: 'done', label: 'انجام‌شده' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+        onRefresh={() => {
+          invalidateCache()
+          reload()
+        }}
+      />
       {shown.length === 0 && (
         <Empty title="یادآوری نیست" description={needle ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ «یادآور جدید» یکی بساز.'} />
       )}
@@ -690,6 +719,7 @@ function RemView() {
 function PgView() {
   const { data, err, loaded, reload } = useTool<PgData>('/api/tools/pg')
   const [q, setQ] = useState('')
+  const [flt, setFlt] = useState('all')
   const [pf, setPf] = useState<{ idx?: number; name: string; url: string; user: string; pass: string } | null>(null)
   const [pfErr, setPfErr] = useState('')
   const [pdel, setPdel] = useState<PgPanel | null>(null)
@@ -755,12 +785,25 @@ function PgView() {
           افزودن پنل
         </Button>
       </div>
-      <div className="cc-searchbar">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در پاسارگارد…" />
-      </div>
-      <div className="cc-section">پنل‌ها</div>
-      {iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="با دکمهٔ «افزودن پنل» یکی اضافه کن." />}
-      {iso.panels.map((p) => (
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="جستجو در پاسارگارد…"
+        filters={[
+          { id: 'all', label: 'همه' },
+          { id: 'panels', label: 'پنل‌ها' },
+          { id: 'mons', label: 'مانیتور نود' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+        onRefresh={() => {
+          invalidateCache()
+          reload()
+        }}
+      />
+      {flt !== 'mons' && <div className="cc-section">پنل‌ها</div>}
+      {flt !== 'mons' && iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="با دکمهٔ «افزودن پنل» یکی اضافه کن." />}
+      {flt !== 'mons' && iso.panels.map((p) => (
         <div key={p.url} className="cc-trow cc-tap" onClick={() => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' })}>
           <div className="cc-grow">
             <div className="cc-name">{p.name || p.url}</div>
@@ -774,14 +817,14 @@ function PgView() {
           </div>
         </div>
       ))}
-      <div className="cc-section">مانیتور نودها</div>
-      <div className="cc-btnrow">
+      {flt !== 'panels' && <div className="cc-section">مانیتور نودها</div>}
+      {flt !== 'panels' && <div className="cc-btnrow">
         <Button variant="outline" icon={Plus} onClick={() => setMf({ panel_url: iso0.panels[0]?.url || '', name: '', interval: 5 })}>
           افزودن مانیتور
         </Button>
-      </div>
-      {iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ بالا یک مانیتور نود بساز." />}
-      {iso.monitors.map((m) => (
+      </div>}
+      {flt !== 'panels' && iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ بالا یک مانیتور نود بساز." />}
+      {flt !== 'panels' && iso.monitors.map((m) => (
         <div key={m.id} className="cc-trow cc-tap" onClick={() => setNd(m)}>
           <div className="cc-grow">
             <div className="cc-name">{m.name || m.id}</div>
@@ -1509,6 +1552,7 @@ const DOM_STATUS: Record<string, string> = {
 function DomView() {
   const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
   const [q, setQ] = useState('')
+  const [flt, setFlt] = useState('all')
   const [addSsl, setAddSsl] = useState(false)
   const [host, setHost] = useState('')
   const [addDom, setAddDom] = useState(false)
@@ -1529,8 +1573,11 @@ function DomView() {
     )
 
   const needle = q.trim().toLowerCase()
-  const ssl = needle ? data.ssl.filter((s) => s.host.includes(needle)) : data.ssl
+  const ssl0 = needle ? data.ssl.filter((s) => s.host.includes(needle)) : data.ssl
+  const ssl = flt === 'near' ? ssl0.filter((s) => !s.ok || s.days <= (warnDays ?? data.warnDays)) : ssl0
   const doms = needle ? data.doms.filter((d) => d.domain.includes(needle)) : data.doms
+  const showSsl = flt !== 'dom'
+  const showDom = flt !== 'ssl' && flt !== 'near'
   const warn = warnDays ?? data.warnDays
   const on = warnOn ?? data.sslOn
   const bad = data.ssl.filter((s) => !s.ok || s.days <= warn).length
@@ -1586,12 +1633,24 @@ function DomView() {
           { label: 'دامنه‌ها', value: faNum(data.doms.length) },
         ]}
       />
-      <div className="cc-searchbar">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجوی دامنه…" />
-      </div>
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="جستجوی دامنه…"
+        filters={[
+          { id: 'all', label: 'همه' },
+          { id: 'ssl', label: 'گواهی‌ها' },
+          { id: 'near', label: 'نزدیک انقضا' },
+          { id: 'dom', label: 'انقضای دامنه' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+        onRefresh={refresh}
+        busy={busy}
+      />
       {fErr && <div className="cc-form-err cc-mb">{fErr}</div>}
 
-      <div className="cc-section">
+      {showSsl && <div className="cc-section">
         <div className="cc-section-head">
           <h2>گواهی SSL</h2>
           <Button variant="outline" icon={Plus} onClick={() => setAddSsl(true)}>
@@ -1631,9 +1690,9 @@ function DomView() {
             </button>
           </div>
         ))}
-      </div>
+      </div>}
 
-      <div className="cc-section">
+      {showDom && <div className="cc-section">
         <div className="cc-section-head">
           <h2>انقضای دامنه</h2>
           <div className="cc-btnrow">
@@ -1682,7 +1741,7 @@ function DomView() {
             </button>
           </div>
         ))}
-      </div>
+      </div>}
 
       {addSsl && (
         <FormDialog
