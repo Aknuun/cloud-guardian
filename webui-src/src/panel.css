@@ -1031,3 +1031,5 @@ html[data-mode='dark'] .cc-stat {
 
 /* deepseek.css renders .cc-section as an inline flex label; sections here stack rows */
 .cc-section { display: block; }
+.cc-main .cc-trow .cc-name,
+.cc-main .cc-trow .cc-sub { white-space: normal; overflow-wrap: anywhere; }
