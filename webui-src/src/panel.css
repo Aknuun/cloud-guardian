@@ -693,3 +693,18 @@ body .animate-spin {
   -webkit-backdrop-filter: none !important;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* flat surfaces in dark mode too: gradient + accent shadows on every row repaint while scrolling */
+.cc-app .cc-card,
+.cc-app .cc-trow,
+.cc-topbar,
+.cc-stats .cc-stat {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+html[data-mode='dark'] .cc-app .cc-card,
+html[data-mode='dark'] .cc-app .cc-trow,
+html[data-mode='dark'] .cc-stat {
+  background-color: var(--ds-panel);
+  border: 1px solid var(--ds-line);
+}
