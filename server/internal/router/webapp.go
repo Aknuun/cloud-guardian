@@ -29,6 +29,8 @@ var webuiFS embed.FS
 func (r *Router) WebApp() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth", r.webAuthAPI)
+	mux.HandleFunc("/api/login/start", r.webLoginStart)
+	mux.HandleFunc("/api/login/state", r.webLoginState)
 	mux.HandleFunc("/api/me", r.webAuthed(r.webMe))
 	mux.HandleFunc("/api/hz/accounts", r.webAuthed(r.webHzAccounts))
 	mux.HandleFunc("/api/hz/servers", r.webAuthed(r.webHzServers))
@@ -169,7 +171,7 @@ func (r *Router) webAuthAPI(w http.ResponseWriter, req *http.Request) {
 		webErr(w, http.StatusForbidden, "این حساب دسترسی ادمین ندارد")
 		return
 	}
-	exp := time.Now().Add(12 * time.Hour).Unix()
+	exp := time.Now().Add(webLoginSess).Unix()
 	webOK(w, map[string]any{
 		"token": r.webSignSession(uid, exp),
 		"user":  map[string]any{"id": uid, "isMain": r.IsMain(uid)},

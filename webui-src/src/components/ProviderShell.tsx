@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
-import { ArrowClockwise, ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react'
+import { useState } from 'react'
+import { ArrowClockwise, ArrowRight, CheckCircle, List, WarningCircle } from '@phosphor-icons/react'
 import { AppVersion } from './AppVersion'
 import { LogoutButton } from './LogoutButton'
 import { useSectionTheme } from './sectionTheme'
-import { ThemePicker } from './ThemePicker'
 import { Button } from './ui'
-import { ProviderRail, Sidebar, ThemeToggle } from './Sidebar'
+import { Sidebar, ThemeToggle } from './Sidebar'
 import type { Provider } from './Sidebar'
 
 export function ProviderShell({
@@ -32,19 +32,21 @@ export function ProviderShell({
   children: ReactNode
 }) {
   const sectionTheme = useSectionTheme(provider)
+  const [navOpen, setNavOpen] = useState(false)
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
-      <Sidebar provider={provider} onChange={onChange} />
-      <ProviderRail provider={provider} onChange={onChange} />
+      <Sidebar provider={provider} onChange={onChange} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen(true)}>
+            <List size={20} />
+          </button>
           {showBack && (
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={onBack} />
           )}
           <h1 className="cc-title">{title}</h1>
           <AppVersion />
-          <ThemePicker provider={provider} />
           <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}

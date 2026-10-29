@@ -50,6 +50,10 @@ func (r *Router) navBack(chat, mid int64, data string) {
 }
 
 func (r *Router) dispatch(chat, mid int64, data string) {
+	if strings.HasPrefix(data, "wblogin:") {
+		r.webLoginCallback(chat, mid, data)
+		return
+	}
 	if data == "back" || strings.HasPrefix(data, "back:") {
 		r.navBack(chat, mid, data)
 		return

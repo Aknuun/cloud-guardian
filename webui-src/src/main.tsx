@@ -4,6 +4,7 @@ import './index.css'
 import './app.css'
 import './deepseek.css'
 import './utilities.css'
+import './panel.css'
 import { initMode, ThemeProvider } from './components/theme'
 import App from './App'
 

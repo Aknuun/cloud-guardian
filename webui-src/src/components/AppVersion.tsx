@@ -34,9 +34,10 @@ export function AppVersion() {
     }
   }, [])
 
+  if (!version) return null
   return (
-    <span className="cc-ver" dir="ltr" title={version ? `نسخه ${version}` : 'نسخه'}>
-      {version ? `v${version}` : 'v…'}
+    <span className="cc-ver" dir="ltr" title={`نسخه ${version}`}>
+      v{version}
     </span>
   )
 }

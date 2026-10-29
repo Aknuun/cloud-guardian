@@ -12,6 +12,7 @@ import {
   Copy,
   GlobeHemisphereWest,
   Key,
+  List,
   PencilSimple,
   Plus,
   Power,
@@ -26,8 +27,9 @@ import { AppVersion } from './components/AppVersion'
 import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
-import { ThemePicker } from './components/ThemePicker'
-import { ProviderRail, Sidebar, ThemeToggle } from './components/Sidebar'
+import { WebLogin } from './components/WebLogin'
+import { Sidebar, ThemeToggle } from './components/Sidebar'
+import { StatGrid } from './components/Stats'
 import type { Provider } from './components/Sidebar'
 import { ProviderSwitch } from './components/ProviderShell'
 
@@ -115,10 +117,11 @@ function badgeVariant(st: string): any {
 /* ---------------- app ---------------- */
 
 export default function App() {
-  const [phase, setPhase] = useState<'boot' | 'ready' | 'error' | 'signedout'>('boot')
+  const [phase, setPhase] = useState<'boot' | 'ready' | 'login' | 'error' | 'signedout'>('boot')
   const [authNonce, setAuthNonce] = useState(0)
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
+  const [navOpen, setNavOpen] = useState(false)
   const [provider, setProvider] = useState<Provider>(() => {
     const p = sessionStorage.getItem('cg_provider')
     return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
@@ -184,10 +187,17 @@ export default function App() {
         return
       }
       if (!TG || !TG.initData) {
-        if (!cancelled) {
-          setAuthErr('این مینی‌اپ فقط از داخل ربات تلگرام کار می‌کند.')
-          setPhase('error')
+        // browser: reuse the same shell, log in with a Telegram approval
+        if (token) {
+          try {
+            await api('/api/me')
+            if (!cancelled) setPhase('ready')
+            return
+          } catch {
+            setToken('')
+          }
         }
+        if (!cancelled) setPhase('login')
         return
       }
       try {
@@ -617,8 +627,16 @@ export default function App() {
       )
     }
     if (cur.v === 'accounts') {
+      const known = accounts.some((a) => a.count !== undefined)
+      const totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
       return (
         <>
+          <StatGrid
+            items={[
+              { label: 'اکانت‌ها', value: faNum(accounts.length) },
+              { label: 'سرورها', value: known ? faNum(totalServers) : '—', pct: known ? 100 : 0 },
+            ]}
+          />
           {!accounts.length && busy > 0 && <AppSkeleton />}
           {!accounts.length && busy === 0 && (
             <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />
@@ -626,7 +644,7 @@ export default function App() {
           {accounts.map((a) => (
             <LayerCard
               key={a.i}
-              className="cc-card cc-row cc-tap"
+              className="cc-trow cc-tap"
               role="button"
               tabIndex={0}
               onClick={() => {
@@ -653,8 +671,16 @@ export default function App() {
       const list = servers.filter(
         (s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type && s.type.name)).toLowerCase().includes(ql),
       )
+      const running = list.filter((s) => s.status === 'running').length
       return (
         <>
+          <StatGrid
+            items={[
+              { label: 'سرورها', value: faNum(list.length) },
+              { label: 'روشن', value: faNum(running), pct: list.length ? (running / list.length) * 100 : 0 },
+              { label: 'خاموش', value: faNum(list.length - running), pct: list.length ? ((list.length - running) / list.length) * 100 : 0 },
+            ]}
+          />
           <Input
             className="cc-input cc-mb"
             placeholder="جست‌وجوی نام یا آی‌پی…"
@@ -682,7 +708,7 @@ export default function App() {
           {list.map((s) => (
             <LayerCard
               key={s.id}
-              className="cc-card cc-row cc-tap"
+              className="cc-trow cc-tap"
               role="button"
               tabIndex={0}
               onClick={() => push({ v: 'server', acc: cur.acc, id: s.id })}
@@ -1176,6 +1202,9 @@ export default function App() {
       </div>
     )
   }
+  if (phase === 'login') {
+    return <WebLogin onDone={() => { setAuthNonce((n) => n + 1); setPhase('ready') }} />
+  }
   if (phase === 'error') {
     return (
       <div className="cc-main">
@@ -1232,17 +1261,18 @@ export default function App() {
 
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
-      <Sidebar provider={provider} onChange={setProvider} />
-      <ProviderRail provider={provider} onChange={setProvider} />
+      <Sidebar provider={provider} onChange={setProvider} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen(true)}>
+            <List size={20} />
+          </button>
           {showBack && (
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
           )}
           <h1 className="cc-title">{title}</h1>
           <AppVersion />
-          <ThemePicker provider={provider} />
           <ThemeToggle />
           {cur.v !== 'create' && (
             <Button

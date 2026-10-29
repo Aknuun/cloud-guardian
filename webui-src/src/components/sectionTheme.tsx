@@ -105,8 +105,9 @@ function resetSectionTheme(provider: Provider) {
 export function useSectionTheme(provider: Provider) {
   const { mode } = useTheme()
   const selection = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-  const palette =
-    PALETTES.find((p) => p.id === (selection[provider] || DEFAULT_THEME[provider])) || PALETTES[0]
+  // panel look: one accent for every section
+  const palette = PALETTES.find((p) => p.id === 'blue') || PALETTES[0]
+  void selection
 
   const style = useMemo(
     () =>
