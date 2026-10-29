@@ -644,3 +644,9 @@ html[data-mode='dark'] .cc-stat-ring {
 .cc-actions button[data-variant='destructive'] svg {
   color: #d92d20;
 }
+
+.cc-actions .cc-btn-ico {
+  background: transparent !important;
+  width: 20px;
+  height: 20px;
+}
