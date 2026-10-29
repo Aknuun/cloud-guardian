@@ -35,20 +35,20 @@ export function ProviderShell({
   children: ReactNode
 }) {
   const sectionTheme = useSectionTheme(provider)
-  const [navOpen, setNavOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar
         provider={provider}
         onChange={onChange}
         open={navOpen}
-        onClose={() => setNavOpen(false)}
+        onToggle={() => setNavOpen((o) => !o)}
         sections={sections}
       />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
-          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen(true)}>
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
             <List size={20} />
           </button>
           {showBack && (

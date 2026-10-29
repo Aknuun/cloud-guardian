@@ -17,13 +17,13 @@ export function Sidebar({
   provider,
   onChange,
   open,
-  onClose,
+  onToggle,
   sections,
 }: {
   provider: Provider
   onChange: (p: Provider) => void
   open: boolean
-  onClose: () => void
+  onToggle: () => void
   sections?: SubItem[]
 }) {
   const { mode, toggle } = useTheme()
@@ -31,7 +31,7 @@ export function Sidebar({
 
   return (
     <>
-      <div className={'cc-scrim' + (open ? ' on' : '')} onClick={onClose} aria-hidden="true" />
+      <div className={'cc-scrim' + (open ? ' on' : '')} onClick={onToggle} aria-hidden="true" />
       <aside className={'cc-sidebar p-' + provider + (open ? ' open' : '')} aria-label="منوی اصلی">
         <div className="cc-sidebrand">
           <div className="cc-sidebrand-mark">CG</div>
@@ -39,7 +39,7 @@ export function Sidebar({
             <div className="cc-sidebrand-name">Cloud Guardian</div>
             <div className="cc-sidebrand-sub">کنسول ابری</div>
           </div>
-          <button type="button" className="cc-drawer-x" aria-label="بستن منو" onClick={onClose}>
+          <button type="button" className="cc-drawer-x" aria-label="بستن منو" onClick={onToggle}>
             ✕
           </button>
         </div>
@@ -59,6 +59,11 @@ export function Sidebar({
                   aria-expanded={isOpen}
                   onClick={() => {
                     if (!on) onChange(it.id)
+                    if (!open) {
+                      setExpanded(it.id)
+                      onToggle()
+                      return
+                    }
                     setExpanded(isOpen ? null : it.id)
                   }}
                 >
@@ -75,7 +80,7 @@ export function Sidebar({
                         className={'cc-subitem' + (s.active ? ' on' : '')}
                         onClick={() => {
                           s.onSelect()
-                          onClose()
+                          if (window.innerWidth < 900) onToggle()
                         }}
                       >
                         {s.label}

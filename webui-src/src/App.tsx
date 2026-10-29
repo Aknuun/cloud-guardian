@@ -122,7 +122,7 @@ export default function App() {
   const [authNonce, setAuthNonce] = useState(0)
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
-  const [navOpen, setNavOpen] = useState(false)
+  const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
   const [provider, setProvider] = useState<Provider>(() => {
     const p = sessionStorage.getItem('cg_provider')
     return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
@@ -1282,13 +1282,13 @@ export default function App() {
         provider={provider}
         onChange={setProvider}
         open={navOpen}
-        onClose={() => setNavOpen(false)}
+        onToggle={() => setNavOpen((o) => !o)}
         sections={sections}
       />
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
-          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen(true)}>
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
             <List size={20} />
           </button>
           {showBack && (
