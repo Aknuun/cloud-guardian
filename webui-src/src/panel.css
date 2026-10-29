@@ -1022,3 +1022,9 @@ html[data-mode='dark'] .cc-stat {
 .cc-trow .cc-badge {
   flex: 0 0 auto;
 }
+
+/* host-filter rows: long panel names and template remarks must wrap, not overlap */
+.cc-btnrow { flex-wrap: wrap; }
+.cc-section-head { flex-wrap: wrap; gap: 8px; }
+.cc-name { overflow-wrap: anywhere; }
+.cc-btnrow .cc-btn { white-space: nowrap; }
