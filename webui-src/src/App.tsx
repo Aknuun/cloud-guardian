@@ -32,6 +32,7 @@ import { FormDialog, Tools, TOOLS, toolItems } from './components/Tools'
 import type { ToolId } from './components/Tools'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
+import { GlobalSearch } from './components/GlobalSearch'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
@@ -1436,6 +1437,12 @@ export default function App() {
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={goBack} />
           )}
           <h1 className="cc-title">{title}</h1>
+          <GlobalSearch
+            go={(p, t) => {
+              if (t) setTool(t)
+              else if (p) pickProvider(p)
+            }}
+          />
           <AppVersion />
           <ThemeToggle />
           {cur.v !== 'create' && (

@@ -118,6 +118,9 @@ function SrvView() {
   const [impOpen, setImpOpen] = useState(false)
   const [pwOpen, setPwOpen] = useState(false)
   const [subOpen, setSubOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [sel, setSel] = useState<string[]>([])
+  const [bulkDel, setBulkDel] = useState(false)
 
   const loadMon = async (s: Srv) => {
     setMonBusy(true)
@@ -145,6 +148,40 @@ function SrvView() {
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const list = data || []
+  const needle = q.trim().toLowerCase()
+  const shown = needle
+    ? list.filter((s) => (s.name + ' ' + s.host + ' ' + s.user + ' ' + s.note).toLowerCase().includes(needle))
+    : list
+  const toggle = (id: string) => setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]))
+  const bulkRun = async (kind: 'reboot' | 'upd') => {
+    const ids = [...sel]
+    setSel([])
+    setNotice('در حال اجرا روی ' + faNum(ids.length) + ' سرور…')
+    let ok = 0
+    for (const id of ids) {
+      try {
+        await api(kind === 'reboot' ? '/api/tools/srv/reboot' : '/api/tools/srv/upd', { id })
+        ok++
+      } catch {
+        /* one failure does not stop the rest */
+      }
+    }
+    setNotice(kind === 'reboot' ? `ریبوت برای ${faNum(ok)} سرور ارسال شد.` : `آپدیت ${faNum(ok)} سرور شروع شد؛ نتیجه در تلگرام می‌آید.`)
+  }
+  const bulkRemove = async () => {
+    const ids = [...sel]
+    for (const id of ids) {
+      try {
+        await api('/api/tools/srv/del', { id })
+      } catch {
+        /* skip */
+      }
+    }
+    setSel([])
+    setBulkDel(false)
+    invalidateCache()
+    reload()
+  }
 
   const submit = async () => {
     if (!edit) return
@@ -184,10 +221,39 @@ function SrvView() {
           رمزهای ذخیره‌شده
         </Button>
       </div>
+      <div className="cc-searchbar">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در سرورها…" />
+        <Button variant="outline" icon={Gear} onClick={() => setCfgOpen(true)}>
+          آستانه‌ها
+        </Button>
+      </div>
+      {sel.length > 0 && (
+        <div className="cc-bulkbar">
+          <span>{faNum(sel.length)} انتخاب شده</span>
+          <Button variant="outline" onClick={() => bulkRun('reboot')}>
+            ریبوت
+          </Button>
+          <Button variant="outline" onClick={() => bulkRun('upd')}>
+            آپدیت
+          </Button>
+          <Button variant="destructive" onClick={() => setBulkDel(true)}>
+            حذف
+          </Button>
+        </div>
+      )}
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
-      {list.length === 0 && <Empty title="سروری ثبت نشده" description="با دکمهٔ «افزودن سرور» یکی اضافه کن." />}
-      {list.map((s) => (
-        <div key={s.id} className="cc-trow cc-tap" onClick={() => setDetail(s)}>
+      {shown.length === 0 && (
+        <Empty title="سروری نیست" description={needle ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ «افزودن سرور» یکی اضافه کن.'} />
+      )}
+      {shown.map((s) => (
+        <div
+          key={s.id}
+          className={'cc-trow cc-tap' + (sel.includes(s.id) ? ' sel' : '')}
+          onClick={() => setDetail(s)}
+        >
+          <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={sel.includes(s.id)} onChange={() => toggle(s.id)} aria-label="انتخاب سرور" />
+          </label>
           <div className="cc-avatar">{(s.name || 'S').slice(0, 1).toUpperCase()}</div>
           <div className="cc-grow">
             <div className="cc-name">{s.name || s.host}</div>
@@ -475,6 +541,26 @@ function SrvView() {
         </FormDialog>
       )}
 
+      {bulkDel && (
+        <Dialog.Root open onOpenChange={(o) => !o && setBulkDel(false)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">حذف گروهی</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {faNum(sel.length)} سرور از لیست حذف شوند؟ فقط رکورد پنل پاک می‌شود، خود سرورها دست‌نخورده می‌مانند.
+            </Dialog.Description>
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setBulkDel(false)}>
+                انصراف
+              </Button>
+              <Button variant="destructive" onClick={bulkRemove}>
+                حذف کن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
       {del && (
         <Dialog.Root open onOpenChange={(o) => !o && setDel(null)}>
           <Dialog className="cc-dialog" size="base">
@@ -513,10 +599,13 @@ function RemView() {
   const [when, setWhen] = useState('')
   const [server, setServer] = useState('')
   const [formErr, setFormErr] = useState('')
+  const [q, setQ] = useState('')
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const list = data || []
   const pending = list.filter((r) => !r.ack).length
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? list.filter((r) => (r.text + ' ' + r.server).toLowerCase().includes(needle)) : list
 
   const submit = async () => {
     setFormErr('')
@@ -547,8 +636,13 @@ function RemView() {
           یادآور جدید
         </Button>
       </div>
-      {list.length === 0 && <Empty title="یادآوری نیست" description="با دکمهٔ «یادآور جدید» یکی بساز." />}
-      {list.map((r) => (
+      <div className="cc-searchbar">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در یادآورها…" />
+      </div>
+      {shown.length === 0 && (
+        <Empty title="یادآوری نیست" description={needle ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ «یادآور جدید» یکی بساز.'} />
+      )}
+      {shown.map((r) => (
         <div key={r.id} className="cc-trow">
           <div className="cc-grow">
             <div className="cc-name">{r.text}</div>
@@ -588,9 +682,17 @@ function RemView() {
 
 function PgView() {
   const { data, err, loaded } = useTool<PgData>('/api/tools/pg')
+  const [q, setQ] = useState('')
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
-  const iso = data || { panels: [], monitors: [] }
+  const iso0 = data || { panels: [], monitors: [] }
+  const needle = q.trim().toLowerCase()
+  const iso = needle
+    ? {
+        panels: iso0.panels.filter((p) => (p.name + ' ' + p.url + ' ' + p.user).toLowerCase().includes(needle)),
+        monitors: iso0.monitors.filter((m) => (m.name + ' ' + m.panel).toLowerCase().includes(needle)),
+      }
+    : iso0
   const on = iso.monitors.filter((m) => m.enabled).length
   return (
     <>
@@ -601,6 +703,9 @@ function PgView() {
           { label: 'فعال', value: faNum(on) },
         ]}
       />
+      <div className="cc-searchbar">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در پاسارگارد…" />
+      </div>
       <div className="cc-section">پنل‌ها</div>
       {iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="از ربات پنل پاسارگارد اضافه کن." />}
       {iso.panels.map((p) => (

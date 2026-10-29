@@ -8,6 +8,7 @@ import { useSectionTheme } from './sectionTheme'
 import { Button } from './ui'
 import { Sidebar, ThemeToggle } from './Sidebar'
 import { toolItems } from './Tools'
+import { GlobalSearch } from './GlobalSearch'
 import type { ToolId } from './Tools'
 import type { SubItem } from './Sidebar'
 import type { Provider } from './Sidebar'
@@ -63,6 +64,12 @@ export function ProviderShell({
             <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={onBack} />
           )}
           <h1 className="cc-title">{title}</h1>
+          <GlobalSearch
+            go={(p, t) => {
+              if (t && onTool) onTool(t)
+              else if (p) onChange(p)
+            }}
+          />
           <AppVersion />
           <ThemeToggle />
           <Button
