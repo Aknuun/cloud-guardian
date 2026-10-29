@@ -650,3 +650,15 @@ html[data-mode='dark'] .cc-stat-ring {
   width: 20px;
   height: 20px;
 }
+
+/* no animation: instant popups and page changes */
+body,
+body *,
+body *::before,
+body *::after {
+  animation: none !important;
+  transition: none !important;
+}
+body .animate-spin {
+  animation: spin 1s linear infinite !important;
+}
