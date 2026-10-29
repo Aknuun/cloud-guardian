@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 
-export type ToolId = 'srv' | 'rem' | 'pg'
+export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
   { id: 'rem', label: 'یادآورها', Icon: BellRinging },
   { id: 'pg', label: 'پاسارگارد', Icon: ShieldCheck },
+  { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
+  { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
 ]
 
 export type ToolItem = { id: ToolId; label: string; Icon: Icon; active?: boolean; onSelect: () => void }
@@ -60,6 +62,8 @@ type PgData = { panels: PgPanel[]; monitors: PgMon[] }
 export function Tools({ id }: { id: ToolId }) {
   if (id === 'srv') return <SrvView />
   if (id === 'rem') return <RemView />
+  if (id === 'um') return <UmView />
+  if (id === 'dom') return <DomView />
   return <PgView />
 }
 
@@ -1242,5 +1246,273 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
         </div>
       </Dialog>
     </Dialog.Root>
+  )
+}
+
+type UmCfg = {
+  enabled: boolean
+  report: boolean
+  hourlyGb: number
+  dailyGb: number
+  cooldownH: number
+  activeMin: number
+  minGb: number
+}
+
+function UmView() {
+  const [cfg, setCfg] = useState<UmCfg | null>(null)
+  const [err, setErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [fErr, setFErr] = useState('')
+  useEffect(() => {
+    api<UmCfg>('/api/tools/um')
+      .then(setCfg)
+      .catch((e) => setErr(e.message || 'خطا'))
+  }, [])
+  if (err) return <Empty title="خطا" description={err} />
+  if (!cfg)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  const num = (k: keyof UmCfg, label: string, hint: string) => (
+    <label className="cc-field">
+      <span>{label}</span>
+      <Input
+        type="number"
+        value={String(cfg[k])}
+        onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 })}
+        placeholder={hint}
+      />
+    </label>
+  )
+  const submit = async () => {
+    setFErr('')
+    try {
+      await save('/api/tools/um', cfg, () => setNotice('ذخیره شد'))
+    } catch (e: any) {
+      setFErr(e.message || 'ذخیره نشد')
+    }
+  }
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'آستانهٔ ساعتی', value: faNum(cfg.hourlyGb) + ' GB' },
+          { label: 'آستانهٔ روزانه', value: faNum(cfg.dailyGb) + ' GB' },
+          { label: 'حداقل اسنپ‌شات', value: faNum(cfg.minGb) + ' GB' },
+        ]}
+      />
+      <div className="cc-hint cc-mb">
+        کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند را پیدا می‌کند؛ هر ۶۰ دقیقه مصرف فعلی را با ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌کند و هشدار را فقط برای ادمین می‌فرستد.
+      </div>
+      <div className="cc-form">
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <span>پایش بد مصرف فعال باشد</span>
+        </label>
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!cfg.report} onChange={(e) => setCfg({ ...cfg, report: e.target.checked })} />
+          <span>گزارش روزانهٔ اخطارشده‌ها ارسال شود</span>
+        </label>
+        {num('hourlyGb', 'آستانهٔ ساعتی (GB)', '7')}
+        {num('dailyGb', 'آستانهٔ روزانه (GB)', '25')}
+        {num('cooldownH', 'فاصلهٔ تکرار هشدار هر کاربر (ساعت)', '6')}
+        {num('minGb', 'حداقل مصرف برای اسنپ‌شات (GB)', '1')}
+        {num('activeMin', 'حداقل مدت فعال بودن (دقیقه)', '75')}
+      </div>
+      <div className="cc-pagebar">
+        <Button variant="primary" onClick={submit}>
+          ذخیره
+        </Button>
+      </div>
+      {fErr && <div className="cc-form-err cc-center">{fErr}</div>}
+      {notice && <div className="cc-hint cc-center">{notice}</div>}
+    </>
+  )
+}
+
+type DomSsl = { host: string; ok: boolean; days: number; expiry: string; error: string }
+type DomItem = { domain: string; status: string; expiry: number | null; manual: boolean; remaining: string }
+type DomData = { ssl: DomSsl[]; doms: DomItem[]; key: boolean }
+
+function DomView() {
+  const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
+  const [q, setQ] = useState('')
+  const [addSsl, setAddSsl] = useState(false)
+  const [host, setHost] = useState('')
+  const [addDom, setAddDom] = useState(false)
+  const [dom, setDom] = useState('')
+  const [dateFor, setDateFor] = useState<DomItem | null>(null)
+  const [when, setWhen] = useState('')
+  const [fErr, setFErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  if (err) return <Empty title="خطا" description={err} />
+  if (!loaded || !data)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+
+  const needle = q.trim().toLowerCase()
+  const ssl = needle ? data.ssl.filter((s) => s.host.includes(needle)) : data.ssl
+  const doms = needle ? data.doms.filter((d) => d.domain.includes(needle)) : data.doms
+  const bad = data.ssl.filter((s) => !s.ok || s.days <= 5).length
+
+  const act = async (path: string, body: any, done?: () => void) => {
+    setFErr('')
+    try {
+      await api(path, body)
+      invalidateCache()
+      done?.()
+      reload()
+    } catch (e: any) {
+      setFErr(e.message || 'انجام نشد')
+    }
+  }
+
+  const refresh = async () => {
+    setBusy(true)
+    setFErr('')
+    try {
+      await api('/api/tools/dom/refresh', {})
+      invalidateCache()
+      reload()
+    } catch (e: any) {
+      setFErr(e.message || 'استعلام نشد')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'گواهی SSL', value: faNum(data.ssl.length) },
+          { label: 'نیاز به بررسی', value: faNum(bad) },
+          { label: 'دامنه‌ها', value: faNum(data.doms.length) },
+        ]}
+      />
+      <div className="cc-searchbar">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجوی دامنه…" />
+      </div>
+      {fErr && <div className="cc-form-err cc-mb">{fErr}</div>}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>گواهی SSL</h2>
+          <Button variant="outline" icon={Plus} onClick={() => setAddSsl(true)}>
+            افزودن دامنه
+          </Button>
+        </div>
+        {ssl.length === 0 && <Empty title="خالی است" description="دامنه‌ای برای نظارت گواهی ثبت نشده." />}
+        {ssl.map((s) => (
+          <div key={s.host} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">{s.host}</div>
+              <div className="cc-sub">{s.ok ? 'انقضا: ' + s.expiry : s.error}</div>
+            </div>
+            <Badge variant={s.ok && s.days > 5 ? 'success' : 'error'}>
+              {s.ok ? faNum(s.days) + ' روز' : 'خطا'}
+            </Badge>
+            <button className="cc-rowbtn danger" title="حذف" onClick={() => act('/api/tools/dom/ssl', { host: s.host })}>
+              <Trash size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>انقضای دامنه</h2>
+          <div className="cc-btnrow">
+            <Button variant="outline" icon={ArrowClockwise} onClick={refresh} disabled={busy}>
+              استعلام دوباره
+            </Button>
+            <Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>
+              افزودن
+            </Button>
+          </div>
+        </div>
+        {!data.key && (
+          <div className="cc-hint cc-mb">
+            برای دامنه‌های .ir که ایرنیک تاریخ را مخفی کرده، تاریخ را دستی ثبت کن.
+          </div>
+        )}
+        {doms.length === 0 && <Empty title="خالی است" description="دامنه‌ای برای نظارت انقضا ثبت نشده." />}
+        {doms.map((d) => (
+          <div key={d.domain} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">{d.domain}</div>
+              <div className="cc-sub">{d.expiry ? 'انقضا: ' + faDate(d.expiry) : 'تاریخ نامشخص'}</div>
+            </div>
+            <Badge>{d.remaining || d.status}</Badge>
+            <button
+              className="cc-rowbtn"
+              title="ثبت تاریخ"
+              onClick={() => {
+                setFErr('')
+                setWhen('')
+                setDateFor(d)
+              }}
+            >
+              <PencilSimple size={16} />
+            </button>
+            <button className="cc-rowbtn danger" title="حذف" onClick={() => act('/api/tools/dom/del', { domain: d.domain })}>
+              <Trash size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {addSsl && (
+        <FormDialog
+          title="افزودن گواهی SSL"
+          sub="روزهای باقی‌مانده گواهی هر ۶ ساعت بررسی می‌شود."
+          onClose={() => setAddSsl(false)}
+          onSave={() => act('/api/tools/dom/ssl', { host }, () => { setAddSsl(false); setHost('') })}
+          error={fErr}
+        >
+          <label className="cc-field">
+            <span>دامنه</span>
+            <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="example.com" />
+          </label>
+        </FormDialog>
+      )}
+
+      {addDom && (
+        <FormDialog
+          title="افزودن دامنه"
+          sub="انقضا از RDAP و whois.nic.ir استعلام می‌شود."
+          onClose={() => setAddDom(false)}
+          onSave={() => act('/api/tools/dom/add', { domain: dom }, () => { setAddDom(false); setDom('') })}
+          error={fErr}
+        >
+          <label className="cc-field">
+            <span>دامنه</span>
+            <Input value={dom} onChange={(e) => setDom(e.target.value)} placeholder="example.ir" />
+          </label>
+        </FormDialog>
+      )}
+
+      {dateFor && (
+        <FormDialog
+          title="ثبت تاریخ انقضا"
+          sub={dateFor.domain}
+          onClose={() => setDateFor(null)}
+          onSave={() => act('/api/tools/dom/date', { domain: dateFor.domain, when }, () => setDateFor(null))}
+          error={fErr}
+        >
+          <label className="cc-field">
+            <span>تاریخ شمسی</span>
+            <Input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="1405/06/20" />
+          </label>
+        </FormDialog>
+      )}
+    </>
   )
 }

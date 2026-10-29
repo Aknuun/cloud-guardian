@@ -990,3 +990,35 @@ html[data-mode='dark'] .cc-stat {
     display: none;
   }
 }
+
+/* ---------- section headers + row icon buttons ---------- */
+.cc-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 2px 0 10px;
+  flex-wrap: wrap;
+}
+.cc-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.cc-rowbtn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ds-line);
+  border-radius: 10px;
+  background: var(--ds-card);
+  color: var(--ds-muted);
+}
+.cc-rowbtn.danger {
+  color: var(--ds-danger);
+}
+.cc-trow .cc-badge {
+  flex: 0 0 auto;
+}
