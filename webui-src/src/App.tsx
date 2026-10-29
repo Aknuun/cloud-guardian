@@ -28,7 +28,7 @@ import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { WebLogin } from './components/WebLogin'
-import { Tools, TOOLS, toolItems } from './components/Tools'
+import { FormDialog, Tools, TOOLS, toolItems } from './components/Tools'
 import type { ToolId } from './components/Tools'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
@@ -148,6 +148,9 @@ export default function App() {
   const [q, setQ] = useState('')
   const [createName, setCreateName] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
+  const [accErr, setAccErr] = useState('')
+  const [accDel, setAccDel] = useState<Account | null>(null)
   const [servers, setServers] = useState<Server[]>([])
   const [serversAcc, setServersAcc] = useState<number | null>(null)
   const [server, setServer] = useState<Server | null>(null)
@@ -670,9 +673,21 @@ export default function App() {
               { label: 'سرورها', value: known ? faNum(totalServers) : '—', pct: known ? 100 : 0 },
             ]}
           />
+          <div className="cc-pagebar">
+            <Button
+              variant="primary"
+              icon={Plus}
+              onClick={() => {
+                setAccErr('')
+                setAccForm({ name: '', token: '' })
+              }}
+            >
+              افزودن اکانت
+            </Button>
+          </div>
           {!accounts.length && busy > 0 && <AppSkeleton />}
           {!accounts.length && busy === 0 && (
-            <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت هتزنر از ربات استفاده کن." />
+            <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن." />
           )}
           {accounts.map((a) => (
             <LayerCard
@@ -692,9 +707,88 @@ export default function App() {
                 <div className="cc-sub">{a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}</div>
               </div>
               <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
+              <button
+                type="button"
+                className="cc-rowbtn danger"
+                aria-label={'حذف ' + (a.name || 'اکانت')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setAccDel(a)
+                }}
+              >
+                <Trash size={16} />
+              </button>
             </LayerCard>
           ))}
           <div className="cc-hint cc-center cc-mt">هر اکانت را انتخاب کن تا سرورها و آی‌پی‌ها را ببینی.</div>
+          {accForm && (
+            <FormDialog
+              title="افزودن اکانت هتزنر"
+              sub="توکن API را از کنسول هتزنر بساز (Read & Write)."
+              error={accErr}
+              onClose={() => setAccForm(null)}
+              onSave={async () => {
+                setAccErr('')
+                try {
+                  await api('/api/hz/accounts/add', { name: accForm.name.trim(), token: accForm.token.trim() })
+                  invalidateCache()
+                  setAccForm(null)
+                  reload()
+                } catch (e: any) {
+                  setAccErr(e.message || 'ذخیره ناموفق')
+                }
+              }}
+            >
+              <label className="cc-field">
+                <span>نام اکانت</span>
+                <Input
+                  value={accForm.name}
+                  placeholder="مثلاً main"
+                  onChange={(e: any) => setAccForm({ ...accForm, name: e.target.value })}
+                />
+              </label>
+              <label className="cc-field">
+                <span>توکن API</span>
+                <Input
+                  value={accForm.token}
+                  placeholder="مثل 3f2a…"
+                  autoComplete="off"
+                  onChange={(e: any) => setAccForm({ ...accForm, token: e.target.value })}
+                />
+              </label>
+            </FormDialog>
+          )}
+          {accDel && (
+            <Dialog.Root open onOpenChange={(o: boolean) => !o && setAccDel(null)}>
+              <Dialog className="cc-dialog" size="base">
+                <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+                <Dialog.Title className="cc-dialog-title">حذف اکانت</Dialog.Title>
+                <Dialog.Description className="cc-dialog-desc">
+                  «{accDel.name}» از لیست حذف می‌شود. سرورهای هتزنر دست‌نخورده می‌مانند.
+                </Dialog.Description>
+                <div className="cc-dialog-actions">
+                  <Button variant="secondary" onClick={() => setAccDel(null)}>
+                    انصراف
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={async () => {
+                      try {
+                        await api('/api/hz/accounts/del', { name: accDel.name })
+                        invalidateCache()
+                        setAccDel(null)
+                        reload()
+                      } catch (e: any) {
+                        toast(e.message || 'حذف ناموفق', true)
+                      }
+                    }}
+                  >
+                    حذف
+                  </Button>
+                </div>
+              </Dialog>
+            </Dialog.Root>
+          )}
         </>
       )
     }

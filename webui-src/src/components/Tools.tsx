@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BellRinging, Check, PencilSimple, Plus, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Pulse, ArrowClockwise, BellRinging, Check, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
@@ -64,7 +64,7 @@ export function Tools({ id }: { id: ToolId }) {
   return <PgView />
 }
 
-function FormDialog({
+export function FormDialog({
   title,
   sub,
   onClose,
@@ -105,6 +105,36 @@ function SrvView() {
   const [edit, setEdit] = useState<Partial<Srv> | null>(null)
   const [del, setDel] = useState<Srv | null>(null)
   const [formErr, setFormErr] = useState('')
+  const [mon, setMon] = useState<Srv | null>(null)
+  const [monData, setMonData] = useState<any>(null)
+  const [monErr, setMonErr] = useState('')
+  const [monBusy, setMonBusy] = useState(false)
+  const [act, setAct] = useState<'reboot' | 'upd' | null>(null)
+  const [notice, setNotice] = useState('')
+
+  const loadMon = async (s: Srv) => {
+    setMonBusy(true)
+    setMonErr('')
+    setMonData(null)
+    try {
+      setMonData(await api('/api/tools/srv/mon?id=' + encodeURIComponent(s.id) + '&t=' + Date.now()))
+    } catch (e: any) {
+      setMonErr(e.message || 'وصل نشد')
+    }
+    setMonBusy(false)
+  }
+
+  const runAct = async () => {
+    if (!mon || !act) return
+    try {
+      await api(act === 'reboot' ? '/api/tools/srv/reboot' : '/api/tools/srv/upd', { id: mon.id })
+      setNotice(act === 'reboot' ? 'دستور ریبوت ارسال شد.' : 'آپدیت شروع شد؛ نتیجه در تلگرام می‌آید.')
+    } catch (e: any) {
+      setNotice(e.message || 'انجام نشد')
+    }
+    setAct(null)
+    setMon(null)
+  }
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const list = data || []
@@ -136,6 +166,7 @@ function SrvView() {
           افزودن سرور
         </Button>
       </div>
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {list.length === 0 && <Empty title="سروری ثبت نشده" description="با دکمهٔ «افزودن سرور» یکی اضافه کن." />}
       {list.map((s) => (
         <div key={s.id} className="cc-trow">
@@ -149,6 +180,16 @@ function SrvView() {
           </div>
           <Badge>{s.key ? 'کلید' : 'رمز'}</Badge>
           <div className="cc-rowbtns">
+            <button
+              type="button"
+              aria-label="آمار"
+              onClick={() => {
+                setMon(s)
+                loadMon(s)
+              }}
+            >
+              <Pulse size={17} />
+            </button>
             <button type="button" aria-label="ویرایش" onClick={() => setEdit({ ...s, secret: '' })}>
               <PencilSimple size={17} />
             </button>
@@ -158,6 +199,87 @@ function SrvView() {
           </div>
         </div>
       ))}
+
+      {mon && (
+        <Dialog.Root open onOpenChange={(o) => !o && setMon(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">{mon.name || mon.host}</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {mon.user}@{mon.host}:{mon.port}
+            </Dialog.Description>
+            {monBusy && (
+              <div className="cc-center cc-mb">
+                <Loader size="lg" />
+              </div>
+            )}
+            {monErr && <div className="cc-form-err">{monErr}</div>}
+            {monData && !monBusy && (
+              <>
+                <div className="cc-mon">
+                  <div>
+                    <span>CPU</span>
+                    <b>{Math.round(Number(monData.cpu?.pct) || 0)}%</b>
+                    <i>{monData.cpu?.cores ? monData.cpu.cores + ' هسته' : '—'}</i>
+                  </div>
+                  <div>
+                    <span>RAM</span>
+                    <b>{Math.round(Number(monData.mem?.pct) || 0)}%</b>
+                    <i>
+                      {monData.mem?.usedMb ?? '—'} / {monData.mem?.totalMb ?? '—'} MB
+                    </i>
+                  </div>
+                  <div>
+                    <span>دیسک</span>
+                    <b>{monData.disk?.pct || '—'}</b>
+                    <i>
+                      {monData.disk?.used || '—'} / {monData.disk?.total || '—'}
+                    </i>
+                  </div>
+                </div>
+                <div className="cc-hint cc-center">
+                  آپ‌تایم: {Math.floor((Number(monData.uptimeS) || 0) / 86400)} روز
+                </div>
+              </>
+            )}
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" icon={ArrowClockwise} onClick={() => mon && loadMon(mon)}>
+                تازه‌سازی
+              </Button>
+              <Button variant="outline" icon={Power} onClick={() => setAct('reboot')}>
+                ریبوت
+              </Button>
+              <Button variant="primary" onClick={() => setAct('upd')}>
+                آپدیت
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {act && mon && (
+        <Dialog.Root open onOpenChange={(o) => !o && setAct(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">
+              {act === 'reboot' ? 'ریبوت سرور' : 'آپدیت سرور'}
+            </Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {act === 'reboot'
+                ? `«${mon.name || mon.host}» ریبوت شود؟ اتصال چند لحظه قطع می‌شود.`
+                : `apt update && apt upgrade روی «${mon.name || mon.host}» اجرا شود؟`}
+            </Dialog.Description>
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setAct(null)}>
+                انصراف
+              </Button>
+              <Button variant={act === 'reboot' ? 'destructive' : 'primary'} onClick={runAct}>
+                {act === 'reboot' ? 'ریبوت کن' : 'اجرا کن'}
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
 
       {edit && (
         <FormDialog
