@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, LayerCard, Switch } from './components/ui'
 import type { Provider, SubItem } from './components/Sidebar'
+import type { ToolId } from './components/Tools'
 import { ProviderShell } from './components/ProviderShell'
 import {
   ArrowRight,
@@ -59,7 +60,15 @@ import {
   SpareSheet,
 } from './cloudflare/components'
 
-export default function Cloudflare({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef: (f: () => void) => void }) {
+export default function Cloudflare({
+  onSwitch,
+  onBackRef,
+  onTool,
+}: {
+  onSwitch: (p: Provider) => void
+  onBackRef: (f: () => void) => void
+  onTool?: (id: ToolId) => void
+}) {
   const [boot] = useState(restoreCfState)
   const [view, setView] = useState<View>(boot?.view || { v: 'zones' })
   const [stack, setStack] = useState<View[]>(boot?.stack || [])
@@ -2102,6 +2111,7 @@ ${reason}`,
   return (
     <>
       <ProviderShell
+        onTool={onTool}
         provider="cf"
         sections={cfSections}
         title={title}

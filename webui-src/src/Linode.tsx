@@ -22,6 +22,7 @@ import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider, SubItem } from './components/Sidebar'
+import type { ToolId } from './components/Tools'
 import { api, fallbackCopy, faDate, faNum, haptic, mem, num, TG } from './lib'
 
 type Account = { i: number; name: string; count?: number }
@@ -73,7 +74,15 @@ function badgeVariant(st: string): 'success' | 'neutral' | 'warning' | 'error' |
   return 'secondary'
 }
 
-export default function Linode({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef?: (f: () => void) => void }) {
+export default function Linode({
+  onSwitch,
+  onBackRef,
+  onTool,
+}: {
+  onSwitch: (p: Provider) => void
+  onBackRef?: (f: () => void) => void
+  onTool?: (id: ToolId) => void
+}) {
   const [view, setView] = useState<View>({ v: 'accounts' })
   const [stack, setStack] = useState<View[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -767,6 +776,7 @@ export default function Linode({ onSwitch, onBackRef }: { onSwitch: (p: Provider
   return (
     <>
       <ProviderShell
+        onTool={onTool}
         sections={sections}
         provider="ln"
         title={title}

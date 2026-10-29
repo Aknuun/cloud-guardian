@@ -7,6 +7,8 @@ import { LogoutButton } from './LogoutButton'
 import { useSectionTheme } from './sectionTheme'
 import { Button } from './ui'
 import { Sidebar, ThemeToggle } from './Sidebar'
+import { toolItems } from './Tools'
+import type { ToolId } from './Tools'
 import type { SubItem } from './Sidebar'
 import type { Provider } from './Sidebar'
 
@@ -21,6 +23,8 @@ export function ProviderShell({
   onChange,
   toast,
   sections,
+  onTool,
+  activeTool,
   children,
 }: {
   provider: Provider
@@ -33,6 +37,8 @@ export function ProviderShell({
   onChange: (p: Provider) => void
   toast: { t: string; err?: boolean } | null
   sections?: SubItem[]
+  onTool?: (id: ToolId) => void
+  activeTool?: ToolId | null
   children: ReactNode
 }) {
   const sectionTheme = useSectionTheme(provider)
@@ -45,6 +51,7 @@ export function ProviderShell({
         open={navOpen}
         onToggle={() => setNavOpen((o) => !o)}
         sections={sections}
+        tools={onTool ? toolItems(activeTool ?? null, onTool) : undefined}
       />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />

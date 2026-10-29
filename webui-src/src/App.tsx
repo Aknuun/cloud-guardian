@@ -28,11 +28,13 @@ import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { WebLogin } from './components/WebLogin'
+import { Tools, TOOLS, toolItems } from './components/Tools'
+import type { ToolId } from './components/Tools'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
-import { ProviderSwitch } from './components/ProviderShell'
+import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
 const Linode = lazy(() => import('./Linode'))
@@ -123,6 +125,11 @@ export default function App() {
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
+  const [tool, setTool] = useState<ToolId | null>(null)
+  const pickProvider = (p: Provider) => {
+    setTool(null)
+    setProvider(p)
+  }
   const [provider, setProvider] = useState<Provider>(() => {
     const p = sessionStorage.getItem('cg_provider')
     return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
@@ -328,7 +335,26 @@ export default function App() {
     requestAnimationFrame(() => window.scrollTo(0, 0))
   }
   function goBack() {
-    if (provider !== 'hz') {
+    if (tool) {
+    return (
+      <ProviderShell
+        provider={provider}
+        title={(TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
+        busy={false}
+        showBack
+        onBack={() => setTool(null)}
+        onRefresh={() => invalidateCache()}
+        onChange={pickProvider}
+        toast={null}
+        onTool={setTool}
+        activeTool={tool}
+      >
+        <Tools id={tool} />
+      </ProviderShell>
+    )
+  }
+
+  if (provider !== 'hz') {
       if (provider === 'cf') cfBack.current()
       else if (provider === 'ln') lnBack.current()
       else arvBack.current()
@@ -1224,6 +1250,25 @@ export default function App() {
     )
   }
 
+  if (tool) {
+    return (
+      <ProviderShell
+        provider={provider}
+        title={(TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
+        busy={false}
+        showBack
+        onBack={() => setTool(null)}
+        onRefresh={() => invalidateCache()}
+        onChange={pickProvider}
+        toast={null}
+        onTool={setTool}
+        activeTool={tool}
+      >
+        <Tools id={tool} />
+      </ProviderShell>
+    )
+  }
+
   if (provider !== 'hz') {
     return (
       <Suspense
@@ -1235,21 +1280,24 @@ export default function App() {
       >
         {provider === 'cf' ? (
           <Cloudflare
-            onSwitch={setProvider}
+            onSwitch={pickProvider}
+            onTool={setTool}
             onBackRef={(f) => {
               cfBack.current = f
             }}
           />
         ) : provider === 'ln' ? (
           <Linode
-            onSwitch={setProvider}
+            onSwitch={pickProvider}
+            onTool={setTool}
             onBackRef={(f) => {
               lnBack.current = f
             }}
           />
         ) : (
           <Arvan
-            onSwitch={setProvider}
+            onSwitch={pickProvider}
+            onTool={setTool}
             onBackRef={(f) => {
               arvBack.current = f
             }}
@@ -1281,9 +1329,10 @@ export default function App() {
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar
         provider={provider}
-        onChange={setProvider}
+        onChange={pickProvider}
         open={navOpen}
         onToggle={() => setNavOpen((o) => !o)}
+        tools={toolItems(tool, setTool)}
         sections={sections}
       />
       <div className="cc-content">
@@ -1313,7 +1362,7 @@ export default function App() {
         <main className="cc-main" aria-busy={busy > 0}>
           <div className="cc-mobile-only">
             {(cur.v === 'accounts' || cur.v === 'servers') && (
-              <ProviderSwitch provider={provider} onChange={setProvider} />
+              <ProviderSwitch provider={provider} onChange={pickProvider} />
             )}
           </div>
           {body()}

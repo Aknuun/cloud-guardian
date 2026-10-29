@@ -1,6 +1,7 @@
 import { Cloud, Cube, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { useTheme } from './theme'
+import type { ToolItem } from './Tools'
 
 export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
 
@@ -19,12 +20,14 @@ export function Sidebar({
   open,
   onToggle,
   sections,
+  tools,
 }: {
   provider: Provider
   onChange: (p: Provider) => void
   open: boolean
   onToggle: () => void
   sections?: SubItem[]
+  tools?: ToolItem[]
 }) {
   const { mode, toggle } = useTheme()
   const [expanded, setExpanded] = useState<Provider | null>(provider)
@@ -92,6 +95,27 @@ export function Sidebar({
             )
           })}
         </nav>
+
+        {tools && tools.length > 0 && (
+          <nav className="cc-sidenav" aria-label="ابزارها">
+            <div className="cc-sidenav-label">ابزارها</div>
+            {tools.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={'cc-sideitem' + (t.active ? ' on' : '')}
+                aria-current={t.active ? 'page' : undefined}
+                onClick={() => {
+                  t.onSelect()
+                  if (window.innerWidth < 900) onToggle()
+                }}
+              >
+                <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
+                <span className="cc-sideitem-label">{t.label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
 
         <nav className="cc-sidenav" aria-label="تنظیمات">
           <div className="cc-sidenav-label">تنظیمات</div>

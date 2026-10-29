@@ -20,6 +20,7 @@ import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider, SubItem } from './components/Sidebar'
+import type { ToolId } from './components/Tools'
 import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 
 type Account = { i: number; name: string; domains?: number; servers?: number }
@@ -82,7 +83,15 @@ function recHost(name: string, domain: string) {
   return n + '.' + domain
 }
 
-export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider) => void; onBackRef?: (f: () => void) => void }) {
+export default function Arvan({
+  onSwitch,
+  onBackRef,
+  onTool,
+}: {
+  onSwitch: (p: Provider) => void
+  onBackRef?: (f: () => void) => void
+  onTool?: (id: ToolId) => void
+}) {
   const [acc, setAcc] = useState<number | null>(null)
   const [tab, setTab] = useState<Tab>('dns')
   const [view, setView] = useState<View>({ v: 'accounts' })
@@ -971,6 +980,7 @@ export default function Arvan({ onSwitch, onBackRef }: { onSwitch: (p: Provider)
   return (
     <>
       <ProviderShell
+        onTool={onTool}
         provider="arv"
         sections={arvSections}
         title={title}
