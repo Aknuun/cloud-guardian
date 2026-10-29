@@ -459,10 +459,15 @@ function SrvView() {
               rows={3}
               value={edit.secret || ''}
               onChange={(e) => setEdit({ ...edit, secret: e.target.value })}
-              placeholder="رمز عبور، یا کلید با -----BEGIN"
+              placeholder={edit.id ? 'برای تغییر نکردن خالی بگذار' : 'خالی = رمزهای ذخیره‌شده یکی‌یکی امتحان می‌شوند'}
               dir="ltr"
             />
           </label>
+          {!edit.id && (
+            <div className="cc-hint">
+              اگر رمز را ندانی، خالی بگذار؛ سرور با رمزهای ذخیره‌شده تست می‌شود و اگر هیچ‌کدام جواب نداد، همین‌جا خطا می‌دهد.
+            </div>
+          )}
           <label className="cc-field">
             <span>یادداشت</span>
             <Input value={edit.note || ''} onChange={(e) => setEdit({ ...edit, note: e.target.value })} />

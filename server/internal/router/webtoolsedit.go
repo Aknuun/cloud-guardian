@@ -60,9 +60,23 @@ func (r *Router) webToolsSrvAdd(w http.ResponseWriter, req *http.Request, uid in
 		webErr(w, http.StatusBadRequest, "هاست معتبر نیست")
 		return
 	}
+	user := orDefault(strings.TrimSpace(in.User), "root")
 	secret := strings.TrimSpace(in.Secret)
 	if secret == "" {
-		webErr(w, http.StatusBadRequest, "رمز یا کلید خصوصی لازم است")
+		// try the saved passwords one by one, like the bot does
+		for _, p := range r.srvPwList() {
+			if s := strings.TrimSpace(strv(p)); s != "" && webSrvPing(host, user, port, s) {
+				secret = s
+				break
+			}
+		}
+		if secret == "" {
+			webErr(w, http.StatusBadRequest,
+				"اتصال SSH برقرار نشد: هیچ‌کدام از رمزهای ذخیره‌شده جواب نداد. رمز را وارد کن.")
+			return
+		}
+	} else if !webSrvPing(host, user, port, secret) {
+		webErr(w, http.StatusBadRequest, "اتصال SSH با این رمز/کلید برقرار نشد؛ مقدار را بررسی کن.")
 		return
 	}
 	auth := "pass"
@@ -74,7 +88,7 @@ func (r *Router) webToolsSrvAdd(w http.ResponseWriter, req *http.Request, uid in
 		name = host
 	}
 	rec := srvRec(fmt.Sprintf("s%d%d", time.Now().UnixNano(), rand.Intn(900)+100),
-		name, host, orDefault(strings.TrimSpace(in.User), "root"), port, auth, secret, strings.TrimSpace(in.Note))
+		name, host, user, port, auth, secret, strings.TrimSpace(in.Note))
 	r.srvSave(append(r.srvList(), rec))
 	webOK(w, map[string]any{"id": rec["id"]})
 }

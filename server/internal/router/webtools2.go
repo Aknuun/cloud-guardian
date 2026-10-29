@@ -8,7 +8,13 @@ import (
 	"time"
 
 	"github.com/aknuun/cg-server/internal/srvmon"
+	"github.com/aknuun/cg-server/internal/sshop"
 )
+
+// webSrvPing reports whether the credentials actually open an SSH session.
+func webSrvPing(host, user string, port int, secret string) bool {
+	return sshop.RunCmd(host, user, secret, port, "true", 20).Ok
+}
 
 const webSrvInfoCmd = `printf 'OS: '; (. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME") || echo '?'; ` +
 	`printf 'Kernel: '; uname -r; ` +
