@@ -125,6 +125,14 @@ export default function App() {
   const [cur, setCur] = useState<View>({ v: 'accounts' })
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
   const [tool, setTool] = useState<ToolId | null>(null)
+  // deep links from the bot: /app/?go=srv|rem|pg|hz|cf|arv
+  useEffect(() => {
+    const go = new URLSearchParams(location.search).get('go')
+    if (!go) return
+    if (go === 'srv' || go === 'rem' || go === 'pg') setTool(go)
+    else if (go === 'hz' || go === 'cf' || go === 'arv') setProvider(go)
+    history.replaceState(null, '', location.pathname)
+  }, [])
   const pickProvider = (p: Provider) => {
     setTool(null)
     setProvider(p)

@@ -1,24 +1,70 @@
 package router
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-// Menu renders the home menu.
+// webLink builds a deep link into the mini app for one section.
+func (r *Router) webLink(goID string) string {
+	u := strings.TrimSpace(r.WebAppURL)
+	if u == "" {
+		return ""
+	}
+	if strings.Contains(u, "?") {
+		return u + "&go=" + goID
+	}
+	return u + "?go=" + goID
+}
+
+// webBtn opens a section in the mini app; falls back to the native screen when
+// no web app URL is configured.
+func (r *Router) webBtn(label, native, goID string) Btn {
+	if u := r.webLink(goID); u != "" {
+		return btnWA(label, u)
+	}
+	return btnS(label, native, "plain")
+}
+
+// Menu renders the home menu. Everything except Cloudflare opens in the mini app
+// (the bot itself only sends reports); the rest stays reachable from "بیشتر".
 func (r *Router) Menu(chat, mid int64) {
 	kb := [][]Btn{
-		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
-		{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
-		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
-		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
-		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
-		{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")},
-		{btnS("⏰ یادآورها", "rem", "plain"), btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
-		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
+		{btn("☁️ کلودفلر", "zones")},
+		{btnWA("🇩🇪 هتزنر", r.webLink("hz")), btnWA("🇮🇷 آروان", r.webLink("arv"))},
+		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
+		{btnWA("🎛 پاسارگارد", r.webLink("pg"))},
+		{btnS("📦 بخش‌های دیگر", "more", "plain")},
+	}
+	if r.webLink("hz") == "" {
+		// no web app configured: keep the native screens usable
+		kb = [][]Btn{
+			{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
+			{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
+			{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("⏰ یادآورها", "rem", "plain")},
+			{btnS("📦 بخش‌های دیگر", "more", "plain")},
+		}
 	}
 	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version)
 	if p := r.PromoText(); p != "" {
 		text += "\n\n" + p
 	}
 	r.Show(chat, mid, text, kb)
+}
+
+// moreMenu keeps the screens that have no mini app page yet.
+func (r *Router) moreMenu(chat, mid int64) {
+	kb := [][]Btn{
+		{btnS("➕ افزودن رکورد", "addrec", "plain"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
+		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
+		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
+		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
+		{btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")},
+		{btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
+		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
+		{btn("🏠 خانه", "menu")},
+	}
+	r.Show(chat, mid, uiTitle("📦", "بخش‌های دیگر", ""), kb)
 }
 
 func (r *Router) settingsHome(chat, mid int64) {

@@ -66,6 +66,8 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 		r.navPush(chat, data)
 	}
 	switch {
+	case data == "more":
+		r.moreMenu(chat, mid)
 	case data == "menu":
 		r.Menu(chat, mid)
 	case data == "settings":

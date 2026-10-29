@@ -744,3 +744,62 @@ html[data-mode='dark'] .cc-stat {
   background-color: var(--ds-panel);
   border: 1px solid var(--ds-line);
 }
+
+/* tool pages: add button + row actions + form fields */
+.cc-pagebar {
+  display: flex;
+  margin: 4px 0 12px;
+}
+.cc-pagebar button[data-kumo-component='Button'] {
+  width: 100%;
+}
+.cc-rowbtns {
+  display: flex;
+  gap: 4px;
+}
+.cc-rowbtns button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ds-line);
+  border-radius: 10px;
+  background: var(--ds-card);
+  color: var(--ds-muted);
+}
+.cc-rowbtns button.danger {
+  color: var(--ds-danger);
+}
+.cc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 14px;
+}
+.cc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ds-muted);
+}
+.cc-field-row {
+  display: flex;
+  gap: 10px;
+}
+.cc-field-sm {
+  width: 96px;
+  flex: 0 0 auto;
+}
+.cc-textarea {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+}
+.cc-form-err {
+  color: var(--ds-danger);
+  font-size: 13px;
+  margin-bottom: 10px;
+}

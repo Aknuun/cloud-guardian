@@ -65,6 +65,12 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/srv", r.webAuthed(r.webToolsSrv))
 	mux.HandleFunc("/api/tools/rem", r.webAuthed(r.webToolsRem))
 	mux.HandleFunc("/api/tools/pg", r.webAuthed(r.webToolsPg))
+	mux.HandleFunc("/api/tools/srv/add", r.webAuthed(r.webToolsSrvAdd))
+	mux.HandleFunc("/api/tools/srv/edit", r.webAuthed(r.webToolsSrvEdit))
+	mux.HandleFunc("/api/tools/srv/del", r.webAuthed(r.webToolsSrvDel))
+	mux.HandleFunc("/api/tools/rem/add", r.webAuthed(r.webToolsRemAdd))
+	mux.HandleFunc("/api/tools/rem/del", r.webAuthed(r.webToolsRemDel))
+	mux.HandleFunc("/api/tools/rem/done", r.webAuthed(r.webToolsRemDone))
 	mux.Handle("/app/", r.webStatic())
 	mux.HandleFunc("/app", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/app/", http.StatusFound)
