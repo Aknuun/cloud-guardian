@@ -53,10 +53,9 @@ async function save(path: string, body: any, done: () => void) {
 
 type Srv = { id: string; name: string; host: string; user: string; port: number; note: string; key: boolean; secret?: string }
 type Rem = { id: string; text: string; when: number; notified: boolean; ack: boolean; server: string }
-type PgData = {
-  panels: { name: string; url: string; user: string }[]
-  monitors: { id: string; name: string; panel: string; interval: number; enabled: boolean }[]
-}
+type PgPanel = { idx: number; name: string; url: string; user: string }
+type PgMon = { id: string; name: string; panel: string; interval: number; enabled: boolean }
+type PgData = { panels: PgPanel[]; monitors: PgMon[] }
 
 export function Tools({ id }: { id: ToolId }) {
   if (id === 'srv') return <SrvView />
@@ -681,8 +680,14 @@ function RemView() {
 }
 
 function PgView() {
-  const { data, err, loaded } = useTool<PgData>('/api/tools/pg')
+  const { data, err, loaded, reload } = useTool<PgData>('/api/tools/pg')
   const [q, setQ] = useState('')
+  const [pf, setPf] = useState<{ idx?: number; name: string; url: string; user: string; pass: string } | null>(null)
+  const [pfErr, setPfErr] = useState('')
+  const [pdel, setPdel] = useState<PgPanel | null>(null)
+  const [mf, setMf] = useState<{ panel_url: string; name: string; interval: number } | null>(null)
+  const [mfErr, setMfErr] = useState('')
+  const [mdel, setMdel] = useState<PgMon | null>(null)
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const iso0 = data || { panels: [], monitors: [] }
@@ -694,31 +699,79 @@ function PgView() {
       }
     : iso0
   const on = iso.monitors.filter((m) => m.enabled).length
+
+  const submitPanel = async () => {
+    if (!pf) return
+    setPfErr('')
+    try {
+      await save(pf.idx === undefined ? '/api/tools/pg/panel/add' : '/api/tools/pg/panel/edit', pf, () => {
+        setPf(null)
+        reload()
+      })
+    } catch (e: any) {
+      setPfErr(e.message || 'ذخیره نشد')
+    }
+  }
+  const submitMon = async () => {
+    if (!mf) return
+    setMfErr('')
+    try {
+      await save('/api/tools/pg/mon/add', mf, () => {
+        setMf(null)
+        reload()
+      })
+    } catch (e: any) {
+      setMfErr(e.message || 'ذخیره نشد')
+    }
+  }
+  const run = async (path: string, body: any) => {
+    try {
+      await save(path, body, reload)
+    } catch (e: any) {
+      alert(e.message || 'انجام نشد')
+    }
+  }
+
   return (
     <>
       <StatGrid
         items={[
-          { label: 'پنل‌ها', value: faNum(iso.panels.length) },
-          { label: 'مانیتور نود', value: faNum(iso.monitors.length) },
+          { label: 'پنل‌ها', value: faNum(iso0.panels.length) },
+          { label: 'مانیتور نود', value: faNum(iso0.monitors.length) },
           { label: 'فعال', value: faNum(on) },
         ]}
       />
+      <div className="cc-pagebar">
+        <Button variant="primary" icon={Plus} onClick={() => setPf({ name: '', url: '', user: '', pass: '' })}>
+          افزودن پنل
+        </Button>
+      </div>
       <div className="cc-searchbar">
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="جستجو در پاسارگارد…" />
       </div>
       <div className="cc-section">پنل‌ها</div>
-      {iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="از ربات پنل پاسارگارد اضافه کن." />}
+      {iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="با دکمهٔ «افزودن پنل» یکی اضافه کن." />}
       {iso.panels.map((p) => (
-        <div key={p.url} className="cc-trow">
+        <div key={p.url} className="cc-trow cc-tap" onClick={() => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' })}>
           <div className="cc-grow">
             <div className="cc-name">{p.name || p.url}</div>
             <div className="cc-sub cc-mono">{p.url}</div>
           </div>
           {p.user && <Badge>{p.user}</Badge>}
+          <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
+            <button type="button" aria-label="حذف" className="danger" onClick={() => setPdel(p)}>
+              <Trash size={17} />
+            </button>
+          </div>
         </div>
       ))}
       <div className="cc-section">مانیتور نودها</div>
-      {iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="از ربات مانیتور نود بساز." />}
+      <div className="cc-btnrow">
+        <Button variant="outline" icon={Plus} onClick={() => setMf({ panel_url: iso0.panels[0]?.url || '', name: '', interval: 5 })}>
+          افزودن مانیتور
+        </Button>
+      </div>
+      {iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ بالا یک مانیتور نود بساز." />}
       {iso.monitors.map((m) => (
         <div key={m.id} className="cc-trow">
           <div className="cc-grow">
@@ -727,9 +780,112 @@ function PgView() {
               {m.panel} · هر {faNum(m.interval)} دقیقه
             </div>
           </div>
-          <Badge>{m.enabled ? 'فعال' : 'خاموش'}</Badge>
+          <div className="cc-rowbtns">
+            <button
+              type="button"
+              aria-label={m.enabled ? 'خاموش کن' : 'روشن کن'}
+              onClick={() => run('/api/tools/pg/mon/toggle', { id: m.id, enabled: !m.enabled })}
+            >
+              <Power size={17} />
+            </button>
+            <button type="button" aria-label="حذف" className="danger" onClick={() => setMdel(m)}>
+              <Trash size={17} />
+            </button>
+          </div>
         </div>
       ))}
+
+      {pf && (
+        <FormDialog
+          title={pf.idx === undefined ? 'افزودن پنل' : 'ویرایش پنل'}
+          sub={pf.idx === undefined ? 'ورود قبل از ذخیره تست می‌شود.' : 'رمز را خالی بگذار تا تغییر نکند.'}
+          onClose={() => setPf(null)}
+          onSave={submitPanel}
+          error={pfErr}
+        >
+          <label className="cc-field">
+            <span>نام</span>
+            <Input value={pf.name} onChange={(e) => setPf({ ...pf, name: e.target.value })} placeholder="main" />
+          </label>
+          <label className="cc-field">
+            <span>آدرس پنل</span>
+            <Input value={pf.url} onChange={(e) => setPf({ ...pf, url: e.target.value })} placeholder="https://panel.example.com" />
+          </label>
+          <label className="cc-field">
+            <span>نام کاربری</span>
+            <Input value={pf.user} onChange={(e) => setPf({ ...pf, user: e.target.value })} placeholder="admin" />
+          </label>
+          <label className="cc-field">
+            <span>رمز</span>
+            <Input type="password" value={pf.pass} onChange={(e) => setPf({ ...pf, pass: e.target.value })} placeholder="••••••" />
+          </label>
+        </FormDialog>
+      )}
+
+      {mf && (
+        <FormDialog title="افزودن مانیتور نود" onClose={() => setMf(null)} onSave={submitMon} error={mfErr}>
+          <label className="cc-field">
+            <span>پنل</span>
+            <select className="cc-input" value={mf.panel_url} onChange={(e) => setMf({ ...mf, panel_url: e.target.value })}>
+              {iso0.panels.map((p) => (
+                <option key={p.url} value={p.url}>
+                  {p.name || p.url}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="cc-field">
+            <span>نام نمایشی</span>
+            <Input value={mf.name} onChange={(e) => setMf({ ...mf, name: e.target.value })} placeholder="node-1" />
+          </label>
+          <label className="cc-field">
+            <span>فاصلهٔ بررسی (دقیقه)</span>
+            <Input
+              type="number"
+              value={String(mf.interval)}
+              onChange={(e) => setMf({ ...mf, interval: Number(e.target.value) || 5 })}
+            />
+          </label>
+        </FormDialog>
+      )}
+
+      {pdel && (
+        <Dialog.Root open onOpenChange={(o) => !o && setPdel(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">حذف پنل</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              «{pdel.name || pdel.url}» و مانیتورهای نودش حذف می‌شوند. روی پاسارگارد اثری ندارد.
+            </Dialog.Description>
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setPdel(null)}>
+                انصراف
+              </Button>
+              <Button variant="destructive" onClick={() => pdel && run('/api/tools/pg/panel/del', { idx: pdel.idx })}>
+                حذف کن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {mdel && (
+        <Dialog.Root open onOpenChange={(o) => !o && setMdel(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">حذف مانیتور</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">مانیتور «{mdel.name || mdel.id}» حذف شود؟</Dialog.Description>
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setMdel(null)}>
+                انصراف
+              </Button>
+              <Button variant="destructive" onClick={() => mdel && run('/api/tools/pg/mon/del', { id: mdel.id })}>
+                حذف کن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
     </>
   )
 }

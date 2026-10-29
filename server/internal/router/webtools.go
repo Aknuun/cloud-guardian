@@ -36,8 +36,9 @@ func (r *Router) webToolsRem(w http.ResponseWriter, req *http.Request, uid int64
 
 func (r *Router) webToolsPg(w http.ResponseWriter, req *http.Request, uid int64) {
 	panels := []map[string]any{}
-	for _, p := range r.panels() {
+	for i, p := range r.panels() {
 		panels = append(panels, map[string]any{
+			"idx":  i,
 			"name": p.Name,
 			"url":  p.URL,
 			"user": p.Username,
