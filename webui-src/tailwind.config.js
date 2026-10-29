@@ -33,11 +33,16 @@ export default {
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
-        'slide-up': { from: { transform: 'translateY(16px)', opacity: '0.6' }, to: { transform: 'translateY(0)', opacity: '1' } },
+        'fade-out': { from: { opacity: '1' }, to: { opacity: '0' } },
+        // scale/opacity only: transform is reserved for the dialog centering
+        'dialog-in': { from: { opacity: '0', scale: '0.95' }, to: { opacity: '1', scale: '1' } },
+        'dialog-out': { from: { opacity: '1', scale: '1' }, to: { opacity: '0', scale: '0.97' } },
       },
       animation: {
-        'fade-in': 'fade-in 0.16s ease-out',
-        'slide-up': 'slide-up 0.2s ease-out',
+        'fade-in': 'fade-in 150ms ease',
+        'fade-out': 'fade-out 120ms ease',
+        'dialog-in': 'dialog-in 150ms ease',
+        'dialog-out': 'dialog-out 120ms ease',
       },
     },
   },
