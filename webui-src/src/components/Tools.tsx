@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 
-export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom'
+export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hook'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -13,6 +13,8 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'pg', label: 'پاسارگارد', Icon: ShieldCheck },
   { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
+  { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
+  { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
 ]
 
 export type ToolItem = { id: ToolId; label: string; Icon: Icon; active?: boolean; onSelect: () => void }
@@ -64,6 +66,8 @@ export function Tools({ id }: { id: ToolId }) {
   if (id === 'rem') return <RemView />
   if (id === 'um') return <UmView />
   if (id === 'dom') return <DomView />
+  if (id === 'hf') return <HfView />
+  if (id === 'hook') return <HookView />
   return <PgView />
 }
 
@@ -1511,6 +1515,487 @@ function DomView() {
             <span>تاریخ شمسی</span>
             <Input value={when} onChange={(e) => setWhen(e.target.value)} placeholder="1405/06/20" />
           </label>
+        </FormDialog>
+      )}
+    </>
+  )
+}
+
+// ---------------- host filter (auto sub swap) ----------------
+type HfCfg = {
+  enabled: boolean; intervalMin: number; cities: number; citiesSel: string[]; maxOk: number
+  recheckCount: number; recheckMin: number; batch: number; maxChanges: number
+  realityRotate: boolean; lastRun: string; lastSummary: string; excCount: number
+}
+type HfData = { cfg: HfCfg; panels: { idx: number; name: string; url: string }[] }
+type HfHost = {
+  id: string; remark: string; disabled: boolean; reality: boolean
+  address: string[]; sni: string[]; host: string[]; skip: Record<string, boolean>; all: boolean
+}
+
+const FIELDS: [string, string][] = [['address', 'A'], ['sni', 'S'], ['host', 'H']]
+
+function HfView() {
+  const { data, err, reload } = useTool<HfData>('/api/tools/hf')
+  const [cfg, setCfg] = useState<HfCfg | null>(null)
+  const [pi, setPi] = useState(0)
+  const [hosts, setHosts] = useState<HfHost[] | null>(null)
+  const [hErr, setHErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [fErr, setFErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [logOpen, setLogOpen] = useState(false)
+  const [log, setLog] = useState<any[] | null>(null)
+  const [revOpen, setRevOpen] = useState(false)
+  const [revs, setRevs] = useState<{ sid: string; from?: string; to?: string }[] | null>(null)
+
+  useEffect(() => {
+    if (data?.cfg) setCfg(data.cfg)
+  }, [data])
+  useEffect(() => {
+    if (!data?.panels?.length) return
+    loadHosts(pi)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, pi])
+
+  async function loadHosts(p: number) {
+    setHErr('')
+    try {
+      const d = await api<{ hosts: HfHost[] }>(`/api/tools/hf/hosts?panel=${p}&t=${Date.now()}`)
+      setHosts(d.hosts || [])
+    } catch (e: any) {
+      setHosts([])
+      setHErr(e.message || 'خواندن هاست‌ها ناموفق')
+    }
+  }
+  async function act(path: string, body: any, msg?: string) {
+    setFErr('')
+    try {
+      await api(path, body)
+      invalidateCache()
+      if (msg) setNotice(msg)
+      return true
+    } catch (e: any) {
+      setFErr(e.message || 'انجام نشد')
+      return false
+    }
+  }
+  if (err) return <Empty title="خطا" description={err} />
+  if (!data || !cfg)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  const num = (k: keyof HfCfg, label: string) => (
+    <label className="cc-field">
+      <span>{label}</span>
+      <Input type="number" value={String(cfg[k])} onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 } as HfCfg)} />
+    </label>
+  )
+  const submit = async () => {
+    if (await act('/api/tools/hf/cfg', cfg, 'تنظیمات ذخیره شد')) reload()
+  }
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'وضعیت', value: cfg.enabled ? 'فعال' : 'خاموش' },
+          { label: 'فاصلهٔ اجرا', value: faNum(cfg.intervalMin) + ' دقیقه' },
+          { label: 'استثناها', value: faNum(cfg.excCount) },
+        ]}
+      />
+      <div className="cc-hint cc-mb">
+        دامنهٔ هاست‌ها هر {faNum(cfg.intervalMin)} دقیقه از داخل ایران بررسی می‌شود؛ اگر فیلتر شد، ساب‌دامنهٔ تازه ساخته و
+        جایگزین می‌شود. هاست‌هایی که لازم نیست بررسی شوند را در لیست پایین «استثنا» کن.
+      </div>
+      {cfg.lastSummary && <div className="cc-hint cc-center cc-mb">آخرین اجرا: {cfg.lastSummary}</div>}
+
+      <div className="cc-form">
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <span>تعویض خودکار فعال باشد</span>
+        </label>
+        <div className="cc-field-row">
+          {num('intervalMin', 'فاصلهٔ اجرا (دقیقه)')}
+          {num('cities', 'حداقل شهر فیلتر')}
+        </div>
+        <div className="cc-field-row">
+          {num('maxOk', 'حداکثر پینگ موفق (۰-۴)')}
+          {num('batch', 'تعداد بررسی هر اجرا')}
+        </div>
+        <div className="cc-field-row">
+          {num('maxChanges', 'حداکثر تعویض')}
+          {num('recheckCount', 'تعداد بررسی مجدد')}
+        </div>
+        <div className="cc-field-row">
+          {num('recheckMin', 'فاصلهٔ بررسی مجدد (دقیقه)')}
+        </div>
+        {fErr && <div className="cc-form-err">{fErr}</div>}
+        <Button variant="primary" onClick={submit}>
+          ذخیرهٔ تنظیمات
+        </Button>
+      </div>
+
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>هاست‌ها</h2>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              const ok = await act('/api/tools/hf/run', {}, 'بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
+              setBusy(false)
+              if (ok) setNotice('بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
+            }}
+          >
+            {busy ? 'در حال اجرا…' : 'بررسی الان'}
+          </Button>
+        </div>
+        <div className="cc-btnrow">
+          {data.panels.map((p) => (
+            <Button key={p.idx} variant={p.idx === pi ? 'primary' : 'outline'} onClick={() => setPi(p.idx)}>
+              {p.name}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (await act('/api/tools/hf/exc', { panel: pi, clear: true })) loadHosts(pi)
+            }}
+          >
+            پاک‌کردن استثناها
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setLogOpen(true)
+              setLog(null)
+              try {
+                const d = await api<{ log: any[] }>(`/api/tools/hf/log?t=${Date.now()}`)
+                setLog(d.log || [])
+              } catch {
+                setLog([])
+              }
+            }}
+          >
+            تاریخچه
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setRevOpen(true)
+              setRevs(null)
+              try {
+                const d = await api<{ items: any[] }>(`/api/tools/hf/revert?t=${Date.now()}`)
+                setRevs(d.items || [])
+              } catch {
+                setRevs([])
+              }
+            }}
+          >
+            بازگردانی
+          </Button>
+        </div>
+        {hErr && <div className="cc-form-err">{hErr}</div>}
+        {!hosts && (
+          <div className="cc-center">
+            <Loader />
+          </div>
+        )}
+        {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
+        {hosts?.map((h) => (
+          <div key={h.id} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">
+                {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
+              </div>
+              <div className="cc-sub">{h.address.join('، ') || '—'}</div>
+              {h.sni.length > 0 && <div className="cc-sub">sni: {h.sni.join('، ')}</div>}
+              {h.host.length > 0 && <div className="cc-sub">host: {h.host.join('، ')}</div>}
+              <div className="cc-btnrow">
+                {FIELDS.map(([f, l]) => (
+                  <Button
+                    key={f}
+                    variant={h.skip[f] ? 'outline' : 'primary'}
+                    onClick={async () => {
+                      if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f })) loadHosts(pi)
+                    }}
+                  >
+                    {l}
+                  </Button>
+                ))}
+                <Button
+                  variant={h.all ? 'destructive' : 'outline'}
+                  onClick={async () => {
+                    if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, all: true })) loadHosts(pi)
+                  }}
+                >
+                  {h.all ? 'مستثنی' : 'استثنا کل'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {logOpen && (
+        <Dialog.Root open onOpenChange={(o) => !o && setLogOpen(false)}>
+          <Dialog className="cc-dialog" size="base">
+              <Dialog.Title className="cc-dialog-title">تاریخچهٔ تعویض‌ها</Dialog.Title>
+              <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+              <div className="cc-dialog-body">
+                {!log && (
+                  <div className="cc-center">
+                    <Loader />
+                  </div>
+                )}
+                {log && log.length === 0 && <Empty title="خالی" description="چیزی ثبت نشده." />}
+                {log && log.length > 0 && (
+                  <div className="cc-form">
+                    {[...log].reverse().map((e, i) => (
+                      <div key={i} className="cc-sub cc-ltr">
+                        {String(e.ts || '').replace('T', ' ').slice(0, 16)} · {e.kind} {e.from ? `${e.from} → ${e.to}` : ''}{' '}
+                        {e.error ? `⚠️ ${e.error}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="cc-dialog-actions">
+                <Button variant="outline" onClick={() => setLogOpen(false)}>
+                  بستن
+                </Button>
+              </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {revOpen && (
+        <Dialog.Root open onOpenChange={(o) => !o && setRevOpen(false)}>
+          <Dialog className="cc-dialog" size="base">
+              <Dialog.Title className="cc-dialog-title">بازگردانی تعویض‌ها</Dialog.Title>
+              <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+              <div className="cc-dialog-body">
+                {!revs && (
+                  <div className="cc-center">
+                    <Loader />
+                  </div>
+                )}
+                {revs && revs.length === 0 && <Empty title="خالی" description="تعویضی برای بازگردانی نیست." />}
+                {revs &&
+                  revs.map((r) => (
+                    <div key={r.sid} className="cc-trow">
+                      <div className="cc-grow">
+                        <div className="cc-name cc-ltr">{r.from || r.sid}</div>
+                        {r.to && <div className="cc-sub cc-ltr">→ {r.to}</div>}
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={async () => {
+                          if (await act('/api/tools/hf/revert', { sid: r.sid }, 'بازگردانی شد')) {
+                            setRevOpen(false)
+                            loadHosts(pi)
+                          }
+                        }}
+                      >
+                        بازگردان
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+              <div className="cc-dialog-actions">
+                {fErr && <div className="cc-form-err">{fErr}</div>}
+                <Button variant="outline" onClick={() => setRevOpen(false)}>
+                  بستن
+                </Button>
+              </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+    </>
+  )
+}
+
+// ---------------- pasarguard expiry / volume webhook ----------------
+type HookPanel = {
+  idx: number; name: string; url: string; set: boolean
+  secret?: string; hook?: string; dashpath?: string; renewbot?: string; renewbotAuto?: boolean
+}
+type HookData = { enabled: boolean; silentMe: boolean; days: number[]; usage: number[]; panels: HookPanel[] }
+
+function HookView() {
+  const { data, err, reload } = useTool<HookData>('/api/tools/hook')
+  const [d, setD] = useState<HookData | null>(null)
+  const [edit, setEdit] = useState<HookPanel | null>(null)
+  const [dash, setDash] = useState('')
+  const [rb, setRb] = useState('')
+  const [auto, setAuto] = useState(false)
+  const [fErr, setFErr] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    if (data) setD(data)
+  }, [data])
+
+  async function act(path: string, body: any, msg?: string) {
+    setFErr('')
+    try {
+      await api(path, body)
+      invalidateCache()
+      if (msg) setNotice(msg)
+      reload()
+      return true
+    } catch (e: any) {
+      setFErr(e.message || 'انجام نشد')
+      return false
+    }
+  }
+  if (err) return <Empty title="خطا" description={err} />
+  if (!d)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'وضعیت', value: d.enabled ? 'فعال' : 'خاموش' },
+          { label: 'پنل‌های متصل', value: faNum(d.panels.filter((p) => p.set).length) + '/' + faNum(d.panels.length) },
+          { label: 'آستانهٔ حجم', value: d.usage.map((u) => faNum(u) + '٪').join(' · ') },
+        ]}
+      />
+      <div className="cc-hint cc-mb">
+        آدرس وبهوک هر پنل را در تنظیمات webhook پنل (بخش اعلان‌ها) بگذار؛ خود پنل وقتی کاربری به آستانهٔ انقضا یا حجم رسید خبر
+        می‌دهد. آستانه‌ها (days_left و usage_percent) هم همان‌جا در پنل تنظیم می‌شوند.
+      </div>
+      <div className="cc-form">
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!d.enabled} onChange={(e) => act('/api/tools/hook/cfg', { enabled: e.target.checked })} />
+          <span>هشدار انقضا و حجم فعال باشد</span>
+        </label>
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!d.silentMe} onChange={(e) => act('/api/tools/hook/cfg', { silentMe: e.target.checked })} />
+          <span>ارسال بی‌صدا (سایلنت)</span>
+        </label>
+        <div className="cc-field-row">
+          <label className="cc-field">
+            <span>آستانهٔ روز (با کاما)</span>
+            <Input
+              value={d.days.join(', ')}
+              onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+            />
+          </label>
+          <label className="cc-field">
+            <span>آستانهٔ حجم ٪ (با کاما)</span>
+            <Input
+              value={d.usage.join(', ')}
+              onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+            />
+          </label>
+        </div>
+        {fErr && <div className="cc-form-err">{fErr}</div>}
+        <Button variant="primary" onClick={() => act('/api/tools/hook/cfg', { days: d.days, usage: d.usage }, 'ذخیره شد')}>
+          ذخیرهٔ آستانه‌ها
+        </Button>
+      </div>
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>پنل‌ها</h2>
+        </div>
+        {d.panels.length === 0 && <Empty title="پنلی نیست" description="اول در بخش پاسارگارد یک پنل اضافه کن." />}
+        {d.panels.map((p) => (
+          <div key={p.idx} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">{p.name}</div>
+              <div className="cc-sub cc-ltr">{p.hook || 'وبهوک ساخته نشده'}</div>
+              {p.dashpath && <div className="cc-sub cc-ltr">dashboard: {p.dashpath}</div>}
+              {p.renewbot && (
+                <div className="cc-sub cc-ltr">
+                  renew-bot: @{p.renewbot}
+                  {p.renewbotAuto ? ' (خودکار)' : ''}
+                </div>
+              )}
+            </div>
+            {!p.set ? (
+              <Button variant="primary" onClick={() => act('/api/tools/hook/panel', { idx: p.idx }, 'وبهوک ساخته شد')}>
+                ساخت وبهوک
+              </Button>
+            ) : (
+              <div className="cc-btnrow">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEdit(p)
+                    setDash(p.dashpath || '')
+                    setRb(p.renewbot || '')
+                    setAuto(!!p.renewbotAuto)
+                    setFErr('')
+                  }}
+                >
+                  تنظیمات
+                </Button>
+                <Button variant="outline" onClick={() => act('/api/tools/hook/test', { idx: p.idx }, 'پیام تستی به تلگرام رفت')}>
+                  پیام تستی
+                </Button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {edit && (
+        <FormDialog
+          title="تنظیم وبهوک"
+          sub={edit.name}
+          onClose={() => setEdit(null)}
+          onSave={() =>
+            act(
+              '/api/tools/hook/panel',
+              { idx: edit.idx, dashpath: dash, renewbot: rb, renewbotAuto: auto },
+              'ذخیره شد',
+            ).then((ok) => ok && setEdit(null))
+          }
+          error={fErr}
+        >
+          {edit.hook && (
+            <div className="cc-field">
+              <span>آدرس وبهوک</span>
+              <div className="cc-pre" style={{ whiteSpace: 'normal' }}>{edit.hook}</div>
+              <Button variant="outline" icon={Copy} onClick={() => { fallbackCopy(edit.hook || ''); setNotice('آدرس کپی شد') }}>
+                کپی آدرس
+              </Button>
+            </div>
+          )}
+          <label className="cc-field">
+            <span>مسیر داشبورد (خالی = /dashboard)</span>
+            <Input value={dash} onChange={(e) => setDash(e.target.value)} placeholder="/dashboard" />
+          </label>
+          <label className="cc-field">
+            <span>ربات داخلی تمدید (یوزرنیم بدون @)</span>
+            <Input value={rb} onChange={(e) => setRb(e.target.value)} placeholder="RenewBot" />
+          </label>
+          <label className="cc-checkline">
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+            <span>تمدید خودکار با ربات داخلی</span>
+          </label>
+          <Button
+            variant="outline"
+            onClick={() =>
+              act('/api/tools/hook/panel', { idx: edit.idx, regen: true }, 'توکن جدید ساخته شد').then((ok) => {
+                if (ok) setEdit(null)
+              })
+            }
+          >
+            ساخت توکن جدید (سکرت قبلی باطل می‌شود)
+          </Button>
         </FormDialog>
       )}
     </>
