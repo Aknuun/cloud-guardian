@@ -107,7 +107,6 @@ export function ProviderSwitch({
   const items: { id: Provider; label: string }[] = [
     { id: 'hz', label: 'هتزنر' },
     { id: 'cf', label: 'کلادفلر' },
-    { id: 'ln', label: 'لینود' },
     { id: 'arv', label: 'آروان' },
   ]
   return (

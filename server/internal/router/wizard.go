@@ -35,15 +35,15 @@ func (r *Router) getWizard(chat int64) map[string]any {
 var navScreensExact = map[string]bool{
 	"menu": true, "settings": true, "accounts": true, "favs": true, "zones": true,
 	"srv": true, "srvmon": true, "srvpw": true, "srvsubcancel": true,
-	"ln": true, "hz": true, "arvan": true, "arvanacc": true, "rem": true,
+	"hz": true, "arvan": true, "arvanacc": true, "rem": true,
 	"nd": true, "pg": true, "zmail": true, "fmail": true, "domexp": true,
 	"sslm": true, "hub": true, "um": true, "fo": true, "hfd": true, "hfbk": true,
 	"hflist": true, "verlist": true, "promo": true, "admins_menu": true,
-	"qacancel": true, "qamenu": true, "pgdel": true, "hzdel": true, "lndel": true,
+	"qacancel": true, "qamenu": true, "pgdel": true, "hzdel": true,
 }
 
 var navScreensPrefix = []string{
-	"cfr:", "cfz:", "lnsi:", "hzsi:", "hzs:", "arvs:", "srvopen:", "qap:",
+	"cfr:", "cfz:", "hzsi:", "hzs:", "arvs:", "srvopen:", "qap:",
 	"pgl:", "pnle:", "traz:",
 }
 
@@ -168,14 +168,6 @@ func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 		r.hfdIntSave(chat, mid, pend, text)
 	case "hfd_at":
 		r.hfdAtSave(chat, mid, pend, text)
-	case "ln_add_name":
-		r.lnAddName(chat, mid, text)
-	case "ln_add_token":
-		r.lnAddToken(chat, mid, pend, text)
-	case "ln_srv_remark":
-		r.lnCreateRemark(chat, mid, pend, text)
-	case "ln_srv_rename":
-		r.lnRename(chat, mid, pend, text)
 	case "hz_add_name":
 		r.hzAddName(chat, mid, text)
 	case "hz_add_token":

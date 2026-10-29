@@ -3,14 +3,13 @@ import { useState } from 'react'
 import { useTheme } from './theme'
 import type { ToolItem } from './Tools'
 
-export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
+export type Provider = 'hz' | 'cf' | 'arv'
 
 export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'hz', label: 'هتزنر', Icon: HardDrives },
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
-  { id: 'ln', label: 'لینود', Icon: Cube },
   { id: 'arv', label: 'آروان', Icon: Globe },
 ]
 

@@ -37,7 +37,6 @@ import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
-const Linode = lazy(() => import('./Linode'))
 const Arvan = lazy(() => import('./Arvan'))
 
 /* ---------------- types ---------------- */
@@ -132,12 +131,11 @@ export default function App() {
   }
   const [provider, setProvider] = useState<Provider>(() => {
     const p = sessionStorage.getItem('cg_provider')
-    return p === 'cf' || p === 'ln' || p === 'arv' ? p : 'hz'
+    return p === 'cf' || p === 'arv' ? p : 'hz'
   })
   const sectionTheme = useSectionTheme(provider)
   const cfBack = useRef<() => void>(() => {})
-  const lnBack = useRef<() => void>(() => {})
-  const arvBack = useRef<() => void>(() => {})
+    const arvBack = useRef<() => void>(() => {})
   const [stack, setStack] = useState<View[]>([])
   const [q, setQ] = useState('')
   const [createName, setCreateName] = useState('')
@@ -356,7 +354,6 @@ export default function App() {
 
   if (provider !== 'hz') {
       if (provider === 'cf') cfBack.current()
-      else if (provider === 'ln') lnBack.current()
       else arvBack.current()
       return
     }
@@ -1284,14 +1281,6 @@ export default function App() {
             onTool={setTool}
             onBackRef={(f) => {
               cfBack.current = f
-            }}
-          />
-        ) : provider === 'ln' ? (
-          <Linode
-            onSwitch={pickProvider}
-            onTool={setTool}
-            onBackRef={(f) => {
-              lnBack.current = f
             }}
           />
         ) : (

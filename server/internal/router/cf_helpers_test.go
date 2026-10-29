@@ -71,26 +71,8 @@ func TestNavPushDedupAndCap(t *testing.T) {
 	}
 }
 
-func TestLnLabelPart(t *testing.T) {
-	cases := map[string]string{
-		"web 1":        "web-1",
-		"  my_server ": "my_server",
-		"---":          "srv",
-		"":             "srv",
-	}
-	for in, want := range cases {
-		if got := lnLabelPart(in); got != want {
-			t.Errorf("lnLabelPart(%q) = %q, want %q", in, got, want)
-		}
-	}
-	long := lnLabelPart("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-	if len(long) != 32 {
-		t.Errorf("long label length = %d, want 32", len(long))
-	}
-}
-
 func TestIsNavScreen(t *testing.T) {
-	for _, d := range []string{"menu", "ln", "srv", "cfr:abc", "hzs:0:0", "lnsi:1:2"} {
+	for _, d := range []string{"menu", "hz", "srv", "cfr:abc", "hzs:0:0"} {
 		if !isNavScreen(d) {
 			t.Errorf("isNavScreen(%q) = false, want true", d)
 		}

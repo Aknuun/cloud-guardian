@@ -841,68 +841,6 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 			r.arvUpgradeConfirm(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
 		}
 
-	// linode
-	case data == "ln":
-		r.lnHome(chat, mid)
-	case data == "lna":
-		r.setWizard(chat, map[string]any{"kind": "ln_add_name"})
-		r.Show(chat, mid, "👤 نام دلخواه اکانت لینود را بفرستید (مثلاً: اصلی):",
-			navKB("ln"))
-	case data == "lndel":
-		r.lnDelList(chat, mid)
-	case strings.HasPrefix(data, "lnd:"):
-		r.lnDelAsk(chat, mid, strings.TrimPrefix(data, "lnd:"))
-	case strings.HasPrefix(data, "lndy:"):
-		r.lnDelDo(chat, mid, strings.TrimPrefix(data, "lndy:"))
-	case strings.HasPrefix(data, "lnm:"):
-		i := atoiSafe(strings.TrimPrefix(data, "lnm:"))
-		if i >= 0 && i < len(r.lnAccs()) {
-			r.Store.Put("ln_sel", strconv.Itoa(i), 0)
-		}
-		r.lnHome(chat, mid)
-	case data == "lnaccs":
-		r.lnAccsMenu(chat, mid)
-	case strings.HasPrefix(data, "lnacc:"):
-		r.lnAccSettings(chat, mid, atoiSafe(strings.TrimPrefix(data, "lnacc:")))
-	case strings.HasPrefix(data, "lns:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lns:"), ":", 2); len(p) == 2 {
-			r.lnServers(chat, mid, atoiSafe(p[0]), atoiSafe(p[1]))
-		}
-	case strings.HasPrefix(data, "lnsi:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnsi:"), ":", 2); len(p) == 2 {
-			r.lnInfo(chat, mid, atoiSafe(p[0]), p[1])
-		}
-	case strings.HasPrefix(data, "lnsu:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnsu:"), ":", 3); len(p) == 3 {
-			r.lnOp(chat, mid, atoiSafe(p[0]), p[1], p[2])
-		}
-	case strings.HasPrefix(data, "lnok:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnok:"), ":", 4); len(p) >= 3 {
-			arg := ""
-			if len(p) == 4 {
-				arg = p[3]
-			}
-			r.lnDo(chat, mid, atoiSafe(p[0]), p[1], p[2], arg)
-		}
-	case strings.HasPrefix(data, "lnsv:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnsv:"), ":", 4); len(p) == 4 {
-			r.lnPick(chat, mid, atoiSafe(p[0]), p[1], p[2], p[3])
-		}
-	case strings.HasPrefix(data, "lnsc:"):
-		r.lnCreateStart(chat, mid, atoiSafe(strings.TrimPrefix(data, "lnsc:")))
-	case strings.HasPrefix(data, "lnscd:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnscd:"), ":", 2); len(p) == 2 {
-			r.lnCreateRegion(chat, mid, atoiSafe(p[0]), p[1])
-		}
-	case strings.HasPrefix(data, "lnscp:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnscp:"), ":", 3); len(p) == 3 {
-			r.lnCreatePlan(chat, mid, atoiSafe(p[0]), p[1], p[2])
-		}
-	case strings.HasPrefix(data, "lnsci:"):
-		if p := strings.SplitN(strings.TrimPrefix(data, "lnsci:"), ":", 2); len(p) == 2 {
-			r.lnCreateImage(chat, mid, atoiSafe(p[0]), p[1])
-		}
-
 	// hetzner
 	case data == "hz":
 		r.hzHome(chat, mid)

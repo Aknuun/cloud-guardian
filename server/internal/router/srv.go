@@ -10,7 +10,6 @@ import (
 
 	"github.com/aknuun/cg-server/internal/cf"
 	"github.com/aknuun/cg-server/internal/hz"
-	"github.com/aknuun/cg-server/internal/ln"
 	"github.com/aknuun/cg-server/internal/srvmon"
 	"github.com/aknuun/cg-server/internal/sshop"
 )
@@ -802,18 +801,6 @@ func (r *Router) srvImport(chat, mid int64) {
 					name = ip
 				}
 				found = append(found, map[string]any{"host": ip, "name": name, "note": "Hetzner: " + strv(a["name"])})
-			}
-		}
-	}
-	for _, a := range r.lnAccs() {
-		for _, s := range ln.New(strv(a["token"])).All("/linode/instances") {
-			ip := lnFirstIP(s)
-			if ip != "" && ip != "—" {
-				name := strv(s["label"])
-				if name == "" {
-					name = ip
-				}
-				found = append(found, map[string]any{"host": ip, "name": name, "note": "Linode: " + strv(a["name"])})
 			}
 		}
 	}

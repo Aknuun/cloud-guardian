@@ -6,7 +6,7 @@ import "fmt"
 func (r *Router) Menu(chat, mid int64) {
 	kb := [][]Btn{
 		{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
-		{btnS("🟢 لینود", "ln", "success"), btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
+		{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
 		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
 		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
 		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
@@ -49,12 +49,11 @@ var guides = map[string][2]string{
 	"rem":   {"⏰ یادآورها", "متن + تاریخ شمسی (مثل 1404/06/20 14:30) بده تا سر ساعت خبرت کنم."},
 	"vers":  {"🔄 نسخه‌ها", "نسخهٔ فعلی و آخرین نسخه را نشان می‌دهد و آپدیت از داخل تلگرام."},
 	"arvan": {"🇮🇷 آروان", "دامنه‌ها و رکوردهای DNS آروان + ابری (CDN)."},
-	"ln":    {"🟢 لینود", "مثل هتزنر: لیست، پاور، ریبوت، تغییرنام، حذف."},
 	"hz":    {"🇩🇪 هتزنر", "سرورها را ببین، روشن/خاموش/ریبوت کن، رمز ریست کن، اسنپ‌شات بگیر، IPv4 جایگزین کن، سرور بساز."},
 	"srv":   {"🖥 سرورها و مانیتورینگ", "مدیریت سرورهای لینوکسی با SSH، آمار CPU/RAM/دیسک و هشدار خودکار."},
 }
 
-var guideOrder = []string{"cf", "rem", "vers", "arvan", "ln", "hz", "srv"}
+var guideOrder = []string{"cf", "rem", "vers", "arvan", "hz", "srv"}
 
 func (r *Router) helpList(chat, mid int64) {
 	var items []Btn

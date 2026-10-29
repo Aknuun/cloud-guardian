@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore, type CSSProperties } from 'react'
 import { useTheme } from './theme'
 
-export type Provider = 'hz' | 'cf' | 'ln' | 'arv'
+export type Provider = 'hz' | 'cf' | 'arv'
 
 export type Palette = {
   id: string
@@ -37,12 +37,11 @@ export const PALETTES: Palette[] = [
 export const DEFAULT_THEME: Record<Provider, string> = {
   hz: 'coral',
   cf: 'red',
-  ln: 'emerald',
   arv: 'teal',
 }
 
 const KEY = 'cg_section_theme'
-const PROVIDERS: Provider[] = ['hz', 'cf', 'ln', 'arv']
+const PROVIDERS: Provider[] = ['hz', 'cf', 'arv']
 type Selection = Partial<Record<Provider, string>>
 
 function read(): Selection {

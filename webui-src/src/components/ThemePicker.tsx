@@ -7,7 +7,6 @@ import { PALETTES, useSectionTheme, type Provider } from './sectionTheme'
 const LABELS: Record<Provider, string> = {
   hz: 'هتزنر',
   cf: 'کلادفلر',
-  ln: 'لینود',
   arv: 'آروان',
 }
 

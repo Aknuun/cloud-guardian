@@ -26,7 +26,6 @@ func (r *Router) foSnap() map[string]any {
 		"health_url":    health,
 		"cf_tokens":     r.cfAccs(),
 		"hz_tokens":     r.hzAccs(),
-		"ln_tokens":     r.lnAccs(),
 		"arvan_tokens":  r.arvanAccList(),
 	}
 }
