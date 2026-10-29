@@ -215,6 +215,7 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 	lastBackup := time.Now()
 	lastDomexp := time.Now()
 	lastTelemetry := time.Now()
+	lastSsl := time.Now()
 	for {
 		time.Sleep(60 * time.Second)
 		now := time.Now()
@@ -241,6 +242,10 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 		if now.Sub(lastDigestD) > 24*time.Hour {
 			alerts.RunDigest(bot, st, panels, "days", adminID)
 			lastDigestD = now
+		}
+		if now.Sub(lastSsl) > 6*time.Hour {
+			r.SslTick()
+			lastSsl = now
 		}
 		if now.Sub(lastDomexp) > 24*time.Hour {
 			r.DomexpDaily()

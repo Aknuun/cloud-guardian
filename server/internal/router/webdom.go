@@ -26,16 +26,20 @@ type webDomItem struct {
 	Expiry    *int64 `json:"expiry"`
 	Manual    bool   `json:"manual"`
 	Remaining string `json:"remaining"`
+	Message   string `json:"message,omitempty"`
 }
 
 type webDomState struct {
-	SSL  []webDomSsl  `json:"ssl"`
-	Doms []webDomItem `json:"doms"`
-	Key  bool         `json:"key"`
+	SSL     []webDomSsl  `json:"ssl"`
+	Doms    []webDomItem `json:"doms"`
+	Key     bool         `json:"key"`
+	SslOn   bool         `json:"sslOn"`
+	WarnDay int          `json:"warnDays"`
 }
 
 func (r *Router) webDomState() webDomState {
-	st := webDomState{SSL: []webDomSsl{}, Doms: []webDomItem{}}
+	cfg := r.sslCfgGet()
+	st := webDomState{SSL: []webDomSsl{}, Doms: []webDomItem{}, SslOn: cfg.Enabled, WarnDay: cfg.WarnDays}
 	mons := sslmon.GetMonitors(r.Store)
 	out := make([]webDomSsl, len(mons))
 	var wg sync.WaitGroup
@@ -65,7 +69,7 @@ func (r *Router) webDomState() webDomState {
 		return *ei < *ej
 	})
 	for _, it := range lst {
-		st.Doms = append(st.Doms, webDomItem{Domain: it.Domain, Status: it.Status, Expiry: it.Expiry, Manual: it.Manual, Remaining: domexpiry.Remaining(it.Expiry, now)})
+		st.Doms = append(st.Doms, webDomItem{Domain: it.Domain, Status: it.Status, Expiry: it.Expiry, Manual: it.Manual, Remaining: domexpiry.Remaining(it.Expiry, now), Message: it.Message})
 	}
 	return st
 }
@@ -142,7 +146,7 @@ func (r *Router) webDomItemOp(w http.ResponseWriter, req *http.Request, uid int6
 		}
 		_, key := r.domexpCfg()
 		res := domexpiry.FetchDomainExpiry(domain, key)
-		it := domexpiry.Item{Domain: domain, Status: res.Status, Expiry: res.Expiry, Added: domexpiry.NowMS()}
+		it := domexpiry.Item{Domain: domain, Status: res.Status, Expiry: res.Expiry, Added: domexpiry.NowMS(), Message: res.Message}
 		lst = append(lst, it)
 	case "del":
 		if idx < 0 {
@@ -174,6 +178,7 @@ func (r *Router) webDomItemOp(w http.ResponseWriter, req *http.Request, uid int6
 		d := ms
 		lst[idx].Manual = true
 		lst[idx].Status = "ok"
+		lst[idx].Message = ""
 		lst[idx].Expiry = &d
 	default:
 		webErr(w, http.StatusBadRequest, "عملیات نامعتبر")
@@ -208,16 +213,58 @@ func (r *Router) webDomRefresh(w http.ResponseWriter, req *http.Request, uid int
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			res := domexpiry.FetchDomainExpiry(lst[i].Domain, key)
-			if res.Status == "ok" && res.Expiry != nil {
-				lst[i].Status = "ok"
-				lst[i].Expiry = res.Expiry
-			} else if res.Status != "" {
-				lst[i].Status = res.Status
-			}
+			webDomFetchInto(&lst[i], key)
 		}(i)
 	}
 	wg.Wait()
+	r.Store.PutJSON("dom_expiry", lst, 0)
+	webOK(w, r.webDomState())
+}
+
+// webDomFetchInto refreshes one record; a failed lookup keeps the last known date.
+func webDomFetchInto(it *domexpiry.Item, key string) {
+	res := domexpiry.FetchDomainExpiry(it.Domain, key)
+	it.Message = res.Message
+	if res.Status == "ok" && res.Expiry != nil {
+		it.Status = "ok"
+		it.Expiry = res.Expiry
+		it.Manual = false
+		return
+	}
+	if it.Expiry != nil {
+		it.Status = "ok"
+		return
+	}
+	if res.Status != "" {
+		it.Status = res.Status
+	} else {
+		it.Status = "error"
+	}
+}
+
+// webDomOne re-checks a single domain.
+func (r *Router) webDomOne(w http.ResponseWriter, req *http.Request, uid int64) {
+	var in struct {
+		Domain string `json:"domain"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	domain := webHostName(in.Domain)
+	lst := r.domexpList()
+	found := false
+	_, key := r.domexpCfg()
+	for i := range lst {
+		if lst[i].Domain == domain {
+			webDomFetchInto(&lst[i], key)
+			found = true
+			break
+		}
+	}
+	if !found {
+		webErr(w, http.StatusNotFound, "دامنه پیدا نشد")
+		return
+	}
 	r.Store.PutJSON("dom_expiry", lst, 0)
 	webOK(w, r.webDomState())
 }

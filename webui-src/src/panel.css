@@ -1033,3 +1033,10 @@ html[data-mode='dark'] .cc-stat {
 .cc-section { display: block; }
 .cc-main .cc-trow .cc-name,
 .cc-main .cc-trow .cc-sub { white-space: normal; overflow-wrap: anywhere; }
+
+/* compact numeric input inside check rows */
+.cc-num{width:76px;text-align:center;padding-inline:6px}
+.cc-checkline .cc-grow{flex:1}
+
+/* node monitor dialog spacing */
+.cc-moncc > *{margin-bottom:10px}

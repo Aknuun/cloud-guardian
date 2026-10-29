@@ -696,6 +696,7 @@ function PgView() {
   const [mf, setMf] = useState<{ panel_url: string; name: string; interval: number } | null>(null)
   const [mfErr, setMfErr] = useState('')
   const [mdel, setMdel] = useState<PgMon | null>(null)
+  const [nd, setNd] = useState<PgMon | null>(null)
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded) return <Loader size="lg" />
   const iso0 = data || { panels: [], monitors: [] }
@@ -781,14 +782,14 @@ function PgView() {
       </div>
       {iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ بالا یک مانیتور نود بساز." />}
       {iso.monitors.map((m) => (
-        <div key={m.id} className="cc-trow">
+        <div key={m.id} className="cc-trow cc-tap" onClick={() => setNd(m)}>
           <div className="cc-grow">
             <div className="cc-name">{m.name || m.id}</div>
             <div className="cc-sub">
               {m.panel} · هر {faNum(m.interval)} دقیقه
             </div>
           </div>
-          <div className="cc-rowbtns">
+          <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               aria-label={m.enabled ? 'خاموش کن' : 'روشن کن'}
@@ -802,6 +803,8 @@ function PgView() {
           </div>
         </div>
       ))}
+
+      {nd && <NdDialog m={nd} onClose={() => setNd(null)} onChanged={reload} />}
 
       {pf && (
         <FormDialog
@@ -895,6 +898,155 @@ function PgView() {
         </Dialog.Root>
       )}
     </>
+  )
+}
+
+
+// ---------------- node monitor detail ----------------
+type NdNode = { name: string; dir: string; addr?: string; version?: string; reason?: string; ts?: string; exc: boolean }
+type NdData = { id: string; name: string; panel: string; interval: number; enabled: boolean; hook: string; nodes: NdNode[] }
+
+function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; onChanged: () => void }) {
+  const [st, setSt] = useState<NdData | null>(null)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState('')
+  const [interval, setInterval] = useState(m.interval || 10)
+  const [notice, setNotice] = useState('')
+
+  const load = async () => {
+    setErr('')
+    try {
+      setSt(await api<NdData>('/api/tools/pg/mon?id=' + encodeURIComponent(m.id) + '&t=' + Date.now()))
+    } catch (e: any) {
+      setErr(e.message || 'خوانده نشد')
+    }
+  }
+  useEffect(() => {
+    load()
+  }, [m.id])
+
+  const post = async (path: string, body: any, label: string) => {
+    setBusy(label)
+    setErr('')
+    setNotice('')
+    try {
+      const res = await api<NdData>(path, body)
+      if (res && res.nodes) setSt(res)
+      invalidateCache()
+      onChanged()
+    } catch (e: any) {
+      setErr(e.message || 'انجام نشد')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const nodes = st?.nodes || []
+  const up = nodes.filter((n) => n.dir === 'up').length
+  const down = nodes.filter((n) => n.dir === 'down').length
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">{m.name || m.id}</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc cc-mono">{m.panel}</Dialog.Description>
+
+        {err && <div className="cc-form-err cc-mb">{err}</div>}
+        {notice && <div className="cc-hint cc-mb">{notice}</div>}
+        {!st && !err && <Loader size="base" />}
+
+        {st && (
+          <div className="cc-moncc">
+            <div className="cc-mon">
+              <div>
+                <span>نودها</span>
+                <b>{faNum(nodes.length)}</b>
+              </div>
+              <div>
+                <span>سالم</span>
+                <b>{faNum(up)}</b>
+              </div>
+              <div>
+                <span>قطع</span>
+                <b>{faNum(down)}</b>
+              </div>
+            </div>
+
+            <div className="cc-field-row">
+              <label className="cc-field cc-field-sm">
+                <span>فاصله (دقیقه)</span>
+                <Input
+                  type="number"
+                  value={String(interval)}
+                  onChange={(e) => setInterval(Number(e.target.value) || 1)}
+                />
+              </label>
+              <Button
+                variant="outline"
+                disabled={!!busy}
+                onClick={() => post('/api/tools/pg/mon/cfg', { id: m.id, interval, enabled: st.enabled }, 'cfg')}
+              >
+                ذخیرهٔ فاصله
+              </Button>
+            </div>
+
+            <div className="cc-btnrow">
+              <Button variant="outline" icon={ArrowClockwise} disabled={!!busy} onClick={() => post('/api/tools/pg/mon/sync', { id: m.id }, 'sync')}>
+                همگام‌سازی
+              </Button>
+              <Button variant="outline" icon={BellRinging} disabled={!!busy} onClick={() => post('/api/tools/pg/mon/test', { id: m.id }, 'test').then(() => setNotice('پیام تستی در تلگرام ارسال شد.'))}>
+                تست هشدار
+              </Button>
+              <Button variant="outline" icon={Power} disabled={!!busy} onClick={() => post('/api/tools/pg/mon/cfg', { id: m.id, interval, enabled: !st.enabled }, 'tg')}>
+                {st.enabled ? 'توقف پایش' : 'فعال‌سازی'}
+              </Button>
+              <Button
+                variant="outline"
+                icon={Copy}
+                onClick={() => {
+                  fallbackCopy(st.hook)
+                  setNotice('آدرس وب‌هوک کپی شد.')
+                }}
+              >
+                کپی وب‌هوک
+              </Button>
+            </div>
+            <div className="cc-hint cc-mb cc-mono">{st.hook}</div>
+
+            {nodes.length === 0 && <Empty title="نودی ثبت نشده" description="«همگام‌سازی» را بزن تا نودها از پنل خوانده شوند." />}
+            {nodes.map((n) => (
+              <div key={n.name} className="cc-trow">
+                <div className="cc-grow">
+                  <div className="cc-name">{n.name}</div>
+                  <div className="cc-sub">
+                    {[n.addr, n.version, n.reason].filter(Boolean).join(' · ') || '—'}
+                  </div>
+                </div>
+                <Badge variant={n.dir === 'up' ? 'success' : n.dir === 'down' ? 'error' : 'neutral'}>
+                  {n.dir === 'up' ? 'سالم' : n.dir === 'down' ? 'قطع' : 'نامشخص'}
+                </Badge>
+                <button
+                  type="button"
+                  className={n.exc ? 'cc-rowbtn' : 'cc-rowbtn danger'}
+                  title={n.exc ? 'حذف از استثنا' : 'استثنا کردن این نود'}
+                  disabled={!!busy}
+                  onClick={() => post('/api/tools/pg/mon/exc', { id: m.id, node: n.name }, 'exc')}
+                >
+                  <BellSimple size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" onClick={onClose}>
+            بستن
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
   )
 }
 
@@ -1338,8 +1490,19 @@ function UmView() {
 }
 
 type DomSsl = { host: string; ok: boolean; days: number; expiry: string; error: string }
-type DomItem = { domain: string; status: string; expiry: number | null; manual: boolean; remaining: string }
-type DomData = { ssl: DomSsl[]; doms: DomItem[]; key: boolean }
+type DomItem = { domain: string; status: string; expiry: number | null; manual: boolean; remaining: string; message?: string }
+type DomData = { ssl: DomSsl[]; doms: DomItem[]; key: boolean; sslOn: boolean; warnDays: number }
+
+const DOM_STATUS: Record<string, string> = {
+  ok: '',
+  hidden: 'تاریخ توسط ایرنیک مخفی شده',
+  no_date: 'تاریخ انقضا پیدا نشد',
+  not_found: 'دامنه یافت نشد',
+  available: 'دامنه آزاد است',
+  api_error: 'خطا در استعلام از سرویس',
+  invalid: 'نام دامنه نامعتبر',
+  error: 'استعلام انجام نشد',
+}
 
 function DomView() {
   const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
@@ -1352,6 +1515,8 @@ function DomView() {
   const [when, setWhen] = useState('')
   const [fErr, setFErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [warnOn, setWarnOn] = useState<boolean | null>(null)
+  const [warnDays, setWarnDays] = useState<number | null>(null)
 
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded || !data)
@@ -1364,7 +1529,25 @@ function DomView() {
   const needle = q.trim().toLowerCase()
   const ssl = needle ? data.ssl.filter((s) => s.host.includes(needle)) : data.ssl
   const doms = needle ? data.doms.filter((d) => d.domain.includes(needle)) : data.doms
-  const bad = data.ssl.filter((s) => !s.ok || s.days <= 5).length
+  const warn = warnDays ?? data.warnDays
+  const on = warnOn ?? data.sslOn
+  const bad = data.ssl.filter((s) => !s.ok || s.days <= warn).length
+
+  const saveCfg = async () => {
+    setBusy(true)
+    setFErr('')
+    try {
+      await api('/api/tools/dom/sslcfg', { enabled: on, warnDays: warn })
+      invalidateCache()
+      setWarnOn(null)
+      setWarnDays(null)
+      reload()
+    } catch (e: any) {
+      setFErr(e.message || 'ذخیره نشد')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const act = async (path: string, body: any, done?: () => void) => {
     setFErr('')
@@ -1413,6 +1596,24 @@ function DomView() {
             افزودن دامنه
           </Button>
         </div>
+        <div className="cc-checkline">
+          <input type="checkbox" checked={on} onChange={(e) => setWarnOn(e.target.checked)} />
+          <span>هشدار تلگرام</span>
+          <span className="cc-grow" />
+          <input
+            className="cc-input cc-num"
+            type="number"
+            min={1}
+            max={365}
+            value={warn}
+            onChange={(e) => setWarnDays(Number(e.target.value))}
+          />
+          <span>روز مانده</span>
+          <Button variant="outline" onClick={saveCfg} disabled={busy}>
+            ذخیره
+          </Button>
+        </div>
+        <div className="cc-hint cc-mb">وقتی گواهی به این تعداد روز یا کمتر برسد، روزی یک بار در تلگرام هشدار می‌آید.</div>
         {ssl.length === 0 && <Empty title="خالی است" description="دامنه‌ای برای نظارت گواهی ثبت نشده." />}
         {ssl.map((s) => (
           <div key={s.host} className="cc-trow">
@@ -1420,7 +1621,7 @@ function DomView() {
               <div className="cc-name">{s.host}</div>
               <div className="cc-sub">{s.ok ? 'انقضا: ' + s.expiry : s.error}</div>
             </div>
-            <Badge variant={s.ok && s.days > 5 ? 'success' : 'error'}>
+            <Badge variant={s.ok && s.days > warn ? 'success' : 'error'}>
               {s.ok ? faNum(s.days) + ' روز' : 'خطا'}
             </Badge>
             <button className="cc-rowbtn danger" title="حذف" onClick={() => act('/api/tools/dom/ssl', { host: s.host })}>
@@ -1452,9 +1653,17 @@ function DomView() {
           <div key={d.domain} className="cc-trow">
             <div className="cc-grow">
               <div className="cc-name">{d.domain}</div>
-              <div className="cc-sub">{d.expiry ? 'انقضا: ' + faDate(d.expiry) : 'تاریخ نامشخص'}</div>
+              <div className="cc-sub">{d.expiry ? 'انقضا: ' + faDate(d.expiry) : DOM_STATUS[d.status] || 'تاریخ نامشخص'}</div>
+              {!d.expiry && d.message && <div className="cc-sub">{d.message}</div>}
             </div>
-            <Badge>{d.remaining || d.status}</Badge>
+            <Badge>{d.remaining || DOM_STATUS[d.status] || d.status}</Badge>
+            <button
+              className="cc-rowbtn"
+              title="استعلام دوباره"
+              onClick={() => act('/api/tools/dom/one', { domain: d.domain })}
+            >
+              <ArrowClockwise size={16} />
+            </button>
             <button
               className="cc-rowbtn"
               title="ثبت تاریخ"

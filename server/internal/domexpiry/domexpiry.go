@@ -29,6 +29,7 @@ type Item struct {
 	Manual       bool   `json:"manual,omitempty"`
 	Added        int64  `json:"added,omitempty"`
 	LastAlertDay *int   `json:"last_alert_day,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
 type Result struct {
