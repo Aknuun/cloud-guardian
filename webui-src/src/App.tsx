@@ -22,7 +22,7 @@ import {
   WarningCircle,
   Wrench,
 } from '@phosphor-icons/react'
-import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, mem, num, setToken, TG, token } from './lib'
+import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, invalidateCache, mem, num, setToken, TG, token } from './lib'
 import { AppVersion } from './components/AppVersion'
 import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
@@ -365,6 +365,7 @@ export default function App() {
   backRef.current = goBack
 
   function reload() {
+    invalidateCache()
     setViewErr('')
     if (cur.v === 'create') {
       setOpts(null)

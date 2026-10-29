@@ -6,11 +6,44 @@ export function setToken(v: string) {
   token = v
   if (v) sessionStorage.setItem('cg_token', v)
   else sessionStorage.removeItem('cg_token')
+  invalidateCache()
+}
+
+// Short-lived cache so revisiting a page paints instantly instead of
+// refetching every list. Any write clears it.
+const CACHE_TTL = 60_000
+const cache = new Map<string, { t: number; v: unknown }>()
+const inflight = new Map<string, Promise<unknown>>()
+
+export function invalidateCache() {
+  cache.clear()
+  inflight.clear()
 }
 
 export class ApiError extends Error {}
 
 export async function api<T = any>(path: string, body?: any, signal?: AbortSignal): Promise<T> {
+  const isGet = body === undefined
+  if (isGet) {
+    const hit = cache.get(path)
+    if (hit && Date.now() - hit.t < CACHE_TTL) return hit.v as T
+    const running = inflight.get(path)
+    if (running && !signal) return running as Promise<T>
+  } else {
+    invalidateCache()
+  }
+  const run = request<T>(path, body, signal)
+  if (isGet) {
+    inflight.set(path, run)
+    run
+      .then((v) => cache.set(path, { t: Date.now(), v }))
+      .catch(() => {})
+      .finally(() => inflight.delete(path))
+  }
+  return run
+}
+
+async function request<T>(path: string, body?: any, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Authorization: 'Bearer ' + token }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
