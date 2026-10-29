@@ -23,16 +23,25 @@ export function toolItems(active: ToolId | null, onSelect: (id: ToolId) => void)
 function useTool<T>(path: string) {
   const [data, setData] = useState<T | null>(null)
   const [err, setErr] = useState('')
+  const [loaded, setLoaded] = useState(false)
   useEffect(() => {
     let stop = false
     api<T>(path)
-      .then((d) => !stop && setData(d))
-      .catch((e) => !stop && setErr(e.message || 'خطا'))
+      .then((d) => {
+        if (stop) return
+        setData(d)
+        setLoaded(true)
+      })
+      .catch((e) => {
+        if (stop) return
+        setErr(e.message || 'خطا')
+        setLoaded(true)
+      })
     return () => {
       stop = true
     }
   }, [path])
-  return { data, err }
+  return { data, err, loaded }
 }
 
 type Srv = { id: string; name: string; host: string; user: string; port: number; note: string; key: boolean }
@@ -49,20 +58,21 @@ export function Tools({ id }: { id: ToolId }) {
 }
 
 function SrvView() {
-  const { data, err } = useTool<Srv[]>('/api/tools/srv')
+  const { data, err, loaded } = useTool<Srv[]>('/api/tools/srv')
   if (err) return <Empty title="خطا" description={err} />
-  if (!data) return <Loader size="lg" />
+  if (!loaded) return <Loader size="lg" />
+  const list = data || []
   return (
     <>
       <StatGrid
         items={[
-          { label: 'سرورها', value: faNum(data.length) },
-          { label: 'با کلید', value: faNum(data.filter((s) => s.key).length) },
-          { label: 'با رمز', value: faNum(data.filter((s) => !s.key).length) },
+          { label: 'سرورها', value: faNum(list.length) },
+          { label: 'با کلید', value: faNum(list.filter((s) => s.key).length) },
+          { label: 'با رمز', value: faNum(list.filter((s) => !s.key).length) },
         ]}
       />
-      {data.length === 0 && <Empty title="سروری ثبت نشده" description="از ربات یک سرور SSH اضافه کن." />}
-      {data.map((s) => (
+      {list.length === 0 && <Empty title="سروری ثبت نشده" description="از ربات یک سرور SSH اضافه کن." />}
+      {list.map((s) => (
         <div key={s.id} className="cc-trow">
           <div className="cc-avatar">{(s.name || 'S').slice(0, 1).toUpperCase()}</div>
           <div className="cc-grow">
@@ -80,21 +90,22 @@ function SrvView() {
 }
 
 function RemView() {
-  const { data, err } = useTool<Rem[]>('/api/tools/rem')
+  const { data, err, loaded } = useTool<Rem[]>('/api/tools/rem')
   if (err) return <Empty title="خطا" description={err} />
-  if (!data) return <Loader size="lg" />
-  const pending = data.filter((r) => !r.ack).length
+  if (!loaded) return <Loader size="lg" />
+  const list = data || []
+  const pending = list.filter((r) => !r.ack).length
   return (
     <>
       <StatGrid
         items={[
-          { label: 'یادآورها', value: faNum(data.length) },
+          { label: 'یادآورها', value: faNum(list.length) },
           { label: 'در انتظار', value: faNum(pending) },
-          { label: 'انجام‌شده', value: faNum(data.length - pending) },
+          { label: 'انجام‌شده', value: faNum(list.length - pending) },
         ]}
       />
-      {data.length === 0 && <Empty title="یادآوری نیست" description="از ربات یادآور بساز." />}
-      {data.map((r) => (
+      {list.length === 0 && <Empty title="یادآوری نیست" description="از ربات یادآور بساز." />}
+      {list.map((r) => (
         <div key={r.id} className="cc-trow">
           <div className="cc-grow">
             <div className="cc-name">{r.text}</div>
@@ -111,22 +122,23 @@ function RemView() {
 }
 
 function PgView() {
-  const { data, err } = useTool<PgData>('/api/tools/pg')
+  const { data, err, loaded } = useTool<PgData>('/api/tools/pg')
   if (err) return <Empty title="خطا" description={err} />
-  if (!data) return <Loader size="lg" />
-  const on = data.monitors.filter((m) => m.enabled).length
+  if (!loaded) return <Loader size="lg" />
+  const iso = data || { panels: [], monitors: [] }
+  const on = iso.monitors.filter((m) => m.enabled).length
   return (
     <>
       <StatGrid
         items={[
-          { label: 'پنل‌ها', value: faNum(data.panels.length) },
-          { label: 'مانیتور نود', value: faNum(data.monitors.length) },
+          { label: 'پنل‌ها', value: faNum(iso.panels.length) },
+          { label: 'مانیتور نود', value: faNum(iso.monitors.length) },
           { label: 'فعال', value: faNum(on) },
         ]}
       />
       <div className="cc-section">پنل‌ها</div>
-      {data.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="از ربات پنل پاسارگارد اضافه کن." />}
-      {data.panels.map((p) => (
+      {iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="از ربات پنل پاسارگارد اضافه کن." />}
+      {iso.panels.map((p) => (
         <div key={p.url} className="cc-trow">
           <div className="cc-grow">
             <div className="cc-name">{p.name || p.url}</div>
@@ -136,8 +148,8 @@ function PgView() {
         </div>
       ))}
       <div className="cc-section">مانیتور نودها</div>
-      {data.monitors.length === 0 && <Empty title="مانیتوری نیست" description="از ربات مانیتور نود بساز." />}
-      {data.monitors.map((m) => (
+      {iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="از ربات مانیتور نود بساز." />}
+      {iso.monitors.map((m) => (
         <div key={m.id} className="cc-trow">
           <div className="cc-grow">
             <div className="cc-name">{m.name || m.id}</div>

@@ -28,6 +28,9 @@ func (r *Router) webToolsSrv(w http.ResponseWriter, req *http.Request, uid int64
 func (r *Router) webToolsRem(w http.ResponseWriter, req *http.Request, uid int64) {
 	list := r.rems()
 	sort.Slice(list, func(i, j int) bool { return list[i].When < list[j].When })
+	if list == nil {
+		list = []Reminder{}
+	}
 	webOK(w, list)
 }
 
