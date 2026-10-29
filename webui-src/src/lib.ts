@@ -108,7 +108,7 @@ export function haptic(kind: 'light' | 'success' | 'error' = 'light') {
 
 export function faDate(v: any) {
   if (!v) return '—'
-  const d = new Date(String(v))
+  const d = new Date(typeof v === 'number' ? v : String(v))
   if (Number.isNaN(d.getTime())) return String(v).slice(0, 10)
   try {
     return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium' }).format(d)

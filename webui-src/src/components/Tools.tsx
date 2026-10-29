@@ -1493,6 +1493,8 @@ type DomSsl = { host: string; ok: boolean; days: number; expiry: string; error: 
 type DomItem = { domain: string; status: string; expiry: number | null; manual: boolean; remaining: string; message?: string }
 type DomData = { ssl: DomSsl[]; doms: DomItem[]; key: boolean; sslOn: boolean; warnDays: number }
 
+const faTxt = (v: string) => (v || '').replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
+
 const DOM_STATUS: Record<string, string> = {
   ok: '',
   hidden: 'تاریخ توسط ایرنیک مخفی شده',
@@ -1619,7 +1621,7 @@ function DomView() {
           <div key={s.host} className="cc-trow">
             <div className="cc-grow">
               <div className="cc-name">{s.host}</div>
-              <div className="cc-sub">{s.ok ? 'انقضا: ' + s.expiry : s.error}</div>
+              <div className="cc-sub">{s.ok ? 'انقضا: ' + faDate(s.expiry) : s.error}</div>
             </div>
             <Badge variant={s.ok && s.days > warn ? 'success' : 'error'}>
               {s.ok ? faNum(s.days) + ' روز' : 'خطا'}
@@ -1656,7 +1658,7 @@ function DomView() {
               <div className="cc-sub">{d.expiry ? 'انقضا: ' + faDate(d.expiry) : DOM_STATUS[d.status] || 'تاریخ نامشخص'}</div>
               {!d.expiry && d.message && <div className="cc-sub">{d.message}</div>}
             </div>
-            <Badge>{d.remaining || DOM_STATUS[d.status] || d.status}</Badge>
+            <Badge>{faTxt(d.remaining) || DOM_STATUS[d.status] || d.status}</Badge>
             <button
               className="cc-rowbtn"
               title="استعلام دوباره"
