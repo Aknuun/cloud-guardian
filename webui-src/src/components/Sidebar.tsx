@@ -1,4 +1,4 @@
-import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown, TelegramLogo } from '@phosphor-icons/react'
+import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { useTheme } from './theme'
 import type { ToolItem } from './Tools'
@@ -126,11 +126,6 @@ export function Sidebar({
             <span className="cc-sideitem-label">{mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}</span>
           </button>
         </nav>
-
-        <a className="cc-sideitem" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer" title="@openWEBcode">
-          <TelegramLogo size={19} />
-          <span className="cc-sideitem-label">@openWEBcode</span>
-        </a>
 
         <div className="cc-profile">
           <div className="cc-profile-avatar">م</div>

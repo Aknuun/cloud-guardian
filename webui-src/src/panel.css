@@ -1062,3 +1062,22 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-menu-item{display:flex;align-items:center;gap:8px;width:100%;height:34px;padding:0 10px;border:0;border-radius:8px;background:none;font:inherit;font-size:14px;color:var(--ds-text);text-align:start;cursor:pointer}
 .cc-menu-item:hover,.cc-menu-item.on{background:var(--ds-brand-soft);color:var(--ds-brand)}
 .cc-menu-item.danger{color:#d1372c}
+
+/* channel chip next to the version */
+.cc-chan {
+  gap: 4px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.cc-chan:hover {
+  background: var(--ds-brand-soft);
+  color: var(--ds-brand);
+}
+@media (max-width: 520px) {
+  .cc-chan span {
+    display: none;
+  }
+  .cc-chan {
+    padding: 0 6px;
+  }
+}

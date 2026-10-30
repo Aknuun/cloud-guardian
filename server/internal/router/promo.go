@@ -14,7 +14,7 @@ import (
 // new release: the central promo.txt in the repo is fetched (and cached 12h), or
 // overridden per-install with /promoset.
 const (
-	promoDefault    = "طراحی توسط t.me/panelSazFilterBot"
+	promoDefault    = "" // disabled: no built-in ad line
 	promoURLDefault = "https://raw.githubusercontent.com/Aknuun/cloud-guardian/main/promo.txt"
 	promoMaxRunes   = 200
 )
@@ -83,6 +83,9 @@ func (r *Router) refreshPromo() {
 func (r *Router) PromoText() string {
 	if v := strings.TrimSpace(r.Store.Get("promo:local")); v != "" {
 		return v
+	}
+	if promoDefault == "" {
+		return ""
 	}
 	var c promoCache
 	have := r.Store.GetJSON("promo:cache", &c) && strings.TrimSpace(c.V) != ""

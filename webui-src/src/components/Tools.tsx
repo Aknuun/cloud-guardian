@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TelegramLogo, Lightning, Envelope, GearSix, ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Lightning, Envelope, GearSix, ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
@@ -3047,14 +3047,6 @@ function SetView() {
         ]}
       />
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
-
-      <a className="cc-trow cc-tap" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer">
-        <span className="cc-avatar"><TelegramLogo size={18} /></span>
-        <div className="cc-grow">
-          <div className="cc-name">@openWEBcode</div>
-          <div className="cc-sub">کانال تلگرام</div>
-        </div>
-      </a>
 
       <div className="cc-section">
         <div className="cc-section-head">

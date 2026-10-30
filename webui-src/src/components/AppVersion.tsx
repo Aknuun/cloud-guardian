@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { TelegramLogo } from '@phosphor-icons/react'
 
 let cachedVersion = ''
 let versionRequest: Promise<string> | null = null
@@ -34,10 +35,17 @@ export function AppVersion() {
     }
   }, [])
 
-  if (!version) return null
   return (
-    <span className="cc-ver" dir="ltr" title={`نسخه ${version}`}>
-      v{version}
-    </span>
+    <>
+      <a className="cc-ver cc-chan" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer" title="کانال تلگرام">
+        <TelegramLogo size={14} />
+        <span dir="ltr">@openWEBcode</span>
+      </a>
+      {version && (
+        <span className="cc-ver" dir="ltr" title={`نسخه ${version}`}>
+          v{version}
+        </span>
+      )}
+    </>
   )
 }
