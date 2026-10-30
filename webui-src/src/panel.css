@@ -1746,3 +1746,13 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   background: var(--ds-tint) !important; color: #c0392b !important;
 }
 .cc-actions-danger button + button { border-top: 0 !important; border-radius: 8px !important; }
+
+/* actions: readable size again inside dialogs */
+.cc-dialog .cc-actions button[data-kumo-component='Button'],
+.cc-actions button[data-kumo-component='Button'] { height:44px !important; min-height:44px !important; font-size:13.5px !important }
+.cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] { height:38px !important; min-height:38px !important; max-height:38px !important; font-size:12.5px !important }
+@media (max-width:699px) {
+  .cc-dialog .cc-actions button[data-kumo-component='Button'],
+  .cc-actions button[data-kumo-component='Button'] { height:42px !important; min-height:42px !important }
+  .cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] { height:36px !important; min-height:36px !important; max-height:36px !important }
+}

@@ -205,7 +205,6 @@ export function RecordEditor({
           </div>
           <div className="cc-field-label">نام رکورد</div>
           <Input
-            autoFocus
             className={'cc-input cc-mb' + (formErr && !name.trim() ? ' cc-invalid' : '')}
             placeholder="مثلاً sub یا @"
             value={name}
@@ -226,15 +225,22 @@ export function RecordEditor({
       )}
       <div className="cc-field-label">مقدار</div>
       <Input
-        autoFocus={!!r}
         className={'cc-input cc-mb cc-mono' + (formErr ? ' cc-invalid' : '')}
         placeholder={
           type === 'CNAME' ? 'host.example.com' : type === 'MX' ? 'mail.example.com' : type === 'TXT' ? 'متن رکورد' : '1.2.3.4'
         }
         value={content}
         onChange={(e) => {
-          setContent(e.target.value)
+          const raw = e.target.value
+          const v = raw.trim()
+          setContent(raw)
           setFormErr('')
+          if (type === 'A' || type === 'AAAA' || type === 'CNAME') {
+            const ip = /^\d{1,3}(\.\d{1,3}){3}$/.test(v)
+            const host = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(v)
+            if (ip && type !== 'A') setType('A')
+            else if (host && !ip && type !== 'CNAME') setType('CNAME')
+          }
         }}
       />
       {history.length > 0 && (
