@@ -206,6 +206,16 @@ export default function App() {
       })
     }, 12000)
     ;(async () => {
+      // "open in browser": the bot links here with ?ext=1, we hand the very same
+      // page to the system browser (Chrome/Safari) and close the webview.
+      if (TG && new URLSearchParams(location.search).get('ext') === '1') {
+        const u = new URL(location.href)
+        u.searchParams.delete('ext')
+        u.searchParams.delete('go')
+        TG.openLink(u.toString())
+        TG.close()
+        return
+      }
       if (TG) {
         TG.ready()
         TG.expand()

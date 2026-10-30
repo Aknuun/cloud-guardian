@@ -40,6 +40,12 @@ func (r *Router) Menu(chat, mid int64) {
 	// the channel button is gone: the last row opens the web panel instead
 	siteBtn := chanBtn()
 	if u := strings.TrimSpace(r.WebAppURL); u != "" {
+		// ?ext=1 makes the mini app hand itself to Chrome/Safari and close
+		if strings.Contains(u, "?") {
+			u += "&ext=1"
+		} else {
+			u += "?ext=1"
+		}
 		siteBtn = btnWA("🌐 نسخهٔ وب سایت", u)
 	}
 	if r.webLink("hz") == "" {
