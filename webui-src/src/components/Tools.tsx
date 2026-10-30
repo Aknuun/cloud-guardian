@@ -194,6 +194,21 @@ function SrvView() {
         <Button variant="primary" icon={Plus} onClick={() => setEdit({ port: 22, user: 'root' })}>
           افزودن سرور
         </Button>
+        <Button variant="outline" icon={Pulse} onClick={loadAllMon}>
+          مانیتور همه
+        </Button>
+        <Button variant="outline" icon={Gear} onClick={() => setCfgOpen(true)}>
+          آستانه‌ها
+        </Button>
+        <Button variant="outline" icon={Plus} onClick={() => setImpOpen(true)}>
+          افزودن گروهی
+        </Button>
+        <Button variant="outline" icon={Plus} onClick={() => setSubOpen(true)}>
+          از ساب‌دامنه
+        </Button>
+        <Button variant="outline" icon={ShieldCheck} onClick={() => setPwOpen(true)}>
+          رمزها
+        </Button>
       </div>
       <FilterBar
         q={q}
@@ -206,20 +221,6 @@ function SrvView() {
         ]}
         value={flt}
         onValue={setFlt}
-        menu={[
-          { id: 'monall', label: 'مانیتور همه' },
-          { id: 'cfg', label: 'آستانه‌های هشدار' },
-          { id: 'imp', label: 'افزودن گروهی' },
-          { id: 'sub', label: 'از ساب‌دامنه' },
-          { id: 'pw', label: 'رمزهای ذخیره‌شده' },
-        ]}
-        onMenu={(id) => {
-          if (id === 'monall') void loadAllMon()
-          if (id === 'cfg') setCfgOpen(true)
-          if (id === 'imp') setImpOpen(true)
-          if (id === 'sub') setSubOpen(true)
-          if (id === 'pw') setPwOpen(true)
-        }}
         onRefresh={() => {
           invalidateCache()
           reload()
