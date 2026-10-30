@@ -1578,3 +1578,5 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-dot.pw { background: var(--ds-subtle); box-shadow: 0 0 0 3px var(--ds-tint) }
 .cc-main .cc-trow { gap: 12px }
 .cc-main .cc-stat-label { text-align: start; padding-inline-start: 2px }
+
+.cc-main .cc-stat-label { width: 100%; text-align: start }
