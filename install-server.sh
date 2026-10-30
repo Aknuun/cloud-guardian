@@ -359,6 +359,27 @@ install_caddy() {
   return 1
 }
 
+# HTTP/3 breaks Telegram/Android WebViews and some ISPs (ERR_QUIC_PROTOCOL_ERROR).
+# Older installs advertised h3; drop it once and reload.
+ensure_no_h3() {
+  [ -f "$CADDYFILE" ] || return 0
+  grep -qF "$CADDY_MARK" "$CADDYFILE" || return 0
+  grep -q "protocols h1 h2" "$CADDYFILE" && return 0
+  python3 - "$CADDYFILE" <<'PY' || return 0
+import sys
+p = sys.argv[1]
+s = open(p).read()
+anchor = "admin 127.0.0.1:2019"
+if anchor in s and "protocols h1 h2" not in s:
+    s = s.replace(anchor, anchor + "\n\tservers {\n\t\tprotocols h1 h2\n\t}", 1)
+    open(p, "w").write(s)
+PY
+  if caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+    systemctl reload caddy >/dev/null 2>&1 || systemctl restart caddy >/dev/null 2>&1 || true
+    ok "HTTP/3 disabled (WebView compatibility)"
+  fi
+}
+
 open_web_ports() {
   if have ufw && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow 80/tcp >/dev/null 2>&1 || true
@@ -420,6 +441,7 @@ setup_webapp() {
   fi
 
   if [ -n "$url" ]; then
+    ensure_no_h3
     save_webapp_url "$url"
     apply_webapp_env "$url"
     if have caddy && ! systemctl is-active --quiet caddy 2>/dev/null; then
@@ -473,6 +495,10 @@ ${CADDY_MARK}
 	http_port 80
 	https_port 9443
 	admin 127.0.0.1:2019
+	# no HTTP/3: Telegram/Android WebViews (and many ISPs) choke on QUIC
+	servers {
+		protocols h1 h2
+	}
 }
 
 ${base} {
