@@ -127,7 +127,7 @@ export function Sidebar({
           </button>
         </nav>
 
-        <a className="cc-sideitem" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer">
+        <a className="cc-sideitem" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer" title="@openWEBcode">
           <TelegramLogo size={19} />
           <span className="cc-sideitem-label">@openWEBcode</span>
         </a>
