@@ -1103,7 +1103,7 @@ ${reason}`,
             </button>
           </div>
         )}
-        <SearchInput placeholder="جست‌وجو در رکوردها…" value={recQ} onChange={setRecQ} />
+        <SearchInput placeholder="جستجوی رکوردها" value={recQ} onChange={setRecQ} />
         {types.length > 1 && (
           <div className="cc-chips" role="group" aria-label="فیلتر نوع رکورد">
             {['all', ...types].map((t) => (

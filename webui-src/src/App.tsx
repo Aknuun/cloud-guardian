@@ -724,7 +724,7 @@ export default function App() {
           <FilterBar
             q={q}
             onQ={setQ}
-            placeholder="جستجوی اکانت…"
+            placeholder="جستجوی اکانت"
             filters={[
               { id: 'all', label: 'همه اکانت‌ها' },
               { id: 'has', label: 'دارای سرور' },
@@ -860,7 +860,7 @@ export default function App() {
           <FilterBar
             q={q}
             onQ={setQ}
-            placeholder="جست‌وجوی نام یا آی‌پی…"
+            placeholder="جستجوی نام یا آی‌پی"
             filters={[
               { id: 'all', label: 'همه سرورها' },
               { id: 'run', label: 'روشن' },

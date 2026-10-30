@@ -640,7 +640,7 @@ export default function Arvan({
     const list = domains.filter((d) => !ql || d.name.toLowerCase().includes(ql))
     return (
       <>
-        <Input className="cc-input cc-mb" placeholder="جست‌وجوی دامنه…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="cc-input cc-mb" placeholder="جستجوی دامنه" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="cc-grid2 cc-mb">
           <Button variant="outline" icon={ArrowClockwise} onClick={reload}>بروزرسانی</Button>
           <Button variant="outline" icon={ImageIcon} onClick={() => toast('حذف/افزودن دامنه از پنل آروان انجام می‌شود')}>
@@ -682,7 +682,7 @@ export default function Arvan({
           <Button variant="primary" icon={Plus} onClick={() => addRecord()}>رکورد</Button>
           <Button variant="outline" icon={ArrowClockwise} onClick={reload}>بروزرسانی</Button>
         </div>
-        <Input className="cc-input cc-mb" placeholder="جست‌وجو در رکوردها…" value={recQ} onChange={(e) => setRecQ(e.target.value)} />
+        <Input className="cc-input cc-mb" placeholder="جستجوی رکوردها" value={recQ} onChange={(e) => setRecQ(e.target.value)} />
         {types.length > 2 && (
           <div className="cc-chips" role="group" aria-label="فیلتر نوع رکورد">
             {types.map((t) => (
@@ -755,7 +755,7 @@ export default function Arvan({
           </Button>
           <Button variant="outline" icon={ArrowClockwise} onClick={reload}>بروزرسانی</Button>
         </div>
-        <Input className="cc-input cc-mb" placeholder="جست‌وجوی نام، آی‌پی یا منطقه…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input className="cc-input cc-mb" placeholder="جستجوی نام یا آی‌پی" value={q} onChange={(e) => setQ(e.target.value)} />
         {regions.length > 1 && (
           <div className="cc-chips" role="group" aria-label="فیلتر منطقه">
             <button

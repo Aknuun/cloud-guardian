@@ -267,7 +267,7 @@ function SrvView() {
       <FilterBar
         q={q}
         onQ={setQ}
-        placeholder="جستجو در سرورها…"
+        placeholder="جستجوی سرورها"
         filters={[
           { id: 'all', label: 'همه سرورها' },
           { id: 'key', label: 'با کلید' },
@@ -714,7 +714,7 @@ function RemView() {
       <FilterBar
         q={q}
         onQ={setQ}
-        placeholder="جستجو در یادآورها…"
+        placeholder="جستجوی یادآورها"
         filters={[
           { id: 'all', label: 'همه' },
           { id: 'pending', label: 'در انتظار' },
@@ -781,7 +781,7 @@ function RemView() {
           </label>
           <label className="cc-field">
             <span>یادداشت (اختیاری)</span>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="شماره فاکتور، مبلغ…" />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="یادداشت" />
           </label>
           <label className="cc-field">
             <span>سرور (اختیاری)</span>
@@ -865,7 +865,7 @@ function PgView() {
       <FilterBar
         q={q}
         onQ={setQ}
-        placeholder="جستجو در پاسارگارد…"
+        placeholder="جستجوی پاسارگارد"
         filters={[
           { id: 'all', label: 'همه' },
           { id: 'panels', label: 'پنل‌ها' },
@@ -1881,7 +1881,7 @@ function DomView() {
       <FilterBar
         q={q}
         onQ={setQ}
-        placeholder="جستجوی دامنه…"
+        placeholder="جستجوی دامنه"
         filters={[
           { id: 'all', label: 'همه' },
           { id: 'ssl', label: 'گواهی‌ها' },
@@ -2915,7 +2915,7 @@ function RecView() {
       <FilterBar
         q={q}
         onQ={setQ}
-        placeholder="آی‌پی، نام رکورد یا مقدار…"
+        placeholder="آی‌پی، نام یا مقدار"
         onEnter={search}
         filters={[
           { id: 'all', label: 'همه' },
