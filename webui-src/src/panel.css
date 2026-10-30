@@ -2006,3 +2006,10 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 }
 .cc-plan-acts .cc-iconbtn.on { background: var(--ds-brand); border-color: var(--ds-brand); color: #fff }
 .cc-plan-acts .cc-iconbtn:active { transform: scale(0.96) }
+
+/* Quick create is not the primary action on the row: keep it neutral. */
+.cc-plan-acts .cc-iconbtn.on {
+  background: var(--ds-tint);
+  border-color: var(--ds-line);
+  color: var(--ds-text);
+}

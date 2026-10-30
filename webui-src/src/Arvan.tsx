@@ -611,8 +611,9 @@ export default function Arvan({
                   {(a.name || 'A').trim().charAt(0)}
                 </span>
                 <div className="cc-grow">
-                  <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
-                  <div className="cc-sub">{label}</div>
+                  <div className="cc-name">
+                    {(a.name || 'اکانت ' + (a.i + 1)) + ' - ' + label}
+                  </div>
                 </div>
                 <button
                   type="button"

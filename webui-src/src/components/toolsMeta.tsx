@@ -1,10 +1,10 @@
-import { CaretLeft, GearSix, House, Lightning, Envelope, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, BellRinging, ShieldCheck, Terminal } from '@phosphor-icons/react'
+import { CaretLeft, GearSix, House, Envelope, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, BellRinging, ShieldCheck, Terminal } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { Button, Dialog } from './ui'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
-export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set' | 'fo' | 'hub' | 'qa'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -15,11 +15,9 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
   { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: CalendarDots },
   { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
-  { id: 'rec', label: 'افزودن رکورد / تغییر سریع', Icon: Lightning },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
-  { id: 'qa', label: 'تغییر سریع / سهمیه', Icon: Lightning },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
@@ -30,7 +28,7 @@ export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) =
     { title: 'سرویس‌ها', tools: [] },
     { title: 'پاسارگارد', tools: ['pg', 'hook', 'hf', 'hfd', 'um'] },
     { title: 'سرور و دامنه', tools: ['srv', 'rem', 'dom', 'mail'] },
-    { title: 'ابزارها', tools: ['rec', 'qa', 'hub', 'fo', 'set'] },
+    { title: 'ابزارها', tools: ['hub', 'fo', 'set'] },
   ]
   return (
     <div className="cc-hg">

@@ -179,7 +179,7 @@ export default function App() {
   useEffect(() => {
     const go = new URLSearchParams(location.search).get('go')
     if (!go) return
-    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub' || go === 'qa') setTool(go)
+    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub') setTool(go)
     else if (go === 'hz' || go === 'cf' || go === 'arv') {
       setTool(null)
       setProvider(go)
@@ -1283,28 +1283,30 @@ export default function App() {
                   </div>
                 </div>
                 {badge}
-                {!busyIp && (
-                  <div className="cc-row-actions">
+                <div className="cc-row-actions">
+                  {!busyIp && (
                     <Button variant="outline" size="sm" onClick={() => void ipFreeFlow(p.id)}>
                       اتصال
                     </Button>
-                    <Button
-                      variant="secondary-destructive"
-                      size="sm"
-                      icon={Trash}
-                      aria-label="حذف آی‌پی"
-                      onClick={() =>
-                        runAction('ip_delete', {
-                          id: String(p.id),
-                          ipId: p.id,
-                          confirm: true,
-                          title: 'حذف آی‌پی',
-                          desc: `آی‌پی «${p.ip}» از حساب هتزنر حذف شود؟ این عمل بازگشت‌پذیر نیست.`,
-                        })
-                      }
-                    />
-                  </div>
-                )}
+                  )}
+                  <Button
+                    variant="secondary-destructive"
+                    size="sm"
+                    icon={Trash}
+                    aria-label="حذف آی‌پی"
+                    onClick={() =>
+                      runAction('ip_delete', {
+                        id: String(p.id),
+                        ipId: p.id,
+                        confirm: true,
+                        title: 'حذف آی‌پی',
+                        desc: busyIp
+                          ? `آی‌پی «${p.ip}» به «${p.assignee}» وصل است. اول جدا می‌شود، بعد حذف — ادامه؟`
+                          : `آی‌پی «${p.ip}» از حساب هتزنر حذف شود؟ این عمل بازگشت‌پذیر نیست.`,
+                      })
+                    }
+                  />
+                </div>
               </LayerCard>
             )
           })}

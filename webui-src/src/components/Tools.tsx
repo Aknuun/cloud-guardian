@@ -56,11 +56,9 @@ export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t:
   if (id === 'hf') return <HfView />
   if (id === 'hfd') return <HfdView />
   if (id === 'hook') return <HookView />
-  if (id === 'rec') return <RecView />
   if (id === 'mail') return <MailView />
   if (id === 'fo') return <FoView />
   if (id === 'hub') return <HubView />
-  if (id === 'qa') return <QaView />
   if (id === 'set') return <SetView />
   return <PgView />
 }
@@ -2197,14 +2195,6 @@ function HfView() {
               {p.name}
             </Button>
           ))}
-          <Button
-            variant="outline"
-            onClick={async () => {
-              if (await act('/api/tools/hf/exc', { panel: pi, clear: true })) loadHosts(pi)
-            }}
-          >
-            پاک‌کردن استثناها
-          </Button>
           <Button variant="outline" onClick={() => setBkOpen(true)}>
             بکاپ‌ها
           </Button>
@@ -2222,6 +2212,26 @@ function HfView() {
             }}
           >
             تاریخچه
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (await act('/api/tools/hf/exc', { panel: pi, clear: true })) loadHosts(pi)
+            }}
+          >
+            پاک‌کردن استثناها
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              for (const h of hosts || []) {
+                if (h.all) continue
+                await act('/api/tools/hf/exc', { panel: pi, host: h.id, all: true })
+              }
+              loadHosts(pi)
+            }}
+          >
+            استثنا کردن همه
           </Button>
           <Button
             variant="outline"
@@ -2267,14 +2277,7 @@ function HfView() {
                     {l}
                   </Button>
                 ))}
-                <Button
-                  variant={h.all ? 'destructive' : 'outline'}
-                  onClick={async () => {
-                    if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, all: true })) loadHosts(pi)
-                  }}
-                >
-                  {h.all ? 'مستثنی' : 'استثنا کل'}
-                </Button>
+
               </div>
             </div>
           </div>
