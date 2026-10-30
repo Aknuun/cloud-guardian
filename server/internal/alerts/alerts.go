@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aknuun/cg-server/internal/jalali"
@@ -339,16 +340,43 @@ func alertText(panel pg.Panel, items []map[string]any, test bool) string {
 	return joinLines(out)
 }
 
+var (
+	botNameOnce sync.Once
+	botNameVal  string
+)
+
+// botUsername caches the bot's own @username for deep links.
+func botUsername(c *tg.Client) string {
+	botNameOnce.Do(func() {
+		if me, err := c.GetMe(); err == nil {
+			botNameVal = toString(me["username"])
+		}
+	})
+	return botNameVal
+}
+
 func renewKB(panel pg.Panel, username string) [][]tg.Button {
 	var row []tg.Button
 	if panelURL := trimRight(panel.URL, "/"); panelURL != "" {
-		row = append(row, tg.Button{Text: "🖥 تمدید با پنل",
+		row = append(row, tg.Button{Text: "🖥 تمدید از پنل",
 			URL: panelURL + "/dashboard/#/users?search=" + trunc(username, 200)})
 	}
 	if len(row) == 0 {
 		return nil
 	}
 	return [][]tg.Button{row}
+}
+
+func renewKBUser(bot *tg.Client, panel pg.Panel, username string) [][]tg.Button {
+	kb := renewKB(panel, username)
+	if u := botUsername(bot); u != "" {
+		link := "https://t.me/" + u
+		if username != "" {
+			link += "?start=renew_" + trunc(username, 60)
+		}
+		kb = append(kb, []tg.Button{{Text: "🤖 تمدید از ربات", URL: link}})
+	}
+	return kb
 }
 
 func SendAlert(bot *tg.Client, to int64, panel pg.Panel, items []map[string]any, test bool) {
@@ -633,21 +661,45 @@ func panelName(p pg.Panel) string {
 }
 
 // userText renders a per-user notice instead of the admin digest.
+// faLeft turns a day count into a human phrase: 0.2 -> «حدود ۵ ساعت».
+func faLeft(val string) string {
+	d, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+	if err != nil {
+		return val + " روز"
+	}
+	if d < 1 {
+		h := int(math.Round(d * 24))
+		if h < 1 {
+			h = 1
+		}
+		return "حدود " + strconv.Itoa(h) + " ساعت"
+	}
+	return strconv.Itoa(int(math.Round(d))) + " روز"
+}
+
 func userText(panel pg.Panel, items []map[string]any) string {
-	lines := []string{"🔔 سرویس «" + panelName(panel) + "»"}
+	user := ""
+	if len(items) > 0 {
+		user = toString(items[0]["username"])
+	}
+	lines := []string{"🔔 <b>یادآوری سرویس</b>", ""}
+	if user != "" {
+		lines = append(lines, "سرویس: <code>"+user+"</code>")
+	}
+	lines = append(lines, "پنل: "+panelName(panel), "")
 	for _, it := range items {
 		kind := toString(it["kind"])
 		val := toString(it["value"])
 		switch kind {
 		case "usage":
-			lines = append(lines, "⛔️ حجم سرویس شما به "+val+"٪ رسیده است.")
+			lines = append(lines, "⛔️ حجم سرویس به "+val+"٪ رسیده است.")
 		case "days":
-			lines = append(lines, "⏰ سرویس شما تا "+val+" روز دیگر منقضی می‌شود.")
+			lines = append(lines, "⏰ تنها "+faLeft(val)+" تا پایان اعتبار سرویس باقی مانده است.")
 		default:
 			lines = append(lines, "• "+kind+": "+val)
 		}
 	}
-	lines = append(lines, "", "برای تمدید با پشتیبانی تماس بگیرید.")
+	lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزنید.")
 	return strings.Join(lines, "\n")
 }
 
@@ -716,7 +768,7 @@ func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
 		if id <= 0 {
 			continue
 		}
-		if bot.Send(id, "👤 "+u+"\n\n"+userText(p, byUser[u]), nil) != 0 {
+		if bot.Send(id, userText(p, byUser[u]), renewKBUser(bot, p, u)) != 0 {
 			sent++
 		}
 	}
