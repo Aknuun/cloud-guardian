@@ -41,7 +41,7 @@ func (r *Router) navBack(chat, mid int64, data string) {
 		r.dispatch(chat, mid, prev)
 		return
 	}
-	if fallback != "" {
+	if fallback != "" && !isTopScreen(fallback) {
 		r.navSkip.Store(chat, true)
 		r.dispatch(chat, mid, fallback)
 		return
@@ -69,6 +69,7 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	case data == "more":
 		r.moreMenu(chat, mid)
 	case data == "menu":
+		r.navStack.Delete(chat)
 		r.Menu(chat, mid)
 	case data == "settings":
 		r.settingsHome(chat, mid)
