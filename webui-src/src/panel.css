@@ -1425,3 +1425,40 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     padding: 14px 6px calc(12px + env(safe-area-inset-bottom));
   }
 }
+
+/* narrower rail: open −35%, collapsed −25% */
+.cc-sidebar.open {
+  width: 177px;
+  padding: 16px 10px;
+}
+.cc-sidebar:not(.open),
+.cc-sidebar:not(.open).cc-sidebar {
+  width: 39px;
+}
+.cc-sidebar:not(.open) .cc-sideitem {
+  width: 36px;
+  height: 36px;
+}
+.cc-sidebar:not(.open) .cc-sidebrand-mark {
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+@media (min-width: 900px) {
+  .cc-sidebar:not(.open) {
+    padding: 12px 2px;
+  }
+}
+@media (max-width: 899px) {
+  .cc-app {
+    padding-inline-start: 39px;
+  }
+  .cc-sidebar:not(.open) {
+    width: 39px;
+    padding: 12px 2px calc(10px + env(safe-area-inset-bottom));
+  }
+  .cc-sidebar.open {
+    width: min(182px, 70vw);
+    padding: 16px 10px calc(14px + env(safe-area-inset-bottom));
+  }
+}
