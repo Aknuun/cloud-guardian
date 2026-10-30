@@ -5,8 +5,11 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
+import { House } from '@phosphor-icons/react'
+import { PROVIDERS } from './Sidebar'
+import type { Provider } from './Sidebar'
 
-export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -22,10 +25,37 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
+// Landing page: every ported section, one tap away.
+function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
+  return (
+    <div className="cc-hub">
+      <div className="cc-hub-title">سرویس‌ها</div>
+      <div className="cc-hub-grid">
+        {PROVIDERS.map((p) => (
+          <button key={p.id} className="cc-hubcard" onClick={() => go!(p.id as Provider, null)}>
+            <p.Icon size={22} />
+            <span>{p.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="cc-hub-title">ابزارها</div>
+      <div className="cc-hub-grid">
+        {TOOLS.map((t) => (
+          <button key={t.id} className="cc-hubcard" onClick={() => go!(null, t.id)}>
+            <t.Icon size={22} />
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export type ToolItem = { id: ToolId; label: string; Icon: Icon; active?: boolean; onSelect: () => void }
 
 export function toolItems(active: ToolId | null, onSelect: (id: ToolId) => void): ToolItem[] {
-  return TOOLS.map((t) => ({ ...t, active: active === t.id, onSelect: () => onSelect(t.id) }))
+  const all = [{ id: 'home' as ToolId, label: 'خانه', Icon: House }, ...TOOLS]
+  return all.map((t) => ({ ...t, active: active === t.id, onSelect: () => onSelect(t.id) }))
 }
 
 function useTool<T>(path: string) {
@@ -66,7 +96,8 @@ type PgPanel = { idx: number; name: string; url: string; user: string }
 type PgMon = { id: string; name: string; panel: string; interval: number; enabled: boolean }
 type PgData = { panels: PgPanel[]; monitors: PgMon[] }
 
-export function Tools({ id }: { id: ToolId }) {
+export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t: ToolId | null) => void }) {
+  if (id === 'home') return <HomeView go={onGo} />
   if (id === 'srv') return <SrvView />
   if (id === 'rem') return <RemView />
   if (id === 'um') return <UmView />

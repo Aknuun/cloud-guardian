@@ -66,13 +66,13 @@ func (r *Router) Menu(chat, mid int64) {
 // moreMenu keeps the screens that have no mini app page yet.
 func (r *Router) moreMenu(chat, mid int64) {
 	kb := [][]Btn{
-		{btnS("➕ افزودن رکورد", "addrec", "plain"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
-		{btnS("🎛 پنل پاسارگارد", "pndef", "primary")},
-		{btn("🧭 تعویض خودکار ساب فیلتر", "hf"), btn("📡 مانیتور نود پاسارگارد", "nd")},
-		{btn("🔔 هشدار انقضا و حجم", "pghook"), btn("🔥 گزارش بد مصرف پاسارگارد", "um")},
-		{btnS("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "plain")},
-		{btnS("✉️ ایمیل دامنه", "fmail", "plain"), btnS("⚖️ لود بالانسر IP", "lb", "plain")},
-		{btnS("⚙️ تنظیمات و راهنما و ...", "settings", "success")},
+		{r.webBtn("➕ افزودن رکورد", "addrec", "rec"), r.webBtn("⚡ تغییر سریع", "qamenu", "rec")},
+		{r.webBtn("🎛 پنل پاسارگارد", "pndef", "pg")},
+		{r.webBtn("🧭 تعویض خودکار ساب فیلتر", "hf", "hf"), r.webBtn("📡 مانیتور نود پاسارگارد", "nd", "pg")},
+		{r.webBtn("🔔 هشدار انقضا و حجم", "pghook", "hook"), r.webBtn("🔥 گزارش بد مصرف پاسارگارد", "um", "um")},
+		{r.webBtn("🌐 مانیتور دامنه و ترافیک‌ها", "dommon", "dom")},
+		{r.webBtn("✉️ ایمیل دامنه", "fmail", "mail"), r.webBtn("⚖️ لود بالانسر IP", "lb", "cf")},
+		{r.webBtn("⚙️ تنظیمات و راهنما و ...", "settings", "set")},
 		{btn("🏠 خانه", "menu")},
 	}
 	r.Show(chat, mid, uiTitle("📦", "بخش‌های دیگر", ""), kb)

@@ -1081,3 +1081,44 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     padding: 0 6px;
   }
 }
+
+/* home hub */
+.cc-hub-title {
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ds-muted);
+}
+.cc-hub-title:first-child {
+  margin-top: 4px;
+}
+.cc-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+.cc-hubcard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-hairline);
+  border-radius: 14px;
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: start;
+  cursor: pointer;
+}
+.cc-hubcard svg {
+  flex: 0 0 auto;
+  color: var(--ds-brand);
+}
+.cc-hubcard:hover {
+  background: var(--ds-brand-soft);
+  border-color: transparent;
+  color: var(--ds-brand);
+}

@@ -126,12 +126,12 @@ export default function App() {
   const [authErr, setAuthErr] = useState('')
   const [cur, setCur] = useState<View>({ v: 'accounts' })
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
-  const [tool, setTool] = useState<ToolId | null>(null)
+  const [tool, setTool] = useState<ToolId | null>('home')
   // deep links from the bot: /app/?go=srv|rem|pg|hz|cf|arv
   useEffect(() => {
     const go = new URLSearchParams(location.search).get('go')
     if (!go) return
-    if (go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set') setTool(go)
+    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set') setTool(go)
     else if (go === 'hz' || go === 'cf' || go === 'arv') setProvider(go)
     history.replaceState(null, '', location.pathname)
   }, [])
@@ -352,7 +352,7 @@ export default function App() {
     return (
       <ProviderShell
         provider={provider}
-        title={(TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
+        title={tool === 'home' ? 'خانه' : (TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
         busy={false}
         showBack
         onBack={() => setTool(null)}
@@ -362,7 +362,7 @@ export default function App() {
         onTool={setTool}
         activeTool={tool}
       >
-        <Tools id={tool} />
+        <Tools id={tool} onGo={(p, t) => { if (t) setTool(t); else if (p) pickProvider(p) }} />
       </ProviderShell>
     )
   }
@@ -1381,7 +1381,7 @@ export default function App() {
     return (
       <ProviderShell
         provider={provider}
-        title={(TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
+        title={tool === 'home' ? 'خانه' : (TOOLS.find((t) => t.id === tool) || TOOLS[0]).label}
         busy={false}
         showBack
         onBack={() => setTool(null)}
@@ -1391,7 +1391,7 @@ export default function App() {
         onTool={setTool}
         activeTool={tool}
       >
-        <Tools id={tool} />
+        <Tools id={tool} onGo={(p, t) => { if (t) setTool(t); else if (p) pickProvider(p) }} />
       </ProviderShell>
     )
   }
