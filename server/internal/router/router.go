@@ -13,7 +13,7 @@ import (
 	"github.com/aknuun/cg-server/internal/tg"
 )
 
-const Version = "4.47.1"
+const Version = "4.47.2"
 
 // Btn is an inline keyboard button (alias of tg.Button).
 type Btn = tg.Button
@@ -182,6 +182,8 @@ func (r *Router) onMessage(m *tg.Message) {
 		return
 	}
 	switch {
+	case strings.HasPrefix(text, "/start renew_"):
+		r.renewFromBot(chat, 0, strings.TrimPrefix(text, "/start renew_"))
 	case strings.HasPrefix(text, "/start"):
 		r.Menu(chat, 0)
 		r.onboardPrompt(chat, frm)
@@ -315,6 +317,10 @@ func (r *Router) nonAdminMessage(m *tg.Message) {
 	}
 	if strings.HasPrefix(text, "/") && !(strings.HasPrefix(text, "/start") || strings.HasPrefix(text, "/contact")) {
 		r.contactKB(chat)
+		return
+	}
+	if strings.HasPrefix(text, "/start renew_") {
+		r.renewFromBot(chat, 0, strings.TrimPrefix(text, "/start renew_"))
 		return
 	}
 	if strings.HasPrefix(text, "/start") {
