@@ -587,35 +587,41 @@ export default function Arvan({
           <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا کلید API آروان را اضافه کن." />
         )}
         {accounts.map((a) => (
-          <LayerCard
-            key={a.i}
-            className="cc-card cc-row cc-tap"
-            role="button"
-            tabIndex={0}
-            onClick={() => openAccount(a.i)}
-          >
-            <span className="cc-avatar">{(a.name || 'A').trim().charAt(0)}</span>
-            <div className="cc-grow">
-              <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
-              <div className="cc-sub">
-                {a.domains !== undefined || a.servers !== undefined
-                  ? `${num(a.domains || 0)} دامنه · ${num(a.servers || 0)} سرور`
-                  : 'دامنه‌ها و سرورهای ابری'}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="cc-rowbtn danger"
-              aria-label="حذف اکانت"
-              onClick={(e) => {
-                e.stopPropagation()
-                setAccDel(a)
-              }}
-            >
-              <Trash size={15} />
-            </button>
-            <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
-          </LayerCard>
+          <div key={a.i}>
+            {([['servers', 'سرورهای ابری'], ['dns', 'دامنه‌ها']] as const).map(([v, label], k) => (
+              <LayerCard
+                key={v}
+                className="cc-card cc-row cc-tap"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setAcc(a.i)
+                  setQ('')
+                  goRoot({ v })
+                }}
+              >
+                <span className="cc-avatar" style={k ? { opacity: 0.35 } : undefined}>
+                  {(a.name || 'A').trim().charAt(0)}
+                </span>
+                <div className="cc-grow">
+                  <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
+                  <div className="cc-sub">{label}</div>
+                </div>
+                <button
+                  type="button"
+                  className="cc-rowbtn danger"
+                  aria-label="حذف اکانت"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setAccDel(a)
+                  }}
+                >
+                  <Trash size={15} />
+                </button>
+                <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
+              </LayerCard>
+            ))}
+          </div>
         ))}
         <div className="cc-hint cc-center cc-mt">آروان را به‌صورت یک Workspace واحد مدیریت کن.</div>
       </>
