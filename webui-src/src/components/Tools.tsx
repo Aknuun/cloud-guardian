@@ -87,6 +87,8 @@ function SrvView() {
   const [flt, setFlt] = useState('all')
   const [sel, setSel] = useState<string[]>([])
   const [bulkDel, setBulkDel] = useState(false)
+  const [monAll, setMonAll] = useState<{ s: Srv; d: any; err: string }[] | null>(null)
+  const [monAllBusy, setMonAllBusy] = useState(false)
 
   const loadMon = async (s: Srv) => {
     setMonBusy(true)
@@ -98,6 +100,23 @@ function SrvView() {
       setMonErr(e.message || 'وصل نشد')
     }
     setMonBusy(false)
+  }
+
+  const loadAllMon = async () => {
+    setMonAllBusy(true)
+    setMonAll([])
+    const rows = await Promise.all(
+      list.map(async (s) => {
+        try {
+          const d = await api('/api/tools/srv/mon?id=' + encodeURIComponent(s.id) + '&t=' + Date.now())
+          return { s, d, err: '' }
+        } catch (e: any) {
+          return { s, d: null, err: e.message || 'وصل نشد' }
+        }
+      }),
+    )
+    setMonAll(rows)
+    setMonAllBusy(false)
   }
 
   const runAct = async () => {
@@ -188,12 +207,14 @@ function SrvView() {
         value={flt}
         onValue={setFlt}
         menu={[
+          { id: 'monall', label: 'مانیتور همه' },
           { id: 'cfg', label: 'آستانه‌های هشدار' },
           { id: 'imp', label: 'افزودن گروهی' },
           { id: 'sub', label: 'از ساب‌دامنه' },
           { id: 'pw', label: 'رمزهای ذخیره‌شده' },
         ]}
         onMenu={(id) => {
+          if (id === 'monall') void loadAllMon()
           if (id === 'cfg') setCfgOpen(true)
           if (id === 'imp') setImpOpen(true)
           if (id === 'sub') setSubOpen(true)
@@ -377,6 +398,47 @@ function SrvView() {
             reload()
           }}
         />
+      )}
+      {monAll && (
+        <Dialog.Root open onOpenChange={(o) => !o && setMonAll(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">مانیتور همه سرورها</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {monAllBusy ? 'در حال بررسی…' : `${faNum(monAll.length)} سرور بررسی شد`}
+            </Dialog.Description>
+            {monAllBusy && (
+              <div className="cc-center cc-mb">
+                <Loader size="lg" />
+              </div>
+            )}
+            {!monAllBusy &&
+              monAll.map((r) => (
+                <div key={r.s.id} className="cc-trow">
+                  <span className={r.err ? 'cc-dot pw' : 'cc-dot'} />
+                  <div className="cc-grow">
+                    <div className="cc-name">{r.s.name || r.s.host}</div>
+                    {r.err ? (
+                      <div className="cc-sub">{r.err}</div>
+                    ) : (
+                      <div className="cc-sub cc-ltr">
+                        CPU {Math.round(Number(r.d?.cpu?.pct) || 0)}% · RAM {Math.round(Number(r.d?.mem?.pct) || 0)}% · Disk{' '}
+                        {Math.round(Number(String(r.d?.disk?.pct ?? '').replace('%', '')) || 0)}%
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" icon={ArrowClockwise} onClick={loadAllMon}>
+                تازه‌سازی
+              </Button>
+              <Button variant="primary" onClick={() => setMonAll(null)}>
+                بستن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
       )}
       {mon && (
         <Dialog.Root open onOpenChange={(o) => !o && setMon(null)}>
