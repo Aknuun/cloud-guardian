@@ -1729,3 +1729,9 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-actions button[data-kumo-component='Button'] { height: 34px !important; min-height: 34px !important; font-size: 12px !important; }
   .cc-actions-danger button[data-kumo-component='Button'] { height: 30px !important; min-height: 30px !important; }
 }
+
+/* dialogs scroll instead of clipping on short screens */
+.cc-dialog { max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
+.cc-dialog-body { overflow-y: auto; overscroll-behavior: contain; }
+.cc-form { max-height: calc(100dvh - 200px); overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 2px; }
+.cc-dialog .cc-actions { max-height: 56vh; overflow-y: auto; overscroll-behavior: contain; }
