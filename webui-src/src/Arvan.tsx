@@ -214,6 +214,14 @@ export default function Arvan({
     bump(1)
     ;(async () => {
       try {
+        if ((view.v === 'dns' || view.v === 'servers') && acc === null) {
+          const d = await api<{ accounts: Account[] }>('/api/arv/accounts')
+          if (!cancelled) {
+            setAccounts(d.accounts || [])
+            if (d.accounts && d.accounts.length) setAcc(d.accounts[0].i)
+          }
+          return
+        }
         if (view.v === 'accounts') {
           const d = await api<{ accounts: Account[] }>('/api/arv/accounts')
           if (!cancelled) setAccounts(d.accounts || [])
@@ -482,35 +490,25 @@ export default function Arvan({
               ? 'جزئیات سرور'
               : 'ساخت سرور'
 
-  function tabsBar() {
-    if (acc === null) return null
+  function accChips() {
+    if (accounts.length < 2) return null
     return (
-      <>
-        <div className="cc-tabs" role="tablist" aria-label="بخش‌های آروان">
+      <div className="cc-chips cc-mb" role="group" aria-label="انتخاب اکانت آروان">
+        {accounts.map((a) => (
           <button
-            role="tab"
-            aria-selected={tab === 'dns'}
-            className={'cc-tab' + (tab === 'dns' ? ' on' : '')}
-            onClick={() => openTab('dns')}
+            key={a.i}
+            className={'cc-chip' + (acc === a.i ? ' on' : '')}
+            aria-pressed={acc === a.i}
+            onClick={() => {
+              setAcc(a.i)
+              setQ('')
+              setRegionFilter('all')
+            }}
           >
-            دامنه‌ها
+            {a.name}
           </button>
-          <button
-            role="tab"
-            aria-selected={tab === 'cloud'}
-            className={'cc-tab' + (tab === 'cloud' ? ' on' : '')}
-            onClick={() => openTab('cloud')}
-          >
-            سرورهای ابری
-          </button>
-        </div>
-        <div className="cc-hint cc-mb">
-          {accInfo?.name || 'اکانت آروان'}
-          {accInfo?.domains !== undefined || accInfo?.servers !== undefined
-            ? ` · ${num(accInfo.domains || 0)} دامنه · ${num(accInfo.servers || 0)} سرور`
-            : ''}
-        </div>
-      </>
+        ))}
+      </div>
     )
   }
 
@@ -600,7 +598,6 @@ export default function Arvan({
     )
     return (
       <>
-        {tabsBar()}
         <div className="cc-grid2 cc-mb">
           <Button variant="primary" icon={Plus} onClick={() => addRecord()}>رکورد</Button>
           <Button variant="outline" icon={ArrowClockwise} onClick={reload}>بروزرسانی</Button>
@@ -744,7 +741,6 @@ export default function Arvan({
     const on = isOn(s.status)
     return (
       <>
-        {tabsBar()}
         <LayerCard className="cc-card cc-row">
           <div className="cc-grow">
             <div className="cc-name">{s.name}</div>
@@ -960,9 +956,9 @@ export default function Arvan({
   let body: any
   if (err) body = errorCard()
   else if (view.v === 'accounts') body = accountsPage()
-  else if (view.v === 'dns') body = <>{tabsBar()}{dnsPage()}</>
+  else if (view.v === 'dns') body = <>{accChips()}{dnsPage()}</>
   else if (view.v === 'records') body = recordsPage()
-  else if (view.v === 'servers') body = <>{tabsBar()}{serversPage()}</>
+  else if (view.v === 'servers') body = <>{accChips()}{serversPage()}</>
   else if (view.v === 'server') body = serverPage()
   else body = createPage()
   onBackRef?.(goBack)
