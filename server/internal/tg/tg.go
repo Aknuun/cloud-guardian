@@ -361,6 +361,17 @@ func (c *Client) SetChatMenuButton(commands bool) {
 		"menu_button": map[string]any{"type": mode}})
 }
 
+// SetChatMenuButtonFor clears a per-chat override, so a private chat can not
+// keep an old mini-app button that the default scope no longer uses.
+func (c *Client) SetChatMenuButtonFor(chatID int64, commands bool) {
+	mode := "default"
+	if commands {
+		mode = "commands"
+	}
+	_, _ = c.call("setChatMenuButton", map[string]any{
+		"chat_id": chatID, "menu_button": map[string]any{"type": mode}})
+}
+
 // SetChatMenuButtonWebApp makes the chat menu button open the mini app.
 func (c *Client) SetChatMenuButtonWebApp(url, text string) {
 	_, _ = c.call("setChatMenuButton", map[string]any{

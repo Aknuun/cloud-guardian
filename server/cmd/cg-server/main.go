@@ -61,6 +61,10 @@ func main() {
 	r.WebAppURL = withVersion(getenv("CG_WEBAPP_URL", ""), router.Version)
 	// the bot stays command/menu-first: no mini app button next to the input
 	bot.SetChatMenuButton(true)
+	// older builds set a per-chat mini-app button for the admin; clear it too
+	if cfg.AdminID != 0 {
+		bot.SetChatMenuButtonFor(cfg.AdminID, true)
+	}
 	r.DBPath = dbPath
 
 	// health + webhook endpoints
