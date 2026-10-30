@@ -968,8 +968,8 @@ export default function App() {
                 <div className="cc-name">{s.name}</div>
                 <div className="cc-sub">
                   {(s.type && s.type.name) || ''}
-                  {s.type ? ` · ${s.type.cores}vCPU / ${mem(s.type.memory)} / ${s.type.disk}GB` : ''}
-                  {s.location ? ` · ${s.location.city || s.location.name}` : ''}
+                  {s.type ? ` · ${s.type.cores}vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : ''}
+                  {s.location ? ` · ${locFa(s.location.name, s.location.city, s.location.country)}` : ''}
                 </div>
                 <div className="cc-sub cc-mono cc-mt4 cc-copyline">
                   {s.ipv4 && (
@@ -1011,7 +1011,7 @@ export default function App() {
             <div className="cc-grow">
               <div className="cc-name">{s.name}</div>
               <div className="cc-sub">
-                {s.image || ''} · {s.location ? s.location.city || s.location.name : ''} · {s.type ? s.type.id : ''}
+                {s.image || ''} · {s.location ? locFa(s.location.name, s.location.city, s.location.country) : ''} · {s.type ? s.type.id : ''}
               </div>
             </div>
             <Badge variant={badgeVariant(s.status)} dot>
@@ -1037,12 +1037,12 @@ export default function App() {
             <div className="cc-kv">
               <span>پلن</span>
               <span>
-                {s.type ? `${s.type.name} · ${s.type.cores}vCPU / ${mem(s.type.memory)} / ${s.type.disk}GB` : '—'}
+                {s.type ? `${s.type.name} · ${s.type.cores} vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : '—'}
               </span>
             </div>
             <div className="cc-kv">
               <span>لوکیشن</span>
-              <span>{s.location ? `${s.location.city || ''}، ${s.location.country || ''}` : '—'}</span>
+              <span>{s.location ? locFa(s.location.name, s.location.city, s.location.country) : '—'}</span>
             </div>
             <div className="cc-kv">
               <span>ساخت</span>
