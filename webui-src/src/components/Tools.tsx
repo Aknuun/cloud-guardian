@@ -1128,7 +1128,7 @@ function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; on
               </Button>
             </div>
 
-            <div className="cc-btnrow">
+            <div className="cc-btnrow cc-gridbtns">
               <Button variant="outline" icon={ArrowClockwise} disabled={!!busy} onClick={() => post('/api/tools/pg/mon/sync', { id: m.id }, 'sync')}>
                 همگام‌سازی
               </Button>
@@ -1149,7 +1149,7 @@ function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; on
                 کپی وب‌هوک
               </Button>
             </div>
-            <div className="cc-hint cc-mb cc-mono">{st.hook}</div>
+            <div className="cc-hookurl">{st.hook}</div>
 
             {nodes.length === 0 && <Empty title="نودی ثبت نشده" description="«همگام‌سازی» را بزن تا نودها از پنل خوانده شوند." />}
             {nodes.map((n) => (

@@ -1675,3 +1675,14 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main .cc-btnrow button, .cc-main .cc-section-head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .cc-main .cc-btnrow > *, .cc-main .cc-section-head > * { min-width: 0 }
 }
+
+/* node monitor dialog: tidy action grid + hook url */
+.cc-gridbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cc-gridbtns > button { width: 100%; justify-content: center; min-width: 0; }
+.cc-hookurl { direction: ltr; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; line-height: 1.5; color: var(--ds-muted); background: var(--ds-tint);
+  border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.cc-field-row .cc-field-sm { max-width: 132px; }
+@media (min-width: 700px) {
+  .cc-gridbtns { grid-template-columns: repeat(4, minmax(0, auto)); justify-content: start; }
+}
