@@ -7,6 +7,8 @@ export type Provider = 'hz' | 'cf' | 'arv'
 
 export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
+const PG_IDS = ['pg', 'hook']
+
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'hz', label: 'هتزنر', Icon: HardDrives },
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
@@ -62,7 +64,8 @@ export function Sidebar({
       window.removeEventListener('touchend', end)
     }
   }, [open, onToggle])
-  const rest = tools?.filter((t) => t.id !== 'home')
+  const rest = tools?.filter((t) => t.id !== 'home' && !PG_IDS.includes(t.id))
+  const pgItems = tools?.filter((t) => PG_IDS.includes(t.id))
 
   return (
     <>
@@ -147,6 +150,27 @@ export function Sidebar({
             )
           })}
         </nav>
+
+        {pgItems && pgItems.length > 0 && (
+          <nav className="cc-sidenav" aria-label="پاسارگارد">
+            <div className="cc-sidenav-label">پاسارگارد</div>
+            {pgItems.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={'cc-sideitem' + (t.active ? ' on' : '')}
+                aria-current={t.active ? 'page' : undefined}
+                onClick={() => {
+                  t.onSelect()
+                  if (window.innerWidth < 900) onToggle()
+                }}
+              >
+                <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
+                <span className="cc-sideitem-label">{t.label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
 
         {rest && rest.length > 0 && (
           <nav className="cc-sidenav" aria-label="ابزارها">
