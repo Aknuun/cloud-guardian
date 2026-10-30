@@ -30,6 +30,8 @@ export function Sidebar({
 }) {
   const { mode, toggle } = useTheme()
   const [expanded, setExpanded] = useState<Provider | null>(provider)
+  const home = tools?.find((t) => t.id === 'home')
+  const rest = tools?.filter((t) => t.id !== 'home')
 
   return (
     <>
@@ -45,6 +47,23 @@ export function Sidebar({
             ✕
           </button>
         </div>
+
+        {home && (
+          <nav className="cc-sidenav cc-navhome" aria-label="خانه">
+            <button
+              type="button"
+              className={'cc-sideitem' + (home.active ? ' on' : '')}
+              aria-current={home.active ? 'page' : undefined}
+              onClick={() => {
+                home.onSelect()
+                if (window.innerWidth < 900) onToggle()
+              }}
+            >
+              <home.Icon size={19} weight={home.active ? 'fill' : 'regular'} />
+              <span className="cc-sideitem-label">{home.label}</span>
+            </button>
+          </nav>
+        )}
 
         <nav className="cc-sidenav" aria-label="سرویس‌ها">
           <div className="cc-sidenav-label">سرویس‌ها</div>
@@ -98,10 +117,10 @@ export function Sidebar({
           })}
         </nav>
 
-        {tools && tools.length > 0 && (
+        {rest && rest.length > 0 && (
           <nav className="cc-sidenav" aria-label="ابزارها">
             <div className="cc-sidenav-label">ابزارها</div>
-            {tools.map((t) => (
+            {rest.map((t) => (
               <button
                 key={t.id}
                 type="button"

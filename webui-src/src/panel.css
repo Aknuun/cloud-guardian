@@ -1122,3 +1122,11 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   border-color: transparent;
   color: var(--ds-brand);
 }
+
+/* home sits alone above the groups, first icon of the rail */
+.cc-navhome {
+  padding-top: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--ds-hairline);
+  margin-bottom: 6px;
+}

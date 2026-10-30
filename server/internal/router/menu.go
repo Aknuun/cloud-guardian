@@ -37,17 +37,21 @@ func (r *Router) webBtn(label, native, goID string) Btn {
 // Menu renders the home menu. Everything except Cloudflare opens in the mini app
 // (the bot itself only sends reports); the rest stays reachable from "بیشتر".
 func (r *Router) Menu(chat, mid int64) {
+	home := btn("🏠 صفحهٔ اصلی", "menu")
+	if u := r.webLink("home"); u != "" {
+		home = btnWA("🏠 صفحهٔ اصلی", u)
+	}
 	kb := [][]Btn{
-		{btn("☁️ کلودفلر", "zones")},
+		{home, btn("☁️ کلودفلر", "zones")},
 		{btnWA("🇩🇪 هتزنر", r.webLink("hz")), btnWA("🇮🇷 آروان", r.webLink("arv"))},
 		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
 		{btnWA("🎛 پاسارگارد", r.webLink("pg"))},
-		{btnS("📦 بخش‌های دیگر", "more", "plain")},
 		{chanBtn()},
 	}
 	if r.webLink("hz") == "" {
 		// no web app configured: keep the native screens usable
 		kb = [][]Btn{
+			{btnS("🏠 صفحهٔ اصلی", "menu", "primary")},
 			{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
 			{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
 			{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("⏰ یادآورها", "rem", "plain")},
