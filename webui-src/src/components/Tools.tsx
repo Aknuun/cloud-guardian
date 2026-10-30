@@ -1625,6 +1625,95 @@ const DOM_STATUS: Record<string, string> = {
   error: 'استعلام انجام نشد',
 }
 
+type DomCfg = { provider: string; hasKey: boolean; keyHint: string; providers: { id: string; label: string }[] }
+
+// Provider + API key for the domain-expiry lookup, with a live test.
+function DomCfgDialog({ onClose }: { onClose: () => void }) {
+  const [cfg, setCfg] = useState<DomCfg | null>(null)
+  const [provider, setProvider] = useState('')
+  const [key, setKey] = useState('')
+  const [test, setTest] = useState<{ status: string; message?: string; remaining?: string; domain?: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    api<DomCfg>('/api/tools/dom/cfg').then((d) => {
+      setCfg(d)
+      setProvider(d.provider)
+    }).catch((e) => setErr(String(e)))
+  }, [])
+
+  async function runTest() {
+    setBusy(true)
+    setErr('')
+    try {
+      const r = await api<{ status: string; message?: string; remaining?: string; domain?: string }>(
+        '/api/tools/dom/cfg/test',
+        { domain: '' },
+      )
+      setTest(r)
+    } catch (e) {
+      setErr(String(e))
+    }
+    setBusy(false)
+  }
+
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">تنظیمات استعلام دامنه</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">
+          بدون کلید، فقط سرویس‌های آزاد (RDAP/whois) استفاده می‌شود؛ بعضی دامنه‌ها تاریخ را مخفی می‌کنند.
+        </Dialog.Description>
+        <div className="cc-form">
+          <label className="cc-field">
+            <span>روش استعلام</span>
+            <select className="cc-input" value={provider} onChange={(e) => setProvider(e.target.value)}>
+              {(cfg?.providers || []).map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="cc-field">
+            <span>کلید API {cfg?.hasKey ? `(ذخیره‌شده: ${cfg.keyHint})` : '(اختیاری)'}</span>
+            <Input className="cc-input" value={key} onChange={(e) => setKey(e.target.value)} placeholder="برای تغییر نکردن خالی بگذار" autoComplete="off" />
+          </label>
+          {test && (
+            <div className="cc-hint">
+              {test.domain}: {test.status}
+              {test.remaining ? ` — ${test.remaining}` : ''}
+              {test.message ? ` (${test.message})` : ''}
+            </div>
+          )}
+          {err && <div className="cc-form-err">{err}</div>}
+        </div>
+        <div className="cc-dialog-actions">
+          <Button variant="outline" onClick={onClose}>بستن</Button>
+          <Button variant="outline" onClick={runTest} disabled={busy}>{busy ? 'در حال تست…' : 'تست'}</Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              setBusy(true)
+              try {
+                await api('/api/tools/dom/cfg', { provider, key })
+                invalidateCache()
+                onClose()
+              } catch (e) {
+                setErr(String(e))
+              }
+              setBusy(false)
+            }}
+            disabled={busy}
+          >
+            ذخیره
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
 function DomView() {
   const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
   const [q, setQ] = useState('')
@@ -1639,6 +1728,7 @@ function DomView() {
   const [busy, setBusy] = useState(false)
   const [warnOn, setWarnOn] = useState<boolean | null>(null)
   const [warnDays, setWarnDays] = useState<number | null>(null)
+  const [cfgOpen, setCfgOpen] = useState(false)
 
   if (err) return <Empty title="خطا" description={err} />
   if (!loaded || !data)
@@ -1721,6 +1811,8 @@ function DomView() {
         ]}
         value={flt}
         onValue={setFlt}
+        menu={[{ id: 'cfg', label: 'تنظیمات استعلام' }]}
+        onMenu={(id) => id === 'cfg' && setCfgOpen(true)}
         onRefresh={refresh}
         busy={busy}
       />
@@ -1863,6 +1955,8 @@ function DomView() {
           </label>
         </FormDialog>
       )}
+
+      {cfgOpen && <DomCfgDialog onClose={() => setCfgOpen(false)} />}
     </>
   )
 }

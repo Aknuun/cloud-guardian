@@ -95,6 +95,17 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/dom/refresh", r.webAuthed(r.webDomRefresh))
 	mux.HandleFunc("/api/tools/dom/one", r.webAuthed(r.webDomOne))
 	mux.HandleFunc("/api/tools/dom/sslcfg", r.webAuthed(r.webDomSslCfg))
+	mux.HandleFunc("/api/tools/dom/cfg", r.webAuthed(func(w http.ResponseWriter, req *http.Request, uid int64) {
+		switch req.Method {
+		case http.MethodGet:
+			r.webDomCfgGet(w, req, uid)
+		case http.MethodPost:
+			r.webDomCfgSet(w, req, uid)
+		default:
+			webErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	}))
+	mux.HandleFunc("/api/tools/dom/cfg/test", r.webAuthed(r.webDomCfgTest))
 	mux.HandleFunc("/api/tools/hf", r.webAuthed(r.webToolsHf))
 	mux.HandleFunc("/api/tools/hf/cfg", r.webAuthed(r.webHfCfg))
 	mux.HandleFunc("/api/tools/hf/hosts", r.webAuthed(r.webHfHosts))
