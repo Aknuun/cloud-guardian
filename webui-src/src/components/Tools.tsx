@@ -88,7 +88,14 @@ function SrvView() {
   const [sel, setSel] = useState<string[]>([])
   const [bulkDel, setBulkDel] = useState(false)
   const [monAll, setMonAll] = useState<{ s: Srv; d: any; err: string }[] | null>(null)
+  const [mcfg, setMcfg] = useState<{ cpuPct: number; memPct: number; diskPct: number } | null>(null)
   const [monAllBusy, setMonAllBusy] = useState(false)
+
+  useEffect(() => {
+    api<any>('/api/tools/srv/moncfg')
+      .then((c) => setMcfg({ cpuPct: c.cpuPct || 90, memPct: c.memPct || 90, diskPct: c.diskPct || 90 }))
+      .catch(() => setMcfg({ cpuPct: 90, memPct: 90, diskPct: 90 }))
+  }, [])
 
   const loadMon = async (s: Srv) => {
     setMonBusy(true)
@@ -197,6 +204,9 @@ function SrvView() {
         <Button variant="outline" icon={Pulse} onClick={loadAllMon}>
           مانیتور همه
         </Button>
+        <Button variant="outline" icon={ShieldCheck} onClick={() => setPwOpen(true)}>
+          رمزها
+        </Button>
         <Button variant="outline" icon={Gear} onClick={() => setCfgOpen(true)}>
           آستانه‌ها
         </Button>
@@ -205,9 +215,6 @@ function SrvView() {
         </Button>
         <Button variant="outline" icon={Plus} onClick={() => setSubOpen(true)}>
           از ساب‌دامنه
-        </Button>
-        <Button variant="outline" icon={ShieldCheck} onClick={() => setPwOpen(true)}>
-          رمزها
         </Button>
       </div>
       <FilterBar
@@ -414,22 +421,40 @@ function SrvView() {
               </div>
             )}
             {!monAllBusy &&
-              monAll.map((r) => (
-                <div key={r.s.id} className="cc-trow">
-                  <span className={r.err ? 'cc-dot pw' : 'cc-dot'} />
-                  <div className="cc-grow">
-                    <div className="cc-name">{r.s.name || r.s.host}</div>
-                    {r.err ? (
-                      <div className="cc-sub">{r.err}</div>
-                    ) : (
+              monAll.map((r) => {
+                const cpu = Math.round(Number(r.d?.cpu?.pct) || 0)
+                const mem = Math.round(Number(r.d?.mem?.pct) || 0)
+                const disk = Math.round(parseFloat(String(r.d?.disk?.pct ?? '')) || 0)
+                const t = mcfg || { cpuPct: 90, memPct: 90, diskPct: 90 }
+                const days = Math.floor((Number(r.d?.uptimeS) || 0) / 86400)
+                return (
+                  <div key={r.s.id} className="cc-trow">
+                    <span className={r.err ? 'cc-dot pw' : cpu >= t.cpuPct || mem >= t.memPct || disk >= t.diskPct ? 'cc-dot hot' : 'cc-dot'} />
+                    <div className="cc-grow">
+                      <div className="cc-name">{r.s.name || r.s.host}</div>
                       <div className="cc-sub cc-ltr">
-                        CPU {Math.round(Number(r.d?.cpu?.pct) || 0)}% · RAM {Math.round(Number(r.d?.mem?.pct) || 0)}% · Disk{' '}
-                        {Math.round(Number(String(r.d?.disk?.pct ?? '').replace('%', '')) || 0)}%
+                        {r.s.user}@{r.s.host}:{r.s.port}
                       </div>
-                    )}
+                      {r.err ? (
+                        <div className="cc-sub cc-hot">{r.err}</div>
+                      ) : (
+                        <div className="cc-monrow">
+                          <span className={cpu >= t.cpuPct ? 'cc-hot' : ''}>
+                            CPU {cpu}%{r.d?.cpu?.cores ? ' · ' + r.d.cpu.cores + ' هسته' : ''}
+                          </span>
+                          <span className={mem >= t.memPct ? 'cc-hot' : ''}>
+                            RAM {mem}% · {r.d?.mem?.usedMb ?? '—'}/{r.d?.mem?.totalMb ?? '—'} MB
+                          </span>
+                          <span className={disk >= t.diskPct ? 'cc-hot' : ''}>
+                            دیسک {disk}% · {r.d?.disk?.used || '—'} / {r.d?.disk?.total || '—'}
+                          </span>
+                          <span>آپ‌تایم {days} روز</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             <div className="cc-dialog-actions">
               <Button variant="secondary" icon={ArrowClockwise} onClick={loadAllMon}>
                 تازه‌سازی
@@ -460,19 +485,25 @@ function SrvView() {
                 <div className="cc-mon">
                   <div>
                     <span>CPU</span>
-                    <b>{Math.round(Number(monData.cpu?.pct) || 0)}%</b>
+                    <b className={Number(monData.cpu?.pct) >= (mcfg?.cpuPct ?? 90) ? 'cc-hot' : ''}>
+                      {Math.round(Number(monData.cpu?.pct) || 0)}%
+                    </b>
                     <i>{monData.cpu?.cores ? monData.cpu.cores + ' هسته' : '—'}</i>
                   </div>
                   <div>
                     <span>RAM</span>
-                    <b>{Math.round(Number(monData.mem?.pct) || 0)}%</b>
+                    <b className={Number(monData.mem?.pct) >= (mcfg?.memPct ?? 90) ? 'cc-hot' : ''}>
+                      {Math.round(Number(monData.mem?.pct) || 0)}%
+                    </b>
                     <i>
                       {monData.mem?.usedMb ?? '—'} / {monData.mem?.totalMb ?? '—'} MB
                     </i>
                   </div>
                   <div>
                     <span>دیسک</span>
-                    <b>{monData.disk?.pct || '—'}</b>
+                    <b className={parseFloat(String(monData.disk?.pct ?? '')) >= (mcfg?.diskPct ?? 90) ? 'cc-hot' : ''}>
+                      {monData.disk?.pct || '—'}
+                    </b>
                     <i>
                       {monData.disk?.used || '—'} / {monData.disk?.total || '—'}
                     </i>
