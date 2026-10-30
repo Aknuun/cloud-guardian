@@ -588,7 +588,7 @@ export default function App() {
         items: types.map((t) => ({
           id: t.id,
           title: t.name,
-          sub: `${t.cores} vCPU · ${mem(t.memory)} · ${t.disk}GB`,
+          sub: `${t.cores} vCPU · ${t.memory} GB · ${t.disk} GB`,
           extra: t.monthly || '',
         })),
         onPick: (tid) =>
