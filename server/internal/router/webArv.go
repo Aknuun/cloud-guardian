@@ -483,3 +483,49 @@ func (r *Router) webArvAction(w http.ResponseWriter, req *http.Request, uid int6
 		webErr(w, http.StatusBadRequest, "عملیات ناشناخته")
 	}
 }
+
+// webArvAccAdd stores a new Arvan account after the key is accepted by the API.
+func (r *Router) webArvAccAdd(w http.ResponseWriter, req *http.Request, uid int64) {
+	var in struct{ Name, Token string }
+	if !webDecode(w, req, &in) {
+		return
+	}
+	key := arvan.NormKey(in.Token)
+	if key == "" {
+		webErr(w, http.StatusBadRequest, "کلید آروان را وارد کن")
+		return
+	}
+	if _, err := arvan.New(key).Call("GET", "/domains?per_page=1", nil); err != nil {
+		webErr(w, http.StatusBadRequest, "کلید قبول نشد: "+hfErrFA(err))
+		return
+	}
+	accs := r.arvanAccList()
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		name = fmt.Sprintf("آروان %d", len(accs)+1)
+	}
+	accs = append(accs, map[string]any{"name": name, "token": key})
+	r.arvanSaveAccs(accs)
+	webOK(w, map[string]any{"ok": true, "i": len(accs) - 1})
+}
+
+// webArvAccDel removes an account and drops every cache keyed by its index.
+func (r *Router) webArvAccDel(w http.ResponseWriter, req *http.Request, uid int64) {
+	var in struct {
+		I int `json:"i"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	accs := r.arvanAccList()
+	if in.I < 0 || in.I >= len(accs) {
+		webErr(w, http.StatusNotFound, "اکانت پیدا نشد")
+		return
+	}
+	for i := in.I; i < len(accs); i++ {
+		r.arvFlushIndex(i)
+	}
+	accs = append(accs[:in.I], accs[in.I+1:]...)
+	r.arvanSaveAccs(accs)
+	webOK(w, map[string]any{"ok": true})
+}

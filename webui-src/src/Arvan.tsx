@@ -15,7 +15,7 @@ import {
   Trash,
   WarningCircle,
 } from '@phosphor-icons/react'
-import { Badge, Button, Empty, Input, LayerCard, Loader } from './components/ui'
+import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader } from './components/ui'
 import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
@@ -114,6 +114,38 @@ export default function Arvan({
   const optsCache = useRef<Record<string, Options>>({})
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const scrollPos = useRef<Record<string, number>>({})
+
+  const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
+  const [accBusy, setAccBusy] = useState(false)
+  const [accErr, setAccErr] = useState('')
+  const [accDel, setAccDel] = useState<Account | null>(null)
+
+  async function submitAcc() {
+    if (!accForm) return
+    setAccBusy(true)
+    setAccErr('')
+    try {
+      await api('/api/arv/accounts/add', { name: accForm.name, token: accForm.token })
+      setAccForm(null)
+      reload()
+    } catch (e: any) {
+      setAccErr(String(e?.message || e))
+    } finally {
+      setAccBusy(false)
+    }
+  }
+
+  async function removeAcc() {
+    if (!accDel) return
+    try {
+      await api('/api/arv/accounts/del', { i: accDel.i })
+      setAccDel(null)
+      reload()
+    } catch (e: any) {
+      toast(String(e?.message || e), true)
+      setAccDel(null)
+    }
+  }
 
   function bump(n: number) {
     setBusy((b) => Math.max(0, b + n))
@@ -490,6 +522,25 @@ export default function Arvan({
               ? 'جزئیات سرور'
               : 'ساخت سرور'
 
+  function rootTabs() {
+    const seg = (v: View, label: string) => (
+      <button
+        key={label}
+        className={'cc-chip' + (view.v === v.v ? ' on' : '')}
+        aria-pressed={view.v === v.v}
+        onClick={() => goRoot(v)}
+      >
+        {label}
+      </button>
+    )
+    return (
+      <div className="cc-chips cc-mb" role="group" aria-label="بخش آروان">
+        {seg({ v: 'servers' }, 'سرورهای ابری')}
+        {seg({ v: 'dns' }, 'دامنه‌ها')}
+      </div>
+    )
+  }
+
   function accChips() {
     if (accounts.length < 2) return null
     return (
@@ -526,9 +577,14 @@ export default function Arvan({
   function accountsPage() {
     return (
       <>
+        <div className="cc-pagebar">
+          <Button variant="primary" icon={Plus} onClick={() => { setAccErr(''); setAccForm({ name: '', token: '' }) }}>
+            افزودن اکانت آروان
+          </Button>
+        </div>
         {!accounts.length && busy > 0 && <Loader />}
         {!accounts.length && busy === 0 && (
-          <Empty title="اکانتی ثبت نشده" description="برای افزودن اکانت آروان از ربات استفاده کن." />
+          <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا کلید API آروان را اضافه کن." />
         )}
         {accounts.map((a) => (
           <LayerCard
@@ -547,6 +603,17 @@ export default function Arvan({
                   : 'دامنه‌ها و سرورهای ابری'}
               </div>
             </div>
+            <button
+              type="button"
+              className="cc-rowbtn danger"
+              aria-label="حذف اکانت"
+              onClick={(e) => {
+                e.stopPropagation()
+                setAccDel(a)
+              }}
+            >
+              <Trash size={15} />
+            </button>
             <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
           </LayerCard>
         ))}
@@ -956,9 +1023,9 @@ export default function Arvan({
   let body: any
   if (err) body = errorCard()
   else if (view.v === 'accounts') body = accountsPage()
-  else if (view.v === 'dns') body = <>{accChips()}{dnsPage()}</>
+  else if (view.v === 'dns') body = <>{rootTabs()}{accChips()}{dnsPage()}</>
   else if (view.v === 'records') body = recordsPage()
-  else if (view.v === 'servers') body = <>{accChips()}{serversPage()}</>
+  else if (view.v === 'servers') body = <>{rootTabs()}{accChips()}{serversPage()}</>
   else if (view.v === 'server') body = serverPage()
   else body = createPage()
   onBackRef?.(goBack)
@@ -990,6 +1057,56 @@ export default function Arvan({
       >
         {body}
       </ProviderShell>
+      <Dialog.Root open={!!accForm} onOpenChange={(o) => !o && setAccForm(null)}>
+        <Dialog className="cc-dialog" size="base">
+          <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+          <Dialog.Title className="cc-dialog-title">افزودن اکانت آروان</Dialog.Title>
+          <Dialog.Description className="cc-dialog-desc">
+            کلید API را از پنل آروان (IAM → کلیدها) بساز و اینجا بگذار.
+          </Dialog.Description>
+          <div className="cc-form">
+            <label className="cc-field">
+              <span>نام اکانت</span>
+              <Input
+                value={accForm?.name || ''}
+                onChange={(e) => setAccForm((f) => ({ name: e.target.value, token: f?.token || '' }))}
+                placeholder="main"
+                autoComplete="off"
+              />
+            </label>
+            <label className="cc-field">
+              <span>کلید API</span>
+              <textarea
+                className="cc-input cc-textarea"
+                value={accForm?.token || ''}
+                onChange={(e) => setAccForm((f) => ({ name: f?.name || '', token: e.target.value }))}
+                placeholder="apikey xxxxxxxx-…"
+                autoComplete="off"
+              />
+            </label>
+            {accErr && <div className="cc-form-err">{accErr}</div>}
+          </div>
+          <div className="cc-dialog-actions">
+            <Button variant="outline" onClick={() => setAccForm(null)}>انصراف</Button>
+            <Button variant="primary" disabled={accBusy} onClick={submitAcc}>ذخیره</Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
+
+      <Dialog.Root open={!!accDel} onOpenChange={(o) => !o && setAccDel(null)}>
+        <Dialog className="cc-dialog" size="base">
+          <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+          <Dialog.Title className="cc-dialog-title">حذف اکانت آروان</Dialog.Title>
+          <Dialog.Description className="cc-dialog-desc">
+            «{accDel?.name}» فقط از این پنل حذف می‌شود؛ دامنه‌ها و سرورهای آروان دست‌نخورده می‌مانند.
+          </Dialog.Description>
+          <div className="cc-dialog-actions">
+            <Button variant="outline" onClick={() => setAccDel(null)}>انصراف</Button>
+            <Button variant="primary" onClick={removeAcc}>حذف</Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
+
       <ActionModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
     </>
   )

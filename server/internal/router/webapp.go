@@ -55,6 +55,8 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/cf/lbgroups", r.webAuthed(r.webCfLbGroups))
 	mux.HandleFunc("/api/cf/lb", r.webAuthed(r.webCfLb))
 	mux.HandleFunc("/api/arv/accounts", r.webAuthed(r.webArvAccounts))
+	mux.HandleFunc("/api/arv/accounts/add", r.webAuthed(r.webArvAccAdd))
+	mux.HandleFunc("/api/arv/accounts/del", r.webAuthed(r.webArvAccDel))
 	mux.HandleFunc("/api/arv/domains", r.webAuthed(r.webArvDomains))
 	mux.HandleFunc("/api/arv/records", r.webAuthed(r.webArvRecords))
 	mux.HandleFunc("/api/arv/record", r.webAuthed(r.webArvRecordOp))
