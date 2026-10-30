@@ -2252,6 +2252,12 @@ function HookView() {
             ) : (
               <div className="cc-btnrow">
                 <Button
+                  variant="primary"
+                  onClick={() => act('/api/tools/hook/apply', { idx: p.idx }, 'در تنظیمات پنل ثبت شد')}
+                >
+                  ست کردن خودکار
+                </Button>
+                <Button
                   variant="outline"
                   onClick={() => {
                     setEdit(p)
@@ -2290,8 +2296,31 @@ function HookView() {
             <div className="cc-field">
               <span>آدرس وبهوک</span>
               <div className="cc-pre" style={{ whiteSpace: 'normal' }}>{edit.hook}</div>
-              <Button variant="outline" icon={Copy} onClick={() => { fallbackCopy(edit.hook || ''); setNotice('آدرس کپی شد') }}>
-                کپی آدرس
+              <div className="cc-btnrow">
+                <Button
+                  variant="outline"
+                  icon={Copy}
+                  onClick={() => {
+                    const v = edit.hook || ''
+                    fallbackCopy(v).then((ok) => setNotice(ok ? 'آدرس کپی شد' : 'کپی نشد؛ دستی انتخاب کن: ' + v))
+                  }}
+                >
+                  کپی آدرس
+                </Button>
+                <Button
+                  variant="outline"
+                  icon={Copy}
+                  onClick={() => {
+                    const v = edit.secret || ''
+                    fallbackCopy(v).then((ok) => setNotice(ok ? 'سکرت کپی شد' : 'کپی نشد؛ سکرت: ' + v))
+                  }}
+                >
+                  کپی سکرت
+                </Button>
+              </div>
+              <div className="cc-hint">با «ست کردن خودکار» همین آدرس و سکرت مستقیم در تنظیمات پنل ذخیره می‌شود.</div>
+              <Button variant="primary" onClick={() => act('/api/tools/hook/apply', { idx: edit.idx }, 'در تنظیمات پنل ثبت شد')}>
+                ست کردن خودکار در پنل
               </Button>
             </div>
           )}

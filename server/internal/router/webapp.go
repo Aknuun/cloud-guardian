@@ -114,6 +114,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/hook/cfg", r.webAuthed(r.webHookCfg))
 	mux.HandleFunc("/api/tools/hook/panel", r.webAuthed(r.webHookPanel))
 	mux.HandleFunc("/api/tools/hook/test", r.webAuthed(r.webHookTest))
+	mux.HandleFunc("/api/tools/hook/apply", r.webAuthed(r.webHookApply))
 	mux.HandleFunc("/api/hz/accounts/add", r.webAuthed(r.webHzAccAdd))
 	mux.HandleFunc("/api/hz/accounts/del", r.webAuthed(r.webHzAccDel))
 	mux.HandleFunc("/api/tools/srv/mon", r.webAuthed(r.webSrvMon))

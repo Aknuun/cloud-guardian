@@ -149,3 +149,33 @@ func (r *Router) webHookTest(w http.ResponseWriter, req *http.Request, uid int64
 	alerts.SendAlert(r.Bot, uid, pg.Panel{Name: pname(p), URL: p.URL, Username: rb}, items, true)
 	webOK(w, map[string]any{"ok": true})
 }
+
+// webHookApply signs the panel into our alert webhook through its own API.
+func (r *Router) webHookApply(w http.ResponseWriter, req *http.Request, uid int64) {
+	var in struct {
+		Idx     int  `json:"idx"`
+		Disable bool `json:"disable"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	panels := r.panels()
+	if in.Idx < 0 || in.Idx >= len(panels) {
+		webErr(w, http.StatusNotFound, "پنل پیدا نشد")
+		return
+	}
+	p := panels[in.Idx]
+	cfg := alerts.GetCfg(r.Store)
+	pc := r.webHookPanelCfg(cfg, p.URL)
+	hook := r.webHookBase() + "/pghook/" + pc.Secret
+	tok, err := p.Client().Login()
+	if err != nil {
+		webErr(w, http.StatusBadGateway, "ورود به پنل ناموفق")
+		return
+	}
+	if err := p.Client().SetWebhook(tok, hook, pc.Secret, !in.Disable, cfg.Days, cfg.Usage); err != nil {
+		webErr(w, http.StatusBadGateway, "ذخیره در پنل ناموفق: "+hfErrFA(err))
+		return
+	}
+	webOK(w, map[string]any{"ok": true, "hook": hook})
+}

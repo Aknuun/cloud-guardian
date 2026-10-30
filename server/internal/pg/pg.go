@@ -438,3 +438,47 @@ func trunc(s string, n int) string {
 	}
 	return s
 }
+
+// SetWebhook writes our alert webhook (and its thresholds) into the panel
+// settings, so the admin never has to paste the URL by hand.
+func (p *Pg) SetWebhook(token, hookURL, secret string, enable bool, days, usage []float64) error {
+	st := p.Settings(token)
+	if st == nil {
+		return &Error{"خواندن تنظیمات پنل ناموفق"}
+	}
+	wh, _ := st["webhook"].(map[string]any)
+	if wh == nil {
+		wh = map[string]any{}
+		st["webhook"] = wh
+	}
+	wh["enable"] = enable
+	if len(days) > 0 {
+		wh["days_left"] = days
+	}
+	if len(usage) > 0 {
+		wh["usage_percent"] = usage
+	}
+	if wh["timeout"] == nil {
+		wh["timeout"] = 180
+	}
+	var list []any
+	if old, ok := wh["webhooks"].([]any); ok {
+		for _, it := range old {
+			m, _ := it.(map[string]any)
+			if m != nil && m["secret"] != secret {
+				list = append(list, m)
+			}
+		}
+	}
+	list = append(list, map[string]any{"url": hookURL, "secret": secret})
+	wh["webhooks"] = list
+	b, _ := json.Marshal(st)
+	req, err := http.NewRequest("PUT", p.Base+"/api/settings", bytes.NewReader(b))
+	if err != nil {
+		return &Error{err.Error()}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", ua)
+	return doJSON(req, 25*time.Second, nil)
+}

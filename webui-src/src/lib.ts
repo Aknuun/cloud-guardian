@@ -81,19 +81,31 @@ export function mem(mb: any) {
   const n = Number(mb || 0)
   return n >= 1024 ? (n / 1024).toFixed(n % 1024 ? 1 : 0) + ' GB' : n + ' MB'
 }
-export function fallbackCopy(v: string) {
+export async function fallbackCopy(v: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(v)
+      return true
+    }
+  } catch {
+    /* fall through to execCommand */
+  }
   const ta = document.createElement('textarea')
   ta.value = v
   ta.style.position = 'fixed'
+  ta.style.top = '0'
   ta.style.opacity = '0'
   document.body.appendChild(ta)
+  ta.focus()
   ta.select()
+  let ok = false
   try {
-    document.execCommand('copy')
+    ok = document.execCommand('copy')
   } catch {
-    /* ignore */
+    ok = false
   }
   ta.remove()
+  return ok
 }
 
 export function haptic(kind: 'light' | 'success' | 'error' = 'light') {

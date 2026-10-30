@@ -1175,3 +1175,29 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     transition: none !important;
   }
 }
+
+/* the sidebar holds every section now: let it scroll instead of clipping */
+.cc-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.cc-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+.cc-sidebar::-webkit-scrollbar-thumb {
+  background: var(--ds-line);
+  border-radius: 6px;
+}
+.cc-sidebar .cc-sidenav {
+  flex: 0 0 auto;
+}
+@media (min-width: 900px) {
+  .cc-sidebar {
+    height: 100dvh;
+  }
+}
