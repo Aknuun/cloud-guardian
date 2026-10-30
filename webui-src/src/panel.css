@@ -1686,3 +1686,17 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 @media (min-width: 700px) {
   .cc-gridbtns { grid-template-columns: repeat(4, minmax(0, auto)); justify-content: start; }
 }
+
+/* server actions: shorter buttons + separated danger zone */
+.cc-main .cc-actions button[data-kumo-component='Button'] { height: 44px; font-size: 13.5px; }
+.cc-actions-danger { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ds-line);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cc-actions-danger-label { grid-column: 1 / -1; font-size: 11px; color: var(--ds-subtle);
+  padding-inline-start: 2px; }
+.cc-actions-danger button[data-kumo-component='Button'] { width: 100%; height: 40px; font-size: 12.5px; }
+.cc-actions-danger button[data-variant='destructive'] { grid-column: 1 / -1; }
+.cc-main input[type='number'] { height: 44px; }
+@media (max-width: 699px) {
+  .cc-main .cc-actions button[data-kumo-component='Button'] { height: 42px; font-size: 13px; }
+  .cc-actions-danger button[data-kumo-component='Button'] { height: 38px; }
+}

@@ -1093,6 +1093,8 @@ export default function App() {
             >
               تعویض IPv4
             </Button>
+<div className="cc-actions-danger">
+            <span className="cc-actions-danger-label">عملیات خطرناک</span>
             <Button
               className="cc-wide"
               variant="secondary-destructive"
@@ -1140,6 +1142,7 @@ export default function App() {
             >
               حذف سرور
             </Button>
+</div>
           </div>
 
           <div className="cc-section">اسنپ‌شات‌ها ({snaps.length})</div>
