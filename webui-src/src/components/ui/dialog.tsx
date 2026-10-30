@@ -17,6 +17,15 @@ function DialogContent({
           size === 'lg' && 'max-w-[min(560px,94vw)]',
           className,
         )}
+        onOpenAutoFocus={(e) => {
+          const root = e.currentTarget as HTMLElement | null
+          const field = root?.querySelector<HTMLElement>(
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
+          )
+          if (!field) return
+          e.preventDefault()
+          field.focus()
+        }}
         {...props}
       >
         {children}
