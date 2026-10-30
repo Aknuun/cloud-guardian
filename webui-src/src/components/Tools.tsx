@@ -3036,7 +3036,7 @@ function SetView() {
         <Loader size="lg" />
       </div>
     )
-  const newer = data.latest && data.latest !== 'v' + data.version && data.latest !== data.version
+  const newer = !!data.latest && verGt(data.latest, data.version)
   return (
     <>
       <StatGrid
@@ -3237,4 +3237,15 @@ function BkDialog({ onClose, act }: { onClose: () => void; act: (p: string, b: a
       </Dialog>
     </Dialog.Root>
   )
+}
+
+// verGt reports whether version a is newer than b (both "x.y.z" or "vx.y.z").
+function verGt(a: string, b: string) {
+  const pa = String(a).replace(/^v/, '').split('.').map((x) => Number(x) || 0)
+  const pb = String(b).replace(/^v/, '').split('.').map((x) => Number(x) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0)
+    if (d) return d > 0
+  }
+  return false
 }
