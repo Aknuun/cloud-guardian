@@ -674,6 +674,23 @@ func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
 		}
 		byUser[u] = append(byUser[u], it)
 	}
+	// owner admins: fall back to the seller's Telegram id when the user has none
+	ownerTg := map[string]int64{}
+	for _, a := range c.Admins(tok) {
+		name := toString(a["username"])
+		var id int64
+		switch v := a["telegram_id"].(type) {
+		case float64:
+			id = int64(v)
+		case int64:
+			id = v
+		case string:
+			id = int64(atoiSafe(v))
+		}
+		if name != "" && id > 0 {
+			ownerTg[name] = id
+		}
+	}
 	sent := 0
 	for _, u := range order {
 		d := c.User(tok, u)
@@ -688,6 +705,13 @@ func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
 			id = v
 		case string:
 			id = int64(atoiSafe(v))
+		}
+		if id <= 0 {
+			if adm, ok := d["admin"].(map[string]any); ok {
+				id = ownerTg[toString(adm["username"])]
+			} else if s, ok := d["admin"].(string); ok {
+				id = ownerTg[s]
+			}
 		}
 		if id <= 0 {
 			continue

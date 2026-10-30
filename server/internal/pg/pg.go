@@ -485,6 +485,17 @@ func (p *Pg) SetWebhook(token, hookURL, secret string, enable bool, days, usage 
 
 // AdminGet finds a panel admin by username (the single-admin GET route is not
 // exposed by PasarGuard, so the list is used).
+// Admins returns the full admin list (username -> telegram_id map is built by callers).
+func (p *Pg) Admins(token string) []map[string]any {
+	var out struct {
+		Admins []map[string]any `json:"admins"`
+	}
+	if err := p.get(token, "/api/admins", 20*time.Second, &out); err != nil {
+		return nil
+	}
+	return out.Admins
+}
+
 func (p *Pg) AdminGet(token, username string) (map[string]any, error) {
 	var out struct {
 		Admins []map[string]any `json:"admins"`
