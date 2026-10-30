@@ -122,3 +122,14 @@ export function ErrBox({ msg, onRetry }: { msg: string; onRetry?: () => void }) 
     </div>
   )
 }
+
+export function Skeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="cc-skel" aria-busy="true" aria-live="polite" aria-label="در حال بارگذاری">
+      <div className="cc-skel-stats">
+        {[0, 1, 2].map((i) => <span key={i} className="cc-skel-tile" />)}
+      </div>
+      {Array.from({ length: rows }).map((_, i) => <span key={i} className="cc-skel-row" />)}
+    </div>
+  )
+}

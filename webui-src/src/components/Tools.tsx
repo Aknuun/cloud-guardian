@@ -4,7 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
-import { TOOLS, FormDialog, HomeView, ErrBox } from './toolsMeta'
+import { TOOLS, FormDialog, HomeView, ErrBox, Skeleton } from './toolsMeta'
 import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
 
@@ -112,7 +112,7 @@ function SrvView() {
     setActSrv(null)
   }
   if (err) return <Empty title="خطا" description={err} />
-  if (!loaded) return <Loader size="lg" />
+  if (!loaded) return <Skeleton />
   const list = data || []
   const needle = q.trim().toLowerCase()
   const shown = list
@@ -583,7 +583,7 @@ function RemView() {
   const [q, setQ] = useState('')
   const [flt, setFlt] = useState('all')
   if (err) return <Empty title="خطا" description={err} />
-  if (!loaded) return <Loader size="lg" />
+  if (!loaded) return <Skeleton />
   const list = data || []
   const pending = list.filter((r) => !r.ack).length
   const needle = q.trim().toLowerCase()
@@ -717,7 +717,7 @@ function PgView() {
   const [mdel, setMdel] = useState<PgMon | null>(null)
   const [nd, setNd] = useState<PgMon | null>(null)
   if (err) return <Empty title="خطا" description={err} />
-  if (!loaded) return <Loader size="lg" />
+  if (!loaded) return <Skeleton />
   const iso0 = data || { panels: [], monitors: [] }
   const needle = q.trim().toLowerCase()
   const iso = needle
@@ -3491,7 +3491,7 @@ function FoView() {
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {err && <ErrBox msg={err} onRetry={reload} />}
-      {!loaded && <Loader />}
+      {!loaded && <Skeleton rows={3} />}
 
       {d && d.configured && (
         <div className="cc-section">
@@ -3699,7 +3699,7 @@ function HubView() {
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {err && <ErrBox msg={err} onRetry={reload} />}
-      {!loaded && <Loader />}
+      {!loaded && <Skeleton rows={3} />}
 
       {s && (
         <div className="cc-section">

@@ -1768,3 +1768,11 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-errbox span{flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
 .cc-errbox-retry{flex:0 0 auto;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--ds-line);background:var(--ds-bg);color:var(--ds-text);font-size:12px;cursor:pointer}
 .cc-errbox-retry:hover{background:var(--ds-brand-soft);color:var(--ds-brand)}
+.cc-skel{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.cc-skel-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.cc-skel-tile{height:62px;border-radius:14px;background:var(--ds-tint)}
+.cc-skel-row{height:52px;border-radius:12px;background:var(--ds-tint)}
+@media (max-width:699px){
+  .cc-skel-tile{height:54px}
+  .cc-skel-row{height:56px}
+}
