@@ -1922,11 +1922,21 @@ function DomView() {
           </Button>
         </div>
         <div className="cc-checkline">
-          <input type="checkbox" checked={on} onChange={(e) => setWarnOn(e.target.checked)} />
+          <input
+            type="checkbox"
+            id="ssl-alert-on"
+            name="sslAlertOn"
+            aria-label="هشدار تلگرام گواهی"
+            checked={on}
+            onChange={(e) => setWarnOn(e.target.checked)}
+          />
           <span>هشدار تلگرام</span>
           <span className="cc-grow" />
           <input
             className="cc-input cc-num"
+            id="ssl-warn-days"
+            name="sslWarnDays"
+            aria-label="روزهای هشدار گواهی"
             type="number"
             min={1}
             max={365}

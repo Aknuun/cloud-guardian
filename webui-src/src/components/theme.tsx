@@ -8,8 +8,12 @@ function apply(mode: Mode) {
   try {
     localStorage.setItem(KEY, mode)
     const tg = (window as any).Telegram?.WebApp
-    tg?.setHeaderColor?.(mode === 'dark' ? '#0e1116' : '#ffffff')
-    tg?.setBackgroundColor?.(mode === 'dark' ? '#0e1116' : '#ffffff')
+    // setHeaderColor/setBackgroundColor need Bot API 6.1+; older clients warn.
+    const ok = tg?.isVersionAtLeast ? tg.isVersionAtLeast('6.1') : false
+    if (ok) {
+      tg?.setHeaderColor?.(mode === 'dark' ? '#0e1116' : '#ffffff')
+      tg?.setBackgroundColor?.(mode === 'dark' ? '#0e1116' : '#ffffff')
+    }
   } catch {
     /* ignore */
   }
