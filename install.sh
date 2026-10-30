@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Cloud Guardian — installer & manager  (bilingual: فارسی / English)
+# Cloud Guardian — installer & manager  (English)
 #   new-install | update | uninstall | status | check | help
 #   (install/i kept as aliases of new-install)
 #
@@ -301,7 +301,7 @@ bot_username() {
   curl -sS --max-time 15 "https://api.telegram.org/bot$1/getMe" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);print((d.get('result') or {}).get('username',''))" 2>/dev/null || true
 }
-# شبیه‌سازی پیام /start از طرف مدیر و فرستادن آن به وب‌هوک ربات
+# Simulate a /start message from the admin and deliver it to the bot webhook
 trigger_start() {
   local url="$1" admin="$2" epoch
   epoch="$(date +%s)"
@@ -309,7 +309,7 @@ trigger_start() {
     -d "{\"update_id\":1,\"message\":{\"message_id\":1,\"date\":$epoch,\"chat\":{\"id\":$admin,\"type\":\"private\"},\"from\":{\"id\":$admin,\"is_bot\":false,\"first_name\":\"admin\"},\"text\":\"/start\"}}" \
     >/dev/null 2>&1 || true
 }
-# پیام متنی مستقیم از طرف ربات به مدیر
+# Send a plain text message from the bot to the admin
 tg_send_text() {
   local tok="$1" chat="$2" text="$3" payload
   payload="$(CHAT="$chat" TEXT="$text" python3 -c 'import json,os; print(json.dumps({"chat_id": os.environ["CHAT"], "text": os.environ["TEXT"]}, ensure_ascii=False))' 2>/dev/null || true)"
@@ -469,7 +469,7 @@ cf_token_guide() {
   hr
 }
 
-# ─────────────── خطای رنگيِ دسترسی توکن کلادفلر ───────────────
+# ─────────────── Cloudflare token permission error (coloured) ───────────────
 cf_perm_error() {
   printf '\n'
   printf "${RED}${BOLD}  ╭──────────────────────────────────────────────────────────────╮${RST}\n"
@@ -745,7 +745,7 @@ do_install() {
   tg_send_text "$BOT" "${ADMIN%%,*}" "$(t done_tg_msg)"
   trigger_start "$url/tg" "${ADMIN%%,*}"
 
-  # ایجنت سرور: قلب تپندهٔ نصب تازه — بدون آن همهٔ کارها روی ورکر می‌ماند و سقف‌ها برمی‌گردند
+  # Server agent: the heart of a fresh install — without it everything stays on the worker and the caps come back
   do_guardian_agent "$url"
 
   printf '\n'
@@ -777,8 +777,8 @@ do_update() {
   b "$(t upd_download)"
   if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/worker.js" ]; then
     cp "$SRC_DIR/worker.js" "$DIR/worker.js"
-    # ابزار دیپلوی را هم هم‌نسخه کن؛ وگرنه نسخهٔ قدیمیِ deploy-tool بایندینگ‌ها را
-    # خالی دیپلوی می‌کند و ربات می‌میرد.
+    # Keep deploy-tool in lockstep; otherwise an older deploy-tool deploys
+    # empty bindings and the bot dies.
     if [ -f "$SRC_DIR/deploy-tool.py" ]; then
       cp "$SRC_DIR/deploy-tool.py" "$DIR/deploy-tool.py"
       chmod +x "$DIR/deploy-tool.py" 2>/dev/null || true
@@ -809,9 +809,9 @@ do_update() {
     fi
     exit 1
   fi
-  # ترمیم وبهوک بعد از هر آپدیت موفق: اگر نصب قبلی با وبهوک بی‌secret (دیپلوی ناقص)
-  # گیر کرده بود، الان با secret درست بازسازی می‌شود. خرابی‌اش کشنده نیست چون
-  # وبهوک سالم قبلی سر جایش می‌ماند.
+  # Webhook repair after every successful update: if a previous install got stuck
+  # with a secretless webhook (partial deploy), it is rebuilt correctly now.
+  # A failure here is not fatal because the previous healthy webhook stays.
   set_webhook || warn "$(t w_webhook) (update continues; old webhook untouched)"
   set_cfg_version "$newv"
   ok "$(t ok_updated) ${newv:-?}."
@@ -845,9 +845,9 @@ do_uninstall() {
 # ============================================================
 
 do_guardian_agent() {
-  # نصب تازه و مستقل: توکن می‌سازد، دستور یک‌خطی سرور مشتری را چاپ می‌کند و
-  # (با تأیید) توکن را در KV ورکر ثبت می‌کند تا heartbeat ایجنت معتبر باشد.
-  # آرگومان اول اختیاری: آدرس عمومی ورکر (در do_install موجود است).
+  # Fresh, standalone install: mints a token, prints the customer's one-line server
+  # command and (with confirmation) stores the token in worker KV so the agent
+  # heartbeat is trusted. First argument is optional: the worker public URL.
   local WORKER_URL_IN="${1:-}"
   printf "\n${MAG}${BOLD}🖥️  %s${RST}\n" "$(t gd_title)"; hr
   local TOK="${GUARDIAN_TOKEN:-}"
@@ -1035,7 +1035,7 @@ main_menu() {
       5) do_status ;;
       6) do_check ;;
       7) usage ;;
-      0|q|exit|خروج) printf '\n'; exit 0 ;;
+      0|q|exit|quit) printf '\n'; exit 0 ;;
       *) err "$(t menu_invalid)"; continue ;;
     esac
     printf '\n'

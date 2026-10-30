@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
-# به‌روزرسانی خودکار نگهبان ابری — توسط کرون هر ۱۰ دقیقه اجرا می‌شود
-# فقط وقتی در مخزن گیت‌هاب «تگ نسخهٔ جدید یا ریلیز جدید» ساخته شده باشد دیپلوی می‌کند.
+# Cloud Guardian auto-update — run by cron every 10 minutes
+# Deploys only when a new tag or release exists in the GitHub repo.
 # ============================================================
 set -euo pipefail
 
@@ -24,8 +24,8 @@ except Exception:
 PY
 )
 
-# آخرین نسخهٔ مخزن (بزرگ‌ترین نسخه از بین تگ‌ها و ریلیزها) — تگ می‌تواند با v شروع شود (مثل v1.0.3)
-# ریلیزهای درفت و پری‌ریلیز نادیده گرفته می‌شوند (فقط ریلیز پایدار)
+# Latest repo version (highest among tags and releases) — tags may start with v (e.g. v1.0.3)
+# Draft and pre-release entries are ignored (stable releases only)
 LATEST_TAG=$(python3 - <<'PY' 2>/dev/null || true
 import json, re, urllib.request
 REPO = "Aknuun/cloud-guardian"
@@ -50,10 +50,10 @@ PY
 )
 [ -n "$LATEST_TAG" ] || exit 0
 
-# نسخهٔ عددی بدون پیشوند v برای مقایسه
+# Numeric version without the v prefix, for comparison
 LATEST="${LATEST_TAG#v}"
 
-# اگر تگ/ریلیز جدیدی نسبت به نسخهٔ نصب‌شده نبود، کاری نکن
+# No new tag/release compared to the installed version: do nothing
 [ "$LATEST" = "$OLDV" ] && exit 0
 if [ -n "$OLDV" ]; then
   NEWEST=$(printf '%s\n%s\n' "$OLDV" "$LATEST" | sort -V | tail -1)
@@ -64,8 +64,8 @@ TMP="${DIR}/worker.js.new"
 DTMP="${DIR}/deploy-tool.py.new"
 curl -fsSL --max-time 90 -o "$TMP" -H 'Accept: application/vnd.github.raw' \
   "https://api.github.com/repos/${REPO}/contents/worker.js?ref=${LATEST_TAG}" || exit 0
-# ابزار دیپلوی را هم از همان تگ بگیر؛ وگرنه نسخهٔ قدیمیِ deploy-tool بایندینگ‌ها را
-# خالی دیپلوی می‌کند و ربات می‌میرد. اگر دانلودش ناموفق بود، این دور را رد کن.
+# Fetch deploy-tool from the same tag; otherwise an older deploy-tool deploys
+# empty bindings and the bot dies. If the download fails, skip this round.
 curl -fsSL --max-time 90 -o "$DTMP" -H 'Accept: application/vnd.github.raw' \
   "https://api.github.com/repos/${REPO}/contents/deploy-tool.py?ref=${LATEST_TAG}" || { rm -f "$TMP"; exit 0; }
 
@@ -75,10 +75,10 @@ if [ -z "$NEWV" ]; then
   rm -f "$TMP" "$DTMP"
   exit 0
 fi
-# deploy-tool باید سالم باشد
+# deploy-tool must be healthy
 grep -q "def update" "$DTMP" || { rm -f "$TMP" "$DTMP"; exit 0; }
-# اگر نسخهٔ داخل کد از نسخهٔ نصب‌شده جدیدتر نیست، دیپلوی نکن
-# (جلوگیری از حلقهٔ دیپلوی تکراری و دانگرید تصادفی)
+# Do not deploy if the in-code version is not newer than the installed one
+# (prevents repeated deploy loops and accidental downgrades)
 if [ -n "$OLDV" ]; then
   NEWEST2=$(printf '%s\n%s\n' "$OLDV" "$NEWV" | sort -V | tail -1)
   if [ "$NEWEST2" != "$NEWV" ] || [ "$NEWV" = "$OLDV" ]; then
@@ -97,7 +97,7 @@ import json,sys
 c=json.load(open(sys.argv[1])); c["version"]=sys.argv[2]
 json.dump(c, open(sys.argv[1],"w"), ensure_ascii=False, indent=2)
 PY
-  echo "$(date) — به نسخهٔ $NEWV (تگ/ریلیز $LATEST_TAG) به‌روزرسانی شد."
+  echo "$(date) — updated to $NEWV (tag/release $LATEST_TAG)."
 else
-  echo "$(date) — به‌روزرسانی به $NEWV ناموفق بود (لاگ بالا)."
+  echo "$(date) — update to $NEWV failed (see log above)."
 fi

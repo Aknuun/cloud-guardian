@@ -23,6 +23,7 @@ ENVFILE="${INSTALL_DIR}/server.env"
 UNIT="/etc/systemd/system/cg-server.service"
 SERVICE="cg-server"
 WEBAPP_ENV="${INSTALL_DIR}/webapp.env"
+WEBAPP_ORIGIN="${INSTALL_DIR}/webapp.origin"
 WEBAPP_DROPIN_DIR="/etc/systemd/system/cg-server.service.d"
 WEBAPP_DROPIN="${WEBAPP_DROPIN_DIR}/webapp.conf"
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -176,6 +177,144 @@ print(v if isinstance(v,str) else ("" if v is None else v))
 PY
 }
 
+# ------------------------------------------------------------
+# Cloudflare helpers (mini app on a real domain)
+# ------------------------------------------------------------
+cf_api() { # cf_api <token> <method> <path> [json-body]
+  if [ -n "${4:-}" ]; then
+    curl -fsS --max-time 25 -X "$2" \
+      -H "Authorization: Bearer $1" -H "Content-Type: application/json" \
+      --data "$4" "https://api.cloudflare.com/client/v4$3" 2>/dev/null
+  else
+    curl -fsS --max-time 25 -X "$2" \
+      -H "Authorization: Bearer $1" -H "Content-Type: application/json" \
+      "https://api.cloudflare.com/client/v4$3" 2>/dev/null
+  fi
+}
+
+# Ask which zone/subdomain should serve the mini app. Sets $domain and $zid.
+pick_miniapp_domain() {
+  local list; list="$(cf_api "$cf" GET '/zones?per_page=50')" || return 1
+  [ -n "$list" ] || return 1
+  local names; names="$(printf '%s' "$list" | python3 -c '
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+for i,z in enumerate(d.get("result") or [],1):
+    print("%d) %s" % (i, z.get("name","")))
+' 2>/dev/null)"
+  [ -n "$names" ] || return 1
+
+  echo
+  info "Zones on this Cloudflare account:"
+  printf '%s\n' "$names"
+  echo
+  info "A real domain behind Cloudflare is more reliable than <ip>.sslip.io:9443,"
+  info "especially on networks that block unusual ports."
+  ask "Use a subdomain of one of these zones? (number, or Enter to skip)" "${domain:+keep}"
+  local pick="$REPLY"
+  if [ -z "$pick" ] || [ "$pick" = "keep" ]; then return 0; fi
+  if ! [[ "$pick" =~ ^[0-9]+$ ]]; then warn "Skipped: not a number"; return 0; fi
+
+  local zone
+  zone="$(printf '%s' "$list" | python3 -c '
+import json,sys
+n=int(sys.argv[1]); d=json.load(sys.stdin)
+r=d.get("result") or []
+print(r[n-1]["name"]+"\t"+r[n-1]["id"]+"\t"+(r[n-1].get("account",{}) or {}).get("id","") if 0<n<=len(r) else "")
+' "$pick" 2>/dev/null)"
+  [ -n "$zone" ] || { warn "Zone not found"; return 0; }
+  zid="$(printf '%s' "$zone" | cut -f2)"
+  local zname; zname="$(printf '%s' "$zone" | cut -f1)"
+  acct="$(printf '%s' "$zone" | cut -f3)"
+  [ -n "$acct" ] && acct="$acct"
+
+  ask "Subdomain label (e.g. cg for cg.${zname})" "cg"
+  local label="$REPLY"
+  if ! [[ "$label" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
+    warn "Invalid label — skipped"; zid=""; return 0
+  fi
+  domain="${label}.${zname}"
+  ok "Mini app domain: https://${domain}/app/"
+}
+
+# Point the domain at this server through a Cloudflare worker that proxies to
+# the local Caddy origin. Sets $fronted_url on success.
+cf_front_domain() { # cf_front_domain <origin-base e.g. https://x:9443>
+  local origin="$1" ip host
+  [ -n "$cf" ] && [ -n "$domain" ] && [ -n "$zid" ] || return 1
+  ip="$(public_ip)"; host="$domain"
+  [ -n "$ip" ] || { warn "Public IP unknown; skipping domain front"; return 1; }
+
+  step "Pointing ${host} at this server (Cloudflare)"
+  local res; res="$(cf_api "$cf" POST "/zones/${zid}/dns_records" \
+    "{\"type\":\"A\",\"name\":\"${host}\",\"content\":\"${ip}\",\"proxied\":true,\"ttl\":1}")"
+  if printf '%s' "$res" | grep -q '"success":true'; then
+    ok "DNS: ${host} -> ${ip} (proxied)"
+  else
+    local rid; rid="$(cf_api "$cf" GET "/zones/${zid}/dns_records?name=${host}" \
+      | python3 -c '
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+r=d.get("result") or []
+print(r[0]["id"] if r else "")
+' 2>/dev/null)"
+    if [ -n "$rid" ]; then
+      cf_api "$cf" PATCH "/zones/${zid}/dns_records/${rid}" \
+        "{\"type\":\"A\",\"name\":\"${host}\",\"content\":\"${ip}\",\"proxied\":true,\"ttl\":1}" >/dev/null
+      ok "DNS: ${host} updated"
+    else
+      warn "Could not create the DNS record (token needs DNS:Edit)"
+      return 1
+    fi
+  fi
+
+  local acc="${acct:-}"
+  [ -n "$acc" ] || acc="$(cf_api "$cf" GET '/zones?per_page=1' | python3 -c '
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception: sys.exit(0)
+r=d.get("result") or []
+print((r[0].get("account") or {}).get("id","") if r else "")
+' 2>/dev/null)"
+
+  local tmp; tmp="$(mktemp -d)"
+  cat > "$tmp/worker.js" <<EOF
+const ORIGIN = "${origin}";
+export default {
+  async fetch(req) {
+    const u = new URL(req.url);
+    const t = new URL(u.pathname + u.search, ORIGIN);
+    const r = await fetch(new Request(t.toString(), req));
+    return new Response(r.body, { status: r.status, headers: new Headers(r.headers) });
+  },
+};
+EOF
+  local meta='{"main_module":"worker.js","compatibility_date":"2026-01-01"}'
+  if curl -fsS --max-time 40 -X PUT \
+      -H "Authorization: Bearer $cf" \
+      -F "metadata=${meta};type=application/json" \
+      -F "worker.js=@${tmp}/worker.js;type=application/javascript+module" \
+      "https://api.cloudflare.com/client/v4/accounts/${acc}/workers/scripts/cgproxy" >/dev/null 2>&1; then
+    ok "Worker deployed (cgproxy)"
+  else
+    warn "Worker upload failed (token needs Workers Scripts:Edit) — falling back to the raw URL"
+    rm -rf "$tmp"; return 1
+  fi
+  rm -rf "$tmp"
+
+  if cf_api "$cf" POST "/zones/${zid}/workers/routes" \
+      "{\"pattern\":\"${host}/*\",\"script\":\"cgproxy\"}" >/dev/null; then
+    ok "Route: ${host}/* -> cgproxy"
+  else
+    warn "Worker route failed — falling back to the raw URL"; return 1
+  fi
+
+  fronted_url="https://${host}/app/"
+  return 0
+}
+
 # extract the :port from a url (empty if none)
 port_of_url() {
   printf '%s' "$1" | sed -nE 's#^[a-zA-Z][a-zA-Z0-9+.-]*://[^/]*:([0-9]{2,5})(/.*)?$#\1#p'
@@ -218,12 +357,17 @@ ask() { # ask <prompt> [default] -> REPLY
 
 write_config() {
   step "Server configuration"
-  local token admin cf pub acct hz
+  local token admin cf pub acct hz domain zid
   token="$(cfg_get bot_token)"; admin="$(cfg_get admin_id)"
   cf="$(cfg_get cf_token)"; acct="$(cfg_get cf_account_id)"; hz="$(cfg_get hz_token)"
   if [ -f "$CFG" ]; then
     warn "config.json exists — press Enter to keep the current value"
   fi
+
+  # Cloudflare token first: it is what lets the mini app get a real domain
+  # (proxied DNS record + worker front) instead of a raw IP:port.
+  ask "Cloudflare API token (DNS + Workers edit; Enter to skip)" "$cf"
+  cf="$REPLY"
 
   # bot token
   while :; do
@@ -241,9 +385,12 @@ write_config() {
     err "Must be numeric"
   done
 
-  # cf token (optional)
-  ask "Cloudflare API token (optional, Enter to keep/skip)" "$cf"
-  cf="$REPLY"
+  # optional private mini-app domain, taken from one of the token's zones
+  domain="$(cfg_get webapp_domain)"
+  zid="$(cfg_get webapp_zone_id)"
+  if [ -n "$cf" ]; then
+    pick_miniapp_domain || true
+  fi
 
   # public url — auto-detected silently (no prompt); used only by the optional failover.
   # The health/webhook port is random per install (5 digits, verified free) to avoid
@@ -265,7 +412,9 @@ write_config() {
   "cf_token": "$(json_escape "$cf")",
   "cf_account_id": "$(json_escape "$acct")",
   "public_url": "$(json_escape "$pub")",
-  "hz_token": "$(json_escape "$hz")"
+  "hz_token": "$(json_escape "$hz")",
+  "webapp_domain": "$(json_escape "$domain")",
+  "webapp_zone_id": "$(json_escape "$zid")"
 }
 EOF
   chmod 600 "$CFG"
@@ -424,6 +573,9 @@ EOF
 
 setup_webapp() {
   local mode="${1:-install}"
+  local domain zid fronted_url cf acct
+  domain="$(cfg_get webapp_domain)"; zid="$(cfg_get webapp_zone_id)"
+  cf="$(cfg_get cf_token)"; acct="$(cfg_get cf_account_id)"
   local port; port="$(service_port)"
   if [ -z "$port" ]; then
     warn "Mini app skipped: server port is unknown"
@@ -442,6 +594,17 @@ setup_webapp() {
 
   if [ -n "$url" ]; then
     ensure_no_h3
+    # A custom domain was picked earlier: front the existing origin through
+    # Cloudflare once, then remember the new URL.
+    local origin=""
+    [ -f "$WEBAPP_ORIGIN" ] && origin="$(head -n1 "$WEBAPP_ORIGIN")"
+    if [ -z "$origin" ]; then origin="$(printf '%s' "$url" | sed 's#/app/*$##')"; fi
+    if [ -n "$domain" ] && [ -n "$cf" ] && [ "$url" != "https://${domain}/app/" ]; then
+      if cf_front_domain "$origin"; then
+        url="$fronted_url"
+        printf '%s\n' "$origin" > "$WEBAPP_ORIGIN"
+      fi
+    fi
     save_webapp_url "$url"
     apply_webapp_env "$url"
     if have caddy && ! systemctl is-active --quiet caddy 2>/dev/null; then
@@ -518,7 +681,11 @@ EOF
     return 0
   fi
 
+  printf '%s\n' "$base" > "$WEBAPP_ORIGIN"
   url="${base}/app/"
+  if [ -n "$domain" ] && [ -n "$cf" ]; then
+    if cf_front_domain "$base"; then url="$fronted_url"; fi
+  fi
   save_webapp_url "$url"
   apply_webapp_env "$url"
   sleep 1
