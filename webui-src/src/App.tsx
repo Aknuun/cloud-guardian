@@ -12,6 +12,7 @@ import {
   Copy,
   GlobeHemisphereWest,
   Key,
+  Lightning,
   List,
   PencilSimple,
   Plus,
@@ -1354,7 +1355,7 @@ export default function App() {
                       <span className="cc-grow">
                         <span className="cc-name">{t.name}</span>
                         <span className="cc-sub">
-                          {t.cores} vCPU · {t.memory} GB RAM · {t.disk} GB
+                          {t.cores} vCPU · {t.memory} GB · {t.disk} GB
                         </span>
                       </span>
                       <span className="cc-plan-price">
@@ -1362,12 +1363,24 @@ export default function App() {
                       </span>
                     </button>
                     <div className="cc-plan-acts">
-                      <Button variant="primary" onClick={() => quickCreate(t)}>
-                        ساخت فوری
-                      </Button>
-                      <Button variant="outline" onClick={custom}>
-                        ساخت سفارشی
-                      </Button>
+                      <button
+                        type="button"
+                        className="cc-iconbtn on"
+                        title="ساخت فوری (Ubuntu 24.04)"
+                        aria-label="ساخت فوری"
+                        onClick={() => quickCreate(t)}
+                      >
+                        <Lightning size={16} weight="fill" />
+                      </button>
+                      <button
+                        type="button"
+                        className="cc-iconbtn"
+                        title="ساخت سفارشی"
+                        aria-label="ساخت سفارشی"
+                        onClick={custom}
+                      >
+                        <CaretLeft size={16} weight="bold" />
+                      </button>
                     </div>
                   </div>
                 )

@@ -1985,3 +1985,24 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   vertical-align: middle;
 }
 .cc-ipinl button { width: 20px !important; height: 20px !important; min-width: 0 !important; padding: 0 !important }
+
+/* Plan row: details on one line, two icon actions on the end. */
+.cc-plan { display: flex; align-items: center; gap: 4px; padding: 0 8px }
+.cc-plan .cc-plan-main { padding: 10px 10px; }
+.cc-plan-acts { display: flex; gap: 6px; padding: 0; flex: 0 0 auto }
+.cc-plan-acts .cc-iconbtn {
+  flex: 0 0 34px !important;
+  width: 34px;
+  height: 34px !important;
+  min-width: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--ds-line);
+  background: var(--ds-card);
+  color: var(--ds-muted);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  box-shadow: none;
+}
+.cc-plan-acts .cc-iconbtn.on { background: var(--ds-brand); border-color: var(--ds-brand); color: #fff }
+.cc-plan-acts .cc-iconbtn:active { transform: scale(0.96) }
