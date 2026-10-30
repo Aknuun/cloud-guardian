@@ -97,7 +97,7 @@ type PlanGroup = { id: string; title: string; items: OptType[] }
 
 // Same split Hetzner uses on its own server-type page.
 function planGroups(types: OptType[]): PlanGroup[] {
-  const shared = (t: OptType) => (t.category || t.cpu_type || 'shared') !== 'dedicated'
+  const shared = (t: OptType) => (t.cpu_type || 'shared') !== 'dedicated'
   const defs: { id: string; title: string; test: (t: OptType) => boolean }[] = [
     { id: 'x86', title: 'Shared vCPU · x86', test: (t) => shared(t) && t.architecture !== 'arm' },
     { id: 'arm', title: 'Shared vCPU · Arm64', test: (t) => shared(t) && t.architecture === 'arm' },
@@ -1356,10 +1356,12 @@ export default function App() {
                       <span className="cc-grow">
                         <span className="cc-name">{t.name}</span>
                         <span className="cc-sub">
-                          {t.cores} vCPU · {mem(t.memory)} RAM · {t.disk} GB
+                          {t.cores} vCPU · {t.memory} GB RAM · {t.disk} GB
                         </span>
                       </span>
-                      <span className="cc-plan-price">{t.monthly || (t.monthly_net ? t.monthly_net.toFixed(2) + ' €' : '')}</span>
+                      <span className="cc-plan-price">
+                        {t.monthly_net ? Number(t.monthly_net).toFixed(2) + ' €' : ''}
+                      </span>
                     </button>
                     <div className="cc-plan-acts">
                       <Button variant="primary" onClick={() => quickCreate(t)}>
