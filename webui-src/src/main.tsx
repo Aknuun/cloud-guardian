@@ -26,8 +26,21 @@ function fatal(msg: string) {
     '<button onclick="location.reload()" style="margin-top:16px;padding:10px 18px;border:0;border-radius:10px;background:#1f5eff;color:#fff;font:inherit">تلاش دوباره</button>' +
     '</div>'
 }
-window.addEventListener('error', (e) => fatal((e.message || 'خطای نامشخص') + (e.filename ? ' @ ' + e.filename : '')))
-window.addEventListener('unhandledrejection', (e: any) => fatal(e?.reason?.message || String(e?.reason || 'خطای نامشخص')))
+// A backgrounded WebView throws opaque "Script error." events from third-party
+// scripts (Telegram, fonts). Those are not app failures, so keep the app mounted.
+const opaque = (msg: string) => /^script error\.?$/i.test(msg.trim()) || msg.trim() === ''
+window.addEventListener('error', (e) => {
+  if (document.visibilityState === 'hidden') return
+  const msg = e.message || ''
+  if (opaque(msg)) return
+  fatal(msg + (e.filename ? ' @ ' + e.filename : ''))
+})
+window.addEventListener('unhandledrejection', (e: any) => {
+  if (document.visibilityState === 'hidden') return
+  const msg = e?.reason?.message || String(e?.reason || '')
+  if (opaque(msg)) return
+  fatal(msg || 'خطای نامشخص')
+})
 
 // telegram.org can be slow or blocked; never let it hold the first paint hostage.
 

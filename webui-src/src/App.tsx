@@ -247,15 +247,26 @@ export default function App() {
   /* boot + auth */
   useEffect(() => {
     let cancelled = false
-    const bootTimer = setTimeout(() => {
-      if (cancelled) return
-      // only a still-booting app is stuck; a login screen is not a failure
-      setPhase((p) => {
-        if (p !== 'boot') return p
-        setAuthErr('اتصال به سرور برقرار نشد. اینترنت یا دسترسی به دامنه را بررسی کن.')
-        return 'error'
-      })
-    }, 12000)
+    let bootTimer = 0
+    const armBoot = () => {
+      clearTimeout(bootTimer)
+      bootTimer = window.setTimeout(() => {
+        if (cancelled) return
+        // a phone that slept through the boot is not a failed boot
+        if (document.visibilityState === 'hidden') return
+        // only a still-booting app is stuck; a login screen is not a failure
+        setPhase((p) => {
+          if (p !== 'boot') return p
+          setAuthErr('اتصال به سرور برقرار نشد. اینترنت یا دسترسی به دامنه را بررسی کن.')
+          return 'error'
+        })
+      }, 12000)
+    }
+    const onVisible = () => {
+      if (!document.hidden) armBoot()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    armBoot()
     ;(async () => {
       if (TG) {
         TG.ready()
@@ -327,6 +338,7 @@ export default function App() {
     })()
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
       clearTimeout(bootTimer)
       clearTimeout(toastTimer.current)
     }

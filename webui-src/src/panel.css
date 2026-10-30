@@ -2013,3 +2013,10 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   border-color: var(--ds-line);
   color: var(--ds-text);
 }
+
+/* Page actions: primary on its own line, the rest in a second row. */
+.cc-main .cc-pagebar button[data-variant='primary'] {
+  flex: 0 0 100% !important;
+  max-width: 240px;
+  margin-bottom: 2px;
+}
