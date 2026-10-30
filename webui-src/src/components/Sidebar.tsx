@@ -1,5 +1,5 @@
 import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTheme } from './theme'
 import type { ToolItem } from './Tools'
 
@@ -31,6 +31,35 @@ export function Sidebar({
   const { mode, toggle } = useTheme()
   const [expanded, setExpanded] = useState<Provider | null>(provider)
   const home = tools?.find((t) => t.id === 'home')
+
+  // swipe from the right edge opens the drawer, swiping back closes it
+  useEffect(() => {
+    let x0 = 0
+    let y0 = 0
+    let track = false
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0]
+      if (!t) return
+      track = open || t.clientX > window.innerWidth - 30
+      x0 = t.clientX
+      y0 = t.clientY
+    }
+    const end = (e: TouchEvent) => {
+      const t = e.changedTouches[0]
+      if (!track || !t) return
+      track = false
+      const dx = t.clientX - x0
+      if (Math.abs(t.clientY - y0) > 70 || Math.abs(dx) < 55) return
+      if (!open && dx < 0) onToggle()
+      else if (open && dx > 0) onToggle()
+    }
+    window.addEventListener('touchstart', start, { passive: true })
+    window.addEventListener('touchend', end, { passive: true })
+    return () => {
+      window.removeEventListener('touchstart', start)
+      window.removeEventListener('touchend', end)
+    }
+  }, [open, onToggle])
   const rest = tools?.filter((t) => t.id !== 'home')
 
   return (
