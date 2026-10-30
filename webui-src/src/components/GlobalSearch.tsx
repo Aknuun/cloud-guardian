@@ -22,6 +22,8 @@ export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null
     <div className="cc-gsearch">
       <MagnifyingGlass size={16} />
       <input
+        id="cc-gsearch"
+        name="gsearch"
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="جستجوی کلی…"
