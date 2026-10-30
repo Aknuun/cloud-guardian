@@ -41,16 +41,9 @@ func (r *Router) Menu(chat, mid int64) {
 	if u := r.webLink("home"); u != "" {
 		home = btnWA("🏠 صفحهٔ اصلی", u)
 	}
-	kb := [][]Btn{
-		{home, btn("☁️ کلودفلر", "zones")},
-		{btnWA("🇩🇪 هتزنر", r.webLink("hz")), btnWA("🇮🇷 آروان", r.webLink("arv"))},
-		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
-		{btnWA("🎛 پاسارگارد", r.webLink("pg"))},
-		{chanBtn()},
-	}
 	if r.webLink("hz") == "" {
-		// no web app configured: keep the native screens usable
-		kb = [][]Btn{
+		// no web app configured: keep every native screen reachable
+		kb := [][]Btn{
 			{btnS("🏠 صفحهٔ اصلی", "menu", "primary")},
 			{btnS("➕ افزودن رکورد", "addrec", "plain"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
 			{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
@@ -58,13 +51,31 @@ func (r *Router) Menu(chat, mid int64) {
 			{btnS("📦 بخش‌های دیگر", "more", "plain")},
 			{chanBtn()},
 		}
+		r.Show(chat, mid, r.menuText(), kb)
+		return
 	}
+	// one screen with everything; Cloudflare gets both entries (mini app + bot)
+	kb := [][]Btn{
+		{home, btn("☁️ کلودفلر (ربات)", "zones")},
+		{btnWA("📱 کلودفلر (مینی‌اپ)", r.webLink("cf")), btnWA("🌐 دامنه و SSL", r.webLink("dom"))},
+		{btnWA("🇩🇪 هتزنر", r.webLink("hz")), btnWA("🇮🇷 آروان", r.webLink("arv"))},
+		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
+		{btnWA("🎛 پاسارگارد", r.webLink("pg")), btnWA("🔔 هشدار انقضا و حجم", r.webLink("hook"))},
+		{btnWA("🧭 تعویض خودکار ساب‌فیلتر", r.webLink("hf")), btnWA("🔁 چرخش روزانه ساب‌ها", r.webLink("hfd"))},
+		{btnWA("🔥 گزارش بد مصرف", r.webLink("um")), btnWA("➕ افزودن رکورد", r.webLink("rec"))},
+		{btnWA("✉️ ایمیل دامنه", r.webLink("mail")), btnWA("⚙️ تنظیمات", r.webLink("set"))},
+		{chanBtn()},
+	}
+	r.Show(chat, mid, r.menuText(), kb)
+}
+
+func (r *Router) menuText() string {
 	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version) +
 		"\n📣 کانال: @" + ChannelHandle
 	if p := r.PromoText(); p != "" {
 		text += "\n\n" + p
 	}
-	r.Show(chat, mid, text, kb)
+	return text
 }
 
 // moreMenu keeps the screens that have no mini app page yet.
