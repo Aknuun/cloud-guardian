@@ -1546,3 +1546,13 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
+.cc-sidebar:not(.open).cc-sidebar,
+.cc-sidebar.cc-sidebar {
+  width: 272px;
+}
+@media (max-width: 899px) {
+  .cc-sidebar:not(.open).cc-sidebar,
+  .cc-sidebar.cc-sidebar {
+    width: min(280px, 82vw);
+  }
+}
