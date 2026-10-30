@@ -1392,3 +1392,36 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   height: 40px;
   margin-inline: auto;
 }
+
+/* selected rail item = coloured icon only (no pill), rail hugs the icons */
+.cc-sidebar:not(.open) .cc-sideitem.on {
+  background: transparent;
+}
+.cc-sidebar:not(.open) .cc-sideitem.on:hover {
+  background: var(--ds-tint);
+}
+.cc-sidebar .cc-sidebrand-mark {
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  color: var(--ds-brand);
+  font-size: 14px;
+  border-radius: 0;
+}
+.cc-sidebar:not(.open) {
+  width: 52px;
+}
+@media (min-width: 900px) {
+  .cc-sidebar:not(.open) {
+    padding: 14px 6px;
+  }
+}
+@media (max-width: 899px) {
+  .cc-app {
+    padding-inline-start: 52px;
+  }
+  .cc-sidebar:not(.open) {
+    width: 52px;
+    padding: 14px 6px calc(12px + env(safe-area-inset-bottom));
+  }
+}
