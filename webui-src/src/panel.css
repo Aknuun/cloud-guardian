@@ -1665,3 +1665,8 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main h1, .cc-main h2, .cc-main .cc-title { overflow-wrap: anywhere }
   .cc-mon { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important }
 }
+
+@media (max-width: 699px) {
+  .cc-main button[data-kumo-component='Button'] { font-size: 12.5px; padding-inline: 10px; max-width: 100% }
+  .cc-main .cc-section-head button[data-kumo-component='Button'] { height: 36px }
+}
