@@ -196,6 +196,11 @@ export default function App() {
   /* boot + auth */
   useEffect(() => {
     let cancelled = false
+    const bootTimer = setTimeout(() => {
+      if (cancelled) return
+      setAuthErr('اتصال به سرور برقرار نشد. اینترنت یا دسترسی به دامنه را بررسی کن.')
+      setPhase('error')
+    }, 12000)
     ;(async () => {
       if (TG) {
         TG.ready()
@@ -249,6 +254,7 @@ export default function App() {
     })()
     return () => {
       cancelled = true
+      clearTimeout(bootTimer)
       clearTimeout(toastTimer.current)
     }
   }, [authNonce])
@@ -1324,6 +1330,9 @@ export default function App() {
     return (
       <div className="cc-boot">
         <Loader size="lg" />
+        <div className="cc-sub" style={{ marginTop: 12 }}>
+          در حال ورود…
+        </div>
       </div>
     )
   }

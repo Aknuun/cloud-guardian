@@ -7,11 +7,36 @@
   <link rel="preload" href="/app/fonts/Vazirmatn-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/app/fonts/Vazirmatn-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <title>کلاد گاردین</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script type="module" crossorigin src="/app/assets/index-CG7TjKgQ.js"></script>
-  <link rel="stylesheet" crossorigin href="/app/assets/index-ChAJTgio.css">
+  <script async src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    .boot-splash {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      font-family: Vazirmatn, system-ui, sans-serif;
+      color: #6f7178;
+      font-size: 13px;
+    }
+    .boot-splash i {
+      width: 26px;
+      height: 26px;
+      border: 3px solid #e6e7ea;
+      border-top-color: #1f5eff;
+      border-radius: 50%;
+      animation: boot-spin 0.9s linear infinite;
+      display: block;
+      margin: 0 auto 12px;
+    }
+    @keyframes boot-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <script type="module" crossorigin src="/app/assets/index-avIBZLet.js"></script>
+  <link rel="stylesheet" crossorigin href="/app/assets/index-Cr4KjoSE.css">
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div class="boot-splash"><div><i></i>در حال بارگذاری…</div></div></div>
 </body>
 </html>
