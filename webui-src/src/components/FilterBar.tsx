@@ -15,17 +15,23 @@ type Props = {
   menu?: MenuItem[]
   onMenu?: (id: string) => void
   onRefresh?: () => void
+  onEnter?: () => void
   busy?: boolean
 }
 
 // Page toolbar: search + filter menu + actions menu, mirroring the MoreBot pages.
-export function FilterBar({ q, onQ, placeholder, filters, value, onValue, menu, onMenu, onRefresh, busy }: Props) {
+export function FilterBar({ q, onQ, placeholder, filters, value, onValue, menu, onMenu, onRefresh, onEnter, busy }: Props) {
   const [open, setOpen] = useState<'f' | 'm' | null>(null)
   const current = filters?.find((f) => f.id === value)
   return (
     <div className="cc-filterbar">
       <div className="cc-searchbar">
-        <Input value={q} onChange={(e) => onQ(e.target.value)} placeholder={placeholder || 'جستجو…'} />
+        <Input
+          value={q}
+          onChange={(e) => onQ(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}
+          placeholder={placeholder || 'جستجو…'}
+        />
         {filters && filters.length > 0 && (
           <Button
             variant="outline"

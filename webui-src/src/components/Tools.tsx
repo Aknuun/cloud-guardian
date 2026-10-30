@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Lightning, Envelope, GearSix, ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
 
-export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hook'
+export type ToolId = 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -15,7 +15,11 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
+  { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: ArrowsClockwise },
   { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
+  { id: 'rec', label: 'افزودن رکورد / تغییر سریع', Icon: Lightning },
+  { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
+  { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
 export type ToolItem = { id: ToolId; label: string; Icon: Icon; active?: boolean; onSelect: () => void }
@@ -68,7 +72,11 @@ export function Tools({ id }: { id: ToolId }) {
   if (id === 'um') return <UmView />
   if (id === 'dom') return <DomView />
   if (id === 'hf') return <HfView />
+  if (id === 'hfd') return <HfdView />
   if (id === 'hook') return <HookView />
+  if (id === 'rec') return <RecView />
+  if (id === 'mail') return <MailView />
+  if (id === 'set') return <SetView />
   return <PgView />
 }
 
@@ -1818,6 +1826,7 @@ function HfView() {
   const [log, setLog] = useState<any[] | null>(null)
   const [revOpen, setRevOpen] = useState(false)
   const [revs, setRevs] = useState<{ sid: string; from?: string; to?: string }[] | null>(null)
+  const [bkOpen, setBkOpen] = useState(false)
 
   useEffect(() => {
     if (data?.cfg) setCfg(data.cfg)
@@ -1939,6 +1948,9 @@ function HfView() {
           >
             پاک‌کردن استثناها
           </Button>
+          <Button variant="outline" onClick={() => setBkOpen(true)}>
+            بکاپ‌ها
+          </Button>
           <Button
             variant="outline"
             onClick={async () => {
@@ -2011,6 +2023,14 @@ function HfView() {
           </div>
         ))}
       </div>
+
+      {bkOpen && (
+        <BkDialog
+          onClose={() => setBkOpen(false)}
+          act={act}
+          faTxt={(v) => v}
+        />
+      )}
 
       {logOpen && (
         <Dialog.Root open onOpenChange={(o) => !o && setLogOpen(false)}>
@@ -2269,5 +2289,944 @@ function HookView() {
         </FormDialog>
       )}
     </>
+  )
+}
+
+// ---------------- daily sub rotation ----------------
+type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; totalCreated: number }
+type HfdData = { cfg: HfdCfg; panels: { idx: number; name: string }[]; items: { key: string; panel: number; host: string }[] }
+type HfdHost = { id: string; remark: string; disabled: boolean; reality: boolean; fields: Record<string, boolean> }
+
+function HfdView() {
+  const { data, err, reload } = useTool<HfdData>('/api/tools/hfd')
+  const [cfg, setCfg] = useState<HfdCfg | null>(null)
+  const [pi, setPi] = useState(0)
+  const [hosts, setHosts] = useState<HfdHost[] | null>(null)
+  const [hErr, setHErr] = useState('')
+  const [notice, setNotice] = useState('')
+  const [fErr, setFErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [logOpen, setLogOpen] = useState(false)
+  const [log, setLog] = useState<any[] | null>(null)
+  const [revOpen, setRevOpen] = useState(false)
+  const [revs, setRevs] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    if (data?.cfg) setCfg(data.cfg)
+  }, [data])
+  useEffect(() => {
+    if (!data?.panels?.length) return
+    loadHosts(pi)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, pi])
+
+  async function loadHosts(p: number) {
+    setHErr('')
+    try {
+      const d = await api<{ hosts: HfdHost[] }>(`/api/tools/hfd/hosts?panel=${p}&t=${Date.now()}`)
+      setHosts(d.hosts || [])
+    } catch (e: any) {
+      setHosts([])
+      setHErr(e.message || 'خواندن هاست‌ها ناموفق')
+    }
+  }
+  async function act(path: string, body: any, msg?: string) {
+    setFErr('')
+    try {
+      await api(path, body)
+      invalidateCache()
+      if (msg) setNotice(msg)
+      return true
+    } catch (e: any) {
+      setFErr(e.message || 'انجام نشد')
+      return false
+    }
+  }
+  if (err) return <Empty title="خطا" description={err} />
+  if (!data || !cfg)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  const next = cfg.nextRun ? faDate(cfg.nextRun) : '—'
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'وضعیت', value: cfg.enabled ? 'فعال' : 'خاموش' },
+          { label: 'هر', value: faNum(cfg.intervalH) + ' ساعت' },
+          { label: 'اجرای بعدی', value: next },
+          { label: 'هاست‌های انتخابی', value: faNum(data.items.length) },
+        ]}
+      />
+      <div className="cc-hint cc-mb">
+        هر {faNum(cfg.intervalH)} ساعت، ساب‌های هاست‌های انتخاب‌شده با نام تازه بازسازی می‌شوند تا فیلترها دور زده شوند.
+        فیلدهای A / S / H را برای هر هاست روشن کن.
+      </div>
+
+      <div className="cc-form">
+        <label className="cc-checkline">
+          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <span>چرخش روزانه فعال باشد</span>
+        </label>
+        <div className="cc-field-row">
+          <label className="cc-field">
+            <span>فاصله (ساعت)</span>
+            <Input
+              type="number"
+              value={String(cfg.intervalH)}
+              onChange={(e) => setCfg({ ...cfg, intervalH: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="cc-field">
+            <span>ساعت شروع (HH:MM)</span>
+            <Input className="cc-input" value={cfg.at} onChange={(e) => setCfg({ ...cfg, at: e.target.value })} placeholder="03:00" />
+          </label>
+        </div>
+        {cfg.totalCreated > 0 && <div className="cc-hint">تاکنون {faNum(cfg.totalCreated)} ساب ساخته شده.</div>}
+        {fErr && <div className="cc-form-err">{fErr}</div>}
+        <Button
+          variant="primary"
+          onClick={async () => {
+            if (await act('/api/tools/hfd/cfg', cfg, 'تنظیمات ذخیره شد')) reload()
+          }}
+        >
+          ذخیرهٔ تنظیمات
+        </Button>
+      </div>
+
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>هاست‌ها</h2>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              const ok = await act('/api/tools/hfd/run', {}, 'چرخش شروع شد؛ نتیجه در تلگرام می‌آید')
+              setBusy(false)
+              if (!ok) setNotice('')
+            }}
+          >
+            {busy ? 'در حال چرخش…' : 'چرخش الان'}
+          </Button>
+        </div>
+        <div className="cc-btnrow">
+          {data.panels.map((p) => (
+            <Button key={p.idx} variant={p.idx === pi ? 'primary' : 'outline'} onClick={() => setPi(p.idx)}>
+              {p.name}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setLogOpen(true)
+              setLog(null)
+              try {
+                const d = await api<{ log: any[] }>(`/api/tools/hfd/log?t=${Date.now()}`)
+                setLog(d.log || [])
+              } catch {
+                setLog([])
+              }
+            }}
+          >
+            تاریخچه
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              setRevOpen(true)
+              setRevs(null)
+              try {
+                const d = await api<{ items: any[] }>(`/api/tools/hfd/revert?t=${Date.now()}`)
+                setRevs(d.items || [])
+              } catch {
+                setRevs([])
+              }
+            }}
+          >
+            بازگردانی
+          </Button>
+        </div>
+        {hErr && <div className="cc-form-err">{hErr}</div>}
+        {!hosts && (
+          <div className="cc-center">
+            <Loader />
+          </div>
+        )}
+        {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
+        {hosts?.map((h) => (
+          <div key={h.id} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">
+                {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
+              </div>
+              <div className="cc-btnrow">
+                {FIELDS.map(([f, l]) => (
+                  <Button
+                    key={f}
+                    variant={h.fields[f] ? 'primary' : 'outline'}
+                    onClick={async () => {
+                      if (await act('/api/tools/hfd/field', { panel: pi, host: h.id, field: f })) loadHosts(pi)
+                    }}
+                  >
+                    {l}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {logOpen && (
+        <Dialog.Root open onOpenChange={(o) => !o && setLogOpen(false)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Title className="cc-dialog-title">تاریخچهٔ چرخش روزانه</Dialog.Title>
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <div className="cc-dialog-body">
+              {!log && (
+                <div className="cc-center">
+                  <Loader />
+                </div>
+              )}
+              {log && log.length === 0 && <Empty title="خالی" description="چیزی ثبت نشده." />}
+              {log && log.length > 0 && (
+                <div className="cc-form">
+                  {log.map((e, i) => (
+                    <div key={i} className="cc-sub cc-ltr">
+                      {String(e.ts || '').replace('T', ' ').slice(0, 16)} · {e.kind} {e.remark ? `· ${e.remark}` : ''}{' '}
+                      {e.error ? `⚠️ ${e.error}` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="cc-dialog-actions">
+              <Button variant="outline" onClick={() => setLogOpen(false)}>
+                بستن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {revOpen && (
+        <Dialog.Root open onOpenChange={(o) => !o && setRevOpen(false)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Title className="cc-dialog-title">بازگردانی چرخش روزانه</Dialog.Title>
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <div className="cc-dialog-body">
+              {!revs && (
+                <div className="cc-center">
+                  <Loader />
+                </div>
+              )}
+              {revs && revs.length === 0 && <Empty title="خالی" description="چیزی برای بازگردانی نیست." />}
+              {revs?.map((r) => (
+                <div key={r.key} className="cc-trow">
+                  <div className="cc-grow">
+                    <div className="cc-name cc-ltr">{r.key}</div>
+                    <div className="cc-sub">{faNum(r.prev)} مقدار قبلی ذخیره شده</div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (await act('/api/tools/hfd/revert', { panel: r.panel, host: r.host }, 'بازگردانی شد')) {
+                        setRevOpen(false)
+                        loadHosts(pi)
+                      }
+                    }}
+                  >
+                    بازگردان
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="cc-dialog-actions">
+              {fErr && <div className="cc-form-err">{fErr}</div>}
+              <Button variant="outline" onClick={() => setRevOpen(false)}>
+                بستن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+    </>
+  )
+}
+
+// ---------------- quick record: add + search/bulk change ----------------
+type CfZone = { id: string; name: string; acc: number; accName: string }
+type CfRec = {
+  id: string; type: string; name: string; content: string
+  acc?: number; zid?: string; zone?: string; fav?: boolean; label?: string
+}
+
+function RecView() {
+  const zones = useTool<{ zones: CfZone[] }>('/api/cf/zones')
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<CfRec[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [sel, setSel] = useState<string[]>([])
+  const [notice, setNotice] = useState('')
+  const [err, setErr] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [flt, setFlt] = useState('all')
+
+  async function search() {
+    if (!q.trim()) return
+    setBusy(true)
+    setErr('')
+    setNotice('')
+    setSel([])
+    try {
+      const d = await api<{ records: CfRec[] }>(`/api/cf/search?q=${encodeURIComponent(q.trim())}&t=${Date.now()}`)
+      setHits(d.records || [])
+    } catch (e: any) {
+      setHits([])
+      setErr(e.message || 'جست‌وجو ناموفق')
+    }
+    setBusy(false)
+  }
+
+  async function fav(r: CfRec) {
+    try {
+      await api('/api/cf/record', { op: 'fav', acc: r.acc, zid: r.zid, rid: r.id })
+      setHits((h) => (h || []).map((x) => (x.id === r.id ? { ...x, fav: !x.fav } : x)))
+    } catch (e: any) {
+      setErr(e.message || 'انجام نشد')
+    }
+  }
+
+  async function bulkDel() {
+    if (!hits) return
+    const groups: Record<string, { acc: number; zid: string; ids: string[] }> = {}
+    for (const r of hits) {
+      if (!sel.includes(r.id) || r.acc === undefined || !r.zid) continue
+      const k = `${r.acc}|${r.zid}`
+      groups[k] = groups[k] || { acc: r.acc, zid: r.zid, ids: [] }
+      groups[k].ids.push(r.id)
+    }
+    let done = 0
+    let failed = 0
+    for (const g of Object.values(groups)) {
+      try {
+        const res = await api<{ ok?: number; fail?: number }>('/api/cf/bulk', { op: 'del', acc: g.acc, zid: g.zid, ids: g.ids })
+        done += Number(res?.ok || g.ids.length)
+        failed += Number(res?.fail || 0)
+      } catch {
+        failed += g.ids.length
+      }
+    }
+    setNotice(`حذف شد: ${faNum(done)}${failed ? ` · ناموفق: ${faNum(failed)}` : ''}`)
+    setSel([])
+    invalidateCache()
+    search()
+  }
+
+  const shown = (hits || []).filter((r) => flt !== 'fav' || !!r.fav)
+  const toggle = (id: string) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
+
+  return (
+    <>
+      <div className="cc-pagebar">
+        <Button variant="primary" icon={Plus} onClick={() => setAddOpen(true)}>
+          افزودن رکورد
+        </Button>
+      </div>
+      <div className="cc-hint cc-mb">
+        یک آی‌پی، نام یا بخشی از آن را بفرست تا در همهٔ دامنه‌ها و اکانت‌ها بگردم؛ بعد می‌توانی چند رکورد را یک‌جا حذف یا منتخب کنی.
+      </div>
+
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="آی‌پی، نام رکورد یا مقدار…"
+        onEnter={search}
+        filters={[
+          { id: 'all', label: 'همه' },
+          { id: 'fav', label: 'منتخب' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+        onRefresh={search}
+        busy={busy}
+      />
+      {err && <div className="cc-form-err">{err}</div>}
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      {sel.length > 0 && (
+        <div className="cc-bulkbar">
+          <span>{faNum(sel.length)} انتخاب شده</span>
+          <Button variant="outline" onClick={bulkDel}>
+            حذف
+          </Button>
+          <Button variant="outline" onClick={() => setSel([])}>
+            لغو
+          </Button>
+        </div>
+      )}
+
+      {busy && (
+        <div className="cc-center">
+          <Loader />
+        </div>
+      )}
+      {hits && hits.length === 0 && !busy && <Empty title="چیزی پیدا نشد" description="عبارت دیگری را امتحان کن." />}
+      {shown.map((r) => (
+        <div key={r.id} className={'cc-trow cc-tap' + (sel.includes(r.id) ? ' sel' : '')}>
+          <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={sel.includes(r.id)} onChange={() => toggle(r.id)} />
+          </label>
+          <div className="cc-grow">
+            <div className="cc-name cc-ltr">
+              {r.name} <Badge>{r.type}</Badge>
+            </div>
+            <div className="cc-sub cc-ltr">{r.content}</div>
+            {r.zone && <div className="cc-sub">{r.zone}</div>}
+          </div>
+          <button className="cc-rowbtn" title="منتخب" onClick={(e) => { e.stopPropagation(); fav(r) }}>
+            {r.fav ? '★' : '☆'}
+          </button>
+        </div>
+      ))}
+
+      {addOpen && zones.data && (
+        <AddRecDialog
+          zones={zones.data.zones || []}
+          onClose={() => setAddOpen(false)}
+          onDone={(m) => {
+            setAddOpen(false)
+            setNotice(m)
+            invalidateCache()
+            if (q.trim()) search()
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+function AddRecDialog({ zones, onClose, onDone }: { zones: CfZone[]; onClose: () => void; onDone: (m: string) => void }) {
+  const [z, setZ] = useState('')
+  const [type, setType] = useState('A')
+  const [name, setName] = useState('')
+  const [content, setContent] = useState('')
+  const [proxied, setProxied] = useState(true)
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const zone = zones.find((x) => `${x.acc}|${x.id}` === z)
+  async function submit() {
+    if (!zone) return setErr('دامنه را انتخاب کن')
+    if (!content.trim()) return setErr('مقدار رکورد لازم است')
+    setBusy(true)
+    setErr('')
+    try {
+      await api('/api/cf/record', { op: 'add', acc: zone.acc, zid: zone.id, type, name: name.trim(), content: content.trim(), proxied })
+      onDone('رکورد اضافه شد')
+    } catch (e: any) {
+      setErr(e.message || 'افزودن ناموفق')
+    }
+    setBusy(false)
+  }
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Title className="cc-dialog-title">افزودن رکورد</Dialog.Title>
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <div className="cc-dialog-body">
+          <div className="cc-form">
+            <label className="cc-field">
+              <span>دامنه</span>
+              <select className="cc-input" value={z} onChange={(e) => setZ(e.target.value)}>
+                <option value="">— انتخاب دامنه —</option>
+                {zones.map((x) => (
+                  <option key={`${x.acc}|${x.id}`} value={`${x.acc}|${x.id}`}>
+                    {x.name} · {x.accName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="cc-field-row">
+              <label className="cc-field">
+                <span>نوع</span>
+                <select className="cc-input" value={type} onChange={(e) => setType(e.target.value)}>
+                  {['A', 'AAAA', 'CNAME', 'TXT', 'MX', 'NS', 'SRV'].map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="cc-field">
+                <span>نام (خالی = ریشه)</span>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="www" />
+              </label>
+            </div>
+            <label className="cc-field">
+              <span>مقدار</span>
+              <Input value={content} onChange={(e) => setContent(e.target.value)} placeholder={type === 'A' ? '1.2.3.4' : '—'} />
+            </label>
+            <label className="cc-checkline">
+              <input type="checkbox" checked={proxied} onChange={(e) => setProxied(e.target.checked)} />
+              <span>پروکسی کلودفلر (فقط A/AAAA/CNAME)</span>
+            </label>
+            {err && <div className="cc-form-err">{err}</div>}
+          </div>
+        </div>
+        <div className="cc-dialog-actions">
+          <Button variant="outline" onClick={onClose}>
+            انصراف
+          </Button>
+          <Button variant="primary" disabled={busy} onClick={submit}>
+            {busy ? 'در حال ذخیره…' : 'ذخیره'}
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
+// ---------------- domain email (catch-all forwarding) ----------------
+type MailZone = { acc: number; zid: string; zname: string; dest?: string }
+type MailData = { fwd: MailZone[]; worker: MailZone[] }
+
+function MailView() {
+  const { data, err, reload } = useTool<MailData>('/api/tools/mail')
+  const zones = useTool<{ zones: CfZone[] }>('/api/cf/zones')
+  const [open, setOpen] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [q, setQ] = useState('')
+  const [flt, setFlt] = useState('all')
+
+  async function off(z: MailZone) {
+    try {
+      await api('/api/tools/mail/off', { acc: z.acc, zid: z.zid })
+      invalidateCache()
+      reload()
+      setNotice('دریافت/فوروارد «' + z.zname + '» قطع شد')
+    } catch (e: any) {
+      setNotice(e.message || 'انجام نشد')
+    }
+  }
+  if (err) return <Empty title="خطا" description={err} />
+  if (!data)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  const all = [...data.fwd, ...data.worker]
+  const shownFwd = data.fwd.filter((z) => flt !== 'worker' && (!q || z.zname.includes(q) || (z.dest || '').includes(q)))
+  const shownWorker = data.worker.filter((z) => flt !== 'fwd' && (!q || z.zname.includes(q)))
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'دامنه‌های وصل', value: faNum(all.length) },
+          { label: 'فوروارد', value: faNum(data.fwd.length) },
+          { label: 'ورکر', value: faNum(data.worker.length) },
+        ]}
+      />
+      <div className="cc-pagebar">
+        <Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>
+          افزودن ایمیل دامنه
+        </Button>
+      </div>
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        placeholder="جستجوی دامنه یا ایمیل…"
+        filters={[
+          { id: 'all', label: 'همه' },
+          { id: 'fwd', label: 'فوروارد' },
+          { id: 'worker', label: 'ورکر' },
+        ]}
+        value={flt}
+        onValue={setFlt}
+      />
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      {all.length === 0 && <Empty title="دامنه‌ای وصل نیست" description="با دکمهٔ بالا ایمیل سازمانی یک دامنه را فوروارد کن." />}
+
+      {shownFwd.length > 0 && (
+        <div className="cc-section">
+          <div className="cc-section-head">
+            <h2>فوروارد به ایمیل</h2>
+          </div>
+          {shownFwd.map((z) => (
+            <div key={`${z.acc}|${z.zid}`} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name">{z.zname}</div>
+                <div className="cc-sub cc-ltr">← {z.dest}</div>
+              </div>
+              <button className="cc-rowbtn danger" onClick={() => off(z)} title="قطع">
+                <Trash size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {shownWorker.length > 0 && (
+        <div className="cc-section">
+          <div className="cc-section-head">
+            <h2>دریافت با ورکر</h2>
+          </div>
+          {shownWorker.map((z) => (
+            <div key={`${z.acc}|${z.zid}`} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name">{z.zname}</div>
+                <div className="cc-sub">Email Worker</div>
+              </div>
+              <button className="cc-rowbtn danger" onClick={() => off(z)} title="قطع">
+                <Trash size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {open && zones.data && (
+        <MailDialog
+          zones={zones.data.zones || []}
+          onClose={() => setOpen(false)}
+          onDone={(m) => {
+            setOpen(false)
+            setNotice(m)
+            invalidateCache()
+            reload()
+          }}
+        />
+      )}
+    </>
+  )
+}
+
+function MailDialog({ zones, onClose, onDone }: { zones: CfZone[]; onClose: () => void; onDone: (m: string) => void }) {
+  const [z, setZ] = useState('')
+  const [dest, setDest] = useState('')
+  const [list, setList] = useState<{ verified: any[]; pending: any[] } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const zone = zones.find((x) => `${x.acc}|${x.id}` === z)
+
+  useEffect(() => {
+    if (!zone) return
+    setList(null)
+    api<{ verified: any[]; pending: any[] }>(`/api/tools/mail/zone?acc=${zone.acc}&zid=${zone.id}&t=${Date.now()}`)
+      .then((d) => setList({ verified: d.verified || [], pending: d.pending || [] }))
+      .catch(() => setList({ verified: [], pending: [] }))
+  }, [z])
+
+  async function submit() {
+    if (!zone) return setErr('دامنه را انتخاب کن')
+    if (!dest.trim()) return setErr('ایمیل مقصد لازم است')
+    setBusy(true)
+    setErr('')
+    try {
+      const known = (list?.verified || []).some((d) => String(d.email) === dest.trim())
+      if (!known) {
+        await api('/api/tools/mail/dest', { acc: zone.acc, zid: zone.id, email: dest.trim() })
+        setBusy(false)
+        onDone('مقصد اضافه شد؛ لینک تأیید به همان ایمیل رفت. بعد از تأیید دوباره اینجا انتخابش کن.')
+        return
+      }
+      await api('/api/tools/mail/set', { acc: zone.acc, zid: zone.id, dest: dest.trim() })
+      onDone('فوروارد فعال شد')
+    } catch (e: any) {
+      setErr(e.message || 'انجام نشد')
+    }
+    setBusy(false)
+  }
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Title className="cc-dialog-title">ایمیل دامنه</Dialog.Title>
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <div className="cc-dialog-body">
+          <div className="cc-form">
+            <label className="cc-field">
+              <span>دامنه</span>
+              <select className="cc-input" value={z} onChange={(e) => setZ(e.target.value)}>
+                <option value="">— انتخاب دامنه —</option>
+                {zones.map((x) => (
+                  <option key={`${x.acc}|${x.id}`} value={`${x.acc}|${x.id}`}>
+                    {x.name} · {x.accName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {zone && !list && (
+              <div className="cc-center">
+                <Loader />
+              </div>
+            )}
+            {list && (
+              <>
+                <label className="cc-field">
+                  <span>ایمیل مقصد</span>
+                  <select className="cc-input" value={list.verified.some((d) => String(d.email) === dest) ? dest : ''} onChange={(e) => setDest(e.target.value)}>
+                    <option value="">— مقصد تأییدشده —</option>
+                    {list.verified.map((d) => (
+                      <option key={String(d.email)} value={String(d.email)}>
+                        {String(d.email)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="cc-field">
+                  <span>یا ایمیل جدید</span>
+                  <Input value={dest} onChange={(e) => setDest(e.target.value)} placeholder="you@gmail.com" className="cc-ltr" />
+                </label>
+                {list.pending.length > 0 && (
+                  <div className="cc-hint">
+                    در انتظار تأیید: {list.pending.map((d) => String(d.email)).join('، ')}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="cc-hint">همهٔ آدرس‌های دامنه به این ایمیل فوروارد می‌شوند (catch-all).</div>
+            {err && <div className="cc-form-err">{err}</div>}
+          </div>
+        </div>
+        <div className="cc-dialog-actions">
+          <Button variant="outline" onClick={onClose}>
+            انصراف
+          </Button>
+          <Button variant="primary" disabled={busy} onClick={submit}>
+            {busy ? 'در حال ذخیره…' : 'ذخیره'}
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}
+
+// ---------------- settings ----------------
+type SetData = { version: string; latest: string; isMain: boolean; admins: number[]; guides: { id: string; title: string; text: string }[] }
+
+function SetView() {
+  const { data, err, reload } = useTool<SetData>('/api/tools/settings')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [addId, setAddId] = useState('')
+  const [guide, setGuide] = useState<{ title: string; text: string } | null>(null)
+
+  async function act(path: string, body: any, msg?: string) {
+    setNotice('')
+    try {
+      const r = await api<any>(path, body)
+      invalidateCache()
+      if (msg) setNotice(msg)
+      return r
+    } catch (e: any) {
+      setNotice(e.message || 'انجام نشد')
+      return null
+    }
+  }
+  if (err) return <Empty title="خطا" description={err} />
+  if (!data)
+    return (
+      <div className="cc-center">
+        <Loader size="lg" />
+      </div>
+    )
+  const newer = data.latest && data.latest !== 'v' + data.version && data.latest !== data.version
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'نسخهٔ نصب‌شده', value: 'v' + data.version },
+          { label: 'آخرین نسخه', value: data.latest || '—' },
+          { label: 'ادمین‌ها', value: faNum(data.admins.length) },
+        ]}
+      />
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>نسخه و آپدیت</h2>
+          <Button variant="outline" disabled={busy} onClick={async () => {
+            setBusy(true)
+            const r = await act('/api/tools/settings/check', {}, '')
+            setBusy(false)
+            if (r) setNotice(r.newer ? `نسخهٔ جدید موجود است: ${r.latest}` : 'روی آخرین نسخه هستی')
+            reload()
+          }}>
+            بررسی نسخه
+          </Button>
+        </div>
+        {newer && data.isMain && (
+          <div className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">آپدیت به {data.latest}</div>
+              <div className="cc-sub">سرویس چند لحظه ری‌استارت می‌شود.</div>
+            </div>
+            <Button variant="primary" onClick={async () => {
+              const r = await act('/api/tools/settings/update', { tag: data.latest }, '')
+              if (r) setNotice('آپدیت شروع شد؛ ۱ تا ۳ دقیقه صبر کن.')
+            }}>
+              آپدیت
+            </Button>
+          </div>
+        )}
+        <div className="cc-hint">
+          نسخه‌ها روی {data.version ? 'همین سرور' : 'سرور'} نصب و سرویس خودکار ری‌استارت می‌شود.
+        </div>
+      </div>
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>ادمین‌ها</h2>
+          {data.isMain && (
+            <Button variant="outline" onClick={async () => {
+              if (!/^\d+$/.test(addId.trim())) return setNotice('شناسهٔ عددی بفرست')
+              const r = await act('/api/tools/settings/admin', { add: Number(addId) }, 'ادمین اضافه شد')
+              if (r) {
+                setAddId('')
+                reload()
+              }
+            }}>
+              افزودن ادمین
+            </Button>
+          )}
+        </div>
+        {data.isMain && (
+          <div className="cc-searchbar">
+            <Input value={addId} onChange={(e) => setAddId(e.target.value)} placeholder="شناسهٔ عددی ادمین جدید…" />
+          </div>
+        )}
+        {data.admins.map((id, i) => (
+          <div key={id} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name cc-ltr">{id}</div>
+              <div className="cc-sub">{i === 0 ? 'ادمین اصلی' : 'ادمین'}</div>
+            </div>
+            {data.isMain && i > 0 && (
+              <button className="cc-rowbtn danger" onClick={async () => {
+                const r = await act('/api/tools/settings/admin', { del: id }, 'ادمین حذف شد')
+                if (r) reload()
+              }}>
+                <Trash size={16} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>راهنما</h2>
+        </div>
+        {data.guides.map((g) => (
+          <div key={g.id} className="cc-trow cc-tap" onClick={() => setGuide(g)}>
+            <div className="cc-grow">
+              <div className="cc-name">{g.title}</div>
+              <div className="cc-sub">{g.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {guide && (
+        <Dialog.Root open onOpenChange={(o) => !o && setGuide(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Title className="cc-dialog-title">{guide.title}</Dialog.Title>
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <div className="cc-dialog-body">
+              <div className="cc-hint">{guide.text}</div>
+            </div>
+            <div className="cc-dialog-actions">
+              <Button variant="outline" onClick={() => setGuide(null)}>
+                بستن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+    </>
+  )
+}
+
+function BkDialog({ onClose, act }: { onClose: () => void; act: (p: string, b: any, m?: string) => Promise<boolean>; faTxt: (v: string) => string }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = async () => {
+    try {
+      const d = await api<{ items: any[] }>(`/api/tools/hf/bk?t=${Date.now()}`)
+      setItems(d.items || [])
+    } catch {
+      setItems([])
+    }
+  }
+  useEffect(() => {
+    load()
+  }, [])
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Title className="cc-dialog-title">بکاپ هاست‌ها</Dialog.Title>
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <div className="cc-dialog-body">
+          <div className="cc-btnrow cc-mb">
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                await act('/api/tools/hf/bk', { op: 'new' }, 'بکاپ گرفته شد')
+                setBusy(false)
+                load()
+              }}
+            >
+              گرفتن بکاپ جدید
+            </Button>
+          </div>
+          {!items && (
+            <div className="cc-center">
+              <Loader />
+            </div>
+          )}
+          {items && items.length === 0 && <Empty title="بکاپی نیست" description="اولین بکاپ را بگیر." />}
+          {items?.map((b) => (
+            <div key={b.id} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name cc-ltr">{faDate(b.ts)}</div>
+                <div className="cc-sub">
+                  {b.label} · {faNum(b.count)} هاست
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (await act('/api/tools/hf/bk', { op: 'restore', id: b.id }, 'بازگردانی انجام شد')) onClose()
+                }}
+              >
+                بازگردان
+              </Button>
+              <button
+                className="cc-rowbtn danger"
+                onClick={async () => {
+                  await act('/api/tools/hf/bk', { op: 'del', id: b.id }, 'حذف شد')
+                  load()
+                }}
+              >
+                <Trash size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="cc-dialog-actions">
+          <Button variant="outline" onClick={onClose}>
+            بستن
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
   )
 }
