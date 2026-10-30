@@ -1383,6 +1383,8 @@ function PwDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
+type Fav = { zone: string; label: string; name?: string; content?: string; type?: string; missing?: boolean }
+
 type Zone = { acc: number; id: string; name: string }
 type Rec = { type: string; name: string; content: string }
 
@@ -1396,6 +1398,16 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
   const [custom, setCustom] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [src, setSrc] = useState<'zones' | 'favs'>('zones')
+  const [favs, setFavs] = useState<Fav[] | null>(null)
+  const [favPick, setFavPick] = useState<Record<string, boolean>>({})
+
+  const loadFavs = () => {
+    if (favs) return
+    api<any>('/api/cf/favs')
+      .then((d) => setFavs((d.items || []).filter((f: Fav) => !f.missing && f.content)))
+      .catch((e) => setErr(e.message || 'خطا'))
+  }
 
   useEffect(() => {
     api<any>('/api/cf/zones')
@@ -1416,6 +1428,29 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
   }
 
   const submit = async () => {
+    if (src === 'favs') {
+      const items = (favs || [])
+        .filter((f, i) => favPick[`${f.zone}|${f.content}|${i}`])
+        .map((f) => ({
+          name: !f.name || f.name === '@' ? f.zone : `${f.name}.${f.zone}`,
+          host: f.content as string,
+        }))
+      if (items.length === 0) {
+        setErr('هیچ موردی انتخاب نشده')
+        return
+      }
+      setBusy(true)
+      setErr('')
+      try {
+        await api('/api/tools/srv/subadd', { items, password: pwIdx === null ? custom : '', pwIndex: pwIdx })
+        done()
+        onClose()
+      } catch (e: any) {
+        setErr(e.message || 'اضافه نشد')
+      }
+      setBusy(false)
+      return
+    }
     if (!zone || !recs) return
     const items = recs
       .map((r, i) => ({ r, key: `${r.type}|${r.name}|${r.content}|${i}` }))
@@ -1454,7 +1489,21 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
             <Loader size="lg" />
           </div>
         )}
-        {zones && !zone && (
+        <div className="cc-btnrow cc-mb">
+          <Button variant={src === 'zones' ? 'primary' : 'outline'} onClick={() => setSrc('zones')}>
+            از زون‌ها
+          </Button>
+          <Button
+            variant={src === 'favs' ? 'primary' : 'outline'}
+            onClick={() => {
+              setSrc('favs')
+              loadFavs()
+            }}
+          >
+            از موردعلاقه‌ها
+          </Button>
+        </div>
+        {src === 'zones' && zones && !zone && (
           <div className="cc-form">
             {zones.length === 0 && <div className="cc-hint">زونی در کلادفلر نیست.</div>}
             {zones.map((z) => (
@@ -1464,7 +1513,7 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
             ))}
           </div>
         )}
-        {zone && (
+        {src === 'zones' && zone && (
           <>
             <div className="cc-hint cc-mb">{zone.name}</div>
             {!recs && (
@@ -1488,6 +1537,35 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
                 </label>
               )
             })}
+          </>
+        )}
+        {src === 'favs' && (
+          <>
+            {!favs && (
+              <div className="cc-center cc-mb">
+                <Loader size="lg" />
+              </div>
+            )}
+            {favs?.length === 0 && <div className="cc-hint cc-mb">موردعلاقه‌ای با IP نیست.</div>}
+            {favs?.map((f, i) => {
+              const key = `${f.zone}|${f.content}|${i}`
+              return (
+                <label key={key} className="cc-checkline">
+                  <input
+                    type="checkbox"
+                    checked={!!favPick[key]}
+                    onChange={(e) => setFavPick({ ...favPick, [key]: e.target.checked })}
+                  />
+                  <span>
+                    {f.label} · {f.content}
+                  </span>
+                </label>
+              )
+            })}
+          </>
+        )}
+        {(src === 'favs' || zone) && (
+          <>
             <div className="cc-field">
               <span>رمز پیش‌فرض</span>
               <select
@@ -1515,7 +1593,7 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
           <Button variant="secondary" onClick={onClose}>
             انصراف
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!zone || busy}>
+          <Button variant="primary" onClick={submit} disabled={(src === 'zones' && !zone) || busy}>
             افزودن
           </Button>
         </div>
