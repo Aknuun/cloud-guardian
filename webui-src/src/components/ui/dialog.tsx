@@ -8,6 +8,17 @@ function DialogContent({
   size,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { size?: 'sm' | 'base' | 'lg' }) {
+  // Dialogs are opened from state, not from Dialog.Trigger, so Radix has nothing to
+  // restore focus to on close; remember the opener and put focus back ourselves.
+  const prevFocus = React.useRef<HTMLElement | null>(
+    typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null,
+  )
+  React.useEffect(() => {
+    const el = prevFocus.current
+    return () => {
+      if (el && document.contains(el)) el.focus({ preventScroll: true })
+    }
+  }, [])
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/35" />
