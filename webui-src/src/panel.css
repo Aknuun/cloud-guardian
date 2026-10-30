@@ -1903,3 +1903,14 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-sidebar.open .cc-sidebrand,
   .cc-sidebar.open .cc-profile { animation: none !important }
 }
+
+/* Sidebar must be opaque: it slides over the page, content must not show through. */
+.cc-sidebar,
+[data-theme='dark'] .cc-sidebar {
+  background-color: var(--ds-panel) !important;
+  background-image: none !important;
+}
+@media (max-width: 899px) {
+  .cc-sidebar { top: 0 !important; height: 100dvh !important; z-index: 60 !important }
+  .cc-sidebar.open { border-start-start-radius: 18px; border-end-start-radius: 18px }
+}
