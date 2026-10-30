@@ -660,6 +660,8 @@ func (r *Router) webHzOptions(w http.ResponseWriter, req *http.Request, uid int6
 			"id": strv(t["id"]), "name": strv(t["name"]),
 			"cores": intOfAny(t["cores"]), "memory": intOfAny(t["memory"]),
 			"disk": intOfAny(t["disk"]), "architecture": strv(t["architecture"]),
+			"category": strv(t["category"]), "cpu_type": strv(t["cpu_type"]),
+			"storage_type": strv(t["storage_type"]), "traffic": intOfAny(t["included_traffic"]),
 		}
 		if loc != "" {
 			var p map[string]any

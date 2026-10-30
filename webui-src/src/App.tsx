@@ -65,9 +65,55 @@ type Server = {
 }
 type CleanIP = { id: number; ip: string; loc: string; assignee?: string; auto?: boolean; check?: { clean: boolean; listed: string[]; unknown: boolean } }
 type OptLocation = { name: string; city: string; country: string; description: string }
-type OptType = SrvType & { monthly?: string }
+type OptType = SrvType & {
+  monthly?: string
+  monthly_net?: number
+  category?: string
+  cpu_type?: string
+  storage_type?: string
+  traffic?: number
+}
 type OptImage = { id: string; name: string; architecture: string; os_flavor?: string }
 type Options = { locations: OptLocation[]; types: OptType[]; images: OptImage[] }
+
+
+const LOC_FA: Record<string, string> = {
+  nbg1: 'نورنبرگ، آلمان',
+  fsn1: 'فالکنشتاین، آلمان',
+  hel1: 'هلسینکی، فنلاند',
+  ash: 'اشبرن، آمریکا',
+  hil: 'هیلزبورو، آمریکا',
+  sin: 'سنگاپور',
+  nyc1: 'نیویورک، آمریکا',
+}
+
+function locFa(name: string, city?: string, country?: string) {
+  if (LOC_FA[name]) return LOC_FA[name]
+  if (city && country) return city + '، ' + country
+  return city || country || name
+}
+
+type PlanGroup = { id: string; title: string; items: OptType[] }
+
+// Same split Hetzner uses on its own server-type page.
+function planGroups(types: OptType[]): PlanGroup[] {
+  const shared = (t: OptType) => (t.category || t.cpu_type || 'shared') !== 'dedicated'
+  const defs: { id: string; title: string; test: (t: OptType) => boolean }[] = [
+    { id: 'x86', title: 'Shared vCPU · x86', test: (t) => shared(t) && t.architecture !== 'arm' },
+    { id: 'arm', title: 'Shared vCPU · Arm64', test: (t) => shared(t) && t.architecture === 'arm' },
+    { id: 'ded', title: 'Dedicated vCPU', test: (t) => !shared(t) },
+  ]
+  const out: PlanGroup[] = []
+  const used = new Set<string>()
+  for (const d of defs) {
+    const items = types.filter((t) => !used.has(t.id) && d.test(t))
+    items.forEach((t) => used.add(t.id))
+    if (items.length) out.push({ id: d.id, title: d.title, items })
+  }
+  const rest = types.filter((t) => !used.has(t.id))
+  if (rest.length) out.push({ id: 'other', title: 'سایر', items: rest })
+  return out
+}
 
 type CreateState = {
   v: 'create'
@@ -616,6 +662,52 @@ export default function App() {
     }
   }
 
+  async function runCreate(st: CreateState, name: string, typeID: string, imageID: string) {
+    bump(1)
+    try {
+      const d = await api<any>('/api/hz/create', { acc: st.acc, name, type: typeID, image: imageID, location: st.loc })
+      setServers([])
+      setServersAcc(null)
+      setModal({
+        kind: 'created',
+        name,
+        ip: d.ip || '',
+        password: d.password || '',
+        onDone: () => {
+          setStack([])
+          setCur({ v: 'servers', acc: st.acc })
+          setCreateName('')
+        },
+      })
+    } catch (e: any) {
+      toast(e.message || 'خطا', true)
+    } finally {
+      bump(-1)
+    }
+  }
+
+  // «ساخت فوری»: Ubuntu 24.04, default name = plan + two random digits.
+  function quickCreate(t: OptType) {
+    if (cur.v !== 'create') return
+    const st = cur
+    const img = (opts?.images || []).find(
+      (i) =>
+        (!i.architecture || i.architecture === t.architecture) &&
+        (/ubuntu-?24\.04/i.test(i.name) || (i.os_flavor === 'ubuntu' && /^24\.04/.test((i as any).os_version || ''))),
+    )
+    if (!img) {
+      toast('Ubuntu 24.04 برای این پلن پیدا نشد؛ از ساخت سفارشی استفاده کن', true)
+      return
+    }
+    const name = t.name + '-' + (Math.floor(Math.random() * 90) + 10)
+    setModal({
+      kind: 'confirm',
+      title: 'ساخت فوری',
+      desc: `«${name}» با پلن ${t.name} و Ubuntu 24.04 در ${locFa(st.loc)} ساخته شود؟`,
+      onOk: () => runCreate(st, name, t.id, img.id),
+    })
+  }
+
   function submitCreate() {
     if (cur.v !== 'create') return
     const name = createName.trim()
@@ -632,35 +724,7 @@ export default function App() {
       kind: 'confirm',
       title: 'ساخت سرور',
       desc: `«${name}» با پلن ${st.type} در ${st.loc} ساخته شود؟`,
-      onOk: async () => {
-        bump(1)
-        try {
-          const d = await api<any>('/api/hz/create', {
-            acc: st.acc,
-            name,
-            type: st.type,
-            image: st.image,
-            location: st.loc,
-          })
-          setServers([])
-          setServersAcc(null)
-          setModal({
-            kind: 'created',
-            name,
-            ip: d.ip || '',
-            password: d.password || '',
-            onDone: () => {
-              setStack([])
-              setCur({ v: 'servers', acc: st.acc })
-              setCreateName('')
-            },
-          })
-        } catch (e: any) {
-          toast(e.message || 'خطا', true)
-        } finally {
-          bump(-1)
-        }
-      },
+      onOk: () => runCreate(st, name, st.type, st.image),
     })
   }
 
@@ -1267,10 +1331,8 @@ export default function App() {
           {opts.locations.map((l) => (
             <button key={l.name} className="cc-choice" onClick={() => setCur({ ...c, step: 2, loc: l.name })}>
               <span className="cc-grow">
-                <span className="cc-name">{l.city || l.name}</span>
-                <span className="cc-sub">
-                  {l.country || ''} · {l.name}
-                </span>
+                <span className="cc-name">{locFa(l.name, l.city, l.country)}</span>
+                <span className="cc-sub cc-ltr">{l.name}</span>
               </span>
             </button>
           ))}
@@ -1281,22 +1343,36 @@ export default function App() {
       return (
         <>
           {steps}
-          <div className="cc-section">پلن · {c.loc}</div>
+          <div className="cc-section">پلن · {locFa(c.loc, '', '')}</div>
           {opts.types.length === 0 && <Empty title="پلنی برای این لوکیشن نیست" />}
-          {opts.types.map((t) => (
-            <button
-              key={t.id}
-              className="cc-choice"
-              onClick={() => setCur({ ...c, step: 3, type: t.id, typeName: t.name, arch: t.architecture })}
-            >
-              <span className="cc-grow">
-                <span className="cc-name">{t.name}</span>
-                <span className="cc-sub">
-                  {t.cores} vCPU · {mem(t.memory)} RAM · {t.disk}GB · {t.architecture}
-                </span>
-              </span>
-              <span className="cc-sub">{t.monthly || ''}</span>
-            </button>
+          {planGroups(opts.types).map((g) => (
+            <div key={g.id} className="cc-plangroup">
+              <div className="cc-plangroup-title">{g.title}</div>
+              {g.items.map((t) => {
+                const custom = () => setCur({ ...c, step: 3, type: t.id, typeName: t.name, arch: t.architecture })
+                return (
+                  <div key={t.id} className="cc-plan">
+                    <button className="cc-choice cc-plan-main" onClick={custom}>
+                      <span className="cc-grow">
+                        <span className="cc-name">{t.name}</span>
+                        <span className="cc-sub">
+                          {t.cores} vCPU · {mem(t.memory)} RAM · {t.disk} GB
+                        </span>
+                      </span>
+                      <span className="cc-plan-price">{t.monthly || (t.monthly_net ? t.monthly_net.toFixed(2) + ' €' : '')}</span>
+                    </button>
+                    <div className="cc-plan-acts">
+                      <Button variant="primary" onClick={() => quickCreate(t)}>
+                        ساخت فوری
+                      </Button>
+                      <Button variant="outline" onClick={custom}>
+                        ساخت سفارشی
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           ))}
         </>
       )
