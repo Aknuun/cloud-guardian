@@ -15,6 +15,7 @@ func (r *Router) webToolsHub(w http.ResponseWriter, req *http.Request, uid int64
 		"annUrl":   r.announceURL(),
 		"secret":   r.hubSecret() != "",
 		"stats":    s,
+		"root":     r.hubRoot(),
 		"hubOk":    false,
 		"installs": []any{},
 	}

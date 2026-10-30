@@ -312,3 +312,32 @@ func (r *Router) HubTick() {
 		}
 	}
 }
+
+// webHubCastInstalls fans a root message out to every member install's feed.
+func (r *Router) webHubCastInstalls(w http.ResponseWriter, req *http.Request, uid int64) {
+	if !r.hubRoot() {
+		webErr(w, http.StatusForbidden, "فقط ادمین هاب ریشه می‌تواند به نصب‌ها پیام بدهد")
+		return
+	}
+	var in struct {
+		Text string `json:"text"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	txt := strings.TrimSpace(in.Text)
+	if txt == "" {
+		webErr(w, http.StatusBadRequest, "متن پیام خالی است")
+		return
+	}
+	list := r.hubFeedList()
+	list = append(list, hubMsg{
+		ID: randHex(6), From: "root", Text: txt,
+		TS: time.Now().UnixMilli(),
+	})
+	if len(list) > 500 {
+		list = list[len(list)-500:]
+	}
+	r.Store.PutJSON("hub_feed", list, 0)
+	webOK(w, map[string]any{"ok": true, "members": len(r.hubMembers())})
+}

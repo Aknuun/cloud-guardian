@@ -653,6 +653,7 @@ function SrvView() {
           </Dialog>
         </Dialog.Root>
       )}
+
     </>
   )
 }
@@ -3673,7 +3674,7 @@ function FoView() {
 }
 
 type HubStats = { bot: string; version: string; go: string; uptime: string; mem_mb: number; db_mb: number; admins: number; users: number; panels: number; zones: number; cf_accs: number; servers: number }
-type HubData = { hubUrl: string; annUrl: string; secret: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
+type HubData = { hubUrl: string; annUrl: string; secret: boolean; root?: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
 type Ann = { id: string; text: string; until: string; reply: boolean }
 
 function HubView() {
@@ -3683,6 +3684,7 @@ function HubView() {
   const [cfg, setCfg] = useState<{ hubUrl: string; annUrl: string; secret: string } | null>(null)
   const [cErr, setCErr] = useState('')
   const [cast, setCast] = useState<string | null>(null)
+  const [castAll, setCastAll] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
@@ -3742,7 +3744,8 @@ function HubView() {
       <div className="cc-section">
         <div className="cc-section-head">
           <h2>اعلان‌ها</h2>
-          <Button variant="outline" icon={Plus} onClick={() => setCast('')}>پیام همگانی</Button>
+          <Button variant="outline" icon={Plus} onClick={() => setCast('')}>پیام به کاربرانم</Button>
+          {data?.root && <Button variant="outline" icon={Plus} onClick={() => setCastAll('')}>پیام به نصب‌ها</Button>}
         </div>
         {annErr && <div className="cc-hint cc-center cc-mb">{annErr}</div>}
         {anns && anns.length === 0 && <Empty title="اعلانی نیست" description="از منبع اعلان‌ها چیزی برنگشت." />}
@@ -3782,7 +3785,7 @@ function HubView() {
 
       {cast !== null && (
         <FormDialog
-          title="پیام همگانی"
+          title="پیام به کاربران من"
           sub="برای همهٔ ادمین‌ها و کاربران شناخته‌شده ارسال می‌شود."
           onClose={() => setCast(null)}
           onSave={async () => {
@@ -3798,6 +3801,27 @@ function HubView() {
           <label className="cc-field">
             <span>متن پیام</span>
             <textarea className="cc-input cc-textarea" value={cast} onChange={(e) => setCast(e.target.value)} />
+          </label>
+        </FormDialog>
+      )}
+      {castAll !== null && (
+        <FormDialog
+          title="پیام به نصب‌ها"
+          sub="این پیام در فید هاب می‌رود و هر نصب عضو آن را برای ادمین خودش می‌فرستد."
+          onClose={() => setCastAll(null)}
+          onSave={async () => {
+            try {
+              const r = await api<{ members: number }>('/api/tools/hub/cast-installs', { text: castAll })
+              setCastAll(null)
+              setNotice(`پیام برای ${faNum(r.members)} نصب در فید هاب ثبت شد`)
+            } catch (e: any) {
+              setNotice(String(e?.message || e))
+            }
+          }}
+        >
+          <label className="cc-field">
+            <span>متن پیام</span>
+            <textarea className="cc-input cc-textarea" value={castAll} onChange={(e) => setCastAll(e.target.value)} />
           </label>
         </FormDialog>
       )}
