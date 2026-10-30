@@ -1201,3 +1201,25 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     height: 100dvh;
   }
 }
+
+/* rows with action buttons: never squeeze the text to zero width */
+.cc-trow {
+  flex-wrap: wrap;
+}
+.cc-trow > .cc-grow {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.cc-trow .cc-ltr {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+@media (max-width: 699px) {
+  .cc-trow > .cc-grow {
+    flex: 1 1 100%;
+  }
+  .cc-trow > .cc-btnrow {
+    flex: 1 1 100%;
+    margin-bottom: 0;
+  }
+}
