@@ -1,6 +1,11 @@
 # نگهبان ابری ☁️
 
-مدیریت کامل **دامنه، DNS، پنل پاسارگارد و سرورها (هتزنر، لینود، آروان)** در تلگرام.
+<p align="center">
+  <a href="https://t.me/openWEBcode" target="_blank"><img src="https://img.shields.io/badge/Telegram-@openWEBcode-26A5E4?logo=telegram&logoColor=white" alt="Telegram: @openWEBcode"/></a>
+</p>
+
+
+مدیریت کامل **دامنه، DNS، پنل پاسارگارد و سرورها (هتزنر، آروان)** در تلگرام.
 
 این پروژه **دو نسخهٔ مستقل** دارد:
 

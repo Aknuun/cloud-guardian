@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+// Promo channel shown in the bot menu and the mini app.
+const (
+	ChannelHandle = "openWEBcode"
+	ChannelURL    = "https://t.me/openWEBcode"
+)
+
+func chanBtn() Btn { return Btn{Text: "📣 @" + ChannelHandle, URL: ChannelURL} }
+
 // webLink builds a deep link into the mini app for one section.
 func (r *Router) webLink(goID string) string {
 	u := strings.TrimSpace(r.WebAppURL)
@@ -35,6 +43,7 @@ func (r *Router) Menu(chat, mid int64) {
 		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
 		{btnWA("🎛 پاسارگارد", r.webLink("pg"))},
 		{btnS("📦 بخش‌های دیگر", "more", "plain")},
+		{chanBtn()},
 	}
 	if r.webLink("hz") == "" {
 		// no web app configured: keep the native screens usable
@@ -43,9 +52,11 @@ func (r *Router) Menu(chat, mid int64) {
 			{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
 			{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("⏰ یادآورها", "rem", "plain")},
 			{btnS("📦 بخش‌های دیگر", "more", "plain")},
+			{chanBtn()},
 		}
 	}
-	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version)
+	text := uiTitle("⚙️", "نگهبان ابری", "") + fmt.Sprintf("\n\nنسخه v%s", Version) +
+		"\n📣 کانال: @" + ChannelHandle
 	if p := r.PromoText(); p != "" {
 		text += "\n\n" + p
 	}
