@@ -1130,3 +1130,48 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   border-bottom: 1px solid var(--ds-hairline);
   margin-bottom: 6px;
 }
+
+/* ---------- sidebar motion (MoreBot-like) ---------- */
+/* the global kill switch lives above; the sidebar is the one place that animates */
+.cc-sidebar {
+  transition: width 0.24s cubic-bezier(0.4, 0, 0.2, 1), padding 0.24s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.24s ease !important;
+  will-change: width;
+}
+.cc-sidebar .cc-sidebrand-text,
+.cc-sidebar .cc-sidenav-label,
+.cc-sidebar .cc-sideitem-label,
+.cc-sidebar .cc-caret,
+.cc-sidebar .cc-profile .cc-grow {
+  transition: opacity 0.16s ease, width 0.24s ease !important;
+}
+.cc-sidebar .cc-sideitem {
+  transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+.cc-sidebar .cc-sideitem svg {
+  transition: color 0.15s ease !important;
+}
+.cc-scrim {
+  transition: opacity 0.2s ease !important;
+}
+
+/* labels that used to pop in/out now fade and shrink instead of jumping */
+.cc-sidebar:not(.open) .cc-sidebrand-text,
+.cc-sidebar:not(.open) .cc-sidenav-label,
+.cc-sidebar:not(.open) .cc-sideitem-label,
+.cc-sidebar:not(.open) .cc-caret,
+.cc-sidebar:not(.open) .cc-profile .cc-grow {
+  display: block;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-sidebar,
+  .cc-sidebar *,
+  .cc-scrim {
+    transition: none !important;
+  }
+}
