@@ -1023,20 +1023,16 @@ ${reason}`,
             {r.type}
           </Badge>
         )}
-        <div className="cc-grow">
-          <div className="cc-name cc-mono cc-copyline">
-            <span>{relName(r.name, zone?.name || '')}</span>
-            {!selMode && <CopyBtn value={r.name} onCopy={copy} label="کپی زیردامنه" />}
-          </div>
-          <div className="cc-sub cc-mono cc-copyline">
-            <span className="cc-copyval">{r.content}</span>
-            {!selMode && <CopyBtn value={r.content} onCopy={copy} label="کپی مقدار" size={14} />}
-          </div>
+        <div className="cc-grow cc-recrow">
+          <span className="cc-name cc-mono">{relName(r.name, zone?.name || '')}</span>
           {PROXYABLE.includes(r.type) && (
-            <div className="cc-sub">
-              {r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'} · TTL {ttlLabel(r.ttl)}
-            </div>
+            <span
+              className={'cc-px' + (r.proxied ? ' on' : '')}
+              title={r.proxied ? 'پروکسی روشن' : 'پروکسی خاموش'}
+            />
           )}
+          <span className="cc-ip cc-mono">{r.content}</span>
+          {!selMode && <CopyBtn value={r.content} onCopy={copy} label="کپی مقدار" size={13} />}
         </div>
         {!selMode && <FavStar fav={r.fav} onClick={() => void setFav(view.acc, view.zid, r.id, !r.fav)} />}
         {!selMode && <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>}

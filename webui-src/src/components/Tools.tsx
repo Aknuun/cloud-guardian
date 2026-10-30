@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
@@ -28,28 +28,45 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
-// Landing page: every ported section, one tap away.
+// Landing page: every ported section, grouped and one tap away.
 function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
+  const byId = new Map(TOOLS.map((t) => [t.id, t]))
+  const groups: { title: string; tools: ToolId[] }[] = [
+    { title: 'سرویس‌ها', tools: [] },
+    { title: 'پاسارگارد', tools: ['pg', 'hook', 'hf', 'hfd', 'um'] },
+    { title: 'سرور و دامنه', tools: ['srv', 'rem', 'dom', 'mail'] },
+    { title: 'ابزارها', tools: ['rec', 'qa', 'hub', 'fo', 'set'] },
+  ]
   return (
-    <div className="cc-hub">
-      <div className="cc-hub-title">سرویس‌ها</div>
-      <div className="cc-hub-grid">
+    <div className="cc-hg">
+      <div className="cc-hg-title">سرویس‌ها</div>
+      <div className="cc-hg-list">
         {PROVIDERS.map((p) => (
-          <button key={p.id} className="cc-hubcard" onClick={() => go!(p.id as Provider, null)}>
-            <p.Icon size={22} />
+          <button key={p.id} className="cc-hrow" onClick={() => go!(p.id as Provider, null)}>
+            <p.Icon size={18} />
             <span>{p.label}</span>
+            <CaretLeft size={14} className="cc-hchev" />
           </button>
         ))}
       </div>
-      <div className="cc-hub-title">ابزارها</div>
-      <div className="cc-hub-grid">
-        {TOOLS.map((t) => (
-          <button key={t.id} className="cc-hubcard" onClick={() => go!(null, t.id)}>
-            <t.Icon size={22} />
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </div>
+      {groups.slice(1).map((g) => (
+        <div key={g.title}>
+          <div className="cc-hg-title">{g.title}</div>
+          <div className="cc-hg-list">
+            {g.tools.map((id) => {
+              const t = byId.get(id)
+              if (!t) return null
+              return (
+                <button key={id} className="cc-hrow" onClick={() => go!(null, id)}>
+                  <t.Icon size={18} />
+                  <span>{t.label}</span>
+                  <CaretLeft size={14} className="cc-hchev" />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

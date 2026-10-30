@@ -1587,3 +1587,24 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main .cc-trow .cc-sub { font-size: 11px; line-height: 1.35 }
   .cc-main .cc-trow .cc-dot { width: 7px; height: 7px; flex: 0 0 7px }
 }
+
+/* home: grouped rows (unslop) */
+.cc-hg { display: block }
+.cc-hg-title { font-size: 12px; font-weight: 500; color: var(--ds-muted); padding: 2px 2px 6px; margin-top: 14px }
+.cc-hg > .cc-hg-title:first-child { margin-top: 0 }
+.cc-hg-list { border: 1px solid var(--ds-hairline); border-radius: 12px; overflow: hidden }
+.cc-hrow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 0 12px; background: var(--ds-card); border: 0; border-top: 1px solid var(--ds-hairline); color: var(--ds-text); font: inherit; font-size: 13.5px; text-align: start; cursor: pointer }
+.cc-hrow:first-child { border-top: 0 }
+.cc-hrow:hover { background: var(--ds-tint) }
+.cc-hrow svg { color: var(--ds-muted); flex: 0 0 18px }
+.cc-hrow span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.cc-hchev { color: var(--ds-subtle) !important; flex: 0 0 14px !important; transform: scaleX(-1) }
+
+/* compact rows everywhere */
+.cc-main .cc-trow { min-height: 52px }
+.cc-recrow { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 }
+.cc-recrow .cc-name { flex: 0 1 auto; min-width: 0 }
+.cc-ip { color: var(--ds-muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+.cc-px { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; background: var(--ds-subtle) }
+.cc-px.on { background: var(--ds-brand) }
+@media (max-width: 699px) { .cc-main .cc-trow { min-height: 56px } .cc-hrow { min-height: 48px } }
