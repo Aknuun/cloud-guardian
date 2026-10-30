@@ -20,6 +20,7 @@ export function Sidebar({
   onToggle,
   sections,
   tools,
+  providerActive = true,
 }: {
   provider: Provider
   onChange: (p: Provider) => void
@@ -27,6 +28,7 @@ export function Sidebar({
   onToggle: () => void
   sections?: SubItem[]
   tools?: ToolItem[]
+  providerActive?: boolean
 }) {
   const { mode, toggle } = useTheme()
   const [expanded, setExpanded] = useState<Provider | null>(provider)
@@ -97,7 +99,7 @@ export function Sidebar({
         <nav className="cc-sidenav" aria-label="سرویس‌ها">
           <div className="cc-sidenav-label">سرویس‌ها</div>
           {PROVIDERS.map((it) => {
-            const on = provider === it.id
+            const on = providerActive && provider === it.id
             const isOpen = expanded === it.id
             const hasSub = on && !!(sections && sections.length)
             const items = hasSub && isOpen ? sections || [] : []

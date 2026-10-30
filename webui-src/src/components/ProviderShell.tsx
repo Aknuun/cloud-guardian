@@ -53,6 +53,7 @@ export function ProviderShell({
         onToggle={() => setNavOpen((o) => !o)}
         sections={sections}
         tools={onTool ? toolItems(activeTool ?? null, onTool) : undefined}
+        providerActive={!activeTool}
       />
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />

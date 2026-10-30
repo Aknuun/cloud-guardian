@@ -1484,6 +1484,7 @@ export default function App() {
         onToggle={() => setNavOpen((o) => !o)}
         tools={toolItems(tool, setTool)}
         sections={sections}
+        providerActive={!tool}
       />
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
