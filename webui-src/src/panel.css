@@ -1315,3 +1315,25 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     font-size: 11px !important;
   }
 }
+
+/* compact rows: no glow, checkbox at the row end, note line only on wide screens */
+.cc-main .cc-trow,
+.cc-app .cc-trow {
+  box-shadow: none;
+  background-image: none;
+}
+.cc-main .cc-trow .cc-pick,
+.cc-app .cc-trow .cc-pick {
+  order: 9;
+}
+@media (max-width: 699px) {
+  .cc-main .cc-trow .cc-sub + .cc-sub,
+  .cc-app .cc-trow .cc-sub + .cc-sub {
+    display: none;
+  }
+  .cc-main .cc-trow,
+  .cc-app .cc-trow {
+    padding: 9px 11px;
+    gap: 8px;
+  }
+}
