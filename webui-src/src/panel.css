@@ -1580,3 +1580,10 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-main .cc-stat-label { text-align: start; padding-inline-start: 2px }
 
 .cc-main .cc-stat-label { width: 100%; text-align: start }
+
+@media (max-width: 699px) {
+  .cc-main .cc-trow { min-height: 60px; gap: 10px; padding: 8px 10px }
+  .cc-main .cc-trow .cc-name { font-size: 13.5px }
+  .cc-main .cc-trow .cc-sub { font-size: 11px; line-height: 1.35 }
+  .cc-main .cc-trow .cc-dot { width: 7px; height: 7px; flex: 0 0 7px }
+}
