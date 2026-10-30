@@ -66,6 +66,27 @@ type hubMsg struct {
 	ToRoot bool   `json:"toRoot"`
 }
 
+// hubStatsWire is the stats object a member posts to the root hub.
+type hubStatsWire struct {
+	Bot     string `json:"bot"`
+	Version string `json:"version"`
+	Users   int    `json:"users"`
+	Admins  int    `json:"admins"`
+	Panels  int    `json:"panels"`
+	Servers int    `json:"servers"`
+	Zones   int    `json:"zones"`
+}
+
+func (s hubStatsWire) apply(m *hubMember) {
+	if s.Bot != "" {
+		m.Bot = s.Bot
+	}
+	if s.Version != "" {
+		m.Version = s.Version
+	}
+	m.Users, m.Admins, m.Panels, m.Servers, m.Zones = s.Users, s.Admins, s.Panels, s.Servers, s.Zones
+}
+
 func (r *Router) hubRoot() bool { return r.AdminID == HubRootID }
 
 func (r *Router) hubMembers() map[string]hubMember {
@@ -92,7 +113,8 @@ func (r *Router) hubInboxList() []hubMsg {
 // webHubJoin is called by a member install to obtain its own token.
 func (r *Router) webHubJoin(w http.ResponseWriter, req *http.Request, uid int64) {
 	var in struct {
-		Name string `json:"name"`
+		Name  string       `json:"name"`
+		Stats hubStatsWire `json:"stats"`
 	}
 	if !webDecode(w, req, &in) {
 		return
@@ -106,9 +128,25 @@ func (r *Router) webHubJoin(w http.ResponseWriter, req *http.Request, uid int64)
 		webErr(w, http.StatusUnauthorized, "کد هاب نامعتبر است")
 		return
 	}
-	tok := randHex(16)
+	name := strings.TrimSpace(in.Name)
 	m := r.hubMembers()
-	m[tok] = hubMember{Token: tok, Name: strings.TrimSpace(in.Name), Seen: time.Now().Unix()}
+	// A reinstall (or a wiped store) rejoins with the same bot name: hand back the
+	// existing token instead of piling up duplicate installs.
+	tok := ""
+	if name != "" {
+		for k, v := range m {
+			if v.Name == name {
+				tok = k
+				break
+			}
+		}
+	}
+	if tok == "" {
+		tok = randHex(16)
+	}
+	rec := hubMember{Token: tok, Name: name, Seen: time.Now().Unix()}
+	in.Stats.apply(&rec)
+	m[tok] = rec
 	r.Store.PutJSON(hubMembersKey, m, 0)
 	webOK(w, map[string]any{"token": tok})
 }
@@ -130,15 +168,22 @@ func (r *Router) webHubPing(w http.ResponseWriter, req *http.Request, uid int64)
 		webErr(w, http.StatusUnauthorized, "توکن هاب نامعتبر است")
 		return
 	}
-	var in hubMember
+	var in struct {
+		Name  string       `json:"name"`
+		Stats hubStatsWire `json:"stats"`
+	}
 	if !webDecode(w, req, &in) {
 		return
 	}
+	rec := mem
+	if n := strings.TrimSpace(in.Name); n != "" {
+		rec.Name = n
+	}
+	in.Stats.apply(&rec)
+	rec.Seen = time.Now().Unix()
+	rec.IP = clientIPOf(req)
 	all := r.hubMembers()
-	in.Token = mem.Token
-	in.Seen = time.Now().Unix()
-	in.IP = clientIPOf(req)
-	all[mem.Token] = in
+	all[mem.Token] = rec
 	r.Store.PutJSON(hubMembersKey, all, 0)
 	webOK(w, map[string]any{"ok": true})
 }
@@ -217,6 +262,11 @@ func (r *Router) webHubSend2(w http.ResponseWriter, req *http.Request, uid int64
 		webErr(w, http.StatusForbidden, "فقط هاب ریشه می‌تواند پیام بفرستد")
 		return
 	}
+	// This route is not session-authenticated, so the hub secret is the only proof.
+	if sec := r.hubSecret(); sec == "" || strings.TrimSpace(req.Header.Get("X-Hub-Code")) != sec {
+		webErr(w, http.StatusUnauthorized, "کد هاب نامعتبر است")
+		return
+	}
 	msg.From = "hub"
 	msg.To = strings.TrimSpace(in.To)
 	feed := r.hubFeedList()
@@ -234,8 +284,21 @@ func (r *Router) webHubMembers(w http.ResponseWriter, req *http.Request, uid int
 		webErr(w, http.StatusForbidden, "فقط هاب ریشه")
 		return
 	}
+	// Older builds joined again on every reinstall; keep one row per bot name.
+	seen := map[string]int{}
 	var list []hubMember
 	for _, m := range r.hubMembers() {
+		key := m.Name
+		if key == "" {
+			key = m.Token
+		}
+		if i, ok := seen[key]; ok {
+			if m.Seen > list[i].Seen {
+				list[i] = m
+			}
+			continue
+		}
+		seen[key] = len(list)
 		list = append(list, m)
 	}
 	webOK(w, map[string]any{
