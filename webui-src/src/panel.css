@@ -1223,3 +1223,95 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     margin-bottom: 0;
   }
 }
+
+/* ---------- compact list rows (all sections) ---------- */
+.cc-main .cc-trow,
+.cc-app .cc-trow {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  min-height: 0;
+  border-radius: 12px;
+}
+.cc-main .cc-trow > .cc-grow,
+.cc-app .cc-trow > .cc-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 1px;
+}
+.cc-main .cc-trow .cc-name,
+.cc-app .cc-trow .cc-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-main .cc-trow .cc-sub,
+.cc-app .cc-trow .cc-sub {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ds-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cc-main .cc-trow .cc-ltr,
+.cc-app .cc-trow .cc-ltr {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.cc-main .cc-trow .cc-avatar,
+.cc-app .cc-trow .cc-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+.cc-main .cc-trow .cc-badge,
+.cc-app .cc-trow .cc-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 999px;
+}
+.cc-main .cc-trow .cc-pick,
+.cc-app .cc-trow .cc-pick {
+  flex: 0 0 auto;
+  padding: 2px;
+}
+.cc-main .cc-trow .cc-btnrow,
+.cc-app .cc-trow .cc-btnrow {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.cc-main .cc-trow .cc-btnrow button[data-kumo-component='Button'],
+.cc-app .cc-trow .cc-btnrow button[data-kumo-component='Button'] {
+  flex: 0 0 auto;
+  font-size: 11.5px !important;
+  padding: 0 10px !important;
+  height: 32px;
+  min-height: 32px;
+  white-space: nowrap;
+}
+@media (max-width: 699px) {
+  .cc-main .cc-trow .cc-btnrow,
+  .cc-app .cc-trow .cc-btnrow {
+    gap: 4px;
+  }
+  .cc-main .cc-trow .cc-btnrow button[data-kumo-component='Button'],
+  .cc-app .cc-trow .cc-btnrow button[data-kumo-component='Button'] {
+    padding: 0 8px !important;
+    font-size: 11px !important;
+  }
+}
