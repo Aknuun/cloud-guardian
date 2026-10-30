@@ -1914,3 +1914,21 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-sidebar { top: 0 !important; height: 100dvh !important; z-index: 60 !important }
   .cc-sidebar.open { border-start-start-radius: 18px; border-end-start-radius: 18px }
 }
+
+/* Scrim: only phones get a click-away layer; on desktop the sidebar is docked
+   and a full-screen layer would swallow page clicks. */
+@media (min-width: 900px) {
+  .cc-scrim { display: none !important }
+}
+@media (max-width: 899px) {
+  .cc-scrim {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: transparent;
+    opacity: 1;
+    pointer-events: none;
+  }
+  .cc-scrim.on { pointer-events: auto }
+}
