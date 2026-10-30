@@ -4,7 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
-import { TOOLS, FormDialog, HomeView } from './toolsMeta'
+import { TOOLS, FormDialog, HomeView, ErrBox } from './toolsMeta'
 import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
 
@@ -1108,7 +1108,7 @@ function TextDialog({ s, kind, onClose }: { s: Srv; kind: 'info' | 'disk'; onClo
             <Loader size="lg" />
           </div>
         )}
-        {err && <div className="cc-form-err">{err}</div>}
+        {err && <ErrBox msg={err} />}
         {!busy && !err && <pre className="cc-pre">{text || '—'}</pre>}
         <div className="cc-dialog-actions">
           <Button variant="secondary" icon={ArrowClockwise} onClick={load}>
@@ -1161,7 +1161,7 @@ function MonCfgDialog({ onClose }: { onClose: () => void }) {
             <Loader size="lg" />
           </div>
         )}
-        {err && <div className="cc-form-err">{err}</div>}
+        {err && <ErrBox msg={err} />}
         {cfg && (
           <div className="cc-form">
             <label className="cc-checkline">
@@ -1259,7 +1259,7 @@ function PwDialog({ onClose }: { onClose: () => void }) {
         <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
         <Dialog.Title className="cc-dialog-title">رمزهای ذخیره‌شده</Dialog.Title>
         <Dialog.Description className="cc-dialog-desc">در افزودن گروهی و از ساب‌دامنه قابل انتخاب‌اند.</Dialog.Description>
-        {err && <div className="cc-form-err">{err}</div>}
+        {err && <ErrBox msg={err} />}
         {!list && (
           <div className="cc-center cc-mb">
             <Loader size="lg" />
@@ -1396,7 +1396,7 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
         <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
         <Dialog.Title className="cc-dialog-title">از ساب‌دامنه</Dialog.Title>
         <Dialog.Description className="cc-dialog-desc">دامنه را انتخاب کن و رکوردهای A/AAAA را تیک بزن.</Dialog.Description>
-        {err && <div className="cc-form-err">{err}</div>}
+        {err && <ErrBox msg={err} />}
         {!zones && (
           <div className="cc-center cc-mb">
             <Loader size="lg" />
@@ -1677,7 +1677,7 @@ function DomCfgDialog({ onClose }: { onClose: () => void }) {
               {test.message ? ` (${test.message})` : ''}
             </div>
           )}
-          {err && <div className="cc-form-err">{err}</div>}
+          {err && <ErrBox msg={err} />}
         </div>
         <div className="cc-dialog-actions">
           <Button variant="outline" onClick={onClose}>بستن</Button>
@@ -2848,7 +2848,7 @@ function RecView() {
         onRefresh={search}
         busy={busy}
       />
-      {err && <div className="cc-form-err">{err}</div>}
+      {err && <ErrBox msg={err} />}
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       {sel.length > 0 && (
@@ -2967,7 +2967,7 @@ function AddRecDialog({ zones, onClose, onDone }: { zones: CfZone[]; onClose: ()
               <input id="cgc10" name="cgc10" type="checkbox" checked={proxied} onChange={(e) => setProxied(e.target.checked)} />
               <span>پروکسی کلودفلر (فقط A/AAAA/CNAME)</span>
             </label>
-            {err && <div className="cc-form-err">{err}</div>}
+            {err && <ErrBox msg={err} />}
           </div>
         </div>
         <div className="cc-dialog-actions">
@@ -3183,7 +3183,7 @@ function MailDialog({ zones, onClose, onDone }: { zones: CfZone[]; onClose: () =
               </>
             )}
             <div className="cc-hint">همهٔ آدرس‌های دامنه به این ایمیل فوروارد می‌شوند (catch-all).</div>
-            {err && <div className="cc-form-err">{err}</div>}
+            {err && <ErrBox msg={err} />}
           </div>
         </div>
         <div className="cc-dialog-actions">
@@ -3490,7 +3490,7 @@ function FoView() {
       </div>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
-      {err && <div className="cc-hint cc-center cc-mb">{err}</div>}
+      {err && <ErrBox msg={err} onRetry={reload} />}
       {!loaded && <Loader />}
 
       {d && d.configured && (
@@ -3623,7 +3623,7 @@ function HubHistory() {
         <h2>تاریخچهٔ پیام‌ها</h2>
         <Button variant="outline" icon={ArrowClockwise} onClick={load}>تازه‌سازی</Button>
       </div>
-      {err && <div className="cc-hint cc-center cc-mb">{err}</div>}
+      {err && <ErrBox msg={err} />}
       {shown.length === 0 && <Empty title="پیامی ثبت نشده" description="هر پیامی که بفرستی اینجا با تعداد دریافت‌کننده‌ها می‌آید." />}
       {shown.map((h) => (
         <div key={h.id} className="cc-trow">
@@ -3698,7 +3698,7 @@ function HubView() {
       </div>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
-      {err && <div className="cc-hint cc-center cc-mb">{err}</div>}
+      {err && <ErrBox msg={err} onRetry={reload} />}
       {!loaded && <Loader />}
 
       {s && (

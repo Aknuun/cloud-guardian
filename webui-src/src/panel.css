@@ -1762,3 +1762,9 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-dialog { overflow-y: auto !important; overscroll-behavior: contain }
 .cc-dialog .cc-actions { max-height: none !important; overflow: visible !important }
 .cc-dialog-body { max-height: none !important; overflow: visible !important }
+
+/* error box with retry */
+.cc-errbox{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--ds-tint);border:1px solid var(--ds-line);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:12.5px;color:#c0392b}
+.cc-errbox span{flex:1 1 160px;min-width:0;overflow-wrap:anywhere}
+.cc-errbox-retry{flex:0 0 auto;height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--ds-line);background:var(--ds-bg);color:var(--ds-text);font-size:12px;cursor:pointer}
+.cc-errbox-retry:hover{background:var(--ds-brand-soft);color:var(--ds-brand)}

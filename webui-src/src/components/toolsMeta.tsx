@@ -109,3 +109,16 @@ export function FormDialog({
   )
 }
 
+
+export function ErrBox({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
+  return (
+    <div className="cc-errbox" role="alert">
+      <span>{msg}</span>
+      {onRetry && (
+        <button type="button" className="cc-errbox-retry" onClick={onRetry}>
+          تلاش دوباره
+        </button>
+      )}
+    </div>
+  )
+}
