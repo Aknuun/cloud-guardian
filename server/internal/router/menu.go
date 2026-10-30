@@ -60,15 +60,16 @@ func (r *Router) Menu(chat, mid int64) {
 		r.Show(chat, mid, r.menuText(), kb)
 		return
 	}
-	// classic row grid: three-button rows render green, two-button rows blue
-	// (the tg styler decides the colour per row).
+	// same row layout as the worker edition's home screen
 	kb := [][]Btn{
 		{r.webBtn("➕ افزودن رکورد", "addrec", "rec"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
 		{r.webBtn("🇩🇪 هتزنر", "hz", "hz"), r.webBtn("🇮🇷 آروان", "arvan", "arv")},
-		{r.webBtn("🎛 پاسارگارد", "pndef", "pg"), r.webBtn("🖥 سرورها", "srv", "srv"), r.webBtn("⏰ یادآورها", "rem", "rem")},
+		{r.webBtn("🎛 پنل پاسارگارد", "pndef", "pg")},
 		{r.webBtn("🧭 تعویض خودکار ساب‌فیلتر", "hf", "hf"), r.webBtn("🔁 چرخش روزانه ساب‌ها", "hfd", "hfd")},
-		{r.webBtn("🔔 هشدار انقضا و حجم", "pghook", "hook"), r.webBtn("🔥 گزارش بد مصرف", "um", "um"), r.webBtn("🌐 دامنه و SSL", "dommon", "dom")},
-		{r.webBtn("✉️ ایمیل دامنه", "fmail", "mail"), r.webBtn("⚙️ تنظیمات", "settings", "set")},
+		{r.webBtn("🔥 گزارش بد مصرف پاسارگارد", "um", "um")},
+		{r.webBtn("🖥 سرورها و مانیتورینگ", "srv", "srv"), r.webBtn("🌐 دامنه و SSL", "dommon", "dom")},
+		{r.webBtn("⏰ یادآورها", "rem", "rem"), r.webBtn("✉️ ایمیل دامنه", "fmail", "mail"), r.webBtn("🔔 هشدار انقضا و حجم", "pghook", "hook")},
+		{r.webBtn("⚙️ تنظیمات و راهنما", "settings", "set")},
 		{siteBtn},
 	}
 	r.Show(chat, mid, r.menuText(), kb)
