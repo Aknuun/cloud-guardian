@@ -68,6 +68,9 @@ func (r *Router) dispatch(chat, mid int64, data string) {
 	switch {
 	case data == "more":
 		r.moreMenu(chat, mid)
+	case data == "link_skip":
+		r.clearWizard(chat)
+		r.Menu(chat, mid)
 	case data == "menu":
 		r.navStack.Delete(chat)
 		r.Menu(chat, mid)

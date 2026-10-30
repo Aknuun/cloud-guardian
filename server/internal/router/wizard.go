@@ -66,6 +66,10 @@ func (r *Router) clearWizard(chat int64) {
 func (r *Router) wizardStep(chat, mid int64, pend map[string]any, text string) {
 	kind, _ := pend["kind"].(string)
 	switch kind {
+	case "link_user":
+		r.linkUserSave(chat, mid, text)
+	case "link_pass":
+		r.linkPassSave(chat, mid, pend, text)
 	case "admin_add":
 		id, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
 		if err != nil || id <= 0 {

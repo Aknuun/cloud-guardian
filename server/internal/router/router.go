@@ -185,6 +185,9 @@ func (r *Router) onMessage(m *tg.Message) {
 	case strings.HasPrefix(text, "/start"):
 		r.Menu(chat, 0)
 		r.onboardPrompt(chat, frm)
+		if r.isAdmin(frm) {
+			r.linkPrompt(chat, frm)
+		}
 	case text == "🏠 خانه":
 		r.Menu(chat, 0)
 	case strings.HasPrefix(text, "/zones"), strings.HasPrefix(text, "/cf"):

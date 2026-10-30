@@ -482,3 +482,37 @@ func (p *Pg) SetWebhook(token, hookURL, secret string, enable bool, days, usage 
 	req.Header.Set("User-Agent", ua)
 	return doJSON(req, 25*time.Second, nil)
 }
+
+// AdminGet fetches one panel admin by username.
+func (p *Pg) AdminGet(token, username string) (map[string]any, error) {
+	var out map[string]any
+	if err := p.get(token, "/api/admin/"+username, 20*time.Second, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AdminSetTelegram writes telegram_id onto an existing panel admin, keeping
+// every other field intact.
+func (p *Pg) AdminSetTelegram(token, username string, tg int64) error {
+	cur, err := p.AdminGet(token, username)
+	if err != nil {
+		return err
+	}
+	for _, k := range []string{"created_at", "used_traffic", "total_users", "lifetime_used_traffic", "role", "status"} {
+		delete(cur, k)
+	}
+	cur["telegram_id"] = tg
+	body, err := json.Marshal(cur)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("PUT", p.Base+"/api/admin/"+username, bytes.NewReader(body))
+	if err != nil {
+		return &Error{err.Error()}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", ua)
+	return doJSON(req, 25*time.Second, nil)
+}
