@@ -1776,3 +1776,43 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-skel-tile{height:54px}
   .cc-skel-row{height:56px}
 }
+
+/* compact chrome on phones: one thin topbar row, smaller stats */
+@media (max-width: 699px) {
+  .cc-main { padding: 12px 12px 28px !important; }
+  .cc-topbar {
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    padding: 6px 8px !important;
+    min-height: 0 !important;
+    height: 50px !important;
+  }
+  .cc-topbar .cc-menu-btn { width: 34px !important; height: 34px !important; flex: 0 0 34px; }
+  .cc-topbar .cc-menu-btn svg { width: 18px; height: 18px; }
+  .cc-topbar button[data-kumo-component='Button'],
+  .cc-topbar button {
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    flex: 0 0 34px;
+  }
+  .cc-topbar button svg { width: 16px; height: 16px; }
+  .cc-topbar .cc-title {
+    font-size: 14px !important;
+    line-height: 1.2;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cc-topbar .cc-chan { display: none !important; }
+  .cc-topbar .cc-ver { font-size: 10px !important; padding: 2px 5px !important; flex: 0 0 auto; }
+
+  .cc-main .cc-stats { gap: 6px !important; }
+  .cc-main .cc-stat { gap: 4px !important; }
+  .cc-main .cc-stat-box { padding: 8px 8px !important; min-height: 44px !important; }
+  .cc-main .cc-stat-value { font-size: 20px !important; }
+  .cc-main .cc-stat-label { font-size: 10.5px !important; line-height: 1.3 !important; }
+}
