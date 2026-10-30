@@ -37,7 +37,9 @@ async function waitTelegram(ms: number) {
   }
 }
 
-waitTelegram(2500).then(() => {
+// Telegram hands initData in the URL hash; if we can see it, its script must win.
+const needsTg = typeof location !== 'undefined' && /tgWebAppData=/.test(location.hash)
+waitTelegram(needsTg ? 8000 : 1500).then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ThemeProvider>

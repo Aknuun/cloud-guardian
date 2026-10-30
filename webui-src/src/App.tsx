@@ -198,8 +198,12 @@ export default function App() {
     let cancelled = false
     const bootTimer = setTimeout(() => {
       if (cancelled) return
-      setAuthErr('اتصال به سرور برقرار نشد. اینترنت یا دسترسی به دامنه را بررسی کن.')
-      setPhase('error')
+      // only a still-booting app is stuck; a login screen is not a failure
+      setPhase((p) => {
+        if (p !== 'boot') return p
+        setAuthErr('اتصال به سرور برقرار نشد. اینترنت یا دسترسی به دامنه را بررسی کن.')
+        return 'error'
+      })
     }, 12000)
     ;(async () => {
       if (TG) {
