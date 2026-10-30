@@ -30,6 +30,19 @@ window.addEventListener('error', (e) => fatal((e.message || 'خطای نامشخ
 window.addEventListener('unhandledrejection', (e: any) => fatal(e?.reason?.message || String(e?.reason || 'خطای نامشخص')))
 
 // telegram.org can be slow or blocked; never let it hold the first paint hostage.
+
+// Number inputs swallow the wheel while focused; blur them so the page scrolls instead.
+window.addEventListener(
+  'wheel',
+  (e) => {
+    const t = e.target as HTMLElement | null
+    if (t && t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'number' && document.activeElement === t) {
+      t.blur()
+    }
+  },
+  { passive: true },
+)
+
 async function waitTelegram(ms: number) {
   const t0 = Date.now()
   while (!(window as any).Telegram && Date.now() - t0 < ms) {
