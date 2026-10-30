@@ -10,8 +10,8 @@ export type SubItem = { id: string; label: string; active?: boolean; onSelect: (
 const PG_IDS = ['pg', 'hook', 'um', 'hf', 'hfd']
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
-  { id: 'hz', label: 'هتزنر', Icon: HardDrives },
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
+  { id: 'hz', label: 'هتزنر', Icon: HardDrives },
   { id: 'arv', label: 'آروان', Icon: Globe },
 ]
 
