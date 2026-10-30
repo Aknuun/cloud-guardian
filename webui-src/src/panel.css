@@ -1670,3 +1670,8 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main button[data-kumo-component='Button'] { font-size: 12.5px; padding-inline: 10px; max-width: 100% }
   .cc-main .cc-section-head button[data-kumo-component='Button'] { height: 36px }
 }
+
+@media (max-width: 699px) {
+  .cc-main .cc-btnrow button, .cc-main .cc-section-head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .cc-main .cc-btnrow > *, .cc-main .cc-section-head > * { min-width: 0 }
+}
