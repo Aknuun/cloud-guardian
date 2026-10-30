@@ -19,6 +19,27 @@ func (r *Router) webToolsHub(w http.ResponseWriter, req *http.Request, uid int64
 		"hubOk":    false,
 		"installs": []any{},
 	}
+	if r.hubRoot() {
+		// The root hub has no upstream to pull from: its members are local records.
+		var list []map[string]any
+		seen := map[string]int{}
+		for _, m := range r.hubMembers() {
+			key := m.Name
+			if key == "" {
+				key = m.Token
+			}
+			if i, ok := seen[key]; ok {
+				if m.Seen > int64(intOrAny(strv(list[i]["seen"]))) {
+					list[i] = hubMemberRow(m)
+				}
+				continue
+			}
+			seen[key] = len(list)
+			list = append(list, hubMemberRow(m))
+		}
+		out["installs"] = list
+		out["hubOk"] = true
+	}
 	if u := r.hubURL(); u != "" {
 		var agg map[string]any
 		if err := httpJSON("GET", u+"/installs/"+r.hubSecret(), nil, &agg, 8*time.Second); err == nil {

@@ -3687,7 +3687,7 @@ function HubView() {
         items={[
           { label: 'نسخه', value: s?.version || '—' },
           { label: 'آپ‌تایم', value: s?.uptime || '—' },
-          { label: 'نصب‌های هاب', value: data?.hubOk ? faNum(data.installs.length) : '—' },
+          { label: 'نصب‌های هاب', value: data?.installs?.length ? faNum(data.installs.length) : '—' },
         ]}
       />
 
@@ -3704,7 +3704,7 @@ function HubView() {
       {s && (
         <div className="cc-section">
           <div className="cc-section-head"><h2>این نصب</h2></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">ربات</div><div className="cc-sub">@{s.bot || '—'}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">ربات</div><div className="cc-sub">{(s.bot || '—').startsWith('@') ? (s.bot || '—') : '@' + (s.bot || '—')}</div></div></div>
           <div className="cc-trow"><div className="cc-grow"><div className="cc-name">کاربران / ادمین‌ها</div><div className="cc-sub">{faNum(s.users)} / {faNum(s.admins)}</div></div></div>
           <div className="cc-trow"><div className="cc-grow"><div className="cc-name">پنل‌ها / سرورها</div><div className="cc-sub">{faNum(s.panels)} / {faNum(s.servers)}</div></div></div>
           <div className="cc-trow"><div className="cc-grow"><div className="cc-name">دامنه‌ها</div><div className="cc-sub">{faNum(s.zones)} در {faNum(s.cf_accs)} اکانت</div></div></div>
@@ -3712,15 +3712,15 @@ function HubView() {
         </div>
       )}
 
-      {data && data.hubUrl && (
+      {data && (data.hubUrl || data.root) && (
         <div className="cc-section">
           <div className="cc-section-head"><h2>نصب‌های هاب</h2></div>
           {!data.hubOk && <div className="cc-hint cc-center cc-mb">{data.hubErr || 'هاب در دسترس نیست'}</div>}
           {data.installs.map((x: any, i: number) => (
             <div key={i} className="cc-trow">
               <div className="cc-grow">
-                <div className="cc-name">{x.bot || '—'}</div>
-                <div className="cc-sub">v{x.version} · {faNum(x.admins || 0)} ادمین · {faNum(x.panels || 0)} پنل</div>
+                <div className="cc-name">{x.bot || x.name || '—'}</div>
+                <div className="cc-sub">{(x.version ? 'v' + x.version + ' · ' : '')}{faNum(x.users || 0)} کاربر · {faNum(x.servers || 0)} سرور</div>
               </div>
             </div>
           ))}

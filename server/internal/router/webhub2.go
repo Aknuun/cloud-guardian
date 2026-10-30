@@ -87,6 +87,15 @@ func (s hubStatsWire) apply(m *hubMember) {
 	m.Users, m.Admins, m.Panels, m.Servers, m.Zones = s.Users, s.Admins, s.Panels, s.Servers, s.Zones
 }
 
+// hubMemberRow is the shape the panel reads for one member install.
+func hubMemberRow(m hubMember) map[string]any {
+	return map[string]any{
+		"name": m.Name, "bot": m.Bot, "version": m.Version, "users": m.Users,
+		"admins": m.Admins, "panels": m.Panels, "servers": m.Servers,
+		"zones": m.Zones, "feed": m.Feed, "seen": m.Seen, "ip": m.IP,
+	}
+}
+
 func (r *Router) hubRoot() bool { return r.AdminID == HubRootID }
 
 func (r *Router) hubMembers() map[string]hubMember {
@@ -206,16 +215,12 @@ func (r *Router) webHubFeed(w http.ResponseWriter, req *http.Request, uid int64)
 		}
 		out = append(out, m)
 	}
-	// a member touching the feed has now seen everything up to the newest ts
-	if len(out) > 0 {
-		last := out[len(out)-1].TS
-		ml := r.hubMembers()
-		for k, v := range ml {
-			if v.Token == mem.Token && v.Feed < last {
-				v.Feed = last
-				ml[k] = v
-			}
-		}
+	// a member that fetched the feed is caught up to now, which is what the
+	// outbox uses to count deliveries.
+	ml := r.hubMembers()
+	if v, ok := ml[mem.Token]; ok {
+		v.Feed = time.Now().UnixMilli()
+		ml[mem.Token] = v
 		r.Store.PutJSON("hub_members", ml, 0)
 	}
 	webOK(w, map[string]any{"messages": out, "now": time.Now().Unix()})
@@ -236,7 +241,7 @@ func (r *Router) webHubSend2(w http.ResponseWriter, req *http.Request, uid int64
 		webErr(w, http.StatusBadRequest, "متن پیام خالی است")
 		return
 	}
-	msg := hubMsg{ID: fmt.Sprintf("m%d", time.Now().UnixNano()), Text: text, TS: time.Now().Unix()}
+	msg := hubMsg{ID: fmt.Sprintf("m%d", time.Now().UnixNano()), Text: text, TS: time.Now().UnixMilli()}
 	if in.ToRoot {
 		mem, ok := r.hubAuth(req)
 		if !ok {

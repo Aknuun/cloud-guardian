@@ -66,7 +66,19 @@ func (r *Router) webHubHistory(w http.ResponseWriter, req *http.Request, uid int
 		l[i].Delivered = n
 	}
 	gone := []map[string]any{}
+	uniq := map[string]int{}
 	for _, m := range members {
+		key := m.Name
+		if key == "" {
+			key = m.Token
+		}
+		if i, ok := uniq[key]; ok {
+			if m.Seen > int64(intOrAny(strv(gone[i]["seen"]))) {
+				gone[i] = hubMemberRow(m)
+			}
+			continue
+		}
+		uniq[key] = len(gone)
 		gone = append(gone, map[string]any{
 			"name": m.Name, "bot": m.Bot, "version": m.Version,
 			"feed": m.Feed, "seen": m.Seen, "users": m.Users,
