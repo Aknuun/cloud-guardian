@@ -3677,6 +3677,70 @@ type HubStats = { bot: string; version: string; go: string; uptime: string; mem_
 type HubData = { hubUrl: string; annUrl: string; secret: boolean; root?: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
 type Ann = { id: string; text: string; until: string; reply: boolean }
 
+
+type HubOut = { id: string; text: string; ts: number; target: string; members: number; delivered: number }
+type HubInst = { name: string; bot: string; version: string; feed: number; seen: number; users: number; servers: number; zones: number; ip: string }
+
+function HubHistory() {
+  const [items, setItems] = useState<HubOut[]>([])
+  const [insts, setInsts] = useState<HubInst[]>([])
+  const [err, setErr] = useState('')
+  const load = () =>
+    api<{ items: HubOut[]; installs: HubInst[] }>(`/api/tools/hub/history?t=${Date.now()}`)
+      .then((d) => { setItems(d.items || []); setInsts(d.installs || []) })
+      .catch((e: any) => setErr(String(e?.message || e)))
+  useEffect(() => { load() }, [])
+  const del = async (id: string) => {
+    await api('/api/tools/hub/history/del', { id })
+    load()
+  }
+  const shown = items.slice().reverse()
+  return (
+    <div className="cc-section">
+      <div className="cc-section-head">
+        <h2>تاریخچهٔ پیام‌ها</h2>
+        <Button variant="outline" icon={ArrowClockwise} onClick={load}>تازه‌سازی</Button>
+      </div>
+      {err && <div className="cc-hint cc-center cc-mb">{err}</div>}
+      {shown.length === 0 && <Empty title="پیامی ثبت نشده" description="هر پیامی که بفرستی اینجا با تعداد دریافت‌کننده‌ها می‌آید." />}
+      {shown.map((h) => (
+        <div key={h.id} className="cc-trow">
+          <div className="cc-grow">
+            <div className="cc-name">{h.text}</div>
+            <div className="cc-sub">
+              {h.target === 'installs'
+                ? `${faNum(h.delivered)} از ${faNum(h.members)} نصب دریافت کردند`
+                : `برای ${faNum(h.members)} نفر ارسال شد`}{' · '}{faDate(h.ts)}
+            </div>
+          </div>
+          <Badge variant={h.target === 'installs' ? 'primary' : 'success'}>{h.target === 'installs' ? 'نصب‌ها' : 'کاربران'}</Badge>
+          <button type="button" className="cc-rowbtn danger" aria-label="حذف" onClick={() => del(h.id)}>
+            <Trash size={15} />
+          </button>
+        </div>
+      ))}
+      {insts.length > 0 && (
+        <>
+          <div className="cc-sub" style={{ margin: '12px 2px 6px' }}>وضعیت نصب‌های عضو</div>
+          {insts.map((m, i) => (
+            <div key={i} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name">{m.name || m.bot}</div>
+                <div className="cc-sub">
+                  {m.feed > 0 ? 'آخرین دریافت: ' + faDate(m.feed) : 'هنوز پیامی دریافت نکرده'} · {faNum(m.users)} کاربر
+                </div>
+              </div>
+              <Badge variant={m.seen > Date.now() - 15 * 60000 ? 'success' : 'error'}>
+                {m.seen > Date.now() - 15 * 60000 ? 'آنلاین' : 'ساکت'}
+              </Badge>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
 function HubView() {
   const { data, err, loaded, reload } = useTool<HubData>('/api/tools/hub')
   const [anns, setAnns] = useState<Ann[] | null>(null)
@@ -3825,6 +3889,7 @@ function HubView() {
           </label>
         </FormDialog>
       )}
+      <HubHistory />
     </>
   )
 }

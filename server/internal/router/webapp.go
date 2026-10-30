@@ -155,6 +155,8 @@ func (r *Router) WebApp() http.Handler {
 	})
 	mux.HandleFunc("/api/tools/hub/members", r.webAuthed(r.webHubMembers))
 	mux.HandleFunc("/api/tools/hub/cast-installs", r.webAuthed(r.webHubCastInstalls))
+	mux.HandleFunc("/api/tools/hub/history", r.webAuthed(r.webHubHistory))
+	mux.HandleFunc("/api/tools/hub/history/del", r.webAuthed(r.webHubDel))
 	mux.HandleFunc("/api/tools/hub/cfg", r.webAuthed(r.webHubCfg))
 	mux.HandleFunc("/api/tools/hub/ann", r.webAuthed(r.webHubAnn))
 	mux.HandleFunc("/api/tools/hub/cast", r.webAuthed(r.webHubCast))

@@ -46,6 +46,7 @@ type hubMember struct {
 	Zones   int    `json:"zones"`
 	Seen    int64  `json:"seen"`
 	IP      string `json:"ip"`
+	Feed    int64  `json:"feed"`
 }
 
 type hubMsg struct {
@@ -151,6 +152,18 @@ func (r *Router) webHubFeed(w http.ResponseWriter, req *http.Request, uid int64)
 			continue
 		}
 		out = append(out, m)
+	}
+	// a member touching the feed has now seen everything up to the newest ts
+	if len(out) > 0 {
+		last := out[len(out)-1].TS
+		ml := r.hubMembers()
+		for k, v := range ml {
+			if v.Token == mem.Token && v.Feed < last {
+				v.Feed = last
+				ml[k] = v
+			}
+		}
+		r.Store.PutJSON("hub_members", ml, 0)
 	}
 	webOK(w, map[string]any{"messages": out, "now": time.Now().Unix()})
 }
@@ -331,13 +344,13 @@ func (r *Router) webHubCastInstalls(w http.ResponseWriter, req *http.Request, ui
 		return
 	}
 	list := r.hubFeedList()
-	list = append(list, hubMsg{
-		ID: randHex(6), From: "root", Text: txt,
-		TS: time.Now().UnixMilli(),
-	})
+	msg := hubMsg{ID: randHex(6), From: "root", Text: txt, TS: time.Now().UnixMilli()}
+	list = append(list, msg)
 	if len(list) > 500 {
 		list = list[len(list)-500:]
 	}
 	r.Store.PutJSON("hub_feed", list, 0)
-	webOK(w, map[string]any{"ok": true, "members": len(r.hubMembers())})
+	n := len(r.hubMembers())
+	r.hubOutAdd(hubOut{ID: hubOutID(), Text: txt, TS: msg.TS, Target: "installs", Members: n})
+	webOK(w, map[string]any{"ok": true, "members": n, "id": msg.ID})
 }

@@ -110,5 +110,7 @@ func (r *Router) webHubCast(w http.ResponseWriter, req *http.Request, uid int64)
 		}
 		r.Bot.Send(uid, fmt.Sprintf("✅ پیام همگانی: %d موفق · %d ناموفق", ok, fail), nil)
 	}()
-	webOK(w, map[string]any{"queued": len(order)})
+	oid := hubOutID()
+	r.hubOutAdd(hubOut{ID: oid, Text: msg, TS: hubNow(), Target: "users", Members: len(order)})
+	webOK(w, map[string]any{"queued": len(order), "id": oid})
 }
