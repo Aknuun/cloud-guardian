@@ -13,7 +13,7 @@ func (r *Router) webToolsHfd(w http.ResponseWriter, req *http.Request, uid int64
 	for i, p := range r.panels() {
 		panels = append(panels, map[string]any{"idx": i, "name": pname(p)})
 	}
-	var items []map[string]any
+	items := []map[string]any{}
 	for key, it := range cfg.Items {
 		pi, hid := hfdKeyParse(key)
 		if pi < 0 {
