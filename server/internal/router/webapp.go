@@ -31,6 +31,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/auth", r.webAuthAPI)
 	mux.HandleFunc("/api/login/start", r.webLoginStart)
 	mux.HandleFunc("/api/login/state", r.webLoginState)
+	mux.HandleFunc("/api/login/ticket", r.webLoginTicket)
 	mux.HandleFunc("/api/me", r.webAuthed(r.webMe))
 	mux.HandleFunc("/api/hz/accounts", r.webAuthed(r.webHzAccounts))
 	mux.HandleFunc("/api/hz/servers", r.webAuthed(r.webHzServers))

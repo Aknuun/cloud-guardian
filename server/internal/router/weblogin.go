@@ -1,10 +1,15 @@
 package router
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -167,4 +172,81 @@ func (r *Router) webLoginCallback(chat, mid int64, data string) {
 		verdict = "🚫 درخواست ورود رد شد."
 	}
 	r.Show(chat, mid, "🔐 <b>ورود به پنل وب</b>\n\n"+verdict, nil)
+}
+
+// ---------- one-time link tickets ----------
+// The bot menu opens the panel on the admin's own device, so asking for a
+// Telegram approval there is pointless. The link carries a signed ticket that
+// lives 10 minutes and works once; nothing else changes.
+
+var (
+	webTicketMu   sync.Mutex
+	webTicketUsed = map[string]time.Time{}
+)
+
+func (r *Router) webMakeTicket() string {
+	var buf [6]byte
+	_, _ = rand.Read(buf[:])
+	nonce := hex.EncodeToString(buf[:])
+	exp := time.Now().Add(10 * time.Minute).Unix()
+	msg := fmt.Sprintf("%d.%d.%s", r.AdminID, exp, nonce)
+	m := hmac.New(sha256.New, []byte("cg-web-ticket"))
+	m.Write(r.webSessionSecret())
+	m.Write([]byte(msg))
+	return msg + "." + hex.EncodeToString(m.Sum(nil))
+}
+
+func (r *Router) webCheckTicket(t string) bool {
+	parts := strings.Split(t, ".")
+	if len(parts) != 4 {
+		return false
+	}
+	uid, err1 := strconv.ParseInt(parts[0], 10, 64)
+	exp, err2 := strconv.ParseInt(parts[1], 10, 64)
+	if err1 != nil || err2 != nil || uid != r.AdminID || exp < time.Now().Unix() {
+		return false
+	}
+	msg := strings.Join(parts[:3], ".")
+	m := hmac.New(sha256.New, []byte("cg-web-ticket"))
+	m.Write(r.webSessionSecret())
+	m.Write([]byte(msg))
+	if !hmac.Equal([]byte(hex.EncodeToString(m.Sum(nil))), []byte(parts[3])) {
+		return false
+	}
+	now := time.Now()
+	webTicketMu.Lock()
+	defer webTicketMu.Unlock()
+	for k, v := range webTicketUsed {
+		if now.After(v) {
+			delete(webTicketUsed, k)
+		}
+	}
+	if _, used := webTicketUsed[parts[2]]; used {
+		return false
+	}
+	webTicketUsed[parts[2]] = time.Unix(exp, 0)
+	return true
+}
+
+func (r *Router) webLoginTicket(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		webErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var in struct {
+		K string `json:"k"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, req.Body, 1<<16)).Decode(&in); err != nil {
+		webErr(w, http.StatusBadRequest, "بدنهٔ درخواست نامعتبر است")
+		return
+	}
+	if !r.webCheckTicket(strings.TrimSpace(in.K)) {
+		webErr(w, http.StatusUnauthorized, "لینک ورود منقضی یا استفاده‌شده است")
+		return
+	}
+	exp := time.Now().Add(webLoginSess).Unix()
+	webOK(w, map[string]any{
+		"token": r.webSignSession(r.AdminID, exp),
+		"user":  map[string]any{"id": r.AdminID, "isMain": true},
+	})
 }

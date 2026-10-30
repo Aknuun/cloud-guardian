@@ -40,7 +40,12 @@ func (r *Router) Menu(chat, mid int64) {
 	// the channel button is gone: the last row opens the web panel instead
 	siteBtn := chanBtn()
 	if u := strings.TrimSpace(r.WebAppURL); u != "" {
-		siteBtn = Btn{Text: "🌐 نسخهٔ وب سایت", URL: u}
+		// signed one-time ticket: opening the panel from the bot needs no approval
+		sep := "?"
+		if strings.Contains(u, "?") {
+			sep = "&"
+		}
+		siteBtn = Btn{Text: "🌐 نسخهٔ وب سایت", URL: u + sep + "k=" + r.webMakeTicket()}
 	}
 	if r.webLink("hz") == "" {
 		// no web app configured: keep every native screen reachable

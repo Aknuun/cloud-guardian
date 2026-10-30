@@ -212,6 +212,24 @@ export default function App() {
         TG.disableVerticalSwipes && TG.disableVerticalSwipes()
         TG.MainButton && TG.MainButton.hide()
       }
+      // the bot links with a one-time ticket: no approval round-trip needed
+      const k = new URLSearchParams(location.search).get('k')
+      if (k) {
+        try {
+          const res = await api<{ token: string }>('/api/login/ticket', { k })
+          setToken(res.token)
+          const u = new URL(location.href)
+          u.searchParams.delete('k')
+          history.replaceState(null, '', u.pathname + u.search + u.hash)
+          if (!cancelled) setPhase('ready')
+          return
+        } catch {
+          // expired or already used: fall through to the normal login
+          const u = new URL(location.href)
+          u.searchParams.delete('k')
+          history.replaceState(null, '', u.pathname + u.search + u.hash)
+        }
+      }
       if (localStorage.getItem('cg_signed_out') === '1') {
         if (!cancelled) setPhase('signedout')
         return
