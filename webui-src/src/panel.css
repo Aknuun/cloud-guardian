@@ -1816,3 +1816,16 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main .cc-stat-value { font-size: 20px !important; }
   .cc-main .cc-stat-label { font-size: 10.5px !important; line-height: 1.3 !important; }
 }
+
+/* Phones: keep every stat row on one line, however many tiles it holds. */
+@media (max-width: 699px) {
+  .cc-stats {
+    grid-template-columns: none !important;
+    grid-auto-flow: column !important;
+    grid-auto-columns: minmax(0, 1fr) !important;
+    gap: 6px !important;
+  }
+  .cc-stat-box { padding: 8px 6px !important; justify-content: center !important; min-height: 42px !important }
+  .cc-stat-value { font-size: 17px !important; white-space: nowrap }
+  .cc-stat-label { font-size: 10px !important; text-align: center !important; line-height: 1.3 }
+}
