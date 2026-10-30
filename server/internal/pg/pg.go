@@ -483,30 +483,30 @@ func (p *Pg) SetWebhook(token, hookURL, secret string, enable bool, days, usage 
 	return doJSON(req, 25*time.Second, nil)
 }
 
-// AdminGet fetches one panel admin by username.
+// AdminGet finds a panel admin by username (the single-admin GET route is not
+// exposed by PasarGuard, so the list is used).
 func (p *Pg) AdminGet(token, username string) (map[string]any, error) {
-	var out map[string]any
-	if err := p.get(token, "/api/admin/"+username, 20*time.Second, &out); err != nil {
+	var out struct {
+		Admins []map[string]any `json:"admins"`
+	}
+	if err := p.get(token, "/api/admins", 20*time.Second, &out); err != nil {
 		return nil, err
 	}
-	return out, nil
+	for _, a := range out.Admins {
+		if s, _ := a["username"].(string); s == username {
+			return a, nil
+		}
+	}
+	return nil, &Error{"admin not found"}
 }
 
-// AdminSetTelegram writes telegram_id onto an existing panel admin, keeping
-// every other field intact.
+// AdminSetTelegram writes telegram_id onto an existing panel admin. Only the id
+// is sent so no other admin field is touched.
 func (p *Pg) AdminSetTelegram(token, username string, tg int64) error {
-	cur, err := p.AdminGet(token, username)
-	if err != nil {
+	if _, err := p.AdminGet(token, username); err != nil {
 		return err
 	}
-	for _, k := range []string{"created_at", "used_traffic", "total_users", "lifetime_used_traffic", "role", "status"} {
-		delete(cur, k)
-	}
-	cur["telegram_id"] = tg
-	body, err := json.Marshal(cur)
-	if err != nil {
-		return err
-	}
+	body, _ := json.Marshal(map[string]any{"telegram_id": tg})
 	req, err := http.NewRequest("PUT", p.Base+"/api/admin/"+username, bytes.NewReader(body))
 	if err != nil {
 		return &Error{err.Error()}
