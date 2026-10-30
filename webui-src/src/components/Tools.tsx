@@ -94,7 +94,7 @@ async function save(path: string, body: any, done: () => void) {
 }
 
 type Srv = { id: string; name: string; host: string; user: string; port: number; note: string; key: boolean; secret?: string }
-type Rem = { id: string; text: string; when: number; notified: boolean; ack: boolean; server: string }
+type Rem = { id: string; text: string; when: number; notified: boolean; ack: boolean; server: string; note?: string }
 type PgPanel = { idx: number; name: string; url: string; user: string }
 type PgMon = { id: string; name: string; panel: string; interval: number; enabled: boolean }
 type PgData = { panels: PgPanel[]; monitors: PgMon[] }
@@ -662,6 +662,9 @@ function RemView() {
   const [add, setAdd] = useState(false)
   const [text, setText] = useState('')
   const [when, setWhen] = useState('')
+  const [rel, setRel] = useState(0)
+  const [back, setBack] = useState(false)
+  const [note, setNote] = useState('')
   const [server, setServer] = useState('')
   const [formErr, setFormErr] = useState('')
   const [q, setQ] = useState('')
@@ -678,10 +681,13 @@ function RemView() {
   const submit = async () => {
     setFormErr('')
     try {
-      await save('/api/tools/rem/add', { text, when, server }, () => {
+      await save('/api/tools/rem/add', { text, when: back ? '' : when, server, note, rel: back ? 0 : rel }, () => {
         setAdd(false)
         setText('')
         setWhen('')
+        setNote('')
+        setRel(0)
+        setBack(false)
         setServer('')
         reload()
       })
@@ -731,6 +737,7 @@ function RemView() {
               {r.when > 0 ? faDate(Number(r.when)) : 'هر وقت آنلاین شدی'}
               {r.server ? ' · ' + r.server : ''}
             </div>
+            {r.note ? <div className="cc-sub">{r.note}</div> : null}
           </div>
           <Badge>{r.ack ? 'انجام شد' : r.notified ? 'اطلاع داده شد' : 'در انتظار'}</Badge>
         </div>
@@ -742,14 +749,38 @@ function RemView() {
             <span>متن</span>
             <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="تمدید سرور آلمان" />
           </label>
+          <div className="cc-field">
+            <span>زمان سریع</span>
+            <div className="cc-chips">
+              {[[15, '۱۵ دقیقه'], [60, '۱ ساعت'], [180, '۳ ساعت'], [1440, '۱ روز'], [10080, '۱ هفته']].map(([m, l]) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={'cc-chip' + (rel === m ? ' on' : '')}
+                  onClick={() => setRel(rel === (m as number) ? 0 : (m as number))}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="cc-field">
-            <span>تاریخ و ساعت (شمسی)</span>
+            <span>یا تاریخ و ساعت (شمسی)</span>
             <Input
               value={when}
               onChange={(e) => setWhen(e.target.value)}
-              placeholder="1404/08/07 14:30 — خالی: وقتی آنلاین شدم"
+              placeholder="1404/08/07 14:30"
               dir="ltr"
+              disabled={rel > 0 || back}
             />
+          </label>
+          <label className="cc-checkline">
+            <input type="checkbox" checked={back} onChange={(e) => setBack(e.target.checked)} />
+            <span>وقتی سرور برگشت آنلاین شد یادم بنداز</span>
+          </label>
+          <label className="cc-field">
+            <span>یادداشت (اختیاری)</span>
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="شماره فاکتور، مبلغ…" />
           </label>
           <label className="cc-field">
             <span>سرور (اختیاری)</span>

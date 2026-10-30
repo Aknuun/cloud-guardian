@@ -151,6 +151,7 @@ type webRemIn struct {
 	When   string `json:"when"` // jalali "1404/08/07 14:30" or empty = when back online
 	Server string `json:"server"`
 	Note   string `json:"note"`
+	Rel    int    `json:"rel"` // minutes from now (used when When is empty)
 }
 
 func (r *Router) webToolsRemAdd(w http.ResponseWriter, req *http.Request, uid int64) {
@@ -175,6 +176,13 @@ func (r *Router) webToolsRemAdd(w http.ResponseWriter, req *http.Request, uid in
 			return
 		}
 		when = ms
+	}
+	if when == 0 && in.Rel > 0 {
+		if in.Rel > 60*24*365 {
+			webErr(w, http.StatusBadRequest, "زمان نسبی بیش از حد بزرگ است")
+			return
+		}
+		when = time.Now().Add(time.Duration(in.Rel) * time.Minute).UnixMilli()
 	}
 	rm := Reminder{ID: newID(), Text: text, When: when, Created: nowMS(), By: uid,
 		Server: strings.TrimSpace(in.Server), Note: strings.TrimSpace(in.Note)}
