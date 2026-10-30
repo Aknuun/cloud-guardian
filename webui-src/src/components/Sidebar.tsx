@@ -1,7 +1,7 @@
 import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { useTheme } from './theme'
-import type { ToolItem } from './Tools'
+import type { ToolItem } from './toolsMeta'
 
 export type Provider = 'hz' | 'cf' | 'arv'
 

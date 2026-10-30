@@ -22,7 +22,7 @@ import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider, SubItem } from './components/Sidebar'
-import type { ToolId } from './components/Tools'
+import type { ToolId } from './components/toolsMeta'
 import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 
 type Account = { i: number; name: string; domains?: number; servers?: number }

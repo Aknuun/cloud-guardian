@@ -28,8 +28,8 @@ import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { WebLogin } from './components/WebLogin'
-import { FormDialog, Tools, TOOLS, toolItems } from './components/Tools'
-import type { ToolId } from './components/Tools'
+import { FormDialog, TOOLS, toolItems } from './components/toolsMeta'
+import type { ToolId } from './components/toolsMeta'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { StatGrid } from './components/Stats'
 import { GlobalSearch } from './components/GlobalSearch'
@@ -40,6 +40,7 @@ import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
 const Arvan = lazy(() => import('./Arvan'))
+const Tools = lazy(() => import('./components/Tools').then((m) => ({ default: m.Tools })))
 
 /* ---------------- types ---------------- */
 
@@ -132,7 +133,10 @@ export default function App() {
     const go = new URLSearchParams(location.search).get('go')
     if (!go) return
     if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub' || go === 'qa') setTool(go)
-    else if (go === 'hz' || go === 'cf' || go === 'arv') setProvider(go)
+    else if (go === 'hz' || go === 'cf' || go === 'arv') {
+      setTool(null)
+      setProvider(go)
+    }
     history.replaceState(null, '', location.pathname)
   }, [])
   const pickProvider = (p: Provider) => {

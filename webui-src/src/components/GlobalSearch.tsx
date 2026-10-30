@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MagnifyingGlass } from '@phosphor-icons/react'
-import { TOOLS } from './Tools'
-import type { ToolId } from './Tools'
+import { TOOLS } from './toolsMeta'
+import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
 
 const SERVICES: { id: Provider; label: string }[] = [

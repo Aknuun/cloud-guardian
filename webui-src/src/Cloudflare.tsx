@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, Empty, LayerCard, Switch } from './components/ui'
 import type { Provider, SubItem } from './components/Sidebar'
-import type { ToolId } from './components/Tools'
+import type { ToolId } from './components/toolsMeta'
 import { ProviderShell } from './components/ProviderShell'
 import {
   ArrowRight,
