@@ -1735,3 +1735,14 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-dialog-body { overflow-y: auto; overscroll-behavior: contain; }
 .cc-form { max-height: calc(100dvh - 200px); overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 2px; }
 .cc-dialog .cc-actions { max-height: 56vh; overflow-y: auto; overscroll-behavior: contain; }
+
+/* danger actions: compact separated rows, no merging */
+.cc-actions-danger { display: flex !important; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ds-line); }
+.cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] {
+  display: flex !important; align-items: center; justify-content: flex-start;
+  width: 100% !important; height: 30px !important; min-height: 30px !important; max-height: 30px !important;
+  line-height: 1 !important; font-size: 12px !important; padding: 0 10px !important;
+  border: 0 !important; border-radius: 8px !important; box-shadow: none !important;
+  background: var(--ds-tint) !important; color: #c0392b !important;
+}
+.cc-actions-danger button + button { border-top: 0 !important; border-radius: 8px !important; }
