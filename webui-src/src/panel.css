@@ -1628,3 +1628,18 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main .cc-recrow button { display: none }
   .cc-main .cc-trow:has(.cc-recrow) { min-height: 44px }
 }
+
+/* unslop mobile pass: keep dialogs and chip rows inside the screen */
+@media (max-width: 699px) {
+  .cc-dialog { width: calc(100vw - 20px); max-width: none }
+  .cc-dialog .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px; min-width: 0 }
+  .cc-dialog .cc-actions button .cc-btn-ico { width: 16px; height: 16px }
+  .cc-main .cc-trow .cc-btnrow { gap: 4px }
+  .cc-main .cc-trow .cc-btnrow button,
+  .cc-trow .cc-btnrow button { height: 30px; font-size: 11px; padding: 0 8px; min-width: 0; border-radius: 8px }
+  .cc-main .cc-trow .cc-name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35 }
+  .cc-main .cc-trow .cc-sub { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden }
+  .cc-dialog .cc-dialog-title { font-size: 16px }
+  .cc-dialog .cc-dialog-desc { font-size: 12px }
+  .cc-main .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px }
+}
