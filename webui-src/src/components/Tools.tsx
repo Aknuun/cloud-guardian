@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Lightning, Envelope, GearSix, ArrowsClockwise, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Lightning, Envelope, GearSix, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
@@ -18,7 +18,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
-  { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: ArrowsClockwise },
+  { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: CalendarDots },
   { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
   { id: 'rec', label: 'افزودن رکورد / تغییر سریع', Icon: Lightning },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
@@ -1842,7 +1842,7 @@ type HfHost = {
   address: string[]; sni: string[]; host: string[]; skip: Record<string, boolean>; all: boolean
 }
 
-const FIELDS: [string, string][] = [['address', 'A'], ['sni', 'S'], ['host', 'H']]
+const FIELDS: [string, string][] = [['address', 'آدرس'], ['sni', 'SNI'], ['host', 'Host']]
 
 function HfView() {
   const { data, err, reload } = useTool<HfData>('/api/tools/hf')

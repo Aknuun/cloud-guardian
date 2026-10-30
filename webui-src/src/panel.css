@@ -1368,3 +1368,27 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     font-size: 13px;
   }
 }
+
+/* one icon size everywhere in the sidebar */
+.cc-sidebar .cc-sideitem > svg,
+.cc-sidebar .cc-subitem > svg,
+.cc-sidebar .cc-sidebrand-mark svg,
+.cc-sidebar .cc-navhome svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+.cc-sidebar .cc-sideitem {
+  height: 40px;
+}
+.cc-sidebar .cc-sidebrand-mark {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.cc-sidebar:not(.open) .cc-sideitem {
+  width: 40px;
+  height: 40px;
+  margin-inline: auto;
+}
