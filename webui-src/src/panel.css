@@ -1651,3 +1651,17 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-trow .cc-btnrow button[data-kumo-component='Button'] { height: 28px !important; font-size: 11px !important; padding: 0 7px !important; min-width: 0 !important; border-radius: 7px !important }
   .cc-trow .cc-btnrow { gap: 4px !important }
 }
+
+/* mobile safety net: nothing overflows its container on phones */
+@media (max-width: 699px) {
+  .cc-dialog { width: calc(100vw - 16px) !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 24px); overflow: auto }
+  .cc-dialog-body { overflow-x: hidden }
+  .cc-actions button, .cc-dialog-actions button { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .cc-main .cc-trow > * { min-width: 0 }
+  .cc-main input, .cc-main select, .cc-main textarea { max-width: 100% }
+  .cc-main .cc-pre { max-width: 100%; overflow: auto }
+  .cc-main .cc-field, .cc-main .cc-field-row, .cc-main .cc-form { width: 100%; max-width: 100% }
+  .cc-section-head, .cc-btnrow, .cc-chips, .cc-bulkbar, .cc-filterbar { flex-wrap: wrap }
+  .cc-main h1, .cc-main h2, .cc-main .cc-title { overflow-wrap: anywhere }
+  .cc-mon { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important }
+}
