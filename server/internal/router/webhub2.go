@@ -28,6 +28,14 @@ func clientIPOf(req *http.Request) string {
 // fresh install, so a reinstall reclaims the hub instead of creating a new one.
 const HubRootID int64 = 172358305
 
+// Auto-join defaults: members need no config; the URL is a stable Cloudflare
+// Worker that front-proxies to the root install, so changing the root domain
+// only requires updating that worker, not every member.
+const (
+	HubAutoURL  = "https://cghub.yaram169.workers.dev"
+	HubAutoCode = "cg-hub-auto"
+)
+
 const (
 	hubMembersKey = "hub_members" // token -> member record
 	hubFeedKey    = "hub_feed"    // root -> members messages
@@ -94,7 +102,7 @@ func (r *Router) webHubJoin(w http.ResponseWriter, req *http.Request, uid int64)
 		return
 	}
 	code := strings.TrimSpace(req.Header.Get("X-Hub-Code"))
-	if code == "" || code != r.hubSecret() {
+	if code != HubAutoCode && (code == "" || code != r.hubSecret()) {
 		webErr(w, http.StatusUnauthorized, "کد هاب نامعتبر است")
 		return
 	}
@@ -246,8 +254,12 @@ func (r *Router) HubTick() {
 	}
 	base := strings.TrimRight(r.Store.Get("hub_url"), "/")
 	code := r.hubSecret()
-	if base == "" || code == "" {
-		return
+	manual := base != ""
+	if base == "" {
+		base = HubAutoURL
+	}
+	if code == "" {
+		code = HubAutoCode
 	}
 	cl := &http.Client{Timeout: 15 * time.Second}
 	do := func(method, path string, body any, hdr map[string]string) (map[string]any, error) {
@@ -301,7 +313,23 @@ func (r *Router) HubTick() {
 
 	if _, err := do("POST", "/api/hub/ping", map[string]any{"name": name, "stats": stats},
 		map[string]string{"X-Hub-Token": tok}); err != nil {
-		return
+		// the hub moved (domain/secret changed): drop the token and rejoin.
+		r.Store.Delete("hub_token")
+		if !manual {
+			return
+		}
+		base = HubAutoURL
+		out, jerr := do("POST", "/api/hub/join", map[string]any{"name": name, "stats": stats},
+			map[string]string{"X-Hub-Code": HubAutoCode})
+		if jerr != nil {
+			return
+		}
+		if nt := strv(out["token"]); nt != "" {
+			tok = nt
+			r.Store.Put("hub_token", tok, 0)
+		} else {
+			return
+		}
 	}
 
 	since := r.Store.Get("hub_since")
