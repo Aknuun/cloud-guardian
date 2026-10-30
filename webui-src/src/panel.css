@@ -1337,3 +1337,34 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     gap: 8px;
   }
 }
+
+/* phone density: stat tiles in one row, no avatar glow, slimmer primary bar */
+.cc-main .cc-trow .cc-avatar,
+.cc-app .cc-trow .cc-avatar {
+  box-shadow: none;
+}
+@media (max-width: 699px) {
+  .cc-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .cc-stat-label {
+    font-size: 11.5px;
+  }
+  .cc-stat-box {
+    padding: 10px 8px;
+    justify-content: center;
+  }
+  .cc-stat-value {
+    font-size: 19px;
+  }
+  .cc-stat-ring {
+    display: none;
+  }
+  .cc-pagebar button[data-kumo-component='Button'] {
+    height: 44px;
+    min-height: 44px;
+    font-size: 13px;
+  }
+}
