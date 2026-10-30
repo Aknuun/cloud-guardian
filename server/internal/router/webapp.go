@@ -141,6 +141,19 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/quota", r.webAuthed(r.webToolsQuota))
 	mux.HandleFunc("/api/tools/quota/cfg", r.webAuthed(r.webQuotaCfg))
 	mux.HandleFunc("/api/tools/hub", r.webAuthed(r.webToolsHub))
+	mux.HandleFunc("/api/hub/join", func(w http.ResponseWriter, req *http.Request) {
+		r.webHubJoin(w, req, 0)
+	})
+	mux.HandleFunc("/api/hub/ping", func(w http.ResponseWriter, req *http.Request) {
+		r.webHubPing(w, req, 0)
+	})
+	mux.HandleFunc("/api/hub/feed", func(w http.ResponseWriter, req *http.Request) {
+		r.webHubFeed(w, req, 0)
+	})
+	mux.HandleFunc("/api/hub/send", func(w http.ResponseWriter, req *http.Request) {
+		r.webHubSend2(w, req, 0)
+	})
+	mux.HandleFunc("/api/tools/hub/members", r.webAuthed(r.webHubMembers))
 	mux.HandleFunc("/api/tools/hub/cfg", r.webAuthed(r.webHubCfg))
 	mux.HandleFunc("/api/tools/hub/ann", r.webAuthed(r.webHubAnn))
 	mux.HandleFunc("/api/tools/hub/cast", r.webAuthed(r.webHubCast))
