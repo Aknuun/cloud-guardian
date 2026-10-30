@@ -1647,3 +1647,7 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-dialog .cc-actions button[data-kumo-component='Button'],
   .cc-main .cc-actions button[data-kumo-component='Button'] { height: 46px !important; font-size: 13px !important; padding: 0 10px !important; min-width: 0 !important }
 }
+@media (max-width: 699px) {
+  .cc-trow .cc-btnrow button[data-kumo-component='Button'] { height: 28px !important; font-size: 11px !important; padding: 0 7px !important; min-width: 0 !important; border-radius: 7px !important }
+  .cc-trow .cc-btnrow { gap: 4px !important }
+}
