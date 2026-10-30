@@ -131,7 +131,7 @@ export default function App() {
   useEffect(() => {
     const go = new URLSearchParams(location.search).get('go')
     if (!go) return
-    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub') setTool(go)
+    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'rec' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub' || go === 'qa') setTool(go)
     else if (go === 'hz' || go === 'cf' || go === 'arv') setProvider(go)
     history.replaceState(null, '', location.pathname)
   }, [])

@@ -9,7 +9,7 @@ import { House } from '@phosphor-icons/react'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
-export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set' | 'fo' | 'hub'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set' | 'fo' | 'hub' | 'qa'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -24,6 +24,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
+  { id: 'qa', label: 'تغییر سریع / سهمیه', Icon: Lightning },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
@@ -111,6 +112,7 @@ export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t:
   if (id === 'mail') return <MailView />
   if (id === 'fo') return <FoView />
   if (id === 'hub') return <HubView />
+  if (id === 'qa') return <QaView />
   if (id === 'set') return <SetView />
   return <PgView />
 }
@@ -3594,6 +3596,143 @@ function HubView() {
             <span>متن پیام</span>
             <textarea className="cc-input cc-textarea" value={cast} onChange={(e) => setCast(e.target.value)} />
           </label>
+        </FormDialog>
+      )}
+    </>
+  )
+}
+
+type QaHit = { acc: number; zid: string; zname: string; rid: string; name: string; type: string }
+type QuotaData = { limit: number; autoStop: boolean; alerts: boolean; paused: boolean; pausedTill: number; usage: string[] }
+
+function QaView() {
+  const [q, setQ] = useState('')
+  const [ip, setIp] = useState('')
+  const [hits, setHits] = useState<QaHit[] | null>(null)
+  const [sel, setSel] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [add, setAdd] = useState<{ acc: number; zid: string; name: string } | null>(null)
+  const [zones, setZones] = useState<{ acc: number; id: string; name: string }[]>([])
+  const [quota, setQuota] = useState<QuotaData | null>(null)
+  const [limit, setLimit] = useState('')
+
+  useEffect(() => {
+    api<QuotaData>('/api/tools/quota').then((d) => { setQuota(d); setLimit(String(d.limit)) }).catch(() => {})
+  }, [])
+
+  const search = async () => {
+    const v = q.trim()
+    if (!v) return
+    setBusy(true); setNotice(''); setSel([])
+    try {
+      const d = await api<{ ip: string; hits: QaHit[] }>('/api/tools/qa/search?ip=' + encodeURIComponent(v))
+      setIp(d.ip); setHits(d.hits || [])
+    } catch (e: any) {
+      setNotice(String(e?.message || e))
+    } finally { setBusy(false) }
+  }
+
+  const key = (h: QaHit) => h.acc + '|' + h.rid
+  const chosen = () => (hits || []).filter((h) => sel.includes(key(h)))
+  const allOn = !!hits?.length && sel.length === hits.length
+
+  return (
+    <>
+      <StatGrid items={[{ label: 'رکوردهای یافته', value: hits ? faNum(hits.length) : '—' }, { label: 'انتخاب‌شده', value: faNum(sel.length) }, { label: 'آی‌پی', value: ip || '—' }]} />
+
+      <FilterBar
+        q={q}
+        onQ={setQ}
+        onEnter={search}
+        placeholder="آی‌پی یا نام را بفرست…"
+        onRefresh={search}
+        busy={busy}
+      />
+
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+      {hits && hits.length === 0 && <Empty title="چیزی پیدا نشد" description="این آی‌پی در هیچ رکوردی از اکانت‌های کلادفلر نیست." />}
+
+      {hits && hits.length > 0 && (
+        <>
+          <div className="cc-bulkbar">
+            <label className="cc-checkline" style={{ padding: 0, background: 'transparent' }}>
+              <input type="checkbox" checked={allOn} onChange={() => setSel(allOn ? [] : hits.map(key))} />
+              <span>{allOn ? 'همه' : 'انتخاب همه'}</span>
+            </label>
+            <Button variant="outline" disabled={!sel.length} onClick={async () => {
+              const d = await api<{ added: number }>('/api/tools/qa/fav', { hits: chosen() })
+              setNotice(`${faNum(d.added)} رکورد منتخب شد`)
+            }}>منتخب</Button>
+            <Button variant="outline" icon={Plus} onClick={() => setAdd({ acc: hits[0].acc, zid: hits[0].zid, name: '' })}>افزودن ساب</Button>
+            <Button variant="destructive" disabled={!sel.length} onClick={async () => {
+              if (!confirm('رکوردهای انتخاب‌شده حذف شوند؟')) return
+              const d = await api<{ ok: number; fail: number }>('/api/tools/qa/del', { hits: chosen() })
+              setNotice(`${faNum(d.ok)} حذف شد` + (d.fail ? ` · ${faNum(d.fail)} ناموفق` : ''))
+              setHits((hits || []).filter((h) => !sel.includes(key(h))))
+              setSel([])
+            }}>حذف</Button>
+          </div>
+
+          {hits.map((h) => (
+            <div key={key(h)} className={'cc-trow cc-tap' + (sel.includes(key(h)) ? ' sel' : '')} onClick={() => setSel(sel.includes(key(h)) ? sel.filter((x) => x !== key(h)) : [...sel, key(h)])}>
+              <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
+                <input type="checkbox" checked={sel.includes(key(h))} onChange={() => setSel(sel.includes(key(h)) ? sel.filter((x) => x !== key(h)) : [...sel, key(h)])} />
+              </label>
+              <div className="cc-grow">
+                <div className="cc-name">{h.name}</div>
+                <div className="cc-sub">{h.type} · {h.zname}</div>
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="cc-section">
+        <div className="cc-section-head"><h2>سهمیه و مصرف</h2></div>
+        <div className="cc-trow">
+          <div className="cc-grow"><div className="cc-name">سقف درخواست روزانه</div><div className="cc-sub">هشدار و توقف خودکار بالای این عدد</div></div>
+          <Input className="cc-input cc-num" value={limit} onChange={(e) => setLimit(e.target.value)} />
+        </div>
+        <div className="cc-checkline cc-mb"><input type="checkbox" checked={!!quota?.autoStop} onChange={(e) => setQuota(quota ? { ...quota, autoStop: e.target.checked } : quota)} /><span>توقف خودکار کرون‌ها</span></div>
+        <div className="cc-checkline cc-mb"><input type="checkbox" checked={!!quota?.alerts} onChange={(e) => setQuota(quota ? { ...quota, alerts: e.target.checked } : quota)} /><span>هشدار تلگرام</span></div>
+        <div className="cc-btnrow">
+          <Button variant="primary" onClick={async () => {
+            await save('/api/tools/quota/cfg', { limit: Number(limit) || 0, autoStop: !!quota?.autoStop, alerts: !!quota?.alerts }, () => {})
+            setNotice('سهمیه ذخیره شد')
+          }}>ذخیره</Button>
+          <Button variant="outline" icon={Power} onClick={async () => {
+            await save('/api/tools/quota/cfg', { pause: !quota?.paused }, () => {})
+            const d = await api<QuotaData>('/api/tools/quota'); setQuota(d)
+            setNotice(d.paused ? 'کرون‌ها ۲۴ ساعت متوقف شدند' : 'کرون‌ها فعال شدند')
+          }}>{quota?.paused ? 'ادامهٔ کرون‌ها' : 'توقف ۲۴ ساعته'}</Button>
+        </div>
+      </div>
+
+      {add && (
+        <FormDialog
+          title="افزودن ساب"
+          sub={ip ? 'برای آی‌پی ' + ip : ''}
+          onClose={() => setAdd(null)}
+          onSave={async () => {
+            try {
+              await api('/api/tools/qa/add', { acc: add.acc, zid: add.zid, name: add.name, ip })
+              setAdd(null); setNotice('رکورد ساخته شد'); search()
+            } catch (e: any) { setNotice(String(e?.message || e)) }
+          }}
+        >
+          <label className="cc-field">
+            <span>دامنه</span>
+            <select className="cc-input" value={add.zid} onChange={(e) => setAdd({ ...add, zid: e.target.value })} onFocus={async () => {
+              if (zones.length) return
+              const d = await api<{ zones: any[] }>('/api/cf/zones')
+              setZones((d.zones || []).map((z: any) => ({ acc: z.acc, id: z.id, name: z.name })))
+            }}>
+              {zones.length === 0 && <option value={add.zid}>در حال بارگذاری…</option>}
+              {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+            </select>
+          </label>
+          <label className="cc-field"><span>نام ساب</span><Input value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} placeholder="test" /></label>
         </FormDialog>
       )}
     </>
