@@ -28,10 +28,15 @@ func (r *Router) webLink(goID string) string {
 // webBtn opens a section in the mini app; falls back to the native screen when
 // no web app URL is configured.
 func (r *Router) webBtn(label, native, goID string) Btn {
+	return r.webBtnS(label, native, goID, "plain")
+}
+
+// webBtnS is webBtn with an explicit button colour.
+func (r *Router) webBtnS(label, native, goID, style string) Btn {
 	if u := r.webLink(goID); u != "" {
-		return btnWA(label, u)
+		return btnWAS(label, u, style)
 	}
-	return btnS(label, native, "plain")
+	return btnS(label, native, style)
 }
 
 // Menu renders the home menu. Everything except Cloudflare opens in the mini app
@@ -45,7 +50,7 @@ func (r *Router) Menu(chat, mid int64) {
 		if strings.Contains(u, "?") {
 			sep = "&"
 		}
-		siteBtn = Btn{Text: "🌐 نسخهٔ وب سایت", URL: u + sep + "k=" + r.webMakeTicket()}
+		siteBtn = Btn{Text: "🌐 نسخهٔ وب سایت", URL: u + sep + "k=" + r.webMakeTicket(), Style: "success"}
 	}
 	if r.webLink("hz") == "" {
 		// no web app configured: keep every native screen reachable
@@ -62,14 +67,14 @@ func (r *Router) Menu(chat, mid int64) {
 	}
 	// same row layout as the worker edition's home screen
 	kb := [][]Btn{
-		{r.webBtn("➕ افزودن رکورد", "addrec", "rec"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
-		{r.webBtn("🇩🇪 هتزنر", "hz", "hz"), r.webBtn("🇮🇷 آروان", "arvan", "arv")},
-		{r.webBtn("🎛 پنل پاسارگارد", "pndef", "pg")},
-		{r.webBtn("🧭 تعویض خودکار ساب‌فیلتر", "hf", "hf"), r.webBtn("🔁 چرخش روزانه ساب‌ها", "hfd", "hfd")},
-		{r.webBtn("🔥 گزارش بد مصرف پاسارگارد", "um", "um")},
-		{r.webBtn("🖥 سرورها و مانیتورینگ", "srv", "srv"), r.webBtn("🌐 دامنه و SSL", "dommon", "dom")},
-		{r.webBtn("⏰ یادآورها", "rem", "rem"), r.webBtn("✉️ ایمیل دامنه", "fmail", "mail"), r.webBtn("🔔 هشدار انقضا و حجم", "pghook", "hook")},
-		{r.webBtn("⚙️ تنظیمات و راهنما", "settings", "set")},
+		{r.webBtnS("➕ افزودن رکورد", "addrec", "rec", "plain"), r.webBtnS("☁️ کلودفلر", "zones", "cf", "primary"), r.webBtnS("⚡ تغییر سریع", "qamenu", "rec", "plain")},
+		{r.webBtnS("🇩🇪 هتزنر", "hz", "hz", "success"), r.webBtnS("🇮🇷 آروان", "arvan", "arv", "success")},
+		{r.webBtnS("🎛 پنل پاسارگارد", "pndef", "pg", "primary")},
+		{r.webBtnS("🧭 تعویض خودکار ساب‌فیلتر", "hf", "hf", "primary"), r.webBtnS("🔁 چرخش روزانه ساب‌ها", "hfd", "hfd", "primary")},
+		{r.webBtnS("🔥 گزارش بد مصرف پاسارگارد", "um", "um", "primary"), r.webBtnS("🔔 هشدار انقضا و حجم", "pghook", "hook", "primary")},
+		{r.webBtnS("🖥 سرورها و مانیتورینگ", "srv", "srv", "success"), r.webBtnS("🌐 دامنه و SSL", "dommon", "dom", "success")},
+		{r.webBtnS("⏰ یادآورها", "rem", "rem", "primary"), r.webBtnS("✉️ ایمیل دامنه", "fmail", "mail", "primary")},
+		{r.webBtnS("⚙️ تنظیمات و راهنما", "settings", "set", "success")},
 		{siteBtn},
 	}
 	r.Show(chat, mid, r.menuText(), kb)
