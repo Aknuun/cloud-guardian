@@ -1572,3 +1572,8 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-main .cc-stat-box { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box }
 .cc-main .cc-stat-value { font-size: 26px; font-weight: 600; line-height: 1.1 }
 .cc-main .cc-stat-label { font-size: 13px; line-height: 1.4 }
+
+/* signature: live status dot instead of letter avatars */
+.cc-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; background: var(--ds-brand); box-shadow: 0 0 0 3px var(--ds-brand-soft) }
+.cc-dot.pw { background: var(--ds-subtle); box-shadow: 0 0 0 3px var(--ds-tint) }
+.cc-main .cc-trow { gap: 12px }

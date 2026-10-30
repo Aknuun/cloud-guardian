@@ -319,7 +319,7 @@ function SrvView() {
           <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
             <input type="checkbox" checked={sel.includes(s.id)} onChange={() => toggle(s.id)} aria-label="انتخاب سرور" />
           </label>
-          <div className="cc-avatar">{(s.name || 'S').slice(0, 1).toUpperCase()}</div>
+          <span className={s.key ? 'cc-dot' : 'cc-dot pw'} title={s.key ? 'کلید SSH' : 'رمز SSH'} />
           <div className="cc-grow">
             <div className="cc-name">{s.name || s.host}</div>
             <div className="cc-sub">
