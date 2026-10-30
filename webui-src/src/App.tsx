@@ -965,28 +965,26 @@ export default function App() {
               onClick={() => push({ v: 'server', acc: cur.acc, id: s.id })}
             >
               <div className="cc-grow">
-                <div className="cc-name">{s.name}</div>
+                <div className="cc-name">
+                  {s.name}
+                  {s.ipv4 && (
+                    <span className="cc-ipinl cc-mono">
+                      <span className="cc-copyval">{s.ipv4}</span>
+                      <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={13} />
+                    </span>
+                  )}
+                </div>
                 <div className="cc-sub">
                   {(s.type && s.type.name) || ''}
                   {s.type ? ` · ${s.type.cores}vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : ''}
                   {s.location ? ` · ${locFa(s.location.name, s.location.city, s.location.country)}` : ''}
                 </div>
-                <div className="cc-sub cc-mono cc-mt4 cc-copyline">
-                  {s.ipv4 && (
-                    <>
-                      <span className="cc-copyval">{s.ipv4}</span>
-                      <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={14} />
-                    </>
-                  )}
-                  {s.ipv6 && (
-                    <>
-                      {s.ipv4 && <span>/</span>}
-                      <span className="cc-copyval">{s.ipv6}</span>
-                      <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={14} />
-                    </>
-                  )}
-                  {!s.ipv4 && !s.ipv6 && <span>بدون آی‌پی</span>}
-                </div>
+                {s.ipv6 && (
+                  <div className="cc-sub cc-mono cc-copyline">
+                    <span className="cc-copyval">{s.ipv6}</span>
+                    <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={13} />
+                  </div>
+                )}
               </div>
               <div className="cc-end">
                 <Badge variant={badgeVariant(s.status)} dot>

@@ -1971,3 +1971,17 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   padding: 0 12px 12px;
 }
 .cc-plan-acts button { flex: 1; height: 34px !important; font-size: 12px !important }
+
+/* Server name line: IPv4 sits right after the name and stays copyable. */
+.cc-ipinl {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ds-muted);
+  direction: ltr;
+  vertical-align: middle;
+}
+.cc-ipinl button { width: 20px !important; height: 20px !important; min-width: 0 !important; padding: 0 !important }
