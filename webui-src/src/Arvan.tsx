@@ -9,6 +9,8 @@ import {
   Cube,
   Globe,
   Key,
+  MagnifyingGlass,
+  TrendUp,
   PencilSimple,
   Plus,
   Power,
@@ -119,6 +121,11 @@ export default function Arvan({
   const [accBusy, setAccBusy] = useState(false)
   const [accErr, setAccErr] = useState('')
   const [accDel, setAccDel] = useState<Account | null>(null)
+  const [arvIP, setArvIP] = useState<{ ip: string; clean: boolean; verdict: string } | null>(null)
+  const [arvIPBusy, setArvIPBusy] = useState(false)
+  const [arvPlans, setArvPlans] = useState<{ id: string; name: string; cpu: number; ram: number; disk: number; price: string; current: boolean }[] | null>(null)
+  const [arvHunt, setArvHunt] = useState<any>(null)
+  const [arvHuntOn, setArvHuntOn] = useState(false)
 
   async function submitAcc() {
     if (!accForm) return
@@ -807,6 +814,16 @@ export default function Arvan({
     )
   }
 
+  const sidx = currentServer ? servers.findIndex((x) => x.id === currentServer.id && x.region === currentServer.region) : -1
+  async function pollHunt() {
+    try {
+      const d = await api<any>('/api/arv/hunt')
+      setArvHunt(d)
+    } catch {
+      setArvHunt({ running: false })
+    }
+  }
+
   function serverPage() {
     if (view.v !== 'server') return null
     if (!currentServer) return busy > 0 ? <Loader /> : <Empty title="سرور پیدا نشد" />
@@ -885,6 +902,50 @@ export default function Arvan({
             تغییر نام
           </Button>
           <Button variant="secondary" icon={Camera} onClick={snapshotFlow}>اسنپ‌شات</Button>
+          <Button
+            variant="secondary"
+            icon={Globe}
+            disabled={arvIPBusy}
+            onClick={async () => {
+              setArvIPBusy(true)
+              setArvIP({ ip: '', clean: true, verdict: 'در حال بررسی… (تا ۶۰ ثانیه)' })
+              try {
+                const d = await api<{ ip: string; clean: boolean; verdict: string }>(`/api/arv/ipcheck?i=${acc}&idx=${sidx}`)
+                setArvIP(d)
+              } catch (e: any) {
+                setArvIP({ ip: '', clean: false, verdict: String(e?.message || e) })
+              } finally {
+                setArvIPBusy(false)
+              }
+            }}
+          >
+            بررسی IP
+          </Button>
+          <Button
+            variant="secondary"
+            icon={TrendUp}
+            onClick={async () => {
+              try {
+                const d = await api<{ plans: any[] }>(`/api/arv/plans?i=${acc}&idx=${sidx}`)
+                setArvPlans(d.plans || [])
+              } catch (e: any) {
+                toast(String(e?.message || e), true)
+              }
+            }}
+          >
+            ارتقای پلن
+          </Button>
+          <Button
+            variant="secondary"
+            icon={MagnifyingGlass}
+            onClick={async () => {
+              setArvHunt(null)
+              setArvHuntOn(true)
+              await pollHunt()
+            }}
+          >
+            شکار پلن
+          </Button>
           <Button
             className="cc-wide"
             variant="destructive"
@@ -1109,6 +1170,96 @@ export default function Arvan({
           <div className="cc-dialog-actions">
             <Button variant="outline" onClick={() => setAccDel(null)}>انصراف</Button>
             <Button variant="primary" onClick={removeAcc}>حذف</Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
+
+      <Dialog.Root open={!!arvIP} onOpenChange={(o) => !o && setArvIP(null)}>
+        <Dialog className="cc-dialog" size="base">
+          <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+          <Dialog.Title className="cc-dialog-title">بررسی IP</Dialog.Title>
+          <Dialog.Description className="cc-dialog-desc">{arvIP?.ip || 'در حال استعلام'}</Dialog.Description>
+          <div className={"cc-hint " + (arvIP?.clean ? '' : 'cc-err')} style={{ lineHeight: 1.9 }}>{arvIP?.verdict}</div>
+          <div className="cc-dialog-actions">
+            <Button variant="outline" onClick={() => setArvIP(null)}>بستن</Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
+
+      <Dialog.Root open={!!arvPlans} onOpenChange={(o) => !o && setArvPlans(null)}>
+        <Dialog className="cc-dialog" size="base">
+          <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+          <Dialog.Title className="cc-dialog-title">ارتقای پلن</Dialog.Title>
+          <Dialog.Description className="cc-dialog-desc">سرور باید خاموش باشد. تغییر پلن روی دیسک اثر ندارد.</Dialog.Description>
+          {(arvPlans || []).map((p) => (
+            <LayerCard key={p.id} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name">{p.name}</div>
+                <div className="cc-sub cc-ltr">{num(p.cpu)} vCPU · {num(p.ram)}GB · {num(p.disk)}GB · {p.price}</div>
+              </div>
+              {p.current ? <Badge>فعلی</Badge> : (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await api('/api/arv/upgrade', { i: acc, idx: sidx, size: p.id })
+                      toast('درخواست ارتقا ثبت شد')
+                      setArvPlans(null)
+                      reload()
+                    } catch (e: any) {
+                      toast(String(e?.message || e), true)
+                    }
+                  }}
+                >انتخاب</Button>
+              )}
+            </LayerCard>
+          ))}
+          {arvPlans && arvPlans.length === 0 && <Empty title="پلنی پیدا نشد" />}
+        </Dialog>
+      </Dialog.Root>
+
+      <Dialog.Root open={arvHuntOn} onOpenChange={(o) => !o && setArvHuntOn(false)}>
+        <Dialog className="cc-dialog" size="base">
+          <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+          <Dialog.Title className="cc-dialog-title">شکار پلن</Dialog.Title>
+          <Dialog.Description className="cc-dialog-desc">هر دور چند سرور می‌سازد و اگر پلن موجود نبود دوباره تلاش می‌کند؛ نتیجه در تلگرام هم می‌آید.</Dialog.Description>
+          <div className="cc-hint">{arvHunt?.running ? `در حال اجرا — دور ${num(arvHunt.round)}/${num(arvHunt.rounds)} · ساخته‌شده ${num(arvHunt.created)}` : 'غیرفعال'}</div>
+          <div className="cc-field-row cc-mt">
+            <label className="cc-field">
+              <span>تعداد دور</span>
+              <Input className="cc-input" type="number" defaultValue={6} id="arv-hunt-rounds" />
+            </label>
+            <label className="cc-field">
+              <span>هر دور</span>
+              <Input className="cc-input" type="number" defaultValue={1} id="arv-hunt-batch" />
+            </label>
+          </div>
+          <div className="cc-dialog-actions">
+            <Button variant="outline" onClick={() => setArvHuntOn(false)}>بستن</Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                const r = Number((document.getElementById('arv-hunt-rounds') as HTMLInputElement)?.value || 6)
+                const b = Number((document.getElementById('arv-hunt-batch') as HTMLInputElement)?.value || 1)
+                try {
+                  await api('/api/arv/hunt/start', { i: acc, region: currentServer?.region, idx: sidx, rounds: r, batch: b })
+                  await pollHunt()
+                } catch (e: any) {
+                  toast(String(e?.message || e), true)
+                }
+              }}
+            >شروع</Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await api('/api/arv/hunt/stop', {})
+                  await pollHunt()
+                } catch (e: any) {
+                  toast(String(e?.message || e), true)
+                }
+              }}
+            >توقف</Button>
           </div>
         </Dialog>
       </Dialog.Root>
