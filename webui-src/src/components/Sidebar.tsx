@@ -7,7 +7,7 @@ export type Provider = 'hz' | 'cf' | 'arv'
 
 export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
-const PG_IDS = ['pg', 'hook']
+const PG_IDS = ['pg', 'hook', 'um', 'hf', 'hfd']
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'hz', label: 'هتزنر', Icon: HardDrives },
