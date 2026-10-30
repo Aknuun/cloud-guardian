@@ -59,11 +59,8 @@ func main() {
 	r.CFToken = cfg.CFToken
 	r.BotToken = cfg.BotToken
 	r.WebAppURL = withVersion(getenv("CG_WEBAPP_URL", ""), router.Version)
-	if r.WebAppURL != "" {
-		bot.SetChatMenuButtonWebApp(r.WebAppURL, "هتزنر")
-	} else {
-		bot.SetChatMenuButton(true)
-	}
+	// the bot stays command/menu-first: no mini app button next to the input
+	bot.SetChatMenuButton(true)
 	r.DBPath = dbPath
 
 	// health + webhook endpoints
