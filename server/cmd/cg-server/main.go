@@ -189,6 +189,11 @@ func main() {
 		ups, err := bot.GetUpdates(offset, 50)
 		if err != nil {
 			log.Printf("getUpdates: %v", err)
+			// the standby worker may hold the webhook after a takeover;
+			// polling only resumes once it is gone, so reclaim it here
+			if strings.Contains(err.Error(), "webhook is active") {
+				bot.DeleteWebhook()
+			}
 			time.Sleep(2 * time.Second)
 			continue
 		}
