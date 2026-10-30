@@ -27,6 +27,9 @@ export function FilterBar({ q, onQ, placeholder, filters, value, onValue, menu, 
     <div className="cc-filterbar">
       <div className="cc-searchbar">
         <Input
+            id="cc-q"
+            name="q"
+            aria-label={placeholder}
           value={q}
           onChange={(e) => onQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && onEnter?.()}

@@ -233,7 +233,7 @@ export default function Arvan({
     onSwitch('hz')
   }
   useEffect(() => {
-    if (!TG || !TG.BackButton) return
+    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
     const h = () => goBack()
     TG.BackButton.onClick(h)
     return () => TG.BackButton.offClick && TG.BackButton.offClick(h)

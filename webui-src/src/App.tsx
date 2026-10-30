@@ -209,7 +209,7 @@ export default function App() {
       if (TG) {
         TG.ready()
         TG.expand()
-        TG.disableVerticalSwipes && TG.disableVerticalSwipes()
+        TG.isVersionAtLeast && TG.isVersionAtLeast('7.0') && TG.disableVerticalSwipes && TG.disableVerticalSwipes()
         TG.MainButton && TG.MainButton.hide()
       }
       // the bot links with a one-time ticket: no approval round-trip needed
@@ -293,13 +293,13 @@ export default function App() {
   /* telegram back button */
   const backRef = useRef<() => void>(() => {})
   useEffect(() => {
-    if (!TG || !TG.BackButton) return
+    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
     const h = () => backRef.current()
     TG.BackButton.onClick(h)
     return () => TG.BackButton.offClick && TG.BackButton.offClick(h)
   }, [])
   useEffect(() => {
-    if (!TG || !TG.BackButton) return
+    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
     if (provider !== 'hz' || modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
     else TG.BackButton.hide()
   }, [modal, cur, stack, provider])
