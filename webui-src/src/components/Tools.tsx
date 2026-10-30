@@ -793,7 +793,7 @@ function RemView() {
             />
           </label>
           <label className="cc-checkline">
-            <input type="checkbox" checked={back} onChange={(e) => setBack(e.target.checked)} />
+            <input id="cgc1" name="cgc1" type="checkbox" checked={back} onChange={(e) => setBack(e.target.checked)} />
             <span>وقتی سرور برگشت آنلاین شد یادم بنداز</span>
           </label>
           <label className="cc-field">
@@ -1680,11 +1680,11 @@ function UmView() {
       </div>
       <div className="cc-form">
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <input id="cgc2" name="cgc2" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
           <span>پایش بد مصرف فعال باشد</span>
         </label>
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!cfg.report} onChange={(e) => setCfg({ ...cfg, report: e.target.checked })} />
+          <input id="cgc3" name="cgc3" type="checkbox" checked={!!cfg.report} onChange={(e) => setCfg({ ...cfg, report: e.target.checked })} />
           <span>گزارش روزانهٔ اخطارشده‌ها ارسال شود</span>
         </label>
         {num('hourlyGb', 'آستانهٔ ساعتی (GB)', '7')}
@@ -2160,7 +2160,7 @@ function HfView() {
 
       <div className="cc-form">
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <input id="cgc4" name="cgc4" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
           <span>تعویض خودکار فعال باشد</span>
         </label>
         <div className="cc-field-row">
@@ -2434,11 +2434,11 @@ function HookView() {
       </div>
       <div className="cc-form">
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!d.enabled} onChange={(e) => act('/api/tools/hook/cfg', { enabled: e.target.checked })} />
+          <input id="cgc5" name="cgc5" type="checkbox" checked={!!d.enabled} onChange={(e) => act('/api/tools/hook/cfg', { enabled: e.target.checked })} />
           <span>هشدار انقضا و حجم فعال باشد</span>
         </label>
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!d.silentMe} onChange={(e) => act('/api/tools/hook/cfg', { silentMe: e.target.checked })} />
+          <input id="cgc6" name="cgc6" type="checkbox" checked={!!d.silentMe} onChange={(e) => act('/api/tools/hook/cfg', { silentMe: e.target.checked })} />
           <span>بی‌صدا: هشدارها به خود کاربران برود، نه به من</span>
         </label>
         <div className="cc-field-row">
@@ -2570,7 +2570,7 @@ function HookView() {
             <Input value={rb} onChange={(e) => setRb(e.target.value)} placeholder="RenewBot" />
           </label>
           <label className="cc-checkline">
-            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
+            <input id="cgc7" name="cgc7" type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
             <span>تمدید خودکار با ربات داخلی</span>
           </label>
           <Button
@@ -2664,7 +2664,7 @@ function HfdView() {
 
       <div className="cc-form">
         <label className="cc-checkline">
-          <input type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
+          <input id="cgc8" name="cgc8" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
           <span>چرخش روزانه فعال باشد</span>
         </label>
         <div className="cc-field-row">
@@ -2977,7 +2977,7 @@ function RecView() {
       {shown.map((r) => (
         <div key={r.id} className={'cc-trow cc-tap' + (sel.includes(r.id) ? ' sel' : '')}>
           <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
-            <input type="checkbox" checked={sel.includes(r.id)} onChange={() => toggle(r.id)} />
+            <input id="cgc9" name="cgc9" type="checkbox" checked={sel.includes(r.id)} onChange={() => toggle(r.id)} />
           </label>
           <div className="cc-grow">
             <div className="cc-name cc-ltr">
@@ -3069,7 +3069,7 @@ function AddRecDialog({ zones, onClose, onDone }: { zones: CfZone[]; onClose: ()
               <Input value={content} onChange={(e) => setContent(e.target.value)} placeholder={type === 'A' ? '1.2.3.4' : '—'} />
             </label>
             <label className="cc-checkline">
-              <input type="checkbox" checked={proxied} onChange={(e) => setProxied(e.target.checked)} />
+              <input id="cgc10" name="cgc10" type="checkbox" checked={proxied} onChange={(e) => setProxied(e.target.checked)} />
               <span>پروکسی کلودفلر (فقط A/AAAA/CNAME)</span>
             </label>
             {err && <div className="cc-form-err">{err}</div>}
@@ -3976,7 +3976,7 @@ function QaView() {
         <>
           <div className="cc-bulkbar">
             <label className="cc-checkline" style={{ padding: 0, background: 'transparent' }}>
-              <input type="checkbox" checked={allOn} onChange={() => setSel(allOn ? [] : hits.map(key))} />
+              <input id="cgc11" name="cgc11" type="checkbox" checked={allOn} onChange={() => setSel(allOn ? [] : hits.map(key))} />
               <span>{allOn ? 'همه' : 'انتخاب همه'}</span>
             </label>
             <Button variant="outline" disabled={!sel.length} onClick={async () => {
@@ -3996,7 +3996,7 @@ function QaView() {
           {hits.map((h) => (
             <div key={key(h)} className={'cc-trow cc-tap' + (sel.includes(key(h)) ? ' sel' : '')} onClick={() => setSel(sel.includes(key(h)) ? sel.filter((x) => x !== key(h)) : [...sel, key(h)])}>
               <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
-                <input type="checkbox" checked={sel.includes(key(h))} onChange={() => setSel(sel.includes(key(h)) ? sel.filter((x) => x !== key(h)) : [...sel, key(h)])} />
+                <input id="cgc12" name="cgc12" type="checkbox" checked={sel.includes(key(h))} onChange={() => setSel(sel.includes(key(h)) ? sel.filter((x) => x !== key(h)) : [...sel, key(h)])} />
               </label>
               <div className="cc-grow">
                 <div className="cc-name">{h.name}</div>
@@ -4013,8 +4013,8 @@ function QaView() {
           <div className="cc-grow"><div className="cc-name">سقف درخواست روزانه</div><div className="cc-sub">هشدار و توقف خودکار بالای این عدد</div></div>
           <Input className="cc-input cc-num" value={limit} onChange={(e) => setLimit(e.target.value)} />
         </div>
-        <div className="cc-checkline cc-mb"><input type="checkbox" checked={!!quota?.autoStop} onChange={(e) => setQuota(quota ? { ...quota, autoStop: e.target.checked } : quota)} /><span>توقف خودکار کرون‌ها</span></div>
-        <div className="cc-checkline cc-mb"><input type="checkbox" checked={!!quota?.alerts} onChange={(e) => setQuota(quota ? { ...quota, alerts: e.target.checked } : quota)} /><span>هشدار تلگرام</span></div>
+        <div className="cc-checkline cc-mb"><input id="cgc13" name="cgc13" type="checkbox" checked={!!quota?.autoStop} onChange={(e) => setQuota(quota ? { ...quota, autoStop: e.target.checked } : quota)} /><span>توقف خودکار کرون‌ها</span></div>
+        <div className="cc-checkline cc-mb"><input id="cgc14" name="cgc14" type="checkbox" checked={!!quota?.alerts} onChange={(e) => setQuota(quota ? { ...quota, alerts: e.target.checked } : quota)} /><span>هشدار تلگرام</span></div>
         <div className="cc-btnrow">
           <Button variant="primary" onClick={async () => {
             await save('/api/tools/quota/cfg', { limit: Number(limit) || 0, autoStop: !!quota?.autoStop, alerts: !!quota?.alerts }, () => {})
