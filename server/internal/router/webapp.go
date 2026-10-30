@@ -39,6 +39,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/hz/snapshots", r.webAuthed(r.webHzSnapshots))
 	mux.HandleFunc("/api/hz/options", r.webAuthed(r.webHzOptions))
 	mux.HandleFunc("/api/hz/ips", r.webAuthed(r.webHzIPs))
+	mux.HandleFunc("/api/hz/ips/add", r.webAuthed(r.webHzIPAdd))
 	mux.HandleFunc("/api/hz/action", r.webAuthed(r.webHzAction))
 	mux.HandleFunc("/api/hz/create", r.webAuthed(r.webHzCreate))
 	mux.HandleFunc("/api/cf/accounts", r.webAuthed(r.webCfAccounts))

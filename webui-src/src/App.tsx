@@ -214,6 +214,8 @@ export default function App() {
   const [viewErr, setViewErr] = useState('')
   const [busy, setBusy] = useState(0)
   const [modal, setModal] = useState<Modal | null>(null)
+  const [ipForm, setIpForm] = useState<{ loc: string; count: number; locs: { name: string; city?: string; country?: string }[] } | null>(null)
+  const [ipBusy, setIpBusy] = useState(false)
   const [toastMsg, setToastMsg] = useState<{ t: string; err?: boolean } | null>(null)
   const optsCache = useRef<Record<string, Options>>({})
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -760,6 +762,38 @@ export default function App() {
             ? 'آی‌پی‌های تمیز'
             : 'ساخت سرور'
 
+  async function openIpAdd() {
+    const acc = (cur as any).acc
+    setIpBusy(true)
+    try {
+      const o = await api<Options>('/api/hz/options?acc=' + acc)
+      const locs = (o.locations || []).map((l: any) => ({ name: l.name, city: l.city, country: l.country }))
+      setIpForm({ loc: locs[0]?.name || '', count: 1, locs })
+    } catch (e: any) {
+      toast(e.message || 'دریافت لوکیشن‌ها ناموفق', true)
+    }
+    setIpBusy(false)
+  }
+
+  async function submitIpAdd() {
+    if (!ipForm) return
+    setIpBusy(true)
+    try {
+      const r = await api<{ created: string[] }>('/api/hz/ips/add', {
+        acc: (cur as any).acc,
+        loc: ipForm.loc,
+        count: ipForm.count,
+      })
+      invalidateCache()
+      setIpForm(null)
+      toast(`${r.created.length} آی‌پی ساخته شد`)
+      setCur((c) => ({ ...c }))
+    } catch (e: any) {
+      toast(e.message || 'ساخت آی‌پی ناموفق', true)
+    }
+    setIpBusy(false)
+  }
+
   function body() {
     if (viewErr) {
       return (
@@ -1259,7 +1293,10 @@ export default function App() {
     if (cur.v === 'ips') {
       return (
         <>
-          <div className="cc-grid2 cc-mb">
+          <div className="cc-btnrow cc-mb">
+            <Button variant="primary" icon={Plus} onClick={() => void openIpAdd()} disabled={ipBusy}>
+              افزودن آی‌پی
+            </Button>
             <Button variant="outline" icon={ArrowRight} onClick={() => setCur({ v: 'servers', acc: cur.acc })}>
               سرورها
             </Button>
@@ -1267,6 +1304,50 @@ export default function App() {
               بروزرسانی
             </Button>
           </div>
+          {ipForm && (
+            <Dialog.Root open onOpenChange={(o: boolean) => !o && setIpForm(null)}>
+              <Dialog className="cc-dialog" size="base">
+                <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+                <Dialog.Title className="cc-dialog-title">افزودن آی‌پی تمیز</Dialog.Title>
+                <Dialog.Description className="cc-dialog-desc">
+                  آی‌پی IPv4 تازه در حساب هتزنر ساخته می‌شود؛ بعد از ساخت می‌توانی وضعیت تمیزی‌اش را بررسی کنی.
+                </Dialog.Description>
+                <label className="cc-field">
+                  <span>لوکیشن</span>
+                  <select
+                    className="cc-input"
+                    value={ipForm.loc}
+                    onChange={(e) => setIpForm({ ...ipForm, loc: e.target.value })}
+                  >
+                    {ipForm.locs.map((l) => (
+                      <option key={l.name} value={l.name}>
+                        {locFa(l.name, l.city, l.country)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="cc-field">
+                  <span>تعداد</span>
+                  <input
+                    className="cc-input"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={ipForm.count}
+                    onChange={(e) => setIpForm({ ...ipForm, count: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })}
+                  />
+                </label>
+                <div className="cc-dialog-actions">
+                  <Button variant="secondary" onClick={() => setIpForm(null)}>
+                    انصراف
+                  </Button>
+                  <Button variant="primary" onClick={() => void submitIpAdd()} disabled={ipBusy}>
+                    بساز
+                  </Button>
+                </div>
+              </Dialog>
+            </Dialog.Root>
+          )}
           {ips.length === 0 && busy > 0 && <AppSkeleton />}
           {ips.length === 0 && busy === 0 && <Empty title="آی‌پی‌ای در استخر نیست" />}
           {ips.map((p) => {
