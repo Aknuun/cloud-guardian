@@ -1564,3 +1564,5 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-pagebar button { width: auto; min-width: 168px; height: 42px; }
 .cc-main .cc-trow { min-height: 64px; }
 .cc-main .cc-trow .cc-sub { line-height: 1.5; }
+.cc-main .cc-pagebar button { width: auto; min-width: 168px; height: 42px; }
+.cc-main .cc-trow { min-height: 78px; }
