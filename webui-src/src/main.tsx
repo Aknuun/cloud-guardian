@@ -43,6 +43,25 @@ window.addEventListener(
   { passive: true },
 )
 
+// Tappable rows are divs; give them button semantics so the keyboard can use them too.
+function keyboardRows() {
+  const prep = () =>
+    document.querySelectorAll<HTMLElement>('.cc-tap:not([data-kbd])').forEach((el) => {
+      el.dataset.kbd = '1'
+      if (!el.hasAttribute('role')) el.setAttribute('role', 'button')
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0')
+    })
+  prep()
+  new MutationObserver(prep).observe(document.body, { childList: true, subtree: true })
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    const el = e.target as HTMLElement | null
+    if (!el?.classList?.contains('cc-tap')) return
+    e.preventDefault()
+    el.click()
+  })
+}
+
 async function waitTelegram(ms: number) {
   const t0 = Date.now()
   while (!(window as any).Telegram && Date.now() - t0 < ms) {
@@ -53,6 +72,7 @@ async function waitTelegram(ms: number) {
 // Telegram hands initData in the URL hash; if we can see it, its script must win.
 const needsTg = typeof location !== 'undefined' && /tgWebAppData=/.test(location.hash)
 waitTelegram(needsTg ? 8000 : 1500).then(() => {
+  keyboardRows()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ThemeProvider>
