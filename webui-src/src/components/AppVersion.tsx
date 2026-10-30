@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TelegramLogo } from '@phosphor-icons/react'
+import { Browsers } from '@phosphor-icons/react'
 
 let cachedVersion = ''
 let versionRequest: Promise<string> | null = null
@@ -37,10 +37,20 @@ export function AppVersion() {
 
   return (
     <>
-      <a className="cc-ver cc-chan" href="https://t.me/openWEBcode" target="_blank" rel="noreferrer" title="کانال تلگرام">
-        <TelegramLogo size={14} />
-        <span dir="ltr">@openWEBcode</span>
-      </a>
+      <button
+        type="button"
+        className="cc-ver cc-chan"
+        title="باز کردن نسخه وب در مرورگر"
+        onClick={() => {
+          const url = location.origin + '/app/'
+          const tg = (window as any).Telegram?.WebApp
+          if (tg?.openLink) tg.openLink(url)
+          else window.open(url, '_blank', 'noopener')
+        }}
+      >
+        <Browsers size={14} />
+        <span>نسخه وب</span>
+      </button>
       {version && (
         <span className="cc-ver" dir="ltr" title={`نسخه ${version}`}>
           v{version}
