@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Lightning, Envelope, GearSix, Lifebuoy, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
+import { Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
@@ -9,7 +9,7 @@ import { House } from '@phosphor-icons/react'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
-export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set' | 'fo'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'rec' | 'mail' | 'set' | 'fo' | 'hub'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -23,6 +23,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'rec', label: 'افزودن رکورد / تغییر سریع', Icon: Lightning },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
+  { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
@@ -109,6 +110,7 @@ export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t:
   if (id === 'rec') return <RecView />
   if (id === 'mail') return <MailView />
   if (id === 'fo') return <FoView />
+  if (id === 'hub') return <HubView />
   if (id === 'set') return <SetView />
   return <PgView />
 }
@@ -3460,6 +3462,139 @@ function FoView() {
             </div>
           </Dialog>
         </Dialog.Root>
+      )}
+    </>
+  )
+}
+
+type HubStats = { bot: string; version: string; go: string; uptime: string; mem_mb: number; db_mb: number; admins: number; users: number; panels: number; zones: number; cf_accs: number; servers: number }
+type HubData = { hubUrl: string; annUrl: string; secret: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
+type Ann = { id: string; text: string; until: string; reply: boolean }
+
+function HubView() {
+  const { data, err, loaded, reload } = useTool<HubData>('/api/tools/hub')
+  const [anns, setAnns] = useState<Ann[] | null>(null)
+  const [annErr, setAnnErr] = useState('')
+  const [cfg, setCfg] = useState<{ hubUrl: string; annUrl: string; secret: string } | null>(null)
+  const [cErr, setCErr] = useState('')
+  const [cast, setCast] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    api<{ items: Ann[] }>('/api/tools/hub/ann')
+      .then((d) => setAnns(d.items || []))
+      .catch((e) => setAnnErr(String(e?.message || e)))
+  }, [])
+
+  const s = data?.stats
+
+  return (
+    <>
+      <StatGrid
+        items={[
+          { label: 'نسخه', value: s?.version || '—' },
+          { label: 'آپ‌تایم', value: s?.uptime || '—' },
+          { label: 'نصب‌های هاب', value: data?.hubOk ? faNum(data.installs.length) : '—' },
+        ]}
+      />
+
+      <div className="cc-pagebar">
+        <Button variant="primary" icon={GearSix} onClick={() => { setCErr(''); setCfg({ hubUrl: data?.hubUrl || '', annUrl: data?.annUrl || '', secret: '' }) }}>
+          تنظیم هاب
+        </Button>
+      </div>
+
+      {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+      {err && <div className="cc-hint cc-center cc-mb">{err}</div>}
+      {!loaded && <Loader />}
+
+      {s && (
+        <div className="cc-section">
+          <div className="cc-section-head"><h2>این نصب</h2></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">ربات</div><div className="cc-sub">@{s.bot || '—'}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">کاربران / ادمین‌ها</div><div className="cc-sub">{faNum(s.users)} / {faNum(s.admins)}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">پنل‌ها / سرورها</div><div className="cc-sub">{faNum(s.panels)} / {faNum(s.servers)}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">دامنه‌ها</div><div className="cc-sub">{faNum(s.zones)} در {faNum(s.cf_accs)} اکانت</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">حافظه / دیتابیس</div><div className="cc-sub">{s.mem_mb.toFixed(1)} MB / {s.db_mb.toFixed(2)} MB</div></div></div>
+        </div>
+      )}
+
+      {data && data.hubUrl && (
+        <div className="cc-section">
+          <div className="cc-section-head"><h2>نصب‌های هاب</h2></div>
+          {!data.hubOk && <div className="cc-hint cc-center cc-mb">{data.hubErr || 'هاب در دسترس نیست'}</div>}
+          {data.installs.map((x: any, i: number) => (
+            <div key={i} className="cc-trow">
+              <div className="cc-grow">
+                <div className="cc-name">{x.bot || '—'}</div>
+                <div className="cc-sub">v{x.version} · {faNum(x.admins || 0)} ادمین · {faNum(x.panels || 0)} پنل</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
+          <h2>اعلان‌ها</h2>
+          <Button variant="outline" icon={Plus} onClick={() => setCast('')}>پیام همگانی</Button>
+        </div>
+        {annErr && <div className="cc-hint cc-center cc-mb">{annErr}</div>}
+        {anns && anns.length === 0 && <Empty title="اعلانی نیست" description="از منبع اعلان‌ها چیزی برنگشت." />}
+        {(anns || []).map((a) => (
+          <div key={a.id} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">{a.text}</div>
+              <div className="cc-sub">{a.until ? 'تا ' + faDate(a.until) : 'بدون پایان'}{a.reply ? ' · با پاسخ' : ''}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {cfg && (
+        <FormDialog
+          title="تنظیم هاب"
+          sub="آدرس هاب برای تجمیع آمار، و آدرس منبع اعلان‌ها (JSON)."
+          onClose={() => setCfg(null)}
+          error={cErr}
+          onSave={async () => {
+            setCErr('')
+            try {
+              await save('/api/tools/hub/cfg', cfg, () => {})
+              setCfg(null)
+              setNotice('تنظیمات ذخیره شد')
+              reload()
+            } catch (e: any) {
+              setCErr(String(e?.message || e))
+            }
+          }}
+        >
+          <label className="cc-field"><span>آدرس هاب</span><Input className="cc-ltr" value={cfg.hubUrl} onChange={(e) => setCfg({ ...cfg, hubUrl: e.target.value })} placeholder="https://hub.example.com" /></label>
+          <label className="cc-field"><span>آدرس اعلان‌ها</span><Input className="cc-ltr" value={cfg.annUrl} onChange={(e) => setCfg({ ...cfg, annUrl: e.target.value })} placeholder="https://…/announcements.json" /></label>
+          <label className="cc-field"><span>کلید هاب (اختیاری)</span><Input type="password" value={cfg.secret} onChange={(e) => setCfg({ ...cfg, secret: e.target.value })} placeholder="برای تغییر نکردن خالی بگذار" /></label>
+        </FormDialog>
+      )}
+
+      {cast !== null && (
+        <FormDialog
+          title="پیام همگانی"
+          sub="برای همهٔ ادمین‌ها و کاربران شناخته‌شده ارسال می‌شود."
+          onClose={() => setCast(null)}
+          onSave={async () => {
+            try {
+              const r = await api<{ queued: number }>('/api/tools/hub/cast', { text: cast })
+              setCast(null)
+              setNotice(`در صف ارسال برای ${faNum(r.queued)} نفر`)
+            } catch (e: any) {
+              setNotice(String(e?.message || e))
+            }
+          }}
+        >
+          <label className="cc-field">
+            <span>متن پیام</span>
+            <textarea className="cc-input cc-textarea" value={cast} onChange={(e) => setCast(e.target.value)} />
+          </label>
+        </FormDialog>
       )}
     </>
   )
