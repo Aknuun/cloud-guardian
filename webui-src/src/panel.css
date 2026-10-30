@@ -1643,3 +1643,7 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-dialog .cc-dialog-desc { font-size: 12px }
   .cc-main .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px }
 }
+@media (max-width: 699px) {
+  .cc-dialog .cc-actions button[data-kumo-component='Button'],
+  .cc-main .cc-actions button[data-kumo-component='Button'] { height: 46px !important; font-size: 13px !important; padding: 0 10px !important; min-width: 0 !important }
+}
