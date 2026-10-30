@@ -33,9 +33,14 @@ function DialogContent({
           const field = root?.querySelector<HTMLElement>(
             'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
           )
-          if (!field) return
+          // No form fields: focus the first real action instead of the close button.
+          const action = field
+            ? null
+            : root?.querySelector<HTMLElement>('.cc-dialog-actions button:not([disabled]), .cc-actions button:not([disabled])')
+          const target = field || action
+          if (!target) return
           e.preventDefault()
-          field.focus()
+          target.focus()
         }}
         {...props}
       >
