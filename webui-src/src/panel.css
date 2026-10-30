@@ -1618,3 +1618,13 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main .cc-row { min-height: 54px; padding: 7px 10px }
   .cc-main .cc-row .cc-name { font-size: 13.5px }
 }
+
+/* record rows must stay one line */
+.cc-main .cc-recrow { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: center; gap: 8px; min-width: 0 }
+.cc-main .cc-recrow > * { flex: 0 0 auto }
+.cc-main .cc-recrow .cc-name { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.cc-main .cc-recrow .cc-ip { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: end }
+@media (max-width: 899px) {
+  .cc-main .cc-recrow button { display: none }
+  .cc-main .cc-trow:has(.cc-recrow) { min-height: 44px }
+}
