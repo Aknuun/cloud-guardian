@@ -37,9 +37,10 @@ func (r *Router) webBtn(label, native, goID string) Btn {
 // Menu renders the home menu. Everything except Cloudflare opens in the mini app
 // (the bot itself only sends reports); the rest stays reachable from "بیشتر".
 func (r *Router) Menu(chat, mid int64) {
-	home := btn("🏠 صفحهٔ اصلی", "menu")
-	if u := r.webLink("home"); u != "" {
-		home = btnWA("🏠 صفحهٔ اصلی", u)
+	// the channel button is gone: the last row opens the web panel instead
+	siteBtn := chanBtn()
+	if u := strings.TrimSpace(r.WebAppURL); u != "" {
+		siteBtn = btnWA("🌐 نسخهٔ وب سایت", u)
 	}
 	if r.webLink("hz") == "" {
 		// no web app configured: keep every native screen reachable
@@ -49,22 +50,21 @@ func (r *Router) Menu(chat, mid int64) {
 			{btnS("🇩🇪 هتزنر", "hz", "success"), btnS("🇮🇷 آروان", "arvan", "success")},
 			{btnS("🖥 سرورها و مانیتورینگ", "srv", "plain"), btnS("⏰ یادآورها", "rem", "plain")},
 			{btnS("📦 بخش‌های دیگر", "more", "plain")},
-			{chanBtn()},
+			{siteBtn},
 		}
 		r.Show(chat, mid, r.menuText(), kb)
 		return
 	}
-	// one screen with everything; Cloudflare gets both entries (mini app + bot)
+	// classic row grid: three-button rows render green, two-button rows blue
+	// (the tg styler decides the colour per row).
 	kb := [][]Btn{
-		{home, btn("☁️ کلودفلر (ربات)", "zones")},
-		{btnWA("📱 کلودفلر (مینی‌اپ)", r.webLink("cf")), btnWA("🌐 دامنه و SSL", r.webLink("dom"))},
-		{btnWA("🇩🇪 هتزنر", r.webLink("hz")), btnWA("🇮🇷 آروان", r.webLink("arv"))},
-		{btnWA("🖥 سرورها و مانیتورینگ", r.webLink("srv")), btnWA("⏰ یادآورها", r.webLink("rem"))},
-		{btnWA("🎛 پاسارگارد", r.webLink("pg")), btnWA("🔔 هشدار انقضا و حجم", r.webLink("hook"))},
-		{btnWA("🧭 تعویض خودکار ساب‌فیلتر", r.webLink("hf")), btnWA("🔁 چرخش روزانه ساب‌ها", r.webLink("hfd"))},
-		{btnWA("🔥 گزارش بد مصرف", r.webLink("um")), btnWA("➕ افزودن رکورد", r.webLink("rec"))},
-		{btnWA("✉️ ایمیل دامنه", r.webLink("mail")), btnWA("⚙️ تنظیمات", r.webLink("set"))},
-		{chanBtn()},
+		{r.webBtn("➕ افزودن رکورد", "addrec", "rec"), btn("☁️ کلودفلر", "zones"), btnS("⚡ تغییر سریع", "qamenu", "plain")},
+		{r.webBtn("🇩🇪 هتزنر", "hz", "hz"), r.webBtn("🇮🇷 آروان", "arvan", "arv")},
+		{r.webBtn("🎛 پاسارگارد", "pndef", "pg"), r.webBtn("🖥 سرورها", "srv", "srv"), r.webBtn("⏰ یادآورها", "rem", "rem")},
+		{r.webBtn("🧭 تعویض خودکار ساب‌فیلتر", "hf", "hf"), r.webBtn("🔁 چرخش روزانه ساب‌ها", "hfd", "hfd")},
+		{r.webBtn("🔔 هشدار انقضا و حجم", "pghook", "hook"), r.webBtn("🔥 گزارش بد مصرف", "um", "um"), r.webBtn("🌐 دامنه و SSL", "dommon", "dom")},
+		{r.webBtn("✉️ ایمیل دامنه", "fmail", "mail"), r.webBtn("⚙️ تنظیمات", "settings", "set")},
+		{siteBtn},
 	}
 	r.Show(chat, mid, r.menuText(), kb)
 }
