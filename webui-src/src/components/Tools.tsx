@@ -2412,7 +2412,7 @@ function HookView() {
         </label>
         <label className="cc-checkline">
           <input type="checkbox" checked={!!d.silentMe} onChange={(e) => act('/api/tools/hook/cfg', { silentMe: e.target.checked })} />
-          <span>ارسال بی‌صدا (سایلنت)</span>
+          <span>بی‌صدا: هشدارها به خود کاربران برود، نه به من</span>
         </label>
         <div className="cc-field-row">
           <label className="cc-field">

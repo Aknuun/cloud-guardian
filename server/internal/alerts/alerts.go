@@ -449,7 +449,11 @@ func FlushBuffers(bot *tg.Client, st *store.Store, panels map[string]pg.Panel, a
 				}
 			}
 			if len(part) > 0 {
-				SendAlert(bot, adminID, panel, part, false)
+				if cfg.SilentMe {
+					SendAlertUsers(bot, panel, part)
+				} else {
+					SendAlert(bot, adminID, panel, part, false)
+				}
 				sent++
 			}
 		}
@@ -601,8 +605,12 @@ func RunDigest(bot *tg.Client, st *store.Store, panels []pg.Panel, kind string, 
 				panel.Name = p.Name
 				_ = pc
 			}
-			SendAlert(bot, adminID, pg.Panel{Name: p.Name, URL: p.URL,
-				Username: "", Password: ""}, fresh, false)
+			if cfg.SilentMe {
+				SendAlertUsers(bot, p, fresh)
+			} else {
+				SendAlert(bot, adminID, pg.Panel{Name: p.Name, URL: p.URL,
+					Username: "", Password: ""}, fresh, false)
+			}
 			sent++
 		}
 	}
@@ -622,4 +630,82 @@ func panelName(p pg.Panel) string {
 		return p.URL
 	}
 	return "?"
+}
+
+// userText renders a per-user notice instead of the admin digest.
+func userText(panel pg.Panel, items []map[string]any) string {
+	lines := []string{"🔔 سرویس «" + panelName(panel) + "»"}
+	for _, it := range items {
+		kind := toString(it["kind"])
+		val := toString(it["value"])
+		switch kind {
+		case "usage":
+			lines = append(lines, "⛔️ حجم سرویس شما به "+val+"٪ رسیده است.")
+		case "days":
+			lines = append(lines, "⏰ سرویس شما تا "+val+" روز دیگر منقضی می‌شود.")
+		default:
+			lines = append(lines, "• "+kind+": "+val)
+		}
+	}
+	lines = append(lines, "", "برای تمدید با پشتیبانی تماس بگیرید.")
+	return strings.Join(lines, "\n")
+}
+
+// SendAlertUsers delivers each item to that user's own Telegram id when the
+// panel has one; it reports how many users were reached.
+func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
+	if len(items) == 0 {
+		return 0
+	}
+	c := p.Client()
+	tok, err := c.Login()
+	if err != nil {
+		return 0
+	}
+	byUser := map[string][]map[string]any{}
+	var order []string
+	for _, it := range items {
+		u := toString(it["username"])
+		if u == "" {
+			continue
+		}
+		if _, ok := byUser[u]; !ok {
+			order = append(order, u)
+		}
+		byUser[u] = append(byUser[u], it)
+	}
+	sent := 0
+	for _, u := range order {
+		d := c.User(tok, u)
+		if d == nil {
+			continue
+		}
+		var id int64
+		switch v := d["telegram_id"].(type) {
+		case float64:
+			id = int64(v)
+		case int64:
+			id = v
+		case string:
+			id = int64(atoiSafe(v))
+		}
+		if id <= 0 {
+			continue
+		}
+		if bot.Send(id, "👤 "+u+"\n\n"+userText(p, byUser[u]), nil) != 0 {
+			sent++
+		}
+	}
+	return sent
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, r := range strings.TrimSpace(s) {
+		if r < '0' || r > '9' {
+			return 0
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
 }

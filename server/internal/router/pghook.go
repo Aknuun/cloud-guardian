@@ -62,9 +62,9 @@ func (r *Router) pghookHome(chat, mid int64) {
 	if cfg.Enabled {
 		toggle = "⏸ غیرفعال‌سازی"
 	}
-	silent := "🔔 سایلنت من: خاموش"
+	silent := "🔔 بی‌صدا: خاموش (هشدارها به من)"
 	if cfg.SilentMe {
-		silent = "🔕 سایلنت من: روشن"
+		silent = "🔕 بی‌صدا: روشن (هشدارها به کاربران)"
 	}
 	kb := [][]Btn{{btn(toggle, "pgtoggle"), btn(silent, "pgsilent")}}
 	for i, p := range panels {
