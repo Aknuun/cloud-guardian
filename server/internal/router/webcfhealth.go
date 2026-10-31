@@ -241,10 +241,13 @@ func (r *Router) cfHealthScan(acc int, zid string, only string, zids map[string]
 		}
 	}
 	last := cfHealthLast{At: time.Now().UnixMilli(), Rows: out, Total: len(out), Bad: bad}
-	r.Store.PutJSON(cfHealthLastKey, last, 0)
-	cfg := r.cfHealthCfg()
-	cfg.LastRun = last.At
-	r.Store.PutJSON(cfHealthCfgKey, cfg, 0)
+	// A single-record check must not replace the full result set the page shows.
+	if only == "" {
+		r.Store.PutJSON(cfHealthLastKey, last, 0)
+		cfg := r.cfHealthCfg()
+		cfg.LastRun = last.At
+		r.Store.PutJSON(cfHealthCfgKey, cfg, 0)
+	}
 	return last
 }
 
