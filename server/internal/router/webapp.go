@@ -48,6 +48,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/cf/records", r.webAuthed(r.webCfRecords))
 	mux.HandleFunc("/api/cf/record", r.webAuthed(r.webCfRecordOp))
 	mux.HandleFunc("/api/cf/bulk", r.webAuthed(r.webCfBulk))
+	mux.HandleFunc("/api/cf/resolve", r.webAuthed(r.webCfResolve))
 	mux.HandleFunc("/api/cf/settings", r.webAuthed(r.webCfSettings))
 	mux.HandleFunc("/api/cf/email", r.webAuthed(r.webCfEmail))
 	mux.HandleFunc("/api/cf/traffic", r.webAuthed(r.webCfTraffic))

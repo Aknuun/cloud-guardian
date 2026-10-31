@@ -148,6 +148,7 @@ export function RecordEditor({
   const [proxied, setProxied] = useState(!!r?.proxied)
   const [priority, setPriority] = useState(r?.priority != null ? String(r.priority) : '')
   const [formErr, setFormErr] = useState('')
+  const [warn, setWarn] = useState('')
   const [busy, setBusy] = useState(false)
   const canProxy = PROXYABLE.includes(type)
   const history = (r?.history || []).filter((v) => v && v !== content)
@@ -159,7 +160,28 @@ export function RecordEditor({
       haptic('error')
       return
     }
+    // A CNAME pointing at a name that resolves nowhere breaks silently; ask first.
+    if (type === 'CNAME' && content.trim() && !warn) {
+      setBusy(true)
+      try {
+        const res = await fetch('/api/cf/resolve?name=' + encodeURIComponent(content.trim()), {
+          headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('cg_token') || '') },
+        }).then((x) => x.json())
+        const d = res?.data || {}
+        if (d.ok === false) {
+          setWarn('«' + content.trim() + '» به هیچ آی‌پی ریسالو نمی‌شود. اگر مطمئنی، دوباره بزن تا ذخیره شود.')
+          haptic('error')
+          return
+        }
+        setFormErr('')
+      } catch {
+        /* resolve check is advisory only */
+      } finally {
+        setBusy(false)
+      }
+    }
     setFormErr('')
+    setWarn('')
     setBusy(true)
     try {
       await onSubmit({
@@ -280,6 +302,11 @@ export function RecordEditor({
         </>
       )}
       {formErr && <div className="cc-field-err" role="alert">{formErr}</div>}
+      {warn && (
+        <div className="cc-field-err" role="alert" style={{ color: '#b54708' }}>
+          {warn}
+        </div>
+      )}
       <div className="cc-editor-settings">
         <div className="cc-editor-setting">
           <span>
