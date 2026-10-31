@@ -35,6 +35,7 @@ import { AccountsPage, FavsPage } from './cloudflare/pages'
 import { LbGroupPage } from './cloudflare/lbgroup'
 import { EmailTab } from './cloudflare/emailtab'
 import { SettingsTab } from './cloudflare/settingstab'
+import { RecordsTab } from './cloudflare/recordstab'
 import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
 import {
   PROXYABLE,
@@ -1006,92 +1007,31 @@ ${reason}`,
   }
 
   function recordsTab() {
-    if (view.v !== 'zone') return null
-    const ql = recQ.trim().toLowerCase()
-    const list = records.filter(
-      (r) =>
-        (recType === 'all' || r.type === recType) &&
-        (!ql ||
-          r.name.toLowerCase().includes(ql) ||
-          r.content.toLowerCase().includes(ql) ||
-          r.type.toLowerCase() === ql),
-    )
-    const { favs: favList, rest } = splitFavorites(list)
-    const types = Array.from(new Set(records.map((r) => r.type)))
-    function selectAll() {
-      if (sel.size === list.length) setSel(new Set())
-      else setSel(new Set(list.map((r) => r.id)))
-    }
     return (
-      <>
-        <div className="cc-grid3 cc-mb">
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={() => setDlg({ k: 'editor', acc: view.acc, zid: view.zid, zone: zone?.name || '' })}
-          >
-            رکورد
-          </Button>
-          <Button
-            variant={selMode ? 'secondary' : 'outline'}
-            icon={selMode ? X : CheckSquare}
-            onClick={() => {
-              setSelMode(!selMode)
-              setSel(new Set())
-            }}
-          >
-            {selMode ? 'پایان' : 'انتخاب گروهی'}
-          </Button>
-          <Button variant="outline" icon={Clock} onClick={() => void showAudit(view.acc, view.zid)}>
-            تاریخچه
-          </Button>
-        </div>
-        {selMode && (
-          <div className="cc-bulkbar" role="toolbar" aria-label="عملیات گروهی">
-            <span className="cc-bulkcount">{faNum(sel.size)} انتخاب</span>
-            <button className="cc-bulkbtn" onClick={selectAll} disabled={list.length === 0}>
-              {sel.size === list.length && list.length > 0 ? <X size={14} /> : <CheckSquare size={14} />}
-              {sel.size === list.length && list.length > 0 ? 'پاک‌کردن' : 'همه'}
-            </button>
-            <button className="cc-bulkbtn red" disabled={!sel.size} onClick={confirmBulkDelete}>
-              <Trash size={14} /> حذف
-            </button>
-            <button className="cc-bulkbtn" disabled={!sel.size} onClick={bulkEdit}>
-              <PencilSimple size={14} /> مقدار
-            </button>
-            <button className="cc-bulkbtn" disabled={!sel.size} onClick={bulkType}>
-              <ArrowsClockwise size={14} /> نوع
-            </button>
-            <button className="cc-bulkbtn green" disabled={!sel.size} onClick={() => bulk('fav')}>
-              <Star size={14} /> منتخب
-            </button>
-          </div>
-        )}
-        <SearchInput placeholder="جستجوی رکوردها" value={recQ} onChange={setRecQ} />
-        {types.length > 1 && (
-          <div className="cc-chips" role="group" aria-label="فیلتر نوع رکورد">
-            {['all', ...types].map((t) => (
-              <button
-                key={t}
-                className={'cc-chip' + (recType === t ? ' on' : '')}
-                aria-pressed={recType === t}
-                onClick={() => setRecType(t)}
-              >
-                {t === 'all' ? 'همه' : t}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="cc-section">
-          {num(list.length)} رکورد{sel.size > 0 ? ' · ' + faNum(sel.size) + ' انتخاب' : ''}
-        </div>
-        {records.length === 0 && busy > 0 && <SkeletonList />}
-        {list.length === 0 && !busy && !err && <Empty title="رکوردی نیست" />}
-        {favList.length > 0 && <div className="cc-section cc-section-fav">ستاره‌دار</div>}
-        {favList.map(recordRow)}
-        {favList.length > 0 && rest.length > 0 && <div className="cc-section">بقیه رکوردها</div>}
-        {rest.map(recordRow)}
-      </>
+      <RecordsTab
+        view={view}
+        zone={zone ?? undefined}
+        records={records}
+        busy={busy}
+        err={err}
+        recQ={recQ}
+        setRecQ={setRecQ}
+        recType={recType}
+        setRecType={setRecType}
+        sel={sel}
+        setSel={setSel}
+        selMode={selMode}
+        setSelMode={setSelMode}
+        setDlg={setDlg}
+        showAudit={showAudit}
+        confirmBulkDelete={confirmBulkDelete}
+        bulkEdit={bulkEdit}
+        bulkType={bulkType}
+        bulk={bulk}
+        recordRow={recordRow}
+        faNum={faNum}
+        num={num}
+      />
     )
   }
 
