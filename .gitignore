@@ -12,3 +12,7 @@ server/data.db-wal
 server/cg-server
 server/*.log
 server/.env
+
+# playwright
+webui-src/test-results/
+webui-src/playwright-report/
