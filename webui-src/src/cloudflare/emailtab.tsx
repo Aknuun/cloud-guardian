@@ -44,7 +44,7 @@ export function EmailTab({ view, email, num, setDlg, post, openCatchAll }: {
                 desc: 'ایمیل روی این دامنه فعال شود؟',
                 okText: 'فعال کن',
                 onOk: async () => {
-                  if (!!view.zid!) await post('/api/cf/email', { op: 'enable', acc: view.acc!, zid: view.zid! })
+                  if (view.zid!) await post('/api/cf/email', { op: 'enable', acc: view.acc!, zid: view.zid! })
                 },
               })
             }
@@ -78,7 +78,7 @@ export function EmailTab({ view, email, num, setDlg, post, openCatchAll }: {
                   danger: true,
                   okText: 'حذف',
                   onOk: async () => {
-                    if (!!view.zid!) await post('/api/cf/email', { op: 'del', acc: view.acc!, zid: view.zid!, rid: r.id })
+                    if (view.zid!) await post('/api/cf/email', { op: 'del', acc: view.acc!, zid: view.zid!, rid: r.id })
                   },
                 })
               }
@@ -115,7 +115,7 @@ export function EmailTab({ view, email, num, setDlg, post, openCatchAll }: {
               ],
               okText: 'ساختن',
               onSubmit: async (v: any) => {
-                if (!!view.zid!)
+                if (view.zid!)
                   await post('/api/cf/email', { op: 'add', acc: view.acc!, zid: view.zid!, addr: v.addr, dest: v.dest })
               },
             })
@@ -164,7 +164,7 @@ export function EmailTab({ view, email, num, setDlg, post, openCatchAll }: {
               ],
               okText: 'افزودن',
               onSubmit: async (v: any) => {
-                if (!!view.zid!)
+                if (view.zid!)
                   await post('/api/cf/email', { op: 'dest_add', acc: view.acc!, zid: view.zid!, dest: v.dest })
               },
             })

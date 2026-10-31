@@ -1,4 +1,4 @@
-import * as React from 'react'
+import type * as React from 'react'
 import { cn } from './utils'
 
 export function LayerCard({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

@@ -108,7 +108,9 @@ function planGroups(types: OptType[]): PlanGroup[] {
   const used = new Set<string>()
   for (const d of defs) {
     const items = types.filter((t) => !used.has(t.id) && d.test(t))
-    items.forEach((t) => used.add(t.id))
+    items.forEach((t) => {
+      used.add(t.id)
+    })
     if (items.length) out.push({ id: d.id, title: d.title, items })
   }
   const rest = types.filter((t) => !used.has(t.id))

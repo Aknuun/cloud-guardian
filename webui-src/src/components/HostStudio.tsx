@@ -239,7 +239,7 @@ export function HostStudio() {
       {data && tab === 'tpl' && (
         <>
           <div className="cc-hsbar">
-            <Button variant="primary" icon={Plus} onClick={() => setEdit(blankTpl(panel, data))}>قالب جدید</Button>
+            <Button variant="primary" icon={Plus} onClick={() => setEdit(blankTpl(data))}>قالب جدید</Button>
             <Button variant="outline" icon={Download} onClick={exportTpls}>خروجی</Button>
             <label className="cc-filebtn">
               <Upload size={16} /> ورود قالب
@@ -503,7 +503,7 @@ export function HostStudio() {
   )
 }
 
-function blankTpl(panel: number, d: Data): Tpl {
+function blankTpl(d: Data): Tpl {
   const base = d.templates.find((t) => t.is_default) || d.templates[0]
   return {
     id: '',
@@ -523,7 +523,6 @@ function blankTpl(panel: number, d: Data): Tpl {
     host_overrides: {},
     version: 1,
   }
-  void panel
 }
 
 function TplEditor({
