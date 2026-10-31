@@ -30,6 +30,7 @@ func (r *Router) WebApp() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/auth", r.webAuthAPI)
 	mux.HandleFunc("/api/login/start", r.webLoginStart)
+	mux.HandleFunc("/copy", r.copyPage)
 	mux.HandleFunc("/api/login/state", r.webLoginState)
 	mux.HandleFunc("/api/login/ticket", r.webLoginTicket)
 	mux.HandleFunc("/api/me", r.webAuthed(r.webMe))

@@ -59,6 +59,9 @@ func main() {
 	r.CFToken = cfg.CFToken
 	r.BotToken = cfg.BotToken
 	r.WebAppURL = withVersion(getenv("CG_WEBAPP_URL", ""), router.Version)
+	if u, err := url.Parse(r.WebAppURL); err == nil && u.Host != "" {
+		alerts.CopyBase = u.Scheme + "://" + u.Host
+	}
 	// the bot stays command/menu-first: no mini app button next to the input
 	bot.SetChatMenuButton(true)
 	// older builds set a per-chat mini-app button for the admin; clear it too

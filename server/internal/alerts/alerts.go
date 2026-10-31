@@ -3,6 +3,7 @@ package alerts
 
 import (
 	"math"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -381,6 +382,10 @@ func renewKB(panel pg.Panel, username string) [][]tg.Button {
 	return [][]tg.Button{row}
 }
 
+// CopyBase is the public origin that serves /copy (the username handout page).
+// Set once at startup from the mini app URL.
+var CopyBase string
+
 func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]tg.Button {
 	kb := renewKB(panel, username)
 	u := strings.TrimLeft(strings.TrimSpace(renewBot), "@")
@@ -390,9 +395,12 @@ func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]
 	}
 	if u != "" {
 		link := "https://t.me/" + u
-		// A third-party renew bot usually ignores ?start payloads, so open it
-		// plainly: the username above is one tap away from being copied.
-		if username != "" && !custom {
+		switch {
+		case custom && username != "" && CopyBase != "":
+			// Telegram cannot prefill another bot's chat, so hand off through a page
+			// that copies the username before opening the renew bot.
+			link = CopyBase + "/copy?u=" + url.QueryEscape(trunc(username, 80)) + "&b=" + url.QueryEscape(u)
+		case !custom && username != "":
 			link += "?start=renew_" + trunc(username, 60)
 		}
 		kb = append(kb, []tg.Button{{Text: "🤖 تمدید از ربات", URL: link}})
@@ -721,7 +729,7 @@ func userText(panel pg.Panel, items []map[string]any, renewBot string) string {
 		}
 	}
 	if strings.TrimSpace(renewBot) != "" {
-		lines = append(lines, "", "برای تمدید: یوزرنیم بالا را لمس کن تا کپی شود، بعد در ربات تمدید بفرست.")
+		lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزن؛ یوزرنیم خودکار کپی می‌شود و فقط باید در ربات بفرستی.")
 	} else {
 		lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزنید.")
 	}
