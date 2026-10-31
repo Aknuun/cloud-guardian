@@ -18,6 +18,13 @@ const inflight = new Map<string, Promise<unknown>>()
 export function invalidateCache() {
   cache.clear()
   inflight.clear()
+  lastHit = 0
+}
+
+// When data on screen came from the short cache, UIs can say how old it is.
+let lastHit = 0
+export function cacheHitAge(): number {
+  return lastHit ? Date.now() - lastHit : 0
 }
 
 export class ApiError extends Error {}
@@ -26,7 +33,10 @@ export async function api<T = any>(path: string, body?: any, signal?: AbortSigna
   const isGet = body === undefined
   if (isGet) {
     const hit = cache.get(path)
-    if (hit && Date.now() - hit.t < CACHE_TTL) return hit.v as T
+    if (hit && Date.now() - hit.t < CACHE_TTL) {
+      lastHit = hit.t
+      return hit.v as T
+    }
     const running = inflight.get(path)
     if (running && !signal) return running as Promise<T>
   } else {

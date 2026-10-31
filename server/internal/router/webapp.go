@@ -47,6 +47,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/cf/zones", r.webAuthed(r.webCfZones))
 	mux.HandleFunc("/api/cf/records", r.webAuthed(r.webCfRecords))
 	mux.HandleFunc("/api/cf/record", r.webAuthed(r.webCfRecordOp))
+	mux.HandleFunc("/api/cf/audit", r.webAuthed(r.webCfAudit))
 	mux.HandleFunc("/api/cf/bulk", r.webAuthed(r.webCfBulk))
 	mux.HandleFunc("/api/cf/resolve", r.webAuthed(r.webCfResolve))
 	mux.HandleFunc("/api/tools/cfcheck", r.webAuthed(r.webToolsCfCheck))
@@ -321,6 +322,10 @@ func (r *Router) webAuthed(fn webHandler) http.HandlerFunc {
 		}
 		if !r.isAdmin(uid) {
 			webErr(w, http.StatusForbidden, "دسترسی ادمین لازم است")
+			return
+		}
+		if !webRateAllow(uid) {
+			webErr(w, http.StatusTooManyRequests, "درخواست‌های زیادی در یک دقیقه؛ چند لحظه صبر کن")
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")

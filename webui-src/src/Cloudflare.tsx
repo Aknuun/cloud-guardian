@@ -365,7 +365,11 @@ export default function Cloudflare({
   }, [view, q, rev])
 
 
+  const inFlight = useRef(new Set<string>())
   async function post(path: string, body: any, keep = false, opts: { refresh?: boolean } = {}) {
+    const key = path + '|' + JSON.stringify(body)
+    if (inFlight.current.has(key)) return null
+    inFlight.current.add(key)
     bump(1)
     try {
       const d = await api<any>(path, body)
@@ -377,6 +381,7 @@ export default function Cloudflare({
       toast(e.message || 'خطا', true)
       return null
     } finally {
+      inFlight.current.delete(key)
       bump(-1)
     }
   }
@@ -1092,6 +1097,21 @@ ${reason}`,
     )
   }
 
+  async function showAudit(acc: number, zid: string) {
+    bump(1)
+    try {
+      const d = await api<{ items: { ts: number; op: string; detail: string }[] }>(
+        '/api/cf/audit?zid=' + encodeURIComponent(zid),
+      )
+      const rows = (d.items || []).map((e) => ({ title: e.op, sub: faDate(e.ts) + ' · ' + e.detail }))
+      setDlg({ k: 'list', title: 'تاریخچهٔ تغییرات', rows: rows.length ? rows : [{ title: 'خالی', sub: 'هنوز تغییر مخربی ثبت نشده' }] })
+    } catch (e: any) {
+      toast(e.message || 'خطا', true)
+    } finally {
+      bump(-1)
+    }
+  }
+
   function recordsTab() {
     if (view.v !== 'zone') return null
     const ql = recQ.trim().toLowerCase()
@@ -1111,7 +1131,7 @@ ${reason}`,
     }
     return (
       <>
-        <div className="cc-grid2 cc-mb">
+        <div className="cc-grid3 cc-mb">
           <Button
             variant="primary"
             icon={Plus}
@@ -1128,6 +1148,9 @@ ${reason}`,
             }}
           >
             {selMode ? 'پایان' : 'انتخاب گروهی'}
+          </Button>
+          <Button variant="outline" icon={Clock} onClick={() => void showAudit(view.acc, view.zid)}>
+            تاریخچه
           </Button>
         </div>
         {selMode && (

@@ -20,11 +20,21 @@ func (e *Error) Error() string { return e.Msg }
 type Client struct {
 	token string
 	hc    *http.Client
+	base  string
 }
 
 func New(token string) *Client {
-	return &Client{token: token, hc: &http.Client{Timeout: 25 * time.Second}}
+	return &Client{token: token, hc: &http.Client{Timeout: 25 * time.Second}, base: api}
 }
+
+// NewAt is New with a custom API base; used by tests.
+func NewAt(base, token string) *Client {
+	c := New(token)
+	c.base = strings.TrimRight(base, "/")
+	return c
+}
+
+const rateLimitMsg = "محدودیت کلادفلر؛ چند ثانیه بعد دوباره تلاش کن"
 
 // Account is a stored Cloudflare credential entry.
 type Account struct {
@@ -33,46 +43,68 @@ type Account struct {
 }
 
 func req(c *Client, method, path string, body any, out any) error {
-	var rd io.Reader
+	var payload []byte
 	if body != nil {
-		b, _ := json.Marshal(body)
-		rd = bytes.NewReader(b)
+		payload, _ = json.Marshal(body)
 	}
-	r, err := http.NewRequest(method, api+path, rd)
-	if err != nil {
-		return &Error{err.Error()}
-	}
-	r.Header.Set("Authorization", "Bearer "+c.token)
-	r.Header.Set("Content-Type", "application/json")
-	resp, err := c.hc.Do(r)
-	if err != nil {
-		return &Error{trunc(err.Error(), 200)}
-	}
-	defer resp.Body.Close()
-	var envelope struct {
-		Success bool `json:"success"`
-		Errors  []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-		Result json.RawMessage `json:"result"`
-	}
-	b, _ := io.ReadAll(resp.Body)
-	if err := json.Unmarshal(b, &envelope); err != nil {
-		return &Error{trunc(err.Error(), 200)}
-	}
-	if !envelope.Success {
-		msg := "cloudflare error"
-		if len(envelope.Errors) > 0 && envelope.Errors[0].Message != "" {
-			msg = envelope.Errors[0].Message
+	var last error
+	for attempt := 0; attempt < 3; attempt++ {
+		var rd io.Reader
+		if payload != nil {
+			rd = bytes.NewReader(payload)
 		}
-		return &Error{trunc(msg, 200)}
-	}
-	if out != nil && len(envelope.Result) > 0 {
-		if err := json.Unmarshal(envelope.Result, out); err != nil {
+		r, err := http.NewRequest(method, c.base+path, rd)
+		if err != nil {
+			return &Error{err.Error()}
+		}
+		r.Header.Set("Authorization", "Bearer "+c.token)
+		r.Header.Set("Content-Type", "application/json")
+		resp, err := c.hc.Do(r)
+		if err != nil {
+			last = &Error{trunc(err.Error(), 200)}
+			if attempt < 2 {
+				time.Sleep(time.Duration(attempt+1) * 400 * time.Millisecond)
+				continue
+			}
+			return last
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		// 429 means the request was rejected before running, so retrying is safe.
+		// 5xx is only retried for reads: a write may already have been applied.
+		if resp.StatusCode == 429 || (method == http.MethodGet && resp.StatusCode >= 500) {
+			last = &Error{rateLimitMsg}
+			if attempt < 2 {
+				time.Sleep(time.Duration(attempt+1) * 400 * time.Millisecond)
+				continue
+			}
+			return last
+		}
+		var envelope struct {
+			Success bool `json:"success"`
+			Errors  []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
 			return &Error{trunc(err.Error(), 200)}
 		}
+		if !envelope.Success {
+			msg := "cloudflare error"
+			if len(envelope.Errors) > 0 && envelope.Errors[0].Message != "" {
+				msg = envelope.Errors[0].Message
+			}
+			return &Error{trunc(msg, 200)}
+		}
+		if out != nil && len(envelope.Result) > 0 {
+			if err := json.Unmarshal(envelope.Result, out); err != nil {
+				return &Error{trunc(err.Error(), 200)}
+			}
+		}
+		return nil
 	}
-	return nil
+	return last
 }
 
 type Zone struct {

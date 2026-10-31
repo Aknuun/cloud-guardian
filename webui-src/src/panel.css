@@ -2249,3 +2249,6 @@ body .cc-menu-item {
   border-radius: 10px;
   font-size: 14px;
 }
+.cc-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.cc-grid3 > button { min-width: 0 }
+@media (max-width: 420px) { .cc-grid3 { grid-template-columns: 1fr 1fr } }

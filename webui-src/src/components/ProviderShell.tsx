@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { ArrowClockwise, CheckCircle, List, WarningCircle } from '@phosphor-icons/react'
 import { AppVersion } from './AppVersion'
-import { invalidateCache } from '../lib'
+import { cacheHitAge, invalidateCache } from '../lib'
 import { LogoutButton } from './LogoutButton'
 import { useSectionTheme } from './sectionTheme'
 import { Button } from './ui'
@@ -76,6 +76,7 @@ export function ProviderShell({
             shape="square"
             icon={ArrowClockwise}
             aria-label="بروزرسانی"
+            title={cacheHitAge() ? 'بروزرسانی — داده‌ها ' + Math.round(cacheHitAge() / 1000) + ' ثانیه پیش خوانده شدند' : 'بروزرسانی'}
             onClick={() => {
               invalidateCache()
               onRefresh()

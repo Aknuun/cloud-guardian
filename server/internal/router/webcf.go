@@ -432,10 +432,16 @@ func (r *Router) webCfRecordOp(w http.ResponseWriter, req *http.Request, uid int
 		}
 		msg = "رکورد ویرایش شد"
 	case "del":
+		gone := r.cfFind(in.Acc, in.Zid, in.Rid)
 		if err := cli.DelRecord(in.Zid, in.Rid); err != nil {
 			webErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
+		label := in.Rid
+		if gone != nil {
+			label = gone.Type + " " + gone.Name
+		}
+		r.cfAuditAdd(uid, in.Acc, in.Zid, "", "حذف رکورد", label)
 		r.webCfSaveFav(in.Acc, in.Zid, in.Rid, "", false)
 		msg = "رکورد حذف شد"
 	case "proxy":
@@ -616,6 +622,9 @@ func (r *Router) webCfBulk(w http.ResponseWriter, req *http.Request, uid int64) 
 			okN++
 		}
 	}
+	if in.Op == "del" && okN > 0 {
+		r.cfAuditAdd(uid, in.Acc, zid, zname, "حذف گروهی", fmt.Sprintf("%d رکورد", okN))
+	}
 	msg := fmt.Sprintf("%d مورد انجام شد", okN)
 	if fail > 0 {
 		msg += fmt.Sprintf(" · %d ناموفق", fail)
@@ -693,6 +702,7 @@ func (r *Router) webCfSettings(w http.ResponseWriter, req *http.Request, uid int
 				webErr(w, http.StatusBadGateway, err.Error())
 				return
 			}
+			r.cfAuditAdd(uid, in.Acc, in.Zid, "", "پاک‌کردن کش", "همهٔ کش دامنه")
 			msg = "کل کش دامنه پاک شد"
 		case "pause":
 			z, err := cli.Zone(in.Zid)
@@ -706,6 +716,7 @@ func (r *Router) webCfSettings(w http.ResponseWriter, req *http.Request, uid int
 				return
 			}
 			if active {
+				r.cfAuditAdd(uid, in.Acc, in.Zid, "", "توقف دامنه", "کل دامنه متوقف شد")
 				msg = "دامنه متوقف شد"
 			} else {
 				msg = "دامنه فعال شد"
