@@ -2120,3 +2120,51 @@ button.cc-zonehead.closed .cc-zonecaret { transform: rotate(-90deg) }
   animation: cc-item-fade 0.18s linear both !important;
   will-change: opacity, transform;
 }
+
+/* --- smooth, purposeful motion (opacity/transform only) --- */
+@keyframes cc-rise { from { opacity: 0; transform: translate3d(0, 6px, 0) } to { opacity: 1; transform: none } }
+@keyframes cc-fadein { from { opacity: 0 } to { opacity: 1 } }
+@keyframes cc-menuin { from { opacity: 0; transform: translate3d(0, -6px, 0) } to { opacity: 1; transform: none } }
+
+/* rows and cards ease in where they mount */
+body .cc-trow,
+body .cc-row,
+body .cc-card,
+body .cc-hrow,
+body .cc-stat,
+body .cc-bulkbar,
+body .cc-errbox {
+  animation: cc-rise 0.18s cubic-bezier(0.22, 0.61, 0.36, 1) both !important;
+}
+
+/* dialogs only fade: their centering relies on the translate() transform */
+body .cc-dialog { animation: cc-fadein 0.14s linear both !important }
+body .cc-menu { animation: cc-menuin 0.14s cubic-bezier(0.22, 0.61, 0.36, 1) both !important }
+
+/* hover/press feedback stays inside the palette */
+body button,
+body .cc-trow,
+body .cc-row,
+body .cc-sideitem,
+body .cc-menu-item {
+  transition: background-color 0.12s linear, border-color 0.12s linear, color 0.12s linear, opacity 0.12s linear !important;
+}
+
+.cc-menu-sep { height: 1px; margin: 4px 6px; background: var(--ds-line) }
+
+@media (prefers-reduced-motion: reduce) {
+  body .cc-trow,
+  body .cc-row,
+  body .cc-card,
+  body .cc-hrow,
+  body .cc-stat,
+  body .cc-bulkbar,
+  body .cc-errbox,
+  body .cc-dialog,
+  body .cc-menu { animation: none !important }
+  body button,
+  body .cc-trow,
+  body .cc-row,
+  body .cc-sideitem,
+  body .cc-menu-item { transition: none !important }
+}
