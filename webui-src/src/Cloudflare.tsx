@@ -29,7 +29,7 @@ import {
   UsersThree,
   X,
 } from '@phosphor-icons/react'
-import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
+import { api, checkRecord, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 import { CopyBtn } from './components/CopyBtn'
 import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
 import {
@@ -91,6 +91,7 @@ export default function Cloudflare({
 
   const [zone, setZone] = useState<ZoneInfo | null>(null)
   const [records, setRecords] = useState<CFRec[]>([])
+  const bulkWarn = useRef('')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [selMode, setSelMode] = useState(false)
 
@@ -521,7 +522,22 @@ export default function Cloudflare({
       desc: 'مقدار جدید برای همهٔ رکوردهای انتخاب‌شده اعمال می‌شود.',
       fields: [{ key: 'content', label: 'مقدار جدید', placeholder: '1.2.3.4 یا host.example.com' }],
       okText: 'اعمال',
-      onSubmit: (v) => bulk('edit', { content: v.content }),
+      onSubmit: async (v) => {
+        const types = [...new Set(records.filter((r) => sel.has(r.id)).map((r) => r.type))]
+        const key = v.content.trim()
+        if (bulkWarn.current !== key) {
+          for (const t of types) {
+            const chk = await checkRecord(t, key)
+            if (!chk.ok) {
+              bulkWarn.current = key
+              haptic('error')
+              toast(chk.message + ' — اگر مطمئنی، دوباره بزن تا اعمال شود.', true)
+              return
+            }
+          }
+        }
+        await bulk('edit', { content: v.content })
+      },
     })
   }
   function bulkType() {

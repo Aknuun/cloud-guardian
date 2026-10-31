@@ -23,7 +23,7 @@ import { ProviderShell } from './components/ProviderShell'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider, SubItem } from './components/Sidebar'
 import type { ToolId } from './components/toolsMeta'
-import { api, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
+import { api, checkRecord, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 
 type Account = { i: number; name: string; domains?: number; servers?: number }
 type Domain = { id: string; name: string; domain: string; status: string }
@@ -116,6 +116,7 @@ export default function Arvan({
   const optsCache = useRef<Record<string, Options>>({})
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const scrollPos = useRef<Record<string, number>>({})
+  const lastWarn = useRef('')
 
   const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
   const [accBusy, setAccBusy] = useState(false)
@@ -345,6 +346,15 @@ export default function Arvan({
         if (v.ttl && (!Number.isFinite(ttl) || ttl < 0)) {
           toast('TTL معتبر نیست', true)
           return
+        }
+        const warnKey = v.type + '|' + v.value
+        if (lastWarn.current !== warnKey) {
+          const chk = await checkRecord(v.type, v.value)
+          if (!chk.ok) {
+            lastWarn.current = warnKey
+            toast((chk.message || 'مقدار معتبر نیست') + ' — اگر مطمئنی، دوباره بزن تا ذخیره شود.', true)
+            return
+          }
         }
         bump(1)
         try {

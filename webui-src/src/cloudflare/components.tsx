@@ -16,7 +16,7 @@ import {
   X,
   ArrowClockwise,
 } from '@phosphor-icons/react'
-import { haptic } from '../lib'
+import { checkRecord, haptic } from '../lib'
 import { CopyBtn } from '../components/CopyBtn'
 import type { Dlg, Field, RefNode } from './model'
 import { isHost, isIPv4, isIPv6, PROXYABLE, relName, TTL_STEPS, ttlLabel, TYPES, validateRecord } from './model'
@@ -565,6 +565,7 @@ export function ConvertRecordDialog({
   const [value, setValue] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [warn, setWarn] = useState(false)
   const picked = dlg.candidates.some((c) => c.name === value) ? value : ''
 
   async function submit() {
@@ -583,6 +584,17 @@ export function ConvertRecordDialog({
       setErr('برای تبدیل به CNAME باید یک دامنهٔ معتبر وارد کنی.')
       haptic('error')
       return
+    }
+    if (!warn) {
+      setBusy(true)
+      const chk = await checkRecord(dlg.next, v)
+      setBusy(false)
+      if (!chk.ok) {
+        setWarn(true)
+        setErr((chk.message || 'مقدار معتبر نیست') + ' — اگر مطمئنی، دوباره بزن تا ذخیره شود.')
+        haptic('error')
+        return
+      }
     }
     setErr('')
     setBusy(true)

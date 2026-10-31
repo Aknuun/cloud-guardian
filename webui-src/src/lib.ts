@@ -128,3 +128,21 @@ export function faDate(v: any) {
     return d.toLocaleDateString('fa-IR')
   }
 }
+
+// DNS/IP sanity check used before saving a record anywhere in the panel.
+export async function checkRecord(
+  type: string,
+  value: string,
+): Promise<{ ok: boolean; message: string }> {
+  const t = (type || '').toUpperCase().trim()
+  const v = (value || '').trim()
+  if (!v || ['TXT', 'SRV', 'CAA', 'PTR'].includes(t)) return { ok: true, message: '' }
+  try {
+    const d = await api<{ ok: boolean; message: string }>(
+      `/api/cf/resolve?type=${encodeURIComponent(t)}&name=${encodeURIComponent(v)}&t=${Date.now()}`,
+    )
+    return { ok: d.ok !== false, message: d.message || '' }
+  } catch {
+    return { ok: true, message: '' }
+  }
+}
