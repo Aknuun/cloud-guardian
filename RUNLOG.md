@@ -26,3 +26,8 @@
 - **رفع:** هلپر `every(name, d, fn)` ساخته شد (goroutine مستقل + `defer recover` + لاگ `loop <name> panic`)، و هر کار با دورهٔ خودش جدا شد: دقیقه‌ای (quota/alerts/um/ndmon/srvmon)، cf-health ۱م، hfd ۱م، hub ۵م، digest ۱ساعت/۲۴ساعت، ssl ۶ساعت، domexp ۲۴ساعت، purge ۱ساعت، sync ۱۰م، telemetry ۶ساعت، snapshot ۲۴ساعت، backup-push ۳۰م. (`hostfilterLoop` از قبل جدا بود.)
 - **تست:** `TestEverySurvivesPanic` (بعد از panic، حلقه ادامه می‌دهد).
 - **فایل‌ها:** `server/cmd/cg-server/main.go`, `main_test.go`
+
+## 4.73.6 — شروع نرم زمان‌بندها (بدون انفجار پیام در بوت)
+- **مشکل:** با جدا شدن حلقه‌ها، همه در لحظهٔ بوت یک‌بار اجرا می‌شدند و بک‌لاگ هشدارهای بافر‌شده یک‌جا ارسال شد (لاگ: `tg error: sendMessage Bad Request: chat not found` ×۱۲).
+- **رفع:** `every` قبل از اولین اجرا به اندازهٔ دوره (حداکثر ۱ دقیقه) صبر می‌کند.
+- **باز (ثبت‌شده):** یکی از شناسه‌های ادمین در لیست، چتی در ربات ندارد و ارسال به آن همیشه `chat not found` می‌دهد؛ نیاز به حذف آن ادمین یا `/start` از سمت او. (بدون تغییر داده انجام نشد.)

@@ -231,6 +231,13 @@ func reminderLoop(r *router.Router) {
 // others (a hung SSH/panel call used to hold up the daily backup).
 func every(name string, d time.Duration, fn func()) {
 	go func() {
+		// First run is delayed by the cadence (capped at a minute) so a restart
+		// does not fire every loop at once.
+		first := d
+		if first > time.Minute {
+			first = time.Minute
+		}
+		time.Sleep(first)
 		for {
 			func() {
 				defer func() {
