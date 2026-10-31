@@ -8,6 +8,8 @@ import {
   Clock,
   Pulse,
   Gear,
+  Hash,
+  ShieldCheck,
   Info,
   Link as LinkIcon,
   PencilSimple,
@@ -474,6 +476,16 @@ export function RecordSheet({
             onClick={onType}
           />
         )}
+        {PROXYABLE.includes(r.type) && (
+          <RecRow
+            icon={<ShieldCheck size={17} />}
+            title="پروکسی کلادفلر"
+            sub={r.proxied ? 'روشن — ترافیک از کلادفلر عبور می‌کند' : 'خاموش — اتصال مستقیم'}
+            onClick={onProxy}
+          />
+        )}
+        {onTTL && <RecRow icon={<Clock size={17} />} title="TTL و کش" sub={ttlLabel(r.ttl) + ' — برای تغییر بزن'} onClick={onTTL} />}
+        <RecRow icon={<Hash size={17} />} title="شناسهٔ رکورد" sub={r.id} onClick={() => onCopy(r.id, 'شناسهٔ رکورد کپی شد')} />
         {onTraffic && (
           <RecRow icon={<ChartBar size={17} />} title="ترافیک امروز" sub="درخواست‌های DNS این رکورد" onClick={onTraffic} />
         )}
