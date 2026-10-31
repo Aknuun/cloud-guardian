@@ -458,15 +458,6 @@ export function RecordSheet({
         </Button>
       </div>
 
-      <div className="cc-kvbox cc-rec-details">
-        {PROXYABLE.includes(r.type) && (
-          <div className="cc-kv">
-            <span>پروکسی کلادفلر</span>
-            <Switch checked={r.proxied} onCheckedChange={onProxy} aria-label="پروکسی کلادفلر" />
-          </div>
-        )}
-      </div>
-
       <div className="cc-section">مدیریت رکورد</div>
       <div className="cc-rec-group">
         <RecRow
