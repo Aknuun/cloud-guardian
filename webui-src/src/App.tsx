@@ -40,6 +40,8 @@ import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
 import { AccountsView, ServersView } from './components/HetznerViews'
 import { ServerDetail } from './components/HetznerServerView'
+import { IpsView } from './components/HetznerIpsView'
+import { CreateView } from './components/HetznerCreateView'
 import type { Account, CleanIP, OptType, Options, Server, Traffic } from './components/hetzner/types'
 import { badgeVariant, locFa, STATUS } from './components/hetzner/ui'
 import { AppSkeleton, ModalHost } from './components/AppDialogs'
@@ -804,250 +806,34 @@ export default function App() {
 
     if (cur.v === 'ips') {
       return (
-        <>
-          <div className="cc-btnrow cc-mb">
-            <Button variant="primary" icon={Plus} onClick={() => void openIpAdd()} disabled={ipBusy}>
-              افزودن آی‌پی
-            </Button>
-            <Button variant="outline" icon={ArrowRight} onClick={() => setCur({ v: 'servers', acc: cur.acc })}>
-              سرورها
-            </Button>
-            <Button variant="secondary" icon={ArrowClockwise} onClick={() => setCur((c) => ({ ...c }))}>
-              بروزرسانی
-            </Button>
-          </div>
-          {ipForm && (
-            <Dialog.Root open onOpenChange={(o: boolean) => !o && setIpForm(null)}>
-              <Dialog className="cc-dialog" size="base">
-                <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
-                <Dialog.Title className="cc-dialog-title">افزودن آی‌پی تمیز</Dialog.Title>
-                <Dialog.Description className="cc-dialog-desc">
-                  آی‌پی IPv4 تازه در حساب هتزنر ساخته می‌شود؛ بعد از ساخت می‌توانی وضعیت تمیزی‌اش را بررسی کنی.
-                </Dialog.Description>
-                <label className="cc-field">
-                  <span>لوکیشن</span>
-                  <select
-                    className="cc-input"
-                    value={ipForm.loc}
-                    onChange={(e) => setIpForm({ ...ipForm, loc: e.target.value })}
-                  >
-                    {ipForm.locs.map((l) => (
-                      <option key={l.name} value={l.name}>
-                        {locFa(l.name, l.city, l.country)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="cc-field">
-                  <span>تعداد</span>
-                  <input
-                    className="cc-input"
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={ipForm.count}
-                    onChange={(e) => setIpForm({ ...ipForm, count: Math.max(1, Math.min(10, Number(e.target.value) || 1)) })}
-                  />
-                </label>
-                <div className="cc-dialog-actions">
-                  <Button variant="secondary" onClick={() => setIpForm(null)}>
-                    انصراف
-                  </Button>
-                  <Button variant="primary" onClick={() => void submitIpAdd()} disabled={ipBusy}>
-                    بساز
-                  </Button>
-                </div>
-              </Dialog>
-            </Dialog.Root>
-          )}
-          {ips.length === 0 && busy > 0 && <AppSkeleton />}
-          {ips.length === 0 && busy === 0 && <Empty title="آی‌پی‌ای در استخر نیست" />}
-          {ips.map((p) => {
-            const c = p.check
-            const badge = !c ? (
-              <Badge variant="secondary">بررسی نشده</Badge>
-            ) : c.clean ? (
-              <Badge variant="success">تمیز</Badge>
-            ) : c.listed && c.listed.length ? (
-              <Badge variant="error">لیست‌شده</Badge>
-            ) : (
-              <Badge variant="warning">نامشخص</Badge>
-            )
-            const busyIp = !!p.assignee
-            return (
-              <LayerCard key={p.id} className="cc-card cc-row">
-                <div className="cc-grow">
-                  <div className="cc-name cc-mono cc-copyline">
-                    <span>{p.ip}</span>
-                    <CopyBtn value={p.ip} onCopy={copy} label="کپی آی‌پی" />
-                  </div>
-                  <div className="cc-sub">
-                    {p.loc || ''}
-                    {busyIp ? ' · ' + p.assignee : ' · آزاد'}
-                    {c && c.listed && c.listed.length ? ' · ' + c.listed.slice(0, 2).join(', ') : ''}
-                  </div>
-                </div>
-                {badge}
-                <div className="cc-row-actions">
-                  {!busyIp && (
-                    <Button variant="outline" size="sm" onClick={() => void ipFreeFlow(p.id)}>
-                      اتصال
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary-destructive"
-                    size="sm"
-                    icon={Trash}
-                    aria-label="حذف آی‌پی"
-                    onClick={() =>
-                      runAction('ip_delete', {
-                        id: String(p.id),
-                        ipId: p.id,
-                        confirm: true,
-                        title: 'حذف آی‌پی',
-                        desc: busyIp
-                          ? `آی‌پی «${p.ip}» به «${p.assignee}» وصل است. اول جدا می‌شود، بعد حذف — ادامه؟`
-                          : `آی‌پی «${p.ip}» از حساب هتزنر حذف شود؟ این عمل بازگشت‌پذیر نیست.`,
-                      })
-                    }
-                  />
-                </div>
-              </LayerCard>
-            )
-          })}
-        </>
+        <IpsView
+          ips={ips}
+          busy={busy}
+          ipBusy={ipBusy}
+          ipForm={ipForm}
+          setIpForm={setIpForm}
+          submitIpAdd={submitIpAdd}
+          openIpAdd={openIpAdd}
+          ipFreeFlow={ipFreeFlow}
+          runAction={runAction}
+          copy={copy}
+          setCur={setCur}
+          acc={cur.acc}
+        />
       )
     }
 
-    /* create wizard */
-    const c = cur
-    const steps = (
-      <div className="cc-steps">
-        {[1, 2, 3, 4].map((n) => (
-          <i key={n} className={c.step >= n ? 'on' : ''} />
-        ))}
-      </div>
-    )
-    if (c.step < 4 && !opts) return <>{steps}<div className="cc-center cc-pad"><Loader /></div></>
-    if (c.step === 1 && opts) {
-      return (
-        <>
-          {steps}
-          <div className="cc-section">لوکیشن</div>
-          {opts.locations.map((l) => (
-            <button key={l.name} className="cc-choice" onClick={() => setCur({ ...c, step: 2, loc: l.name })}>
-              <span className="cc-grow">
-                <span className="cc-name">{locFa(l.name, l.city, l.country)}</span>
-                <span className="cc-sub cc-ltr">{l.name}</span>
-              </span>
-            </button>
-          ))}
-        </>
-      )
-    }
-    if (c.step === 2 && opts) {
-      return (
-        <>
-          {steps}
-          <div className="cc-section">پلن · {locFa(c.loc, '', '')}</div>
-          {opts.types.length === 0 && <Empty title="پلنی برای این لوکیشن نیست" />}
-          {planGroups(opts.types).map((g) => (
-            <div key={g.id} className="cc-plangroup">
-              <div className="cc-plangroup-title">{g.title}</div>
-              {g.items.map((t) => {
-                const custom = () => setCur({ ...c, step: 3, type: t.id, typeName: t.name, arch: t.architecture })
-                return (
-                  <div key={t.id} className="cc-plan">
-                    <button className="cc-choice cc-plan-main" onClick={custom}>
-                      <span className="cc-grow">
-                        <span className="cc-name">{t.name}</span>
-                        <span className="cc-sub">
-                          {t.cores} vCPU · {t.memory} GB · {t.disk} GB
-                        </span>
-                      </span>
-                      <span className="cc-plan-price">
-                        {t.monthly_net ? Number(t.monthly_net).toFixed(2) + ' €' : ''}
-                      </span>
-                    </button>
-                    <div className="cc-plan-acts">
-                      <button
-                        type="button"
-                        className="cc-iconbtn on"
-                        title="ساخت فوری (Ubuntu 24.04)"
-                        aria-label="ساخت فوری"
-                        onClick={() => quickCreate(t)}
-                      >
-                        <Lightning size={16} weight="fill" />
-                      </button>
-                      <button
-                        type="button"
-                        className="cc-iconbtn"
-                        title="ساخت سفارشی"
-                        aria-label="ساخت سفارشی"
-                        onClick={custom}
-                      >
-                        <CaretLeft size={16} weight="bold" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-        </>
-      )
-    }
-    if (c.step === 3 && opts) {
-      return (
-        <>
-          {steps}
-          <div className="cc-section">سیستم‌عامل</div>
-          {opts.images.map((im) => (
-            <button key={im.id} className="cc-choice" onClick={() => setCur({ ...c, step: 4, image: im.id, imageName: im.name })}>
-              <span className="cc-grow">
-                <span className="cc-name">{im.name}</span>
-                <span className="cc-sub">
-                  {im.architecture} · {im.os_flavor || ''}
-                </span>
-              </span>
-            </button>
-          ))}
-        </>
-      )
-    }
     return (
-      <>
-        {steps}
-        <div className="cc-section">نام و تأیید</div>
-        <Input
-          className="cc-input cc-mb"
-          placeholder="نام سرور (مثلاً de-1)"
-          value={createName}
-          maxLength={63}
-          onChange={(e) => setCreateName(e.target.value)}
-        />
-        <LayerCard className="cc-card">
-          <div className="cc-kv">
-            <span>لوکیشن</span>
-            <span>{c.loc}</span>
-          </div>
-          <div className="cc-kv">
-            <span>پلن</span>
-            <span>{c.typeName || c.type}</span>
-          </div>
-          <div className="cc-kv">
-            <span>تصویر</span>
-            <span className="cc-mono">{c.imageName || c.image}</span>
-          </div>
-          <div className="cc-kv">
-            <span>سیستم</span>
-            <span>Ubuntu + رمز روت تصادفی</span>
-          </div>
-        </LayerCard>
-        <Button className="cc-wide cc-submit" variant="primary" icon={Plus} onClick={submitCreate}>
-          ساخت سرور
-        </Button>
-      </>
+      <CreateView
+        cur={cur}
+        opts={opts}
+        setCur={setCur}
+        createName={createName}
+        setCreateName={setCreateName}
+        submitCreate={submitCreate}
+        planGroups={planGroups}
+        quickCreate={quickCreate}
+      />
     )
   }
 
