@@ -396,10 +396,10 @@ func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]
 	if u != "" {
 		link := "https://t.me/" + u
 		switch {
-		case custom && username != "" && CopyBase != "":
-			// Telegram cannot prefill another bot's chat, so hand off through a page
-			// that copies the username before opening the renew bot.
-			link = CopyBase + "/app/copy?u=" + url.QueryEscape(trunc(username, 80)) + "&b=" + url.QueryEscape(u)
+		case custom && username != "":
+			// t.me/<bot>?text=<msg> opens the bot chat with the text already in the
+			// input box, so the user only has to press send.
+			link += "?text=" + url.QueryEscape(trunc(username, 60))
 		case !custom && username != "":
 			link += "?start=renew_" + trunc(username, 60)
 		}
@@ -729,7 +729,7 @@ func userText(panel pg.Panel, items []map[string]any, renewBot string) string {
 		}
 	}
 	if strings.TrimSpace(renewBot) != "" {
-		lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزن؛ یوزرنیم خودکار کپی می‌شود و فقط باید در ربات بفرستی.")
+		lines = append(lines, "", "برای تمدید دکمهٔ «تمدید از ربات» را بزن؛ یوزرنیم از قبل در کادر نوشته شده، فقط ارسال کن.")
 	} else {
 		lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزنید.")
 	}
