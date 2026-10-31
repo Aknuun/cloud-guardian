@@ -38,6 +38,9 @@ import { FilterBar } from './components/FilterBar'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
+import { AccountsView, ServersView } from './components/HetznerViews'
+import type { Account, CleanIP, OptType, Options, Server, Traffic } from './components/hetzner/types'
+import { badgeVariant, locFa, STATUS } from './components/hetzner/ui'
 import { AppSkeleton, ModalHost } from './components/AppDialogs'
 import type { Modal, PickerItem } from './components/AppDialogs'
 
@@ -47,54 +50,6 @@ const Tools = lazy(() => import('./components/Tools').then((m) => ({ default: m.
 
 /* ---------------- types ---------------- */
 
-type Account = { i: number; name: string; count?: number }
-type SrvType = { id: string; name: string; cores: number; memory: number; disk: number; architecture: string }
-type Traffic = { in_gb: number; out_gb: number; total_gb: number; included_gb: number; used_pct: number; extra_gb: number }
-type Snapshot = { id: string; name: string; size_gb: number; created: string; description: string }
-type Server = {
-  id: string
-  name: string
-  status: string
-  ipv4: string
-  ipv6: string
-  locked: boolean
-  created: string
-  type: SrvType
-  location: { name: string; city: string; country: string }
-  image: string
-  traffic: Traffic
-  snapshots?: Snapshot[]
-  prices?: { monthly?: string; hourly?: string }
-}
-type CleanIP = { id: number; ip: string; loc: string; assignee?: string; auto?: boolean; check?: { clean: boolean; listed: string[]; unknown: boolean } }
-type OptLocation = { name: string; city: string; country: string; description: string }
-type OptType = SrvType & {
-  monthly?: string
-  monthly_net?: number
-  category?: string
-  cpu_type?: string
-  storage_type?: string
-  traffic?: number
-}
-type OptImage = { id: string; name: string; architecture: string; os_flavor?: string }
-type Options = { locations: OptLocation[]; types: OptType[]; images: OptImage[] }
-
-
-const LOC_FA: Record<string, string> = {
-  nbg1: 'نورنبرگ، آلمان',
-  fsn1: 'فالکنشتاین، آلمان',
-  hel1: 'هلسینکی، فنلاند',
-  ash: 'اشبرن، آمریکا',
-  hil: 'هیلزبورو، آمریکا',
-  sin: 'سنگاپور',
-  nyc1: 'نیویورک، آمریکا',
-}
-
-function locFa(name: string, city?: string, country?: string) {
-  if (LOC_FA[name]) return LOC_FA[name]
-  if (city && country) return city + '، ' + country
-  return city || country || name
-}
 
 type PlanGroup = { id: string; title: string; items: OptType[] }
 
@@ -141,27 +96,10 @@ type View =
 
 /* ---------------- helpers ---------------- */
 
-const STATUS: Record<string, string> = {
-  running: 'روشن',
-  off: 'خاموش',
-  starting: 'در حال روشن شدن',
-  stopping: 'در حال خاموش شدن',
-  rebuilding: 'ریبیلد',
-  migrating: 'انتقال',
-  deleting: 'در حال حذف',
-  unknown: 'نامشخص',
-}
 
 function addr(s: Server) {
   if (s.ipv4 && s.ipv6) return s.ipv4 + ' / ' + s.ipv6
   return s.ipv4 || s.ipv6 || 'بدون آی‌پی'
-}
-function badgeVariant(st: string): any {
-  if (st === 'running') return 'success'
-  if (st === 'off') return 'neutral'
-  if (st === 'starting' || st === 'migrating' || st === 'rebuilding') return 'warning'
-  if (st === 'unknown' || st === 'deleting') return 'error'
-  return 'secondary'
 }
 /* ---------------- app ---------------- */
 
@@ -806,238 +744,43 @@ export default function App() {
         </div>
       )
     }
-    if (cur.v === 'accounts') {
-      const aq = q.trim().toLowerCase()
-      const list0 = accounts.filter(
-        (a) => (!aq || a.name.toLowerCase().includes(aq)) && (aflt === 'has' ? (a.count || 0) > 0 : aflt === 'none' ? (a.count || 0) === 0 : true),
-      )
-      const known = accounts.some((a) => a.count !== undefined)
-      const totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
-      return (
-        <>
-          <StatGrid
-            items={[
-              { label: 'اکانت‌ها', value: faNum(accounts.length) },
-              { label: 'سرورها', value: known ? faNum(totalServers) : '—', pct: known ? 100 : 0 },
-            ]}
-          />
-          <div className="cc-pagebar">
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => {
-                setAccErr('')
-                setAccForm({ name: '', token: '' })
-              }}
-            >
-              افزودن اکانت
-            </Button>
-          </div>
-          <FilterBar
+    if (cur.v === 'accounts' || cur.v === 'servers') {
+      if (cur.v === 'accounts')
+        return (
+          <AccountsView
+            accounts={accounts}
             q={q}
-            onQ={setQ}
-            placeholder="جستجوی اکانت"
-            filters={[
-              { id: 'all', label: 'همه اکانت‌ها' },
-              { id: 'has', label: 'دارای سرور' },
-              { id: 'none', label: 'بدون سرور' },
-            ]}
-            value={aflt}
-            onValue={setAflt}
-            onRefresh={reload}
+            setQ={setQ}
+            aflt={aflt}
+            setAflt={setAflt}
+            reload={reload}
+            busy={busy}
+            accForm={accForm}
+            setAccForm={setAccForm}
+            accErr={accErr}
+            setAccErr={setAccErr}
+            accDel={accDel}
+            setAccDel={setAccDel}
+            push={push}
+            toast={toast}
+            setServers={setServers}
+            setServersAcc={setServersAcc}
           />
-          {!list0.length && busy > 0 && <AppSkeleton />}
-          {!list0.length && busy === 0 && (
-            <Empty title="اکانتی پیدا نشد" description={aq ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن.'} />
-          )}
-          {list0.map((a) => (
-            <LayerCard
-              key={a.i}
-              className="cc-trow cc-tap"
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                setServers([])
-                setServersAcc(null)
-                push({ v: 'servers', acc: a.i })
-              }}
-            >
-              <span className="cc-avatar">{(a.name || 'C').trim().charAt(0)}</span>
-              <div className="cc-grow">
-                <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
-                <div className="cc-sub">{a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}</div>
-              </div>
-              <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
-              <button
-                type="button"
-                className="cc-rowbtn danger"
-                aria-label={'حذف ' + (a.name || 'اکانت')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setAccDel(a)
-                }}
-              >
-                <Trash size={16} />
-              </button>
-            </LayerCard>
-          ))}
-          <div className="cc-hint cc-center cc-mt">هر اکانت را انتخاب کن تا سرورها و آی‌پی‌ها را ببینی.</div>
-          {accForm && (
-            <FormDialog
-              title="افزودن اکانت هتزنر"
-              sub="توکن API را از کنسول هتزنر بساز (Read & Write)."
-              error={accErr}
-              onClose={() => setAccForm(null)}
-              onSave={async () => {
-                setAccErr('')
-                try {
-                  await api('/api/hz/accounts/add', { name: accForm.name.trim(), token: accForm.token.trim() })
-                  invalidateCache()
-                  setAccForm(null)
-                  reload()
-                } catch (e: any) {
-                  setAccErr(e.message || 'ذخیره ناموفق')
-                }
-              }}
-            >
-              <label className="cc-field">
-                <span>نام اکانت</span>
-                <Input
-                  value={accForm.name}
-                  placeholder="مثلاً main"
-                  onChange={(e: any) => setAccForm({ ...accForm, name: e.target.value })}
-                />
-              </label>
-              <label className="cc-field">
-                <span>توکن API</span>
-                <Input
-                  value={accForm.token}
-                  placeholder="مثل 3f2a…"
-                  autoComplete="off"
-                  onChange={(e: any) => setAccForm({ ...accForm, token: e.target.value })}
-                />
-              </label>
-            </FormDialog>
-          )}
-          {accDel && (
-            <Dialog.Root open onOpenChange={(o: boolean) => !o && setAccDel(null)}>
-              <Dialog className="cc-dialog" size="base">
-                <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
-                <Dialog.Title className="cc-dialog-title">حذف اکانت</Dialog.Title>
-                <Dialog.Description className="cc-dialog-desc">
-                  «{accDel.name}» از لیست حذف می‌شود. سرورهای هتزنر دست‌نخورده می‌مانند.
-                </Dialog.Description>
-                <div className="cc-dialog-actions">
-                  <Button variant="secondary" onClick={() => setAccDel(null)}>
-                    انصراف
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={async () => {
-                      try {
-                        await api('/api/hz/accounts/del', { name: accDel.name })
-                        invalidateCache()
-                        setAccDel(null)
-                        reload()
-                      } catch (e: any) {
-                        toast(e.message || 'حذف ناموفق', true)
-                      }
-                    }}
-                  >
-                    حذف
-                  </Button>
-                </div>
-              </Dialog>
-            </Dialog.Root>
-          )}
-        </>
-      )
-    }
-
-    if (cur.v === 'servers') {
-      const ql = q.trim().toLowerCase()
-      const list = servers
-        .filter((s) => (sflt === 'run' ? s.status === 'running' : sflt === 'off' ? s.status !== 'running' : true))
-        .filter((s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type && s.type.name)).toLowerCase().includes(ql))
-      const running = list.filter((s) => s.status === 'running').length
+        )
       return (
-        <>
-          <StatGrid
-            items={[
-              { label: 'سرورها', value: faNum(list.length) },
-              { label: 'روشن', value: faNum(running), pct: list.length ? (running / list.length) * 100 : 0 },
-              { label: 'خاموش', value: faNum(list.length - running), pct: list.length ? ((list.length - running) / list.length) * 100 : 0 },
-            ]}
-          />
-          <FilterBar
-            q={q}
-            onQ={setQ}
-            placeholder="جستجوی نام یا آی‌پی"
-            filters={[
-              { id: 'all', label: 'همه سرورها' },
-              { id: 'run', label: 'روشن' },
-              { id: 'off', label: 'خاموش' },
-            ]}
-            value={sflt}
-            onValue={setSflt}
-            onRefresh={reload}
-          />
-          <div className="cc-grid2 cc-mb">
-            <Button variant="outline" icon={GlobeHemisphereWest} onClick={() => push({ v: 'ips', acc: cur.acc })}>
-              آی‌پی‌های تمیز
-            </Button>
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => {
-                setCreateName('')
-                push({ v: 'create', acc: cur.acc, step: 1, loc: '', type: '', typeName: '', arch: '', image: '', imageName: '' })
-              }}
-            >
-              ساخت سرور
-            </Button>
-          </div>
-          <div className="cc-section">{num(list.length)} سرور</div>
-          {servers.length === 0 && busy > 0 && <AppSkeleton />}
-          {list.length === 0 && busy === 0 && <Empty title="سروری پیدا نشد" />}
-          {list.map((s) => (
-            <LayerCard
-              key={s.id}
-              className="cc-trow cc-tap"
-              role="button"
-              tabIndex={0}
-              onClick={() => push({ v: 'server', acc: cur.acc, id: s.id })}
-            >
-              <div className="cc-grow">
-                <div className="cc-name">
-                  {s.name}
-                  {s.ipv4 && (
-                    <span className="cc-ipinl cc-mono">
-                      <span className="cc-copyval">{s.ipv4}</span>
-                      <CopyBtn value={s.ipv4} onCopy={copy} label="کپی IPv4" size={13} />
-                    </span>
-                  )}
-                </div>
-                <div className="cc-sub">
-                  {(s.type && s.type.name) || ''}
-                  {s.type ? ` · ${s.type.cores}vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : ''}
-                  {s.location ? ` · ${locFa(s.location.name, s.location.city, s.location.country)}` : ''}
-                </div>
-                {s.ipv6 && (
-                  <div className="cc-sub cc-mono cc-copyline">
-                    <span className="cc-copyval">{s.ipv6}</span>
-                    <CopyBtn value={s.ipv6} onCopy={copy} label="کپی IPv6" size={13} />
-                  </div>
-                )}
-              </div>
-              <div className="cc-end">
-                <Badge variant={badgeVariant(s.status)} dot>
-                  {STATUS[s.status] || s.status}
-                </Badge>
-              </div>
-            </LayerCard>
-          ))}
-        </>
+        <ServersView
+          cur={cur}
+          servers={servers}
+          q={q}
+          setQ={setQ}
+          sflt={sflt}
+          setSflt={setSflt}
+          reload={reload}
+          busy={busy}
+          push={push}
+          copy={copy}
+          setCreateName={setCreateName}
+        />
       )
     }
 
