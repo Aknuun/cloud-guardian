@@ -2243,3 +2243,9 @@ body .cc-menu-item {
 /* numeric inputs must be wide enough for 3 digits */
 .cc-checkline .cc-num { width: 96px; min-width: 96px; height: 38px; text-align: center }
 .cc-num { width: 96px; text-align: center }
+.cc-checkline .cc-num {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-line);
+  border-radius: 10px;
+  font-size: 14px;
+}
