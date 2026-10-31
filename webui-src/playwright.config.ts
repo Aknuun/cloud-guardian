@@ -10,7 +10,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: {
-    command: 'npx vite preview --port 4173 --strictPort',
+    command: 'npx vite preview --outDir ../server/internal/router/webui --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173/app/',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
