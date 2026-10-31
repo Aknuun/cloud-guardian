@@ -355,6 +355,20 @@ func botUsername(c *tg.Client) string {
 	return botNameVal
 }
 
+// renewBotOf returns the renew-bot username configured for this panel.
+func renewBotOf(cfg Cfg, panelURL string) string {
+	u := trimRight(panelURL, "/")
+	for k, pc := range cfg.Panels {
+		if pc == nil {
+			continue
+		}
+		if trimRight(k, "/") == u {
+			return pc.Renewbot
+		}
+	}
+	return ""
+}
+
 func renewKB(panel pg.Panel, username string) [][]tg.Button {
 	var row []tg.Button
 	if panelURL := trimRight(panel.URL, "/"); panelURL != "" {
@@ -367,9 +381,13 @@ func renewKB(panel pg.Panel, username string) [][]tg.Button {
 	return [][]tg.Button{row}
 }
 
-func renewKBUser(bot *tg.Client, panel pg.Panel, username string) [][]tg.Button {
+func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]tg.Button {
 	kb := renewKB(panel, username)
-	if u := botUsername(bot); u != "" {
+	u := strings.TrimLeft(strings.TrimSpace(renewBot), "@")
+	if u == "" {
+		u = botUsername(bot)
+	}
+	if u != "" {
 		link := "https://t.me/" + u
 		if username != "" {
 			link += "?start=renew_" + trunc(username, 60)
@@ -478,7 +496,7 @@ func FlushBuffers(bot *tg.Client, st *store.Store, panels map[string]pg.Panel, a
 			}
 			if len(part) > 0 {
 				if cfg.SilentMe {
-					SendAlertUsers(bot, panel, part)
+					SendAlertUsers(bot, panel, part, renewBotOf(cfg, panel.URL))
 				} else {
 					SendAlert(bot, adminID, panel, part, false)
 				}
@@ -634,7 +652,7 @@ func RunDigest(bot *tg.Client, st *store.Store, panels []pg.Panel, kind string, 
 				_ = pc
 			}
 			if cfg.SilentMe {
-				SendAlertUsers(bot, p, fresh)
+				SendAlertUsers(bot, p, fresh, renewBotOf(cfg, p.URL))
 			} else {
 				SendAlert(bot, adminID, pg.Panel{Name: p.Name, URL: p.URL,
 					Username: "", Password: ""}, fresh, false)
@@ -705,7 +723,7 @@ func userText(panel pg.Panel, items []map[string]any) string {
 
 // SendAlertUsers delivers each item to that user's own Telegram id when the
 // panel has one; it reports how many users were reached.
-func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
+func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any, renewBot string) int {
 	if len(items) == 0 {
 		return 0
 	}
@@ -768,7 +786,7 @@ func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any) int {
 		if id <= 0 {
 			continue
 		}
-		if bot.Send(id, userText(p, byUser[u]), renewKBUser(bot, p, u)) != 0 {
+		if bot.Send(id, userText(p, byUser[u]), renewKBUser(bot, p, u, renewBot)) != 0 {
 			sent++
 		}
 	}
