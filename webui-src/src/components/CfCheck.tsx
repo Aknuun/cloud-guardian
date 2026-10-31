@@ -50,6 +50,7 @@ export function CfCheckView() {
   const [fixType, setFixType] = useState('A')
   const [fixErr, setFixErr] = useState('')
   const [del, setDel] = useState<Row | null>(null)
+  const [sort, setSort] = useState<'default' | 'ok' | 'bad' | 'name' | 'lat' | 'type'>('default')
   const [cfg, setCfg] = useState<{ enabled: boolean; intervalMin: number } | null>(null)
   const [notice, setNotice] = useState('')
   const [zones, setZones] = useState<{ acc: number; aname: string; zid: string; zone: string }[] | null>(null)
@@ -207,6 +208,17 @@ export function CfCheckView() {
     })
   }, [rows, q, flt])
 
+  const SORTS: { id: typeof sort; label: string }[] = [
+    { id: 'default', label: 'ترتیب دامنه' },
+    { id: 'ok', label: 'سالم‌ها بالا' },
+    { id: 'bad', label: 'خطادارها بالا' },
+    { id: 'name', label: 'بر اساس نام' },
+    { id: 'lat', label: 'کم‌ترین تأخیر' },
+    { id: 'type', label: 'بر اساس نوع' },
+  ]
+
+  const isBad = (r: Row) => r.status !== 'ok' && r.status !== 'proxy'
+
   const groups = useMemo(() => {
     const m = new Map<string, Row[]>()
     for (const r of shown) {
@@ -214,8 +226,25 @@ export function CfCheckView() {
       if (!m.has(k)) m.set(k, [])
       m.get(k)!.push(r)
     }
-    return [...m.entries()]
-  }, [shown])
+    const cmp: Record<string, (a: Row, b: Row) => number> = {
+      default: (a, b) => a.name.localeCompare(b.name),
+      ok: (a, b) => Number(isBad(a)) - Number(isBad(b)) || a.name.localeCompare(b.name),
+      bad: (a, b) => Number(isBad(b)) - Number(isBad(a)) || a.name.localeCompare(b.name),
+      name: (a, b) => a.name.localeCompare(b.name),
+      lat: (a, b) => (a.latency || 1e9) - (b.latency || 1e9),
+      type: (a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name),
+    }
+    const list = [...m.entries()].map(([z, rs]) => [z, [...rs].sort(cmp[sort])] as [string, Row[]])
+    if (sort === 'bad' || sort === 'ok') {
+      const badOf = (rs: Row[]) => rs.filter(isBad).length
+      list.sort((a, b) =>
+        sort === 'bad' ? badOf(b[1]) - badOf(a[1]) || a[0].localeCompare(b[0]) : badOf(a[1]) - badOf(b[1]) || a[0].localeCompare(b[0]),
+      )
+    } else {
+      list.sort((a, b) => a[0].localeCompare(b[0]))
+    }
+    return list
+  }, [shown, sort])
 
   const okCount = rows.filter((r) => r.status === 'ok' || r.status === 'proxy').length
 
@@ -284,8 +313,14 @@ export function CfCheckView() {
         ]}
         value={flt}
         onValue={setFlt}
+        menu={SORTS.filter((x) => x.id !== sort).map((x) => ({ id: x.id, label: x.label }))}
+        onMenu={(id) => setSort(id as typeof sort)}
         onRefresh={() => void load()}
       />
+
+      <div className="cc-hint cc-center cc-mb">
+        مرتب‌سازی: {SORTS.find((x) => x.id === sort)?.label}
+      </div>
 
       <div className="cc-btnrow cc-mb">
         <Button variant="primary" icon={GlobeSimple} onClick={() => void openZones()} disabled={busy}>

@@ -2071,3 +2071,12 @@ button.cc-zonehead.closed .cc-zonecaret { transform: rotate(-90deg) }
 .cc-main .cc-trow .cc-rowbtns { flex: 0 0 auto; margin-inline-start: auto; display: flex; gap: 6px }
 .cc-menuwrap { position: relative; display: inline-block }
 .cc-menuwrap .cc-menu { top: calc(100% + 4px); inset-inline-end: 0; z-index: 70 }
+
+/* Dialogs scroll as one block: flex-column clipping hid the action rows. */
+.cc-dialog {
+  display: block !important;
+  max-height: calc(100dvh - 24px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+.cc-dialog-actions { position: static !important }
