@@ -2168,3 +2168,25 @@ body .cc-menu-item {
   body .cc-sideitem,
   body .cc-menu-item { transition: none !important }
 }
+
+/* Rows fade only: a transform on hundreds of rows is what made long lists stutter. */
+@keyframes cc-rowfade { from { opacity: 0 } to { opacity: 1 } }
+body .cc-trow,
+body .cc-row,
+body .cc-card,
+body .cc-hrow,
+body .cc-stat,
+body .cc-bulkbar,
+body .cc-errbox {
+  animation: cc-rowfade 0.16s linear both !important;
+}
+body .cc-menu { animation: cc-menuin 0.16s cubic-bezier(0.22, 0.61, 0.36, 1) both !important }
+body .cc-dialog { animation: cc-fadein 0.16s linear both !important }
+body button,
+body .cc-trow,
+body .cc-row,
+body .cc-sideitem,
+body .cc-menu-item {
+  transition: background-color 0.16s cubic-bezier(0.22, 0.61, 0.36, 1), border-color 0.16s linear,
+    color 0.16s linear, opacity 0.16s linear !important;
+}

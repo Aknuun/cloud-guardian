@@ -61,6 +61,7 @@ export function CfCheckView() {
   const [bulkMenu, setBulkMenu] = useState(false)
   const [edit, setEdit] = useState<Row | null>(null)
   const [sheet, setSheet] = useState<Row | null>(null)
+  const [info, setInfo] = useState<{ title: string; rows: { t: string; s?: string }[] } | null>(null)
   const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
   const [bulkVal, setBulkVal] = useState('')
   const [bulkErr, setBulkErr] = useState('')
@@ -562,6 +563,27 @@ export function CfCheckView() {
         </FormDialog>
       )}
 
+      {info && (
+        <Dialog.Root open onOpenChange={(o) => !o && setInfo(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">{info.title}</Dialog.Title>
+            {info.rows.map((x, i) => (
+              <div key={i} className="cc-trow" style={{ minHeight: 48 }}>
+                <div className="cc-grow">
+                  <div className="cc-name">{x.t}</div>
+                  {x.s && <div className="cc-sub">{x.s}</div>}
+                </div>
+              </div>
+            ))}
+            <div className="cc-dialog-actions">
+              <Button variant="primary" onClick={() => setInfo(null)}>
+                بستن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
       {sheet && (
         <Dialog.Root open onOpenChange={(o) => !o && setSheet(null)}>
           <Dialog className="cc-dialog cc-recsheet" size="base">
@@ -622,7 +644,46 @@ export function CfCheckView() {
                   setNotice(String(e?.message || 'انجام نشد'))
                 }
               }}
-              onDelete={() => {
+              onTraffic={async () => {
+              const cur = sheet
+              try {
+                const t = await api<any>('/api/cf/traffic?acc=' + cur.acc + '&zid=' + encodeURIComponent(cur.zid) + '&days=1')
+                const counts: Record<string, number> = t.counts || {}
+                const fq = (cur.name || '').toLowerCase().replace(/\.$/, '')
+                const n = counts[fq] || 0
+                setInfo({
+                  title: 'ترافیک امروز',
+                  rows: [
+                    { t: cur.name, s: 'کوئری DNS امروز' },
+                    { t: faNum(n) + ' کوئری', s: 'مجموع دامنه: ' + faNum(t.total || 0) },
+                  ],
+                })
+              } catch (e: any) {
+                setInfo({ title: 'ترافیک امروز', rows: [{ t: e.message || 'خطا' }] })
+              }
+            }}
+            onRefs={async () => {
+              const cur = sheet
+              try {
+                const d = await api<any>('/api/cf/refs?acc=' + cur.acc + '&zid=' + encodeURIComponent(cur.zid) + '&rid=' + encodeURIComponent(cur.rid))
+                const names: string[] = []
+                const walk = (ns: any[]) =>
+                  ns.forEach((n) => {
+                    if (n && n.name) names.push(n.name)
+                    if (n && Array.isArray(n.children)) walk(n.children)
+                  })
+                walk(d.tree || [])
+                setInfo({
+                  title: 'CNAMEهای وارده',
+                  rows: names.length
+                    ? names.slice(0, 40).map((n) => ({ t: n }))
+                    : [{ t: 'هیچ دامنه‌ای به این رکورد CNAME نکرده است.' }],
+                })
+              } catch (e: any) {
+                setInfo({ title: 'CNAMEهای وارده', rows: [{ t: e.message || 'خطا' }] })
+              }
+            }}
+            onDelete={() => {
                 const cur = sheet
                 setSheet(null)
                 setDel(cur)

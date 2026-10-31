@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { ArrowClockwise, ArrowRight, CheckCircle, List, WarningCircle } from '@phosphor-icons/react'
+import { ArrowClockwise, CheckCircle, List, WarningCircle } from '@phosphor-icons/react'
 import { AppVersion } from './AppVersion'
 import { invalidateCache } from '../lib'
 import { LogoutButton } from './LogoutButton'
@@ -61,9 +61,6 @@ export function ProviderShell({
           <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
             <List size={20} />
           </button>
-          {showBack && (
-            <Button variant="ghost" shape="square" icon={ArrowRight} aria-label="بازگشت" onClick={onBack} />
-          )}
           <h1 className="cc-title">{title}</h1>
           <GlobalSearch
             go={(p, t) => {
