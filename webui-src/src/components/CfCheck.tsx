@@ -5,6 +5,7 @@ import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
 import { ErrBox, FormDialog, Skeleton } from './toolsMeta'
 import { StatGrid } from './Stats'
+import { RecordEditor } from '../cloudflare/components'
 
 type Row = {
   acc: number
@@ -57,6 +58,7 @@ export function CfCheckView() {
   const [sel, setSel] = useState<string[]>([])
   const [closed, setClosed] = useState<string[]>([])
   const [bulkMenu, setBulkMenu] = useState(false)
+  const [edit, setEdit] = useState<Row | null>(null)
   const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
   const [bulkVal, setBulkVal] = useState('')
   const [bulkErr, setBulkErr] = useState('')
@@ -87,6 +89,28 @@ export function CfCheckView() {
       setNotice(e.message || 'بررسی ناموفق بود')
     }
     setBusy(false)
+  }
+
+  // Re-check one record and splice the fresh row back into the list.
+  const runOne = async (r: Row) => {
+    try {
+      const res = await api<{ rows: Row[]; total: number; bad: number }>('/api/tools/cfcheck/run', {
+        acc: r.acc,
+        zid: r.zid,
+        rid: r.rid,
+      })
+      const fresh = (res.rows || [])[0]
+      if (fresh) {
+        setSt((s) => {
+          if (!s?.last) return s
+          const rows = s.last.rows.map((x) => (key(x) === key(r) ? fresh : x))
+          const bad = rows.filter((x) => x.status !== 'ok' && x.status !== 'proxy').length
+          return { ...s, last: { ...s.last, rows, bad } }
+        })
+      }
+    } catch {
+      /* leave the previous row in place */
+    }
   }
 
   const rows = st?.last?.rows || []
@@ -362,17 +386,8 @@ export function CfCheckView() {
                     type="button"
                     className="cc-rowbtn"
                     aria-label="اصلاح رکورد"
-                    onClick={() => {
-                      try {
-                        sessionStorage.setItem(
-                          'cf_edit',
-                          JSON.stringify({ acc: r.acc, zid: r.zid, rid: r.rid, zone: r.zone }),
-                        )
-                      } catch {
-                        /* ignore */
-                      }
-                      location.href = '/app/?go=cf'
-                    }}
+                    onClick={() => setEdit(r)}
+
                   >
                     <PencilSimple size={15} />
                   </button>
@@ -511,6 +526,33 @@ export function CfCheckView() {
         </FormDialog>
       )}
 
+      {edit && (
+        <RecordEditor
+          key={edit.rid}
+          dlg={{
+            k: 'editor',
+            acc: edit.acc,
+            zid: edit.zid,
+            zone: edit.zone,
+            rec: {
+              id: edit.rid,
+              name: edit.name,
+              type: edit.type,
+              content: edit.content,
+              proxied: edit.proxied,
+              ttl: 1,
+            } as any,
+          }}
+          onClose={() => setEdit(null)}
+          onSubmit={async (payload: any) => {
+            await api('/api/cf/record', { ...payload, acc: edit.acc, zid: edit.zid, rid: edit.rid })
+            const cur = edit
+            setEdit(null)
+            invalidateCache()
+            await runOne(cur)
+          }}
+        />
+      )}
       {del && (
         <Dialog.Root open onOpenChange={(o) => !o && setDel(null)}>
           <Dialog className="cc-dialog" size="base">
