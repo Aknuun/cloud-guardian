@@ -904,7 +904,6 @@ ${reason}`,
     return (
       <>
         <SearchInput
-          autoFocus
           placeholder="نام رکورد، آی‌پی یا دامنه…"
           value={q}
           onChange={setQ}

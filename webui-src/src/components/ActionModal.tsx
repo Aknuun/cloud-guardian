@@ -69,7 +69,6 @@ export function ActionModalHost({
           <>
             <Dialog.Title className="cc-dialog-title">{modal.title}</Dialog.Title>
             <Input
-              autoFocus
               className="cc-input cc-mb"
               placeholder={modal.placeholder}
               value={promptVal}

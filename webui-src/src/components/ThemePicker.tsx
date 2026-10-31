@@ -7,7 +7,7 @@ import { PALETTES, useSectionTheme, type Provider } from './sectionTheme'
 const LABELS: Record<Provider, string> = {
   hz: 'هتزنر',
   cf: 'کلادفلر',
-  arv: 'آروان',
+  arv: 'آروان کلاد',
 }
 
 export function ThemePicker({ provider }: { provider: Provider }) {

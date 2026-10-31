@@ -491,7 +491,7 @@ export default function Arvan({
     const st = view
     setModal({
       kind: 'confirm',
-      title: 'ساخت سرور آروان',
+      title: 'ساخت سرور آروان کلاد',
       desc: `«${name}» با پلن ${st.sizeName} در ${st.region} ساخته شود؟ ساخت سرور هزینه دارد.`,
       onOk: async () => {
         bump(1)
@@ -528,7 +528,7 @@ export default function Arvan({
     view.v === 'server' ? servers.find((s) => s.id === view.id && s.region === view.region) || null : null
   const title =
     view.v === 'accounts'
-      ? 'آروان'
+      ? 'آروان کلاد'
       : view.v === 'dns'
         ? 'دامنه‌ها'
         : view.v === 'records'
@@ -551,7 +551,7 @@ export default function Arvan({
       </button>
     )
     return (
-      <div className="cc-chips cc-mb" role="group" aria-label="بخش آروان">
+      <div className="cc-chips cc-mb" role="group" aria-label="بخش آروان کلاد">
         {seg({ v: 'servers' }, 'سرورهای ابری')}
         {seg({ v: 'dns' }, 'دامنه‌ها')}
       </div>
@@ -561,7 +561,7 @@ export default function Arvan({
   function accChips() {
     if (accounts.length < 2) return null
     return (
-      <div className="cc-chips cc-mb" role="group" aria-label="انتخاب اکانت آروان">
+      <div className="cc-chips cc-mb" role="group" aria-label="انتخاب اکانت آروان کلاد">
         {accounts.map((a) => (
           <button
             key={a.i}
@@ -596,12 +596,12 @@ export default function Arvan({
       <>
         <div className="cc-pagebar">
           <Button variant="primary" icon={Plus} onClick={() => { setAccErr(''); setAccForm({ name: '', token: '' }) }}>
-            افزودن اکانت آروان
+            افزودن اکانت آروان کلاد
           </Button>
         </div>
         {!accounts.length && busy > 0 && <Loader />}
         {!accounts.length && busy === 0 && (
-          <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا کلید API آروان را اضافه کن." />
+          <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا کلید API آروان کلاد را اضافه کن." />
         )}
         {accounts.map((a) => (
           <div key={a.i}>
@@ -641,7 +641,7 @@ export default function Arvan({
             ))}
           </div>
         ))}
-        <div className="cc-hint cc-center cc-mt">آروان را به‌صورت یک Workspace واحد مدیریت کن.</div>
+        <div className="cc-hint cc-center cc-mt">آروان کلاد را به‌صورت یک Workspace واحد مدیریت کن.</div>
       </>
     )
   }
@@ -654,7 +654,7 @@ export default function Arvan({
         <Input className="cc-input cc-mb" placeholder="جستجوی دامنه" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="cc-grid2 cc-mb">
           <Button variant="outline" icon={ArrowClockwise} onClick={reload}>بروزرسانی</Button>
-          <Button variant="outline" icon={ImageIcon} onClick={() => toast('حذف/افزودن دامنه از پنل آروان انجام می‌شود')}>
+          <Button variant="outline" icon={ImageIcon} onClick={() => toast('حذف/افزودن دامنه از پنل آروان کلاد انجام می‌شود')}>
             راهنما
           </Button>
         </div>
@@ -1138,9 +1138,9 @@ export default function Arvan({
       <Dialog.Root open={!!accForm} onOpenChange={(o) => !o && setAccForm(null)}>
         <Dialog className="cc-dialog" size="base">
           <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
-          <Dialog.Title className="cc-dialog-title">افزودن اکانت آروان</Dialog.Title>
+          <Dialog.Title className="cc-dialog-title">افزودن اکانت آروان کلاد</Dialog.Title>
           <Dialog.Description className="cc-dialog-desc">
-            کلید API را از پنل آروان (IAM → کلیدها) بساز و اینجا بگذار.
+            کلید API را از پنل آروان کلاد (IAM → کلیدها) بساز و اینجا بگذار.
           </Dialog.Description>
           <div className="cc-form">
             <label className="cc-field">
@@ -1174,9 +1174,9 @@ export default function Arvan({
       <Dialog.Root open={!!accDel} onOpenChange={(o) => !o && setAccDel(null)}>
         <Dialog className="cc-dialog" size="base">
           <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
-          <Dialog.Title className="cc-dialog-title">حذف اکانت آروان</Dialog.Title>
+          <Dialog.Title className="cc-dialog-title">حذف اکانت آروان کلاد</Dialog.Title>
           <Dialog.Description className="cc-dialog-desc">
-            «{accDel?.name}» فقط از این پنل حذف می‌شود؛ دامنه‌ها و سرورهای آروان دست‌نخورده می‌مانند.
+            «{accDel?.name}» فقط از این پنل حذف می‌شود؛ دامنه‌ها و سرورهای آروان کلاد دست‌نخورده می‌مانند.
           </Dialog.Description>
           <div className="cc-dialog-actions">
             <Button variant="outline" onClick={() => setAccDel(null)}>انصراف</Button>

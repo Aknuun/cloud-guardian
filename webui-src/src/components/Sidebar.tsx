@@ -13,7 +13,7 @@ const MISC_IDS = ['hub', 'fo', 'set']
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
   { id: 'hz', label: 'هتزنر', Icon: HardDrives },
-  { id: 'arv', label: 'آروان', Icon: Globe },
+  { id: 'arv', label: 'آروان کلاد', Icon: Globe },
 ]
 
 export function Sidebar({

@@ -29,18 +29,11 @@ function DialogContent({
           className,
         )}
         onOpenAutoFocus={(e) => {
-          const root = e.currentTarget as HTMLElement | null
-          const field = root?.querySelector<HTMLElement>(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
-          )
-          // No form fields: focus the first real action instead of the close button.
-          const action = field
-            ? null
-            : root?.querySelector<HTMLElement>('.cc-dialog-actions button:not([disabled]), .cc-actions button:not([disabled])')
-          const target = field || action
-          if (!target) return
+          // Never focus a field on open: on phones that pops the keyboard before the
+          // user taps anything. Focus the dialog itself so Esc/scroll still work.
           e.preventDefault()
-          target.focus()
+          const root = e.currentTarget as HTMLElement | null
+          root?.focus({ preventScroll: true })
         }}
         {...props}
       >

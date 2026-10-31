@@ -573,7 +573,6 @@ export function SpareSheet({
       )}
       <div className="cc-field-label">آی‌پی یا دامنهٔ زاپاس</div>
       <Input
-        autoFocus
         className={'cc-input cc-mb cc-mono' + (vErr ? ' cc-invalid' : '')}
         placeholder="1.2.3.4 یا backup.example.com"
         value={v}
@@ -672,7 +671,6 @@ export function ConvertRecordDialog({
         <>
           <div className="cc-field-label">انتخاب از رکوردهای موجود</div>
           <select
-            autoFocus
             className="cc-select cc-mb"
             value={picked}
             aria-label="انتخاب ساب‌دامنه از رکوردهای موجود"
@@ -692,7 +690,6 @@ export function ConvertRecordDialog({
       )}
       <div className="cc-field-label">{toA ? 'آی‌پی جدید (IPv4)' : 'یا دامنهٔ مقصد را وارد کن'}</div>
       <Input
-        autoFocus={toA || dlg.candidates.length === 0}
         className={'cc-input cc-mb cc-mono' + (err ? ' cc-invalid' : '')}
         placeholder={toA ? '1.2.3.4' : 'target.example.com'}
         value={value}
@@ -833,7 +830,6 @@ export function FormDialog({
             </select>
           ) : (
             <Input
-              autoFocus
               type={f.password ? 'password' : 'text'}
               className={'cc-input cc-mb' + (errs[f.key] ? ' cc-invalid' : '')}
               placeholder={f.placeholder}

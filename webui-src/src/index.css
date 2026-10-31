@@ -56,40 +56,6 @@ html[data-mode='dark'] {
   --pv-accent: var(--ds-brand);
   --pv-accent-2: var(--ds-brand-2);
 }
-.p-hz,
-html[data-provider='hz'] {
-  --pv-accent: #e14b43;
-  --pv-accent-2: #f59e0b;
-}
-.p-cf,
-html[data-provider='cf'] {
-  --pv-accent: #dc2626;
-  --pv-accent-2: #ef4444;
-  --ds-primary: #dc2626;
-  --ds-primary-2: #ef4444;
-}
-.p-arv,
-html[data-provider='arv'] {
-  --pv-accent: #0d9ca8;
-  --pv-accent-2: #3b82f6;
-}
-html[data-mode='dark'] .p-hz,
-html[data-mode='dark'][data-provider='hz'] {
-  --pv-accent: #ff7b72;
-  --pv-accent-2: #fbbf24;
-}
-html[data-mode='dark'] .p-cf,
-html[data-mode='dark'][data-provider='cf'] {
-  --pv-accent: #ff5c5c;
-  --pv-accent-2: #ff8a8a;
-  --ds-primary: #dc2626;
-  --ds-primary-2: #ef4444;
-}
-html[data-mode='dark'] .p-arv,
-html[data-mode='dark'][data-provider='arv'] {
-  --pv-accent: #33d6e0;
-  --pv-accent-2: #7dd3fc;
-}
 
 /* Kumo variable bridge: the legacy app.css still reads these names. */
 :root,

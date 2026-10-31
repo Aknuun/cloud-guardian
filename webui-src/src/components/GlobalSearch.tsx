@@ -7,7 +7,7 @@ import type { Provider } from './Sidebar'
 const SERVICES: { id: Provider; label: string }[] = [
   { id: 'hz', label: 'هتزنر' },
   { id: 'cf', label: 'کلادفلر' },
-  { id: 'arv', label: 'آروان' },
+  { id: 'arv', label: 'آروان کلاد' },
 ]
 
 export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null) => void }) {

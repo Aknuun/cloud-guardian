@@ -112,7 +112,7 @@ export function ProviderSwitch({
   const items: { id: Provider; label: string }[] = [
     { id: 'hz', label: 'هتزنر' },
     { id: 'cf', label: 'کلادفلر' },
-    { id: 'arv', label: 'آروان' },
+    { id: 'arv', label: 'آروان کلاد' },
   ]
   return (
     <div className="cc-provider" role="group" aria-label="انتخاب سرویس">

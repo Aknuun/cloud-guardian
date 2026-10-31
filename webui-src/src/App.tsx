@@ -1763,7 +1763,6 @@ function ModalHost({ modal, onClose, onCopy }: { modal: Modal | null; onClose: (
           <>
             <Dialog.Title className="cc-dialog-title">{modal.title}</Dialog.Title>
             <Input
-              autoFocus
               className="cc-input cc-mb"
               placeholder={modal.placeholder}
               value={promptVal}
