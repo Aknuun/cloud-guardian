@@ -384,12 +384,15 @@ func renewKB(panel pg.Panel, username string) [][]tg.Button {
 func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]tg.Button {
 	kb := renewKB(panel, username)
 	u := strings.TrimLeft(strings.TrimSpace(renewBot), "@")
-	if u == "" {
+	custom := u != ""
+	if !custom {
 		u = botUsername(bot)
 	}
 	if u != "" {
 		link := "https://t.me/" + u
-		if username != "" {
+		// A third-party renew bot usually ignores ?start payloads, so open it
+		// plainly: the username above is one tap away from being copied.
+		if username != "" && !custom {
 			link += "?start=renew_" + trunc(username, 60)
 		}
 		kb = append(kb, []tg.Button{{Text: "🤖 تمدید از ربات", URL: link}})
@@ -695,7 +698,7 @@ func faLeft(val string) string {
 	return strconv.Itoa(int(math.Round(d))) + " روز"
 }
 
-func userText(panel pg.Panel, items []map[string]any) string {
+func userText(panel pg.Panel, items []map[string]any, renewBot string) string {
 	user := ""
 	if len(items) > 0 {
 		user = toString(items[0]["username"])
@@ -717,7 +720,11 @@ func userText(panel pg.Panel, items []map[string]any) string {
 			lines = append(lines, "• "+kind+": "+val)
 		}
 	}
-	lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزنید.")
+	if strings.TrimSpace(renewBot) != "" {
+		lines = append(lines, "", "برای تمدید: یوزرنیم بالا را لمس کن تا کپی شود، بعد در ربات تمدید بفرست.")
+	} else {
+		lines = append(lines, "", "برای تمدید یکی از دکمه‌های زیر را بزنید.")
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -786,7 +793,7 @@ func SendAlertUsers(bot *tg.Client, p pg.Panel, items []map[string]any, renewBot
 		if id <= 0 {
 			continue
 		}
-		if bot.Send(id, userText(p, byUser[u]), renewKBUser(bot, p, u, renewBot)) != 0 {
+		if bot.Send(id, userText(p, byUser[u], renewBot), renewKBUser(bot, p, u, renewBot)) != 0 {
 			sent++
 		}
 	}
