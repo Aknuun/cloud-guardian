@@ -478,7 +478,25 @@ func (r *Router) hsPlan(in hsPlanIn) ([]hsRow, []map[string]any, error) {
 		}
 		return rows[i].Priority < rows[j].Priority
 	})
-	if in.Mode != "name" {
+	if in.Mode != "name" && len(want) > 0 {
+		// subset apply: permute the existing priority slots of the selected hosts
+		// so no priority collides with hosts outside the selection
+		vals := []int{}
+		for i := range rows {
+			if want[rows[i].ID] && !rows[i].Locked {
+				vals = append(vals, rows[i].Priority)
+			}
+		}
+		sort.Ints(vals)
+		k := 0
+		for i := range rows {
+			if !want[rows[i].ID] || rows[i].Locked {
+				continue
+			}
+			rows[i].NewPriority = vals[k]
+			k++
+		}
+	} else if in.Mode != "name" {
 		used := map[int]bool{}
 		for i := range rows {
 			if rows[i].Locked {
