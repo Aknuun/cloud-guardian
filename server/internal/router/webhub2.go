@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -120,7 +121,36 @@ func (r *Router) hubInboxList() []hubMsg {
 }
 
 // webHubJoin is called by a member install to obtain its own token.
+var (
+	hubJoinMu   sync.Mutex
+	hubJoinHits = map[string][]time.Time{}
+)
+
+// hubJoinAllow caps joins to 10 per hour per client address so the shared
+// auto-join code cannot be used to flood the member list.
+func hubJoinAllow(ip string) bool {
+	hubJoinMu.Lock()
+	defer hubJoinMu.Unlock()
+	cut := time.Now().Add(-time.Hour)
+	hits := hubJoinHits[ip][:0]
+	for _, t := range hubJoinHits[ip] {
+		if t.After(cut) {
+			hits = append(hits, t)
+		}
+	}
+	if len(hits) >= 10 {
+		hubJoinHits[ip] = hits
+		return false
+	}
+	hubJoinHits[ip] = append(hits, time.Now())
+	return true
+}
+
 func (r *Router) webHubJoin(w http.ResponseWriter, req *http.Request, uid int64) {
+	if !hubJoinAllow(clientIPOf(req)) {
+		webErr(w, http.StatusTooManyRequests, "درخواست‌های زیادی برای عضویت در هاب؛ بعداً تلاش کن")
+		return
+	}
 	var in struct {
 		Name  string       `json:"name"`
 		Stats hubStatsWire `json:"stats"`
@@ -228,6 +258,11 @@ func (r *Router) webHubFeed(w http.ResponseWriter, req *http.Request, uid int64)
 
 // webHubSend2 handles member -> root (toRoot) and root -> member messages.
 func (r *Router) webHubSend2(w http.ResponseWriter, req *http.Request, uid int64) {
+	mem, ok := r.hubAuth(req)
+	if !ok {
+		webErr(w, http.StatusUnauthorized, "توکن هاب نامعتبر است")
+		return
+	}
 	var in struct {
 		Text   string `json:"text"`
 		To     string `json:"to"`
@@ -241,7 +276,7 @@ func (r *Router) webHubSend2(w http.ResponseWriter, req *http.Request, uid int64
 		webErr(w, http.StatusBadRequest, "متن پیام خالی است")
 		return
 	}
-	msg := hubMsg{ID: fmt.Sprintf("m%d", time.Now().UnixNano()), Text: text, TS: time.Now().UnixMilli()}
+	msg := hubMsg{ID: fmt.Sprintf("m%d", time.Now().UnixNano()), Text: text, TS: time.Now().UnixMilli(), From: mem.Token}
 	if in.ToRoot {
 		mem, ok := r.hubAuth(req)
 		if !ok {

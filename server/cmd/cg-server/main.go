@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -222,6 +224,7 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 	lastPurge := time.Now()
 	lastSync := time.Now()
 	lastBackup := time.Now()
+	lastSnap := time.Now()
 	lastDomexp := time.Now()
 	lastTelemetry := time.Now()
 	lastSsl := time.Now()
@@ -279,6 +282,13 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 			r.SyncPush()
 			lastSync = now
 		}
+		if now.Sub(lastSnap) > 24*time.Hour {
+			if err := st.Snapshot(dbPath + ".daily-" + now.UTC().Format("20060102")); err != nil {
+				log.Println("db snapshot:", err)
+			}
+			pruneSnapshots(dbPath, 7)
+			lastSnap = now
+		}
 		if now.Sub(lastBackup) > 30*time.Minute {
 			tok, acc, ns := r.SyncCredentials()
 			if tok != "" && acc != "" && ns != "" {
@@ -293,6 +303,20 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 		}
 	}
 }
+
+// pruneSnapshots keeps the newest n "<db>.daily-*" copies.
+func pruneSnapshots(dbPath string, n int) {
+	dir, base := filepath.Split(dbPath)
+	m, _ := filepath.Glob(filepath.Join(dir, base+".daily-*"))
+	if len(m) <= n {
+		return
+	}
+	sort.Strings(m)
+	for _, f := range m[:len(m)-n] {
+		_ = os.Remove(f)
+	}
+}
+
 func srvStats(s map[string]any) map[string]any {
 	host, _ := s["host"].(string)
 	user, _ := s["user"].(string)

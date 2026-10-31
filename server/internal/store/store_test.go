@@ -45,3 +45,25 @@ func TestJSONAndHook(t *testing.T) {
 		t.Fatalf("hook got %q", seen)
 	}
 }
+
+func TestSnapshotCopiesData(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(dir + "/d.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.Put("k", "v", 0)
+	snap := dir + "/d.db.daily-1"
+	if err := st.Snapshot(snap); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := Open(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cp.Close()
+	if cp.Get("k") != "v" {
+		t.Fatalf("snapshot lost data")
+	}
+}

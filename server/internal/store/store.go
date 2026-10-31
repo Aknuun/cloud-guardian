@@ -7,6 +7,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"os"
 	"sync"
 	"time"
 
@@ -33,6 +34,8 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the db holds API tokens and ssh passwords: keep it owner-only
+	_ = os.Chmod(path, 0o600)
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
@@ -43,6 +46,16 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// Snapshot writes a consistent copy of the database to path (VACUUM INTO).
+func (s *Store) Snapshot(path string) error {
+	_ = os.Remove(path)
+	if _, err := s.db.Exec("VACUUM INTO ?", path); err != nil {
+		return err
+	}
+	_ = os.Chmod(path, 0o600)
+	return nil
+}
 
 func (s *Store) notify(key string) {
 	if s.OnChange != nil {

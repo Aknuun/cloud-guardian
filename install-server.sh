@@ -445,10 +445,19 @@ ExecStart=${BIN}
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=${INSTALL_DIR}
 
 [Install]
 WantedBy=multi-user.target
 EOF
+  chmod 600 "$DB" "$DB"-wal "$DB"-shm 2>/dev/null || true
   systemctl daemon-reload
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
   ok "Service ready"
