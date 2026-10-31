@@ -36,6 +36,7 @@ import { LbGroupPage } from './cloudflare/lbgroup'
 import { EmailTab } from './cloudflare/emailtab'
 import { SettingsTab } from './cloudflare/settingstab'
 import { RecordsTab } from './cloudflare/recordstab'
+import { loadView } from './cloudflare/load'
 import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
 import {
   PROXYABLE,
@@ -240,34 +241,26 @@ export default function Cloudflare({
     bump(1)
     ;(async () => {
       try {
-        if (view.v === 'zones' || view.v === 'lbzones') {
-          const d = await api<{ zones: CFZone[]; accounts: CFAcc[] }>('/api/cf/zones', undefined, ac.signal)
-          if (!cancelled) {
-            setZones(d.zones || [])
-            setAccs(d.accounts || [])
-          }
-        } else if (view.v === 'accounts') {
-          const d = await api<{ accounts: CFAcc[] }>('/api/cf/accounts', undefined, ac.signal)
-          if (!cancelled) setAccs(d.accounts || [])
-        } else if (view.v === 'favs') {
-          const d = await api<{ items: FavItem[] }>('/api/cf/favs', undefined, ac.signal)
-          if (!cancelled) setFavs(d.items || [])
-        } else if (view.v === 'zone') {
-          const d = await api<{ zone: ZoneInfo; records: CFRec[] }>(
-            '/api/cf/records?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid),
-            undefined,
-            ac.signal,
-          )
-          if (cancelled) return
+        const d = await loadView(view, tab, days, ac.signal)
+        if (cancelled) return
+        if (d.kind === 'zones') {
+          setZones(d.zones)
+          setAccs(d.accs)
+        } else if (d.kind === 'accounts') {
+          setAccs(d.accs)
+        } else if (d.kind === 'favs') {
+          setFavs(d.favs)
+        } else if (d.kind === 'zone') {
           setZone(d.zone)
-          setRecords(d.records || [])
+          setRecords(d.records)
+          if (view.v !== 'zone') return
           if (pendingEdit && pendingEdit.acc === view.acc && pendingEdit.zid === view.zid) {
-            const hit = (d.records || []).find((r) => r.id === pendingEdit.rid)
+            const hit = d.records.find((r) => r.id === pendingEdit.rid)
             if (hit) setDlg({ k: 'editor', acc: view.acc, zid: view.zid, zone: d.zone.name, rec: hit })
             setPendingEdit(null)
           }
           if (pendingRid) {
-            const hit = (d.records || []).find((r) => r.id === pendingRid)
+            const hit = d.records.find((r) => r.id === pendingRid)
             if (hit) setDlg({ k: 'record', acc: view.acc, zid: view.zid, zone: d.zone.name, rec: hit })
             setPendingRid('')
           }
@@ -275,41 +268,16 @@ export default function Cloudflare({
             setDlg({ k: 'editor', acc: pendingEditor.acc, zid: pendingEditor.zid, zone: pendingEditor.zone })
             setPendingEditor(null)
           }
-          if (tab === 'settings') {
-            const s = await api<any>('/api/cf/settings?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid), undefined, ac.signal)
-            if (!cancelled) setSettings({ groups: s.groups || [], dev: !!s.dev, paused: !!s.paused })
-          } else if (tab === 'email') {
-            const e = await api<EmailData>('/api/cf/email?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid), undefined, ac.signal)
-            if (!cancelled) setEmail(e)
-          } else if (tab === 'traffic') {
-            const t = await api<any>(
-              '/api/cf/traffic?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid) + '&days=' + days,
-              undefined,
-              ac.signal,
-            )
-            if (!cancelled) setTraffic({ days: t.days, total: t.total, top: t.top || [] })
-          }
-        } else if (view.v === 'lb') {
-          const d = await api<{ zone: ZoneInfo; groups: LbGroup[] }>(
-            '/api/cf/lbgroups?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid),
-            undefined,
-            ac.signal,
-          )
-          if (!cancelled) {
-            setZone(d.zone)
-            setLbGroups(d.groups || [])
-          }
-        } else if (view.v === 'lbgroup') {
-          const d = await api<{ zone: ZoneInfo; name: string; entries: LbEntry[] }>(
-            '/api/cf/lb?acc=' + view.acc + '&zid=' + encodeURIComponent(view.zid) + '&name=' + encodeURIComponent(view.name),
-            undefined,
-            ac.signal,
-          )
-          if (!cancelled) {
-            setZone(d.zone)
-            setLbName(d.name)
-            setLbEntries(d.entries || [])
-          }
+          if (d.settings) setSettings(d.settings)
+          if (d.email) setEmail(d.email)
+          if (d.traffic) setTraffic(d.traffic)
+        } else if (d.kind === 'lb') {
+          setZone(d.zone)
+          setLbGroups(d.groups)
+        } else if (d.kind === 'lbgroup') {
+          setZone(d.zone)
+          setLbName(d.name)
+          setLbEntries(d.entries)
         }
       } catch (e: any) {
         if (!cancelled && e && e.name !== 'AbortError') {
