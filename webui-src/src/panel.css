@@ -1892,9 +1892,9 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(7),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(7){animation-delay:0.23s}
 .cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(8),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(8){animation-delay:0.26s}
 .cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(9),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(9){animation-delay:0.29s}
-.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(10),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(10){animation-delay:0.32s}
-.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(11),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(11){animation-delay:0.35s}
-.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(12),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(12){animation-delay:0.38s}
+.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(10),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(10){animation-delay:0.2s}
+.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(11),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(11){animation-delay:0.2s}
+.cc-sidebar.open .cc-sidenav .cc-sideitem:nth-of-type(12),.cc-sidebar.open .cc-navhome .cc-sideitem:nth-of-type(12){animation-delay:0.2s}
 
 .cc-sidebar { box-shadow: -8px 0 24px rgba(16, 20, 30, 0.08) !important }
 [data-theme='dark'] .cc-sidebar { box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45) !important }
@@ -2080,3 +2080,43 @@ button.cc-zonehead.closed .cc-zonecaret { transform: rotate(-90deg) }
   overscroll-behavior: contain;
 }
 .cc-dialog-actions { position: static !important }
+
+/* Drawer motion: animate composited properties only, one solid surface. */
+.cc-sidebar,
+.cc-sidebar.open,
+.cc-sidebar:not(.open) {
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+  will-change: transform;
+  background-image: none !important;
+  background-color: var(--ds-panel) !important;
+  backface-visibility: hidden;
+}
+.cc-sidebar.open { transform: translate3d(0, 0, 0) }
+@media (max-width: 899px) {
+  .cc-sidebar:not(.open) { transform: translate3d(101%, 0, 0) }
+}
+@media (min-width: 900px) {
+  .cc-sidebar:not(.open) { transform: translate3d(101%, 0, 0) }
+}
+
+/* No width/padding/label animations while the drawer slides. */
+.cc-sidebar .cc-sideitem,
+.cc-sidebar .cc-sideitem-label,
+.cc-sidebar .cc-sidenav-label,
+.cc-sidebar .cc-sidebrand-text,
+.cc-sidebar .cc-profile .cc-grow,
+.cc-sidebar .cc-caret,
+.cc-sidebar .cc-subnav {
+  transition: opacity 0.14s linear, color 0.14s linear, background-color 0.14s linear !important;
+}
+
+@keyframes cc-item-fade {
+  from { opacity: 0; transform: translate3d(6px, 0, 0) }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) }
+}
+.cc-sidebar.open .cc-sideitem,
+.cc-sidebar.open .cc-sidebrand,
+.cc-sidebar.open .cc-profile {
+  animation: cc-item-fade 0.18s linear both !important;
+  will-change: opacity, transform;
+}
