@@ -53,6 +53,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/cfcheck/run", r.webAuthed(r.webCfHealthRun))
 	mux.HandleFunc("/api/tools/cfcheck/cfg", r.webAuthed(r.webCfHealthCfgSave))
 	mux.HandleFunc("/api/tools/cfcheck/fix", r.webAuthed(r.webCfHealthFix))
+	mux.HandleFunc("/api/tools/cfcheck/bulk", r.webAuthed(r.webCfHealthBulk))
 	mux.HandleFunc("/api/cf/settings", r.webAuthed(r.webCfSettings))
 	mux.HandleFunc("/api/cf/email", r.webAuthed(r.webCfEmail))
 	mux.HandleFunc("/api/cf/traffic", r.webAuthed(r.webCfTraffic))

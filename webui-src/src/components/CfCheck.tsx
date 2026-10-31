@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowClockwise, PencilSimple, Pulse, ShieldCheck, Trash } from '@phosphor-icons/react'
+import { ArrowClockwise, Check, GlobeSimple, PencilSimple, Pulse, ShieldCheck, SquaresFour, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
@@ -51,6 +51,13 @@ export function CfCheckView() {
   const [del, setDel] = useState<Row | null>(null)
   const [cfg, setCfg] = useState<{ enabled: boolean; intervalMin: number } | null>(null)
   const [notice, setNotice] = useState('')
+  const [zones, setZones] = useState<{ acc: number; aname: string; zid: string; zone: string }[] | null>(null)
+  const [zpick, setZpick] = useState<Record<string, boolean>>({})
+  const [zoneOpen, setZoneOpen] = useState(false)
+  const [sel, setSel] = useState<string[]>([])
+  const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
+  const [bulkVal, setBulkVal] = useState('')
+  const [bulkErr, setBulkErr] = useState('')
 
   const load = async () => {
     try {
@@ -81,6 +88,87 @@ export function CfCheckView() {
   }
 
   const rows = st?.last?.rows || []
+  const key = (r: Row) => r.acc + '|' + r.zid + '|' + r.rid
+
+  const openZones = async () => {
+    setZoneOpen(true)
+    if (zones) return
+    try {
+      const d = await api<{ zones: any[]; accounts: { i: number; name: string }[] }>('/api/cf/zones?t=' + Date.now())
+      const names: Record<number, string> = {}
+      for (const a of d.accounts || []) names[a.i] = a.name
+      setZones(
+        (d.zones || []).map((z: any) => ({ acc: z.acc, aname: names[z.acc] || 'اکانت ' + z.acc, zid: z.id, zone: z.name })),
+      )
+    } catch (e: any) {
+      setNotice(e.message || 'لیست دامنه‌ها نیامد')
+    }
+  }
+
+  const runZones = async () => {
+    const zids = (zones || []).filter((z) => zpick[z.acc + '|' + z.zid]).map((z) => z.zid)
+    if (!zids.length) {
+      setNotice('حداقل یک دامنه انتخاب کن')
+      return
+    }
+    setZoneOpen(false)
+    setBusy(true)
+    setNotice('')
+    try {
+      const res = await api<{ at: number; rows: Row[]; total: number; bad: number }>('/api/tools/cfcheck/run', { zids })
+      setSt((s2) => (s2 ? { ...s2, last: res, lastRun: res.at } : s2))
+      setNotice(`بررسی انجام شد: ${faNum(res.total)} رکورد، ${faNum(res.bad)} مشکل`)
+      invalidateCache()
+    } catch (e: any) {
+      setNotice(e.message || 'بررسی ناموفق بود')
+    }
+    setBusy(false)
+  }
+
+  const bad = rows.filter((r) => r.status !== 'ok' && r.status !== 'proxy')
+  const picked = rows.filter((r) => sel.includes(key(r)))
+
+  const bulkApply = async () => {
+    const items = (bulk === 'bad' ? bad : picked).map((r) => ({ acc: r.acc, zid: r.zid, rid: r.rid }))
+    if (!items.length) {
+      setBulkErr('رکوردی انتخاب نشده')
+      return
+    }
+    setBulkErr('')
+    try {
+      const res = await api<{ ok: number; fail: number }>('/api/tools/cfcheck/bulk', {
+        op: bulk === 'del' ? 'del' : 'edit',
+        content: bulk === 'del' ? '' : bulkVal.trim(),
+        items,
+      })
+      setBulk(null)
+      setSel([])
+      invalidateCache()
+      await load()
+      setNotice(`انجام شد: ${faNum(res.ok)} موفق، ${faNum(res.fail)} ناموفق`)
+    } catch (e: any) {
+      setBulkErr(e.message || 'انجام نشد')
+    }
+  }
+
+  const runBadAgain = async () => {
+    const zids = [...new Set(bad.map((r) => r.zid))]
+    setBulk(null)
+    if (!zids.length) {
+      setNotice('موردی برای بررسی نیست')
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await api<{ at: number; rows: Row[]; total: number; bad: number }>('/api/tools/cfcheck/run', { zids })
+      setSt((s2) => (s2 ? { ...s2, last: res, lastRun: res.at } : s2))
+      setNotice(`بررسی مجدد: ${faNum(res.bad)} مشکل`)
+    } catch (e: any) {
+      setNotice(e.message || 'بررسی ناموفق بود')
+    }
+    setBusy(false)
+  }
+
   const shown = useMemo(() => {
     const ql = q.trim().toLowerCase()
     return rows.filter((r) => {
@@ -176,15 +264,34 @@ export function CfCheckView() {
         <Button variant="primary" icon={Pulse} onClick={() => void run('all')} disabled={busy}>
           {busy ? 'در حال بررسی…' : 'بررسی همه'}
         </Button>
+        <Button variant="outline" icon={GlobeSimple} onClick={() => void openZones()}>
+          انتخاب دامنه‌ها
+        </Button>
+        <Button variant="outline" icon={SquaresFour} onClick={() => { setBulkErr(''); setBulkVal(''); setBulk('bad') }}>
+          عملیات گروهی
+        </Button>
         <Button variant="outline" icon={ShieldCheck} onClick={() => setCfg({ enabled: !!st?.enabled, intervalMin: st?.intervalMin || 60 })}>
           مانیتور
         </Button>
         {st?.enabled ? (
-          <Button variant="outline" onClick={() => setCfg({ enabled: true, intervalMin: st?.intervalMin || 60 })}>
-            هر {faNum(st?.intervalMin || 60)} دقیقه · روشن
-          </Button>
+          <span className="cc-sub">هر {faNum(st?.intervalMin || 60)} دقیقه · روشن</span>
         ) : null}
       </div>
+
+      {sel.length > 0 && (
+        <div className="cc-bulkbar">
+          <span>{faNum(sel.length)} انتخاب شده</span>
+          <Button variant="outline" onClick={() => { setBulkErr(''); setBulkVal(''); setBulk('edit') }}>
+            ویرایش
+          </Button>
+          <Button variant="outline" onClick={() => { setBulkErr(''); setBulk('del') }}>
+            حذف
+          </Button>
+          <Button variant="outline" onClick={() => setSel([])}>
+            لغو
+          </Button>
+        </div>
+      )}
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {err && <ErrBox msg={err} onRetry={load} />}
@@ -206,7 +313,19 @@ export function CfCheckView() {
           {list.map((r) => {
             const bad = r.status !== 'ok' && r.status !== 'proxy'
             return (
-              <div key={r.rid} className={'cc-trow' + (bad ? ' sel' : '')}>
+              <div key={r.rid} className={'cc-trow' + (sel.includes(key(r)) ? ' sel' : '')}>
+                <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    id={'cfpick-' + r.rid}
+                    name={'cfpick'}
+                    aria-label={'انتخاب ' + r.name}
+                    checked={sel.includes(key(r))}
+                    onChange={(e) =>
+                      setSel((cur) => (e.target.checked ? [...cur, key(r)] : cur.filter((k) => k !== key(r))))
+                    }
+                  />
+                </label>
                 <span className={'cc-dot' + (bad ? ' hot' : r.status === 'proxy' ? ' pw' : '')} />
                 <div className="cc-grow">
                   <div className="cc-name cc-ltr">{r.name}</div>
@@ -255,6 +374,108 @@ export function CfCheckView() {
           })}
         </div>
       ))}
+
+      {zoneOpen && (
+        <Dialog.Root open onOpenChange={(o) => !o && setZoneOpen(false)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">انتخاب دامنه‌ها</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              فقط رکوردهای A/AAAA/CNAME همین دامنه‌ها بررسی می‌شوند.
+            </Dialog.Description>
+            {!zones && <div className="cc-center cc-pad"><Loader /></div>}
+            {zones && (
+              <>
+                <label className="cc-checkline">
+                  <input
+                    type="checkbox"
+                    id="cfz-all"
+                    name="cfzAll"
+                    checked={zones.every((z) => zpick[z.acc + '|' + z.zid])}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      const next: Record<string, boolean> = {}
+                      for (const z of zones) next[z.acc + '|' + z.zid] = on
+                      setZpick(next)
+                    }}
+                  />
+                  <span className="cc-grow">همهٔ دامنه‌ها ({faNum(zones.length)})</span>
+                </label>
+                {zones.map((z) => (
+                  <label key={z.acc + '|' + z.zid} className="cc-checkline">
+                    <input
+                      type="checkbox"
+                      id={'cfz-' + z.zid}
+                      name="cfz"
+                      checked={!!zpick[z.acc + '|' + z.zid]}
+                      onChange={(e) => setZpick((p) => ({ ...p, [z.acc + '|' + z.zid]: e.target.checked }))}
+                    />
+                    <span className="cc-grow cc-ltr">{z.zone}</span>
+                    <span className="cc-sub">{z.aname}</span>
+                  </label>
+                ))}
+              </>
+            )}
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setZoneOpen(false)}>انصراف</Button>
+              <Button variant="primary" icon={Pulse} onClick={() => void runZones()}>بررسی انتخاب‌شده‌ها</Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      {bulk && (
+        <Dialog.Root open onOpenChange={(o) => !o && setBulk(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">
+              {bulk === 'del' ? 'حذف گروهی' : bulk === 'edit' ? 'ویرایش گروهی' : 'عملیات گروهی'}
+            </Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              {bulk === 'bad'
+                ? `${faNum(bad.length)} رکورد مشکل‌دار در آخرین بررسی`
+                : `${faNum(picked.length)} رکورد انتخاب شده`}
+            </Dialog.Description>
+            {bulk === 'bad' ? (
+              <div className="cc-form">
+                <Button variant="outline" icon={ArrowClockwise} onClick={() => void runBadAgain()}>
+                  بررسی مجدد خطادارها
+                </Button>
+                <Button variant="outline" onClick={() => setSel(bad.map(key))}>
+                  انتخاب همهٔ خطادارها
+                </Button>
+                <Button variant="outline" onClick={() => { setBulk('edit'); setBulkVal('') }}>
+                  ویرایش مقدار خطادارها
+                </Button>
+                <Button variant="outline" onClick={() => setBulk('del')}>
+                  حذف همهٔ خطادارها
+                </Button>
+              </div>
+            ) : (
+              <div className="cc-form">
+                {bulk === 'edit' && (
+                  <label className="cc-field">
+                    <span>مقدار جدید</span>
+                    <Input className="cc-ltr" value={bulkVal} onChange={(e) => setBulkVal(e.target.value)} placeholder="1.2.3.4 یا host.example.com" />
+                  </label>
+                )}
+                {bulk === 'del' && (
+                  <div className="cc-hint">این رکوردها از کلادفلر حذف می‌شوند و برگشت‌پذیر نیست.</div>
+                )}
+                {bulkErr && <div className="cc-form-err">{bulkErr}</div>}
+              </div>
+            )}
+            {(bulk === 'edit' || bulk === 'del') && (
+              <div className="cc-dialog-actions">
+                <Button variant="secondary" onClick={() => setBulk('bad')}>بازگشت</Button>
+                <Button variant={bulk === 'del' ? 'destructive' : 'primary'} icon={bulk === 'del' ? Trash : Check} onClick={() => void bulkApply()}>
+                  {bulk === 'del' ? 'حذف' : 'ذخیره'}
+                </Button>
+              </div>
+            )}
+          </Dialog>
+        </Dialog.Root>
+      )}
 
       {fix && (
         <FormDialog

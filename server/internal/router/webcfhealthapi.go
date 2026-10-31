@@ -28,19 +28,28 @@ func (r *Router) webToolsCfCheck(w http.ResponseWriter, req *http.Request, uid i
 // webCfHealthRun checks everything, one zone, or a single record.
 func (r *Router) webCfHealthRun(w http.ResponseWriter, req *http.Request, uid int64) {
 	var in struct {
-		Acc  int    `json:"acc"`
-		Zid  string `json:"zid"`
-		Rid  string `json:"rid"`
-		Zone string `json:"zone"`
+		Acc  *int     `json:"acc"`
+		Zid  string   `json:"zid"`
+		Rid  string   `json:"rid"`
+		Zids []string `json:"zids"`
 	}
 	if !webDecode(w, req, &in) {
 		return
 	}
-	acc := in.Acc
-	if acc < 0 || acc >= len(r.cfAccs()) {
-		acc = -1
+	acc := -1
+	if in.Acc != nil && *in.Acc >= 0 && *in.Acc < len(r.cfAccs()) {
+		acc = *in.Acc
 	}
-	last := r.cfHealthScan(acc, in.Zid, in.Rid)
+	var zids map[string]bool
+	if len(in.Zids) > 0 {
+		zids = map[string]bool{}
+		for _, z := range in.Zids {
+			if z != "" {
+				zids[z] = true
+			}
+		}
+	}
+	last := r.cfHealthScan(acc, in.Zid, in.Rid, zids)
 	webOK(w, last)
 }
 
@@ -114,4 +123,60 @@ func (r *Router) webCfHealthFix(w http.ResponseWriter, req *http.Request, uid in
 		return
 	}
 	webOK(w, map[string]any{"ok": true})
+}
+
+// webCfHealthBulk applies one fix to many rows at once.
+func (r *Router) webCfHealthBulk(w http.ResponseWriter, req *http.Request, uid int64) {
+	type item struct {
+		Acc int    `json:"acc"`
+		Zid string `json:"zid"`
+		Rid string `json:"rid"`
+	}
+	var in struct {
+		Op      string `json:"op"` // del | edit
+		Content string `json:"content"`
+		Type    string `json:"type"`
+		Items   []item `json:"items"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	if in.Op != "del" && in.Op != "edit" {
+		webErr(w, http.StatusBadRequest, "عملیات نامعتبر است")
+		return
+	}
+	if in.Op == "edit" && strings.TrimSpace(in.Content) == "" {
+		webErr(w, http.StatusBadRequest, "مقدار جدید را وارد کن")
+		return
+	}
+	accs := r.cfAccs()
+	ok, fail := 0, 0
+	for _, it := range in.Items {
+		if it.Acc < 0 || it.Acc >= len(accs) || it.Zid == "" || it.Rid == "" {
+			fail++
+			continue
+		}
+		cli := cf.New(accs[it.Acc].Token)
+		var err error
+		if in.Op == "del" {
+			err = cli.DelRecord(it.Zid, it.Rid)
+		} else {
+			cur := r.cfFind(it.Acc, it.Zid, it.Rid)
+			if cur == nil {
+				fail++
+				continue
+			}
+			ch := map[string]any{"content": strings.TrimSpace(in.Content)}
+			if t := strings.ToUpper(strings.TrimSpace(in.Type)); t != "" {
+				ch["type"] = t
+			}
+			_, err = cli.UpdateRecord(it.Zid, *cur, ch)
+		}
+		if err != nil {
+			fail++
+		} else {
+			ok++
+		}
+	}
+	webOK(w, map[string]any{"ok": ok, "fail": fail})
 }

@@ -157,7 +157,7 @@ func cfHealthCheckRow(row cfHealthRow) cfHealthRow {
 }
 
 // cfHealthCollect gathers A/AAAA/CNAME rows for one account (acc<0 = all) or one zone.
-func (r *Router) cfHealthCollect(acc int, zid string) []cfHealthRow {
+func (r *Router) cfHealthCollect(acc int, zid string, zids map[string]bool) []cfHealthRow {
 	var out []cfHealthRow
 	accs := r.cfAccs()
 	for i, a := range accs {
@@ -171,6 +171,9 @@ func (r *Router) cfHealthCollect(acc int, zid string) []cfHealthRow {
 		}
 		for _, z := range zones {
 			if zid != "" && z.ID != zid {
+				continue
+			}
+			if len(zids) > 0 && !zids[z.ID] {
 				continue
 			}
 			recs, err := cli.Records(z.ID)
@@ -198,8 +201,8 @@ func (r *Router) cfHealthCollect(acc int, zid string) []cfHealthRow {
 	return out
 }
 
-func (r *Router) cfHealthScan(acc int, zid string, only string) cfHealthLast {
-	rows := r.cfHealthCollect(acc, zid)
+func (r *Router) cfHealthScan(acc int, zid string, only string, zids map[string]bool) cfHealthLast {
+	rows := r.cfHealthCollect(acc, zid, zids)
 	if only != "" {
 		kept := rows[:0]
 		for _, x := range rows {
@@ -261,7 +264,7 @@ func (r *Router) CfHealthTick(force bool) {
 			prevBad[x.Zid+"|"+x.Rid] = true
 		}
 	}
-	last := r.cfHealthScan(-1, "", "")
+	last := r.cfHealthScan(-1, "", "", nil)
 	var fresh []string
 	for _, x := range last.Rows {
 		k := x.Zid + "|" + x.Rid
