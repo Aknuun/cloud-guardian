@@ -1,6 +1,5 @@
 import { CaretLeft, GearSix, House, Envelope, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, BellRinging, ShieldCheck, Tag, Terminal } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
-import { Button, Dialog } from './ui'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
@@ -75,42 +74,7 @@ export function toolItems(active: ToolId | null, onSelect: (id: ToolId) => void)
   return all.map((t) => ({ ...t, active: active === t.id, onSelect: () => onSelect(t.id) }))
 }
 
-export function FormDialog({
-  title,
-  sub,
-  onClose,
-  onSave,
-  children,
-  error,
-}: {
-  title: string
-  sub?: string
-  onClose: () => void
-  onSave: () => void
-  children: React.ReactNode
-  error?: string
-}) {
-  return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog className="cc-dialog" size="base">
-        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
-        <Dialog.Title className="cc-dialog-title">{title}</Dialog.Title>
-        {sub && <Dialog.Description className="cc-dialog-desc">{sub}</Dialog.Description>}
-        <div className="cc-form">{children}</div>
-        {error && <div className="cc-form-err">{error}</div>}
-        <div className="cc-dialog-actions">
-          <Button variant="secondary" onClick={onClose}>
-            انصراف
-          </Button>
-          <Button variant="primary" onClick={onSave}>
-            ذخیره
-          </Button>
-        </div>
-      </Dialog>
-    </Dialog.Root>
-  )
-}
-
+export { FormDialog } from '../tools/shared'
 
 export function ErrBox({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
   return (
