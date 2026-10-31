@@ -75,6 +75,24 @@ function keyboardRows() {
   })
 }
 
+// A Telegram webview can keep an old bundle alive for days. Compare the running
+// script with the one index.html points at now and reload once when they differ.
+async function checkUpdate() {
+  try {
+    const res = await fetch('/app/?t=' + Date.now(), { cache: 'no-store' })
+    const html = await res.text()
+    const m = html.match(/assets\/index-[\w-]+\.js/)
+    const cur = [...document.scripts].map((s) => s.src).find((u) => /assets\/index-[\w-]+\.js/.test(u))
+    if (!m || !cur) return
+    const stamp = 'cg_reload_' + m[0]
+    if (cur.includes(m[0]) || sessionStorage.getItem(stamp)) return
+    sessionStorage.setItem(stamp, '1')
+    location.reload()
+  } catch {
+    /* offline: try again next time */
+  }
+}
+
 async function waitTelegram(ms: number) {
   const t0 = Date.now()
   while (!(window as any).Telegram && Date.now() - t0 < ms) {
@@ -86,6 +104,10 @@ async function waitTelegram(ms: number) {
 const needsTg = typeof location !== 'undefined' && /tgWebAppData=/.test(location.hash)
 waitTelegram(needsTg ? 8000 : 1500).then(() => {
   keyboardRows()
+  void checkUpdate()
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void checkUpdate()
+  })
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <ThemeProvider>
