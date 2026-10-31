@@ -6,10 +6,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aknuun/cg-server/internal/store"
 )
 
 func makeInitData(t *testing.T, token string, uid int64, authDate int64) string {
@@ -60,21 +63,51 @@ func TestValidateInitData(t *testing.T) {
 }
 
 func TestWebSessionRoundTrip(t *testing.T) {
-	r := &Router{BotToken: "123:abc"}
-	exp := time.Now().Add(time.Hour).Unix()
-	tok := r.webSignSession(7, exp)
-	if uid, ok := r.webCheckSession(tok); !ok || uid != 7 {
-		t.Fatalf("session rejected: uid=%d ok=%v", uid, ok)
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := r.webCheckSession(tok + "x"); ok {
+	defer st.Close()
+	r := &Router{BotToken: "123:abc", Store: st}
+	exp := time.Now().Add(time.Hour).Unix()
+	sid := r.webSessCreate(7, "127.0.0.1", "Mozilla/5.0 (iPhone) Safari", exp)
+	tok := r.webSignSession(7, exp, sid)
+	uid, got, ok := r.webCheckSession(tok)
+	if !ok || uid != 7 || got != sid {
+		t.Fatalf("session rejected: uid=%d sid=%q ok=%v", uid, got, ok)
+	}
+	if _, _, ok := r.webCheckSession(tok + "x"); ok {
 		t.Fatal("tampered session accepted")
 	}
-	if _, ok := r.webCheckSession(r.webSignSession(7, time.Now().Add(-time.Minute).Unix())); ok {
+	expired := r.webSignSession(7, time.Now().Add(-time.Minute).Unix(), "x")
+	if _, _, ok := r.webCheckSession(expired); ok {
 		t.Fatal("expired session accepted")
 	}
-	if _, ok := r.webCheckSession("garbage"); ok {
+	if _, _, ok := r.webCheckSession("garbage"); ok {
 		t.Fatal("garbage session accepted")
 	}
+	if lst := r.webSessList(7); len(lst) != 1 || lst[0].Device != "iPhone · Safari" {
+		t.Fatalf("session list wrong: %+v", lst)
+	}
+	// revoking the row kills the still-valid token
+	r.webSessRevoke(7, sid)
+	if _, _, ok := r.webCheckSession(tok); ok {
+		t.Fatal("revoked session still accepted")
+	}
+	// revoke-all clears every device
+	a := r.webSessCreate(7, "1.1.1.1", "Windows Chrome", exp)
+	b := r.webSessCreate(7, "2.2.2.2", "Android Chrome", exp)
+	if len(r.webSessList(7)) != 2 {
+		t.Fatal("expected two sessions")
+	}
+	r.webSessRevokeAll(7)
+	if len(r.webSessList(7)) != 0 {
+		t.Fatal("revoke-all left sessions behind")
+	}
+	if _, _, ok := r.webCheckSession(r.webSignSession(7, exp, a)); ok {
+		t.Fatal("revoked-all token accepted")
+	}
+	_ = b
 }
 
 func TestWebHzTraffic(t *testing.T) {

@@ -129,6 +129,8 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/hs/tpl", r.webAuthed(r.webStudioTpl))
 	mux.HandleFunc("/api/tools/hs/ov", r.webAuthed(r.webStudioOverride))
 	mux.HandleFunc("/api/tools/hs/bk", r.webAuthed(r.webStudioBackup))
+	mux.HandleFunc("/api/sessions", r.webAuthed(r.webSessions))
+	mux.HandleFunc("/api/sessions/revoke", r.webAuthed(r.webSessionsRevoke))
 	mux.HandleFunc("/api/tools/settings", r.webAuthed(r.webToolsSettings))
 	mux.HandleFunc("/api/tools/settings/check", r.webAuthed(r.webSetCheck))
 	mux.HandleFunc("/api/tools/settings/update", r.webAuthed(r.webSetUpdate))
@@ -214,28 +216,32 @@ func (r *Router) webSessionSecret() []byte {
 	return m.Sum(nil)
 }
 
-func (r *Router) webSignSession(uid int64, exp int64) string {
-	msg := fmt.Sprintf("%d.%d", uid, exp)
+func (r *Router) webSignSession(uid int64, exp int64, sid string) string {
+	msg := fmt.Sprintf("%d.%d.%s", uid, exp, sid)
 	m := hmac.New(sha256.New, r.webSessionSecret())
 	m.Write([]byte(msg))
 	return msg + "." + hex.EncodeToString(m.Sum(nil))
 }
 
-func (r *Router) webCheckSession(tok string) (int64, bool) {
+func (r *Router) webCheckSession(tok string) (int64, string, bool) {
 	parts := strings.Split(tok, ".")
-	if len(parts) != 3 {
-		return 0, false
+	if len(parts) != 4 {
+		return 0, "", false
 	}
 	uid, err1 := strconv.ParseInt(parts[0], 10, 64)
 	exp, err2 := strconv.ParseInt(parts[1], 10, 64)
-	if err1 != nil || err2 != nil || uid <= 0 || exp < time.Now().Unix() {
-		return 0, false
+	sid := parts[2]
+	if err1 != nil || err2 != nil || uid <= 0 || sid == "" || exp < time.Now().Unix() {
+		return 0, "", false
 	}
-	want := r.webSignSession(uid, exp)
+	want := r.webSignSession(uid, exp, sid)
 	if subtle.ConstantTimeCompare([]byte(want), []byte(tok)) != 1 {
-		return 0, false
+		return 0, "", false
 	}
-	return uid, true
+	if !r.webSessValid(uid, sid) {
+		return 0, "", false
+	}
+	return uid, sid, true
 }
 
 // validateInitData verifies Telegram WebApp initData and returns the user id.
@@ -304,7 +310,7 @@ func (r *Router) webAuthAPI(w http.ResponseWriter, req *http.Request) {
 	}
 	exp := time.Now().Add(webLoginSess).Unix()
 	webOK(w, map[string]any{
-		"token": r.webSignSession(uid, exp),
+		"token": r.webSignSession(uid, exp, r.webSessCreate(uid, clientIPOf(req), req.UserAgent(), exp)),
 		"user":  map[string]any{"id": uid, "isMain": r.IsMain(uid)},
 	})
 }
@@ -315,7 +321,7 @@ func (r *Router) webAuthed(fn webHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		h := req.Header.Get("Authorization")
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
-		uid, ok := r.webCheckSession(tok)
+		uid, _, ok := r.webCheckSession(tok)
 		if !ok {
 			webErr(w, http.StatusUnauthorized, "نشست نامعتبر یا منقضی است")
 			return

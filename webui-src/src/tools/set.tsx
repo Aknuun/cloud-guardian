@@ -9,10 +9,15 @@ import { FormDialog } from './shared'
 import { useTool, save, faTxt, verGt } from './shared'
 import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
 
+type Sess = { id: string; created: number; last: number; exp: number; ip: string; device: string; current: boolean }
+
 type SetData = { version: string; latest: string; isMain: boolean; admins: number[]; guides: { id: string; title: string; text: string }[] }
 
 function SetView() {
   const { data, err, reload } = useTool<SetData>('/api/tools/settings')
+  const sess = useTool<{ sessions: Sess[] }>('/api/sessions')
+  const [sessNotice, setSessNotice] = useState('')
+  const [confirmAll, setConfirmAll] = useState(false)
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [addId, setAddId] = useState('')
@@ -122,6 +127,70 @@ function SetView() {
 
       <div className="cc-section">
         <div className="cc-section-head">
+          <h2>دستگاه‌های واردشده</h2>
+          <Button variant="outline" onClick={() => setConfirmAll(true)}>
+            خروج از همه
+          </Button>
+        </div>
+        {sessNotice && <div className="cc-hint cc-mb">{sessNotice}</div>}
+        {!sess.loaded && <Loader />}
+        {(sess.data?.sessions || []).map((x) => (
+          <div key={x.id} className="cc-trow">
+            <div className="cc-grow">
+              <div className="cc-name">
+                {x.device || 'نامشخص'}
+                {x.current && <span className="cc-now"> · همین دستگاه</span>}
+              </div>
+              <div className="cc-sub cc-ltr">
+                {x.ip} · آخرین استفاده {ago(x.last)} · ورود {faDate(x.created)}
+              </div>
+            </div>
+            {!x.current && (
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await act('/api/sessions/revoke', { id: x.id })
+                  setSessNotice('آن دستگاه خارج شد')
+                  sess.reload()
+                }}
+              >
+                <Trash size={15} />
+              </Button>
+            )}
+          </div>
+        ))}
+        {sess.loaded && (sess.data?.sessions || []).length === 0 && <Empty title="نشستی نیست" />}
+      </div>
+
+      {confirmAll && (
+        <Dialog.Root open onOpenChange={(o) => !o && setConfirmAll(false)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">خروج از همهٔ دستگاه‌ها</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">
+              همهٔ نشست‌ها باطل می‌شوند و روی هر دستگاه باید دوباره از تلگرام وارد شوی — از جمله همین دستگاه.
+            </Dialog.Description>
+            <div className="cc-dialog-actions">
+              <Button variant="secondary" onClick={() => setConfirmAll(false)}>
+                انصراف
+              </Button>
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  await act('/api/sessions/revoke', { all: true })
+                  setConfirmAll(false)
+                  window.location.href = '/app/'
+                }}
+              >
+                خارج کن
+              </Button>
+            </div>
+          </Dialog>
+        </Dialog.Root>
+      )}
+
+      <div className="cc-section">
+        <div className="cc-section-head">
           <h2>راهنما</h2>
         </div>
         {data.guides.map((g) => (
@@ -152,6 +221,15 @@ function SetView() {
       )}
     </>
   )
+}
+
+function ago(ts: number) {
+  const m = Math.round((Date.now() / 1000 - ts) / 60)
+  if (m < 1) return 'همین حالا'
+  if (m < 60) return faNum(m) + ' دقیقه پیش'
+  const h = Math.round(m / 60)
+  if (h < 24) return faNum(h) + ' ساعت پیش'
+  return faNum(Math.round(h / 24)) + ' روز پیش'
 }
 
 export default SetView

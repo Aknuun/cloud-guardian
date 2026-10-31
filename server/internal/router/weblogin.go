@@ -131,9 +131,10 @@ func (r *Router) webLoginState(w http.ResponseWriter, req *http.Request) {
 		uid := e.uid
 		delete(webLoginReqs, code) // single use
 		webLoginMu.Unlock()
+		exp := time.Now().Add(webLoginSess).Unix()
 		webOK(w, map[string]any{
 			"status": "ok",
-			"token":  r.webSignSession(uid, time.Now().Add(webLoginSess).Unix()),
+			"token":  r.webSignSession(uid, exp, r.webSessCreate(uid, clientIPOf(req), req.UserAgent(), exp)),
 		})
 	case 2:
 		delete(webLoginReqs, code)
@@ -246,7 +247,7 @@ func (r *Router) webLoginTicket(w http.ResponseWriter, req *http.Request) {
 	}
 	exp := time.Now().Add(webLoginSess).Unix()
 	webOK(w, map[string]any{
-		"token": r.webSignSession(r.AdminID, exp),
+		"token": r.webSignSession(r.AdminID, exp, r.webSessCreate(r.AdminID, clientIPOf(req), req.UserAgent(), exp)),
 		"user":  map[string]any{"id": r.AdminID, "isMain": true},
 	})
 }
