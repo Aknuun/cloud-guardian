@@ -2230,3 +2230,8 @@ body .cc-menu-item {
 .cc-mutedic { color: var(--ds-brand) }
 .cc-inline { display: inline-flex; align-items: center; gap: 6px; height: 38px; font-size: 13px }
 .cc-center { text-align: center }
+.cc-diffold, .cc-diffnew { direction: ltr; text-align: left }
+.cc-hsbar .cc-input { min-width: 132px }
+.cc-tplbtns [data-kumo-component='Button'] { padding: 0 7px; font-size: 12px; min-width: 0 }
+.cc-tplbtns { justify-content: flex-end }
+.cc-hs .cc-trow .cc-name { direction: ltr; text-align: left }
