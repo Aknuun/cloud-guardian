@@ -86,6 +86,10 @@ func main() {
 	})
 	mux.HandleFunc("/pghook/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !router.IPAllow(router.ClientIP(req), 240) {
+			http.Error(w, `{"ok":false}`, http.StatusTooManyRequests)
+			return
+		}
 		if req.Method != "POST" {
 			http.Error(w, `{"ok":false}`, 405)
 			return
@@ -117,6 +121,10 @@ func main() {
 	})
 	mux.HandleFunc("/ndhook/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if !router.IPAllow(router.ClientIP(req), 240) {
+			http.Error(w, `{"ok":false}`, http.StatusTooManyRequests)
+			return
+		}
 		if req.Method != "POST" {
 			http.Error(w, `{"ok":false}`, 405)
 			return
