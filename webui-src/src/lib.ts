@@ -53,9 +53,28 @@ export async function api<T = any>(path: string, body?: any, signal?: AbortSigna
   return run
 }
 
+// Same payload + same path sent again within a few seconds = the same logical
+// action (double click, impatient retry). Reuse the key so the server replays
+// the first result instead of running the mutation twice.
+const idemKeys = new Map<string, { k: string; t: number }>()
+
+function idemKey(path: string, body: any): string {
+  const sig = path + '|' + JSON.stringify(body)
+  const now = Date.now()
+  const hit = idemKeys.get(sig)
+  if (hit && now - hit.t < 8000) return hit.k
+  for (const [s, v] of idemKeys) if (now - v.t > 30000) idemKeys.delete(s)
+  const k = (crypto as any).randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + now
+  idemKeys.set(sig, { k, t: now })
+  return k
+}
+
 async function request<T>(path: string, body?: any, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { Authorization: 'Bearer ' + token }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+    headers['Idempotency-Key'] = idemKey(path, body)
+  }
   const res = await fetch(path, {
     method: body === undefined ? 'GET' : 'POST',
     headers,

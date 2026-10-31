@@ -335,7 +335,7 @@ func (r *Router) webAuthed(fn webHandler) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		fn(w, req, uid)
+		r.webIdemRun(w, req, uid, fn)
 	}
 }
 
