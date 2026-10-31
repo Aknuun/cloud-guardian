@@ -20,3 +20,9 @@
 - **تست:** `TestFoPublicBasePrefersHTTPS`.
 - **نکته:** ورکرِ فعال فعلی تا دیپلوی مجدد از پنل، هنوز همان آدرس HTTP را probe می‌کند؛ تغییر در پیکربندی ذخیره‌شده کافی نیست چون `CG_HEALTH_URL` در زمان دیپلوی bind می‌شود.
 - **فایل‌ها:** `server/internal/router/failover.go`, `failover_test.go`, `scripts/release.sh`
+
+## 4.73.5 — زمان‌بند: هر کار goroutine مستقل + recover
+- **مشکل:** `alertLoop` همهٔ کارها (پاکسازی بافرها، ndmon، srvmon، cf health، ssl، domexp، purge، sync، snapshot، backup) را سری و در یک goroutine و **بدون recover** اجرا می‌کرد؛ یک panic = مرگ کل ربات، و یک تماس کند = عقب‌افتادن بکاپ روزانه و بقیه.
+- **رفع:** هلپر `every(name, d, fn)` ساخته شد (goroutine مستقل + `defer recover` + لاگ `loop <name> panic`)، و هر کار با دورهٔ خودش جدا شد: دقیقه‌ای (quota/alerts/um/ndmon/srvmon)، cf-health ۱م، hfd ۱م، hub ۵م، digest ۱ساعت/۲۴ساعت، ssl ۶ساعت، domexp ۲۴ساعت، purge ۱ساعت، sync ۱۰م، telemetry ۶ساعت، snapshot ۲۴ساعت، backup-push ۳۰م. (`hostfilterLoop` از قبل جدا بود.)
+- **تست:** `TestEverySurvivesPanic` (بعد از panic، حلقه ادامه می‌دهد).
+- **فایل‌ها:** `server/cmd/cg-server/main.go`, `main_test.go`

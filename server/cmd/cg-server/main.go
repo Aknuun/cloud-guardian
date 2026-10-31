@@ -226,22 +226,30 @@ func reminderLoop(r *router.Router) {
 	}
 }
 
+// every runs fn on a fixed cadence in its own goroutine. A panic in one task
+// must never kill the scheduler or the bot, and a slow task must not delay the
+// others (a hung SSH/panel call used to hold up the daily backup).
+func every(name string, d time.Duration, fn func()) {
+	go func() {
+		for {
+			func() {
+				defer func() {
+					if e := recover(); e != nil {
+						log.Printf("loop %s panic: %v", name, e)
+					}
+				}()
+				fn()
+			}()
+			time.Sleep(d)
+		}
+	}()
+}
+
 func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64, dbPath string) {
-	lastDigestU := time.Now()
-	lastDigestD := time.Now()
-	lastPurge := time.Now()
-	lastSync := time.Now()
-	lastBackup := time.Now()
-	lastSnap := time.Now()
-	lastDomexp := time.Now()
-	lastTelemetry := time.Now()
-	lastSsl := time.Now()
-	lastHub := time.Now()
-	lastCfCheck := time.Now()
-	for {
-		time.Sleep(60 * time.Second)
-		now := time.Now()
-		panels := r.PanelsRaw()
+	panelsOf := func() []pg.Panel { return r.PanelsRaw() }
+
+	every("minute", time.Minute, func() {
+		panels := panelsOf()
 		pmap := map[string]pg.Panel{}
 		for _, p := range panels {
 			pmap[p.URL] = p
@@ -251,65 +259,52 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 				bot.Send(t, qm, nil)
 			}
 		}
-		if !r.QuotaPaused() {
-			alerts.FlushBuffers(bot, st, pmap, adminID, false)
-			um.Run(bot, st, panels, adminID)
-			ndmon.RunNodePoll(bot, st, panels, adminID, false)
-			srvmon.Run(st, r.SrvList(), adminID, srvStats, bot, false)
+		if r.QuotaPaused() {
+			return
 		}
-		if now.Sub(lastDigestU) > time.Hour {
-			alerts.RunDigest(bot, st, panels, "usage", adminID)
-			lastDigestU = now
+		alerts.FlushBuffers(bot, st, pmap, adminID, false)
+		um.Run(bot, st, panels, adminID)
+		ndmon.RunNodePoll(bot, st, panels, adminID, false)
+		srvmon.Run(st, r.SrvList(), adminID, srvStats, bot, false)
+	})
+
+	every("cf-health", time.Minute, func() { r.CfHealthTick(false) })
+	every("sub-rotate", time.Minute, func() { r.HfdTick() })
+	every("hub", 5*time.Minute, func() { r.HubTick() })
+
+	every("digest-usage", time.Hour, func() {
+		if r.QuotaPaused() {
+			return
 		}
-		if now.Sub(lastDigestD) > 24*time.Hour {
-			alerts.RunDigest(bot, st, panels, "days", adminID)
-			lastDigestD = now
+		alerts.RunDigest(bot, st, panelsOf(), "usage", adminID)
+	})
+	every("digest-days", 24*time.Hour, func() {
+		if r.QuotaPaused() {
+			return
 		}
-		if now.Sub(lastSsl) > 6*time.Hour {
-			r.SslTick()
-			lastSsl = now
+		alerts.RunDigest(bot, st, panelsOf(), "days", adminID)
+	})
+	every("ssl", 6*time.Hour, func() { r.SslTick() })
+	every("domexp", 24*time.Hour, func() { r.DomexpDaily() })
+	every("purge", time.Hour, func() { st.Purge() })
+	every("sync", 10*time.Minute, func() { r.SyncPush() })
+	every("telemetry", 6*time.Hour, func() { r.HubTelemetry() })
+
+	every("snapshot", 24*time.Hour, func() {
+		if err := st.Snapshot(dbPath + ".daily-" + time.Now().UTC().Format("20060102")); err != nil {
+			log.Println("db snapshot:", err)
 		}
-		if now.Sub(lastDomexp) > 24*time.Hour {
-			r.DomexpDaily()
-			lastDomexp = now
+		pruneSnapshots(dbPath, 7)
+	})
+
+	every("backup-push", 30*time.Minute, func() {
+		tok, acc, ns := r.SyncCredentials()
+		if tok == "" || acc == "" || ns == "" {
+			return
 		}
-		r.HfdTick()
-		if now.Sub(lastHub) > 5*time.Minute {
-			r.HubTick()
-			lastHub = now
-		}
-		if now.Sub(lastCfCheck) > 60*time.Second {
-			r.CfHealthTick(false)
-			lastCfCheck = now
-		}
-		if now.Sub(lastPurge) > time.Hour {
-			st.Purge()
-			lastPurge = now
-		}
-		if now.Sub(lastSync) > 10*time.Minute {
-			r.SyncPush()
-			lastSync = now
-		}
-		if now.Sub(lastSnap) > 24*time.Hour {
-			if err := st.Snapshot(dbPath + ".daily-" + now.UTC().Format("20060102")); err != nil {
-				log.Println("db snapshot:", err)
-			}
-			pruneSnapshots(dbPath, 7)
-			lastSnap = now
-		}
-		if now.Sub(lastBackup) > 30*time.Minute {
-			tok, acc, ns := r.SyncCredentials()
-			if tok != "" && acc != "" && ns != "" {
-				path := dbPath
-				fosync.PushAsync(func() { fosync.BackupDB(tok, acc, ns, path) })
-			}
-			lastBackup = now
-		}
-		if now.Sub(lastTelemetry) > 6*time.Hour {
-			r.HubTelemetry()
-			lastTelemetry = now
-		}
-	}
+		path := dbPath
+		fosync.PushAsync(func() { fosync.BackupDB(tok, acc, ns, path) })
+	})
 }
 
 // pruneSnapshots keeps the newest n "<db>.daily-*" copies.
