@@ -2020,3 +2020,9 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   max-width: 240px;
   margin-bottom: 2px;
 }
+
+/* The off-canvas drawer must never widen the page. */
+.cc-app { overflow-x: clip }
+@media (max-width: 899px) {
+  .cc-sidebar:not(.open) { pointer-events: none }
+}
