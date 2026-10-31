@@ -390,11 +390,11 @@ export function RecordSheet({
   onCopy: (v: string, l?: string) => void
   onFav: () => void
   onProxy: () => void
-  onTTL: () => void
+  onTTL?: () => void
   onType?: () => void
-  onTraffic: () => void
-  onRefs: () => void
-  onLB: () => void
+  onTraffic?: () => void
+  onRefs?: () => void
+  onLB?: () => void
   onDelete: () => void
 }) {
   const r = dlg.rec
@@ -474,9 +474,13 @@ export function RecordSheet({
             onClick={onType}
           />
         )}
-        <RecRow icon={<ChartBar size={17} />} title="ترافیک امروز" sub="درخواست‌های DNS این رکورد" onClick={onTraffic} />
-        <RecRow icon={<LinkIcon size={17} />} title="CNAMEهای وارده" sub="دامنه‌هایی که به این رکورد اشاره می‌کنند" onClick={onRefs} />
-        {PROXYABLE.includes(r.type) && (
+        {onTraffic && (
+          <RecRow icon={<ChartBar size={17} />} title="ترافیک امروز" sub="درخواست‌های DNS این رکورد" onClick={onTraffic} />
+        )}
+        {onRefs && (
+          <RecRow icon={<LinkIcon size={17} />} title="CNAMEهای وارده" sub="دامنه‌هایی که به این رکورد اشاره می‌کنند" onClick={onRefs} />
+        )}
+        {onLB && PROXYABLE.includes(r.type) && (
           <RecRow icon={<Gear size={17} />} title="لود بالانسر و آی‌پی زاپاس" sub="مدیریت گروه و آدرس پشتیبان" onClick={onLB} />
         )}
       </div>

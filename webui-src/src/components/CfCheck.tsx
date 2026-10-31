@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowClockwise, CaretDown, Check, FunnelSimple, GlobeSimple, PencilSimple, Pulse, ShieldCheck, SquaresFour, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, invalidateCache } from '../lib'
+import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
 import { ErrBox, FormDialog, Skeleton } from './toolsMeta'
 import { StatGrid } from './Stats'
-import { RecordEditor } from '../cloudflare/components'
+import { RecordEditor, RecordSheet } from '../cloudflare/components'
 
 type Row = {
   acc: number
@@ -59,6 +59,7 @@ export function CfCheckView() {
   const [closed, setClosed] = useState<string[]>([])
   const [bulkMenu, setBulkMenu] = useState(false)
   const [edit, setEdit] = useState<Row | null>(null)
+  const [sheet, setSheet] = useState<Row | null>(null)
   const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
   const [bulkVal, setBulkVal] = useState('')
   const [bulkErr, setBulkErr] = useState('')
@@ -386,7 +387,7 @@ export function CfCheckView() {
                     type="button"
                     className="cc-rowbtn"
                     aria-label="اصلاح رکورد"
-                    onClick={() => setEdit(r)}
+                    onClick={() => setSheet(r)}
 
                   >
                     <PencilSimple size={15} />
@@ -526,6 +527,75 @@ export function CfCheckView() {
         </FormDialog>
       )}
 
+      {sheet && (
+        <Dialog.Root open onOpenChange={(o) => !o && setSheet(null)}>
+          <Dialog className="cc-dialog cc-recsheet" size="base">
+            <RecordSheet
+              dlg={{
+                k: 'record',
+                acc: sheet.acc,
+                zid: sheet.zid,
+                zone: sheet.zone,
+                rec: {
+                  id: sheet.rid,
+                  name: sheet.name,
+                  type: sheet.type,
+                  content: sheet.content,
+                  proxied: sheet.proxied,
+                  ttl: 1,
+                } as any,
+              }}
+              onClose={() => setSheet(null)}
+              onEdit={() => {
+                const cur = sheet
+                setSheet(null)
+                setEdit(cur)
+              }}
+              onCopy={(v, l) => {
+                void fallbackCopy(v)
+                setNotice(l || 'کپی شد')
+              }}
+              onFav={async () => {
+                try {
+                  await api('/api/cf/record', { op: 'fav', acc: sheet.acc, zid: sheet.zid, rid: sheet.rid })
+                  setNotice('منتخب‌ها به‌روزرسانی شد')
+                  setSheet(null)
+                  invalidateCache()
+                  void load()
+                } catch (e: any) {
+                  setNotice(String(e?.message || 'انجام نشد'))
+                }
+              }}
+              onProxy={async () => {
+                const cur = sheet
+                try {
+                  await api('/api/cf/record', {
+                    op: 'proxy',
+                    acc: cur.acc,
+                    zid: cur.zid,
+                    rid: cur.rid,
+                    type: cur.type,
+                    name: cur.name,
+                    content: cur.content,
+                    ttl: 1,
+                    proxied: !cur.proxied,
+                  })
+                  setSheet(null)
+                  invalidateCache()
+                  await runOne(cur)
+                } catch (e: any) {
+                  setNotice(String(e?.message || 'انجام نشد'))
+                }
+              }}
+              onDelete={() => {
+                const cur = sheet
+                setSheet(null)
+                setDel(cur)
+              }}
+            />
+          </Dialog>
+        </Dialog.Root>
+      )}
       {edit && (
         <Dialog.Root open onOpenChange={(o) => !o && setEdit(null)}>
           <Dialog className="cc-dialog" size="base">
