@@ -160,22 +160,23 @@ export function RecordEditor({
       haptic('error')
       return
     }
-    // A CNAME pointing at a name that resolves nowhere breaks silently; ask first.
-    if (type === 'CNAME' && content.trim() && !warn) {
+    // A target that does not resolve (or an impossible IP) breaks silently; ask first.
+    if (content.trim() && !warn && !['TXT', 'SRV', 'CAA', 'PTR'].includes(type)) {
       setBusy(true)
       try {
-        const res = await fetch('/api/cf/resolve?name=' + encodeURIComponent(content.trim()), {
-          headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('cg_token') || '') },
-        }).then((x) => x.json())
+        const res = await fetch(
+          '/api/cf/resolve?type=' + type + '&name=' + encodeURIComponent(content.trim()),
+          { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('cg_token') || '') } },
+        ).then((x) => x.json())
         const d = res?.data || {}
         if (d.ok === false) {
-          setWarn('«' + content.trim() + '» به هیچ آی‌پی ریسالو نمی‌شود. اگر مطمئنی، دوباره بزن تا ذخیره شود.')
+          setWarn((d.message || 'مقدار معتبر نیست') + ' — اگر مطمئنی، دوباره بزن تا ذخیره شود.')
           haptic('error')
           return
         }
         setFormErr('')
       } catch {
-        /* resolve check is advisory only */
+        /* the check is advisory only */
       } finally {
         setBusy(false)
       }

@@ -109,6 +109,7 @@ export default function Cloudflare({
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const scrollPos = useRef<Record<string, number>>({})
+  const fromSearch = useRef(false)
   const favPending = useRef<Set<string>>(new Set())
   const bump = (n: number) => setBusy((b) => Math.max(0, b + n))
   function toast(t: string, isErr = false) {
@@ -172,6 +173,7 @@ export default function Cloudflare({
   function goBack() {
     if (dlg) {
       setDlg(null)
+      leaveSearchDialog()
       return
     }
     if (stack.length) {
@@ -776,7 +778,20 @@ ${reason}`,
 
   /* ---------------- favorites/search ---------------- */
 
+  // Opening a result from the global search must come back to the search, not the zone.
+  function leaveSearchDialog() {
+    if (!fromSearch.current) return
+    fromSearch.current = false
+    if (stack.length) {
+      saveScroll()
+      setView(stack[stack.length - 1])
+      setStack(stack.slice(0, -1))
+      setErr('')
+    }
+  }
+
   function openInZone(acc: number, zid: string, zoneName: string, rid: string) {
+    if (view.v === 'search') fromSearch.current = true
     if (view.v === 'zone' && view.acc === acc && view.zid === zid) {
       const hit = records.find((r) => r.id === rid)
       if (hit) setDlg({ k: 'record', acc, zid, zone: zoneName, rec: hit })
@@ -1813,7 +1828,14 @@ ${reason}`,
   function renderDlg() {
     if (!dlg) return null
     return (
-      <Dialog.Root open onOpenChange={(o: boolean) => !o && setDlg(null)}>
+      <Dialog.Root
+        open
+        onOpenChange={(o: boolean) => {
+          if (o) return
+          setDlg(null)
+          leaveSearchDialog()
+        }}
+      >
         <Dialog className="cc-dialog" size="base">
           {dlg.k === 'confirm' && (
             <>
