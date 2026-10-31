@@ -527,6 +527,11 @@ export function CfCheckView() {
       )}
 
       {edit && (
+        <Dialog.Root open onOpenChange={(o) => !o && setEdit(null)}>
+          <Dialog className="cc-dialog" size="base">
+            <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+            <Dialog.Title className="cc-dialog-title">ویرایش رکورد</Dialog.Title>
+            <Dialog.Description className="cc-dialog-desc">{edit.name}</Dialog.Description>
         <RecordEditor
           key={edit.rid}
           dlg={{
@@ -552,6 +557,8 @@ export function CfCheckView() {
             await runOne(cur)
           }}
         />
+          </Dialog>
+        </Dialog.Root>
       )}
       {del && (
         <Dialog.Root open onOpenChange={(o) => !o && setDel(null)}>
