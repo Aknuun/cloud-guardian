@@ -4,6 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
+import { CfCheckView } from './CfCheck'
 import { TOOLS, FormDialog, HomeView, ErrBox, Skeleton } from './toolsMeta'
 import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
@@ -59,6 +60,7 @@ export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t:
   if (id === 'mail') return <MailView />
   if (id === 'fo') return <FoView />
   if (id === 'hub') return <HubView />
+  if (id === 'cfcheck') return <CfCheckView />
   if (id === 'set') return <SetView />
   return <PgView />
 }

@@ -4,7 +4,7 @@ import { Button, Dialog } from './ui'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
-export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub' | 'cfcheck'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
@@ -18,6 +18,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
+  { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
@@ -27,7 +28,7 @@ export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) =
   const groups: { title: string; tools: ToolId[] }[] = [
     { title: 'سرویس‌ها', tools: [] },
     { title: 'پاسارگارد', tools: ['pg', 'hook', 'hf', 'hfd', 'um'] },
-    { title: 'سرور و دامنه', tools: ['srv', 'rem', 'dom', 'mail'] },
+    { title: 'سرور و دامنه', tools: ['srv', 'rem', 'dom', 'mail', 'cfcheck'] },
     { title: 'ابزارها', tools: ['hub', 'fo', 'set'] },
   ]
   return (

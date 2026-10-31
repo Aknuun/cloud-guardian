@@ -226,6 +226,7 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 	lastTelemetry := time.Now()
 	lastSsl := time.Now()
 	lastHub := time.Now()
+	lastCfCheck := time.Now()
 	for {
 		time.Sleep(60 * time.Second)
 		now := time.Now()
@@ -265,6 +266,10 @@ func alertLoop(r *router.Router, st *store.Store, bot *tg.Client, adminID int64,
 		if now.Sub(lastHub) > 5*time.Minute {
 			r.HubTick()
 			lastHub = now
+		}
+		if now.Sub(lastCfCheck) > 60*time.Second {
+			r.CfHealthTick(false)
+			lastCfCheck = now
 		}
 		if now.Sub(lastPurge) > time.Hour {
 			st.Purge()
