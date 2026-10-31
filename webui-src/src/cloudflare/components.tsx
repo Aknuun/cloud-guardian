@@ -6,6 +6,7 @@ import {
   CaretLeft,
   ChartBar,
   Clock,
+  Pulse,
   Gear,
   Info,
   Link as LinkIcon,
@@ -16,7 +17,7 @@ import {
   X,
   ArrowClockwise,
 } from '@phosphor-icons/react'
-import { checkRecord, haptic } from '../lib'
+import { api, checkRecord, haptic } from '../lib'
 import { CopyBtn } from '../components/CopyBtn'
 import type { Dlg, Field, RefNode } from './model'
 import { isHost, isIPv4, isIPv6, PROXYABLE, relName, TTL_STEPS, ttlLabel, TYPES, validateRecord } from './model'
@@ -397,6 +398,24 @@ export function RecordSheet({
   onDelete: () => void
 }) {
   const r = dlg.rec
+  const [health, setHealth] = useState<{ busy: boolean; ok?: boolean; text?: string }>({ busy: false })
+
+  async function checkHealth() {
+    setHealth({ busy: true })
+    try {
+      const d = await api<{ rows?: any[] }>('/api/tools/cfcheck/run', {
+        acc: dlg.acc,
+        zid: dlg.zid,
+        rid: r.id,
+      })
+      const row = (d.rows || []).find((x) => x.rid === r.id)
+      const ok = !!row && (row.status === 'ok' || row.status === 'proxy')
+      setHealth({ busy: false, ok, text: row ? String(row.detail || '') : 'نتیجه‌ای برنگشت' })
+    } catch (e: any) {
+      setHealth({ busy: false, ok: false, text: String(e?.message || 'بررسی نشد') })
+    }
+  }
+
   return (
     <>
       <div className="cc-rec-head">
@@ -410,7 +429,7 @@ export function RecordSheet({
             )}
           </div>
           <Dialog.Title className="cc-rec-title">
-            {r.label}
+            {r.name}
             {r.fav && <Star size={15} weight="fill" className="cc-starred" />}
             <CopyBtn value={r.name} onCopy={(v) => onCopy(v, 'زیردامنه کپی شد')} label="کپی زیردامنه" />
           </Dialog.Title>
@@ -440,28 +459,22 @@ export function RecordSheet({
       </div>
 
       <div className="cc-kvbox cc-rec-details">
-        <div className="cc-kv">
-          <span>TTL</span>
-          <span>{ttlLabel(r.ttl)}</span>
-        </div>
         {PROXYABLE.includes(r.type) && (
           <div className="cc-kv">
             <span>پروکسی کلادفلر</span>
             <Switch checked={r.proxied} onCheckedChange={onProxy} aria-label="پروکسی کلادفلر" />
           </div>
         )}
-        <div className="cc-kv">
-          <span>نام کامل</span>
-          <span className="cc-mono cc-small cc-copyline">
-            <span>{r.name}</span>
-            <CopyBtn value={r.name} onCopy={(v) => onCopy(v, 'زیردامنه کپی شد')} label="کپی زیردامنه" size={14} />
-          </span>
-        </div>
       </div>
 
       <div className="cc-section">مدیریت رکورد</div>
       <div className="cc-rec-group">
-        <RecRow icon={<Clock size={17} />} title="زمان TTL" sub={ttlLabel(r.ttl)} onClick={onTTL} />
+        <RecRow
+          icon={<Pulse size={17} />}
+          title="بررسی سلامت دامنه"
+          sub={health.busy ? 'در حال بررسی…' : health.text || 'DNS، اتصال، HTTP و گواهی را بررسی می‌کند'}
+          onClick={checkHealth}
+        />
         {onType && (r.type === 'A' || r.type === 'CNAME') && (
           <RecRow
             icon={<ArrowsClockwise size={17} />}

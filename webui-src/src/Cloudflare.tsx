@@ -71,6 +71,22 @@ export default function Cloudflare({
 }) {
   const [boot] = useState(restoreCfState)
   const [view, setView] = useState<View>(boot?.view || { v: 'zones' })
+
+  // Opened from the record health page: jump straight to that record's editor.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('cf_edit')
+      if (!raw) return
+      sessionStorage.removeItem('cf_edit')
+      const v = JSON.parse(raw)
+      if (typeof v?.acc === 'number' && v?.zid && v?.rid) {
+        setPendingEdit({ acc: v.acc, zid: v.zid, rid: v.rid })
+        setView({ v: 'zone', acc: v.acc, zid: v.zid })
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
   const [stack, setStack] = useState<View[]>(boot?.stack || [])
   const [rev, setRev] = useState(0)
   const [busy, setBusy] = useState(0)
@@ -105,6 +121,7 @@ export default function Cloudflare({
   const [lbEntries, setLbEntries] = useState<LbEntry[]>([])
 
   const [pendingRid, setPendingRid] = useState('')
+  const [pendingEdit, setPendingEdit] = useState<{ acc: number; zid: string; rid: string } | null>(null)
   const [pendingEditor, setPendingEditor] = useState<{ acc: number; zid: string; zone: string } | null>(null)
   const [days, setDays] = useState(1)
 
@@ -237,6 +254,11 @@ export default function Cloudflare({
           if (cancelled) return
           setZone(d.zone)
           setRecords(d.records || [])
+          if (pendingEdit && pendingEdit.acc === view.acc && pendingEdit.zid === view.zid) {
+            const hit = (d.records || []).find((r) => r.id === pendingEdit.rid)
+            if (hit) setDlg({ k: 'editor', acc: view.acc, zid: view.zid, zone: d.zone.name, rec: hit })
+            setPendingEdit(null)
+          }
           if (pendingRid) {
             const hit = (d.records || []).find((r) => r.id === pendingRid)
             if (hit) setDlg({ k: 'record', acc: view.acc, zid: view.zid, zone: d.zone.name, rec: hit })
@@ -1852,7 +1874,7 @@ ${reason}`,
           leaveSearchDialog()
         }}
       >
-        <Dialog className="cc-dialog" size="base">
+        <Dialog className={"cc-dialog" + (dlg && dlg.k === 'record' ? ' cc-recsheet' : '')} size="base">
           {dlg.k === 'confirm' && (
             <>
               <Dialog.Title className="cc-dialog-title">{dlg.title}</Dialog.Title>

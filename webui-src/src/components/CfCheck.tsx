@@ -56,6 +56,7 @@ export function CfCheckView() {
   const [zoneOpen, setZoneOpen] = useState(false)
   const [sel, setSel] = useState<string[]>([])
   const [closed, setClosed] = useState<string[]>([])
+  const [bulkMenu, setBulkMenu] = useState(false)
   const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
   const [bulkVal, setBulkVal] = useState('')
   const [bulkErr, setBulkErr] = useState('')
@@ -265,9 +266,50 @@ export function CfCheckView() {
         <Button variant="primary" icon={GlobeSimple} onClick={() => void openZones()} disabled={busy}>
           {busy ? 'در حال بررسی…' : 'بررسی دوباره'}
         </Button>
-        <Button variant="outline" icon={SquaresFour} onClick={() => { setBulkErr(''); setBulkVal(''); setBulk('bad') }}>
-          عملیات گروهی
-        </Button>
+        <div className="cc-menuwrap">
+          <Button variant="outline" icon={SquaresFour} onClick={() => setBulkMenu((v) => !v)} aria-expanded={bulkMenu}>
+            عملیات گروهی
+          </Button>
+          {bulkMenu && (
+            <>
+              <div className="cc-menu-scrim" onClick={() => setBulkMenu(false)} />
+              <div className="cc-menu" role="menu">
+                <button
+                  type="button"
+                  className="cc-menu-item"
+                  onClick={() => {
+                    setBulkMenu(false)
+                    void runBadAgain()
+                  }}
+                >
+                  بررسی مجدد خطادارها
+                </button>
+                <button
+                  type="button"
+                  className="cc-menu-item"
+                  onClick={() => {
+                    setBulkMenu(false)
+                    setBulkErr('')
+                    setBulkVal('')
+                    setBulk('edit')
+                  }}
+                >
+                  ویرایش مقدار خطادارها
+                </button>
+                <button
+                  type="button"
+                  className="cc-menu-item danger"
+                  onClick={() => {
+                    setBulkMenu(false)
+                    setBulk('del')
+                  }}
+                >
+                  حذف همهٔ خطادارها
+                </button>
+              </div>
+            </>
+          )}
+        </div>
         <Button variant="outline" icon={ShieldCheck} onClick={() => setCfg({ enabled: !!st?.enabled, intervalMin: st?.intervalMin || 60 })}>
           مانیتور
         </Button>
@@ -321,10 +363,15 @@ export function CfCheckView() {
                     className="cc-rowbtn"
                     aria-label="اصلاح رکورد"
                     onClick={() => {
-                      setFixErr('')
-                      setFix(r)
-                      setFixVal(r.content)
-                      setFixType(r.type)
+                      try {
+                        sessionStorage.setItem(
+                          'cf_edit',
+                          JSON.stringify({ acc: r.acc, zid: r.zid, rid: r.rid, zone: r.zone }),
+                        )
+                      } catch {
+                        /* ignore */
+                      }
+                      location.href = '/app/?go=cf'
                     }}
                   >
                     <PencilSimple size={15} />
