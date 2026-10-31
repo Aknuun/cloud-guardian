@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowClockwise, Check, GlobeSimple, PencilSimple, Pulse, ShieldCheck, SquaresFour, Trash } from '@phosphor-icons/react'
+import { ArrowClockwise, CaretDown, Check, FunnelSimple, GlobeSimple, PencilSimple, Pulse, ShieldCheck, SquaresFour, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
@@ -55,6 +55,7 @@ export function CfCheckView() {
   const [zpick, setZpick] = useState<Record<string, boolean>>({})
   const [zoneOpen, setZoneOpen] = useState(false)
   const [sel, setSel] = useState<string[]>([])
+  const [closed, setClosed] = useState<string[]>([])
   const [bulk, setBulk] = useState<'edit' | 'del' | 'bad' | null>(null)
   const [bulkVal, setBulkVal] = useState('')
   const [bulkErr, setBulkErr] = useState('')
@@ -261,11 +262,8 @@ export function CfCheckView() {
       />
 
       <div className="cc-btnrow cc-mb">
-        <Button variant="primary" icon={Pulse} onClick={() => void run('all')} disabled={busy}>
-          {busy ? 'در حال بررسی…' : 'بررسی همه'}
-        </Button>
-        <Button variant="outline" icon={GlobeSimple} onClick={() => void openZones()}>
-          انتخاب دامنه‌ها
+        <Button variant="primary" icon={GlobeSimple} onClick={() => void openZones()} disabled={busy}>
+          {busy ? 'در حال بررسی…' : 'بررسی دوباره'}
         </Button>
         <Button variant="outline" icon={SquaresFour} onClick={() => { setBulkErr(''); setBulkVal(''); setBulk('bad') }}>
           عملیات گروهی
@@ -278,21 +276,6 @@ export function CfCheckView() {
         ) : null}
       </div>
 
-      {sel.length > 0 && (
-        <div className="cc-bulkbar">
-          <span>{faNum(sel.length)} انتخاب شده</span>
-          <Button variant="outline" onClick={() => { setBulkErr(''); setBulkVal(''); setBulk('edit') }}>
-            ویرایش
-          </Button>
-          <Button variant="outline" onClick={() => { setBulkErr(''); setBulk('del') }}>
-            حذف
-          </Button>
-          <Button variant="outline" onClick={() => setSel([])}>
-            لغو
-          </Button>
-        </div>
-      )}
-
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
       {err && <ErrBox msg={err} onRetry={load} />}
       {busy && <div className="cc-center cc-pad"><Loader size="lg" /></div>}
@@ -300,32 +283,27 @@ export function CfCheckView() {
       {st && rows.length === 0 && !busy && (
         <Empty
           title="هنوز بررسی نشده"
-          description="با «بررسی همه» تمام رکوردهای A/AAAA/CNAME در همهٔ اکانت‌های کلادفلر تست می‌شوند."
+          description="با «بررسی دوباره» دامنه‌های دلخواه را انتخاب کن تا رکوردهای A/AAAA/CNAME آن‌ها تست شوند."
         />
       )}
 
       {groups.map(([zone, list]) => (
         <div key={zone} className="cc-section">
-          <div className="cc-section-head">
+          <button
+            type="button"
+            className={'cc-section-head cc-zonehead' + (closed.includes(zone) ? ' closed' : '')}
+            aria-expanded={!closed.includes(zone)}
+            onClick={() => setClosed((c) => (c.includes(zone) ? c.filter((z) => z !== zone) : [...c, zone]))}
+          >
+            <FunnelSimple size={14} />
             <h2>{zone}</h2>
             <span className="cc-sub">{faNum(list.length)} رکورد</span>
-          </div>
-          {list.map((r) => {
+            <CaretDown size={14} className="cc-zonecaret" />
+          </button>
+          {closed.includes(zone) ? null : list.map((r) => {
             const bad = r.status !== 'ok' && r.status !== 'proxy'
             return (
-              <div key={r.rid} className={'cc-trow' + (sel.includes(key(r)) ? ' sel' : '')}>
-                <label className="cc-pick" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    id={'cfpick-' + r.rid}
-                    name={'cfpick'}
-                    aria-label={'انتخاب ' + r.name}
-                    checked={sel.includes(key(r))}
-                    onChange={(e) =>
-                      setSel((cur) => (e.target.checked ? [...cur, key(r)] : cur.filter((k) => k !== key(r))))
-                    }
-                  />
-                </label>
+              <div key={r.rid} className={'cc-trow' + (bad ? ' bad' : '')}>
                 <span className={'cc-dot' + (bad ? ' hot' : r.status === 'proxy' ? ' pw' : '')} />
                 <div className="cc-grow">
                   <div className="cc-name cc-ltr">{r.name}</div>
@@ -335,23 +313,9 @@ export function CfCheckView() {
                     {r.http ? ' · HTTP ' + faNum(r.http) : ''}
                     {r.tlsDays ? ' · SSL ' + faNum(r.tlsDays) + ' روز' : ''}
                   </div>
-                  <div className={'cc-sub' + (bad ? ' cc-hot' : '')}>
-                    {STATUS_FA[r.status] || r.status}
-                    {r.detail ? ' — ' + r.detail : ''}
-                  </div>
+                  <div className={'cc-sub' + (bad ? ' cc-hot' : '')}>{r.detail || ''}</div>
                 </div>
-                <Badge variant={bad ? 'error' : r.status === 'proxy' ? 'secondary' : 'success'}>
-                  {STATUS_FA[r.status] || r.status}
-                </Badge>
                 <div className="cc-rowbtns">
-                  <button
-                    type="button"
-                    className="cc-rowbtn"
-                    aria-label="بررسی دوباره"
-                    onClick={() => void run(r)}
-                  >
-                    <ArrowClockwise size={15} />
-                  </button>
                   <button
                     type="button"
                     className="cc-rowbtn"

@@ -2026,3 +2026,34 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 @media (max-width: 899px) {
   .cc-sidebar:not(.open) { pointer-events: none }
 }
+
+/* Health rows carry their state as colour, not as duplicate words. */
+.cc-trow.bad {
+  background: #fff1f0;
+  border-color: #f3c6c2;
+}
+[data-theme='dark'] .cc-trow.bad {
+  background: rgba(217, 45, 32, 0.12);
+  border-color: rgba(217, 45, 32, 0.35);
+}
+.cc-main .cc-trow .cc-rowbtns {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 6px;
+}
+button.cc-zonehead {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  padding: 4px 2px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+button.cc-zonehead h2 { margin: 0 }
+button.cc-zonehead .cc-sub { margin-inline-start: auto; font-size: 11.5px; color: var(--ds-muted) }
+button.cc-zonehead .cc-zonecaret { transition: transform 0.15s ease }
+button.cc-zonehead.closed .cc-zonecaret { transform: rotate(-90deg) }
