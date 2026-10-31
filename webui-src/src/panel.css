@@ -2190,3 +2190,43 @@ body .cc-menu-item {
   transition: background-color 0.16s cubic-bezier(0.22, 0.61, 0.36, 1), border-color 0.16s linear,
     color 0.16s linear, opacity 0.16s linear !important;
 }
+
+/* ---------- host name studio ---------- */
+.cc-hs { display: block }
+.cc-hschips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px }
+.cc-chip {
+  height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--ds-line);
+  background: var(--ds-tint); color: var(--ds-text); font-size: 12.5px; line-height: 1;
+}
+.cc-chip.on { background: var(--ds-brand-soft); border-color: color-mix(in oklab, var(--ds-brand) 35%, transparent); color: var(--ds-brand) }
+.cc-hstabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px; margin-bottom: 14px; background: var(--ds-tint); border-radius: 12px }
+.cc-hstab { flex: 1 0 auto; height: 34px; padding: 0 12px; border-radius: 9px; font-size: 13px; color: var(--ds-muted) }
+.cc-hstab.on { background: var(--ds-card); color: var(--ds-text); box-shadow: 0 1px 2px rgb(0 0 0 / .06) }
+.cc-hsbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px }
+.cc-hsbar .cc-input { max-width: 210px }
+.cc-filebtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px;
+  border: 1px solid var(--ds-line); border-radius: 10px; font-size: 13px; cursor: pointer;
+}
+.cc-filebtn input { display: none }
+.cc-tplgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px }
+.cc-tpl { padding: 14px 16px; border: 1px solid var(--ds-line); border-radius: 14px; background: var(--ds-card) }
+.cc-tpl.def { border-color: color-mix(in oklab, var(--ds-brand) 40%, transparent); background: color-mix(in oklab, var(--ds-brand-soft) 45%, var(--ds-card)) }
+.cc-tplhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px }
+.cc-tplprev { font-size: 13px; direction: ltr; text-align: left; margin-bottom: 6px; overflow-wrap: anywhere }
+.cc-tplbtns { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px }
+.cc-trowlist { display: block }
+.cc-trowlist .cc-trow { margin-bottom: 6px }
+.cc-lock { color: var(--ds-muted); flex: 0 0 auto }
+.cc-diff { padding: 10px 14px; border: 1px solid var(--ds-line); border-radius: 12px; margin-bottom: 6px; background: var(--ds-card) }
+.cc-diff.on { border-color: color-mix(in oklab, var(--ds-brand) 35%, transparent) }
+.cc-diffold { font-size: 12.5px; color: var(--ds-muted); text-decoration: line-through; overflow-wrap: anywhere }
+.cc-diffnew { font-size: 13.5px; overflow-wrap: anywhere; margin-top: 2px }
+.cc-warn { font-size: 12px; color: #b45309; margin-top: 4px }
+.cc-varchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px }
+.cc-varchips .cc-chip { height: 28px; font-family: ui-monospace, monospace; font-size: 11.5px; direction: ltr }
+.cc-orderrow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--ds-hairline) }
+.cc-mini { width: 26px; height: 26px; border: 1px solid var(--ds-line); border-radius: 7px; font-size: 10px; color: var(--ds-muted) }
+.cc-mutedic { color: var(--ds-brand) }
+.cc-inline { display: inline-flex; align-items: center; gap: 6px; height: 38px; font-size: 13px }
+.cc-center { text-align: center }

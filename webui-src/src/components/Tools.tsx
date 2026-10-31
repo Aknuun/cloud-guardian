@@ -5,6 +5,7 @@ import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { StatGrid } from './Stats'
 import { FilterBar } from './FilterBar'
 import { CfCheckView } from './CfCheck'
+import { HostStudio } from './HostStudio'
 import { TOOLS, FormDialog, HomeView, ErrBox, Skeleton } from './toolsMeta'
 import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
@@ -61,6 +62,7 @@ export function Tools({ id, onGo }: { id: ToolId; onGo?: (p: Provider | null, t:
   if (id === 'fo') return <FoView />
   if (id === 'hub') return <HubView />
   if (id === 'cfcheck') return <CfCheckView />
+  if (id === 'hs') return <HostStudio />
   if (id === 'set') return <SetView />
   return <PgView />
 }

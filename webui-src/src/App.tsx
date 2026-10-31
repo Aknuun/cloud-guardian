@@ -179,7 +179,7 @@ export default function App() {
   useEffect(() => {
     const go = new URLSearchParams(location.search).get('go')
     if (!go) return
-    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub' || go === 'cfcheck') setTool(go)
+    if (go === 'home' || go === 'srv' || go === 'rem' || go === 'pg' || go === 'um' || go === 'dom' || go === 'hf' || go === 'hfd' || go === 'hook' || go === 'mail' || go === 'set' || go === 'fo' || go === 'hub' || go === 'cfcheck' || go === 'hs') setTool(go)
     else if (go === 'hz' || go === 'cf' || go === 'arv') {
       setTool(null)
       setProvider(go)
