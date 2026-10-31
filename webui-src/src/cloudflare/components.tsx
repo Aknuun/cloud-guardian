@@ -131,6 +131,25 @@ export function DialogHead({ title, sub, onClose }: { title: string; sub?: strin
   )
 }
 
+const IPV4_RE = /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/
+const HOST_RE = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+\.?$/i
+
+// Pick the record type that matches what the user actually typed, so an IP in a
+// CNAME row (or a hostname in an A row) stops being an error.
+export function inferType(type: string, content: string): string {
+  const v = (content || '').trim()
+  if (!v) return type
+  const t = type.toUpperCase()
+  if (!['A', 'AAAA', 'CNAME'].includes(t)) return type
+  const ip4 = IPV4_RE.test(v)
+  const ip6 = !ip4 && v.includes(':') && /^[0-9a-fA-F:]+$/.test(v)
+  const host = !ip4 && !ip6 && HOST_RE.test(v)
+  if (!ip4 && !ip6 && !host) return type
+  if (t === 'A') return ip4 ? 'A' : ip6 ? 'AAAA' : 'CNAME'
+  if (t === 'AAAA') return ip6 ? 'AAAA' : ip4 ? 'A' : 'CNAME'
+  return host ? 'CNAME' : ip4 ? 'A' : 'AAAA'
+}
+
 export function RecordEditor({
   dlg,
   onClose,
@@ -154,18 +173,24 @@ export function RecordEditor({
   const history = (r?.history || []).filter((v) => v && v !== content)
 
   async function submit() {
-    const problem = validateRecord(type, name, content, priority, !r)
+    const eff = inferType(type, content)
+    if (eff !== type) {
+      setType(eff)
+      setFormErr('')
+      setWarn('')
+    }
+    const problem = validateRecord(eff, name, content, priority, !r)
     if (problem) {
       setFormErr(problem)
       haptic('error')
       return
     }
     // A target that does not resolve (or an impossible IP) breaks silently; ask first.
-    if (content.trim() && !warn && !['TXT', 'SRV', 'CAA', 'PTR'].includes(type)) {
+    if (content.trim() && !warn && !['TXT', 'SRV', 'CAA', 'PTR'].includes(eff)) {
       setBusy(true)
       try {
         const res = await fetch(
-          '/api/cf/resolve?type=' + type + '&name=' + encodeURIComponent(content.trim()),
+          '/api/cf/resolve?type=' + eff + '&name=' + encodeURIComponent(content.trim()),
           { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('cg_token') || '') } },
         ).then((x) => x.json())
         const d = res?.data || {}
@@ -187,12 +212,12 @@ export function RecordEditor({
     try {
       await onSubmit({
         op: r ? 'edit' : 'add',
-        type,
+        type: eff,
         name: r ? undefined : name.trim(),
         content: content.trim(),
         ttl: Number(ttl || 1),
-        proxied: canProxy && proxied,
-        priority: type === 'MX' && priority !== '' ? Number(priority) : undefined,
+        proxied: PROXYABLE.includes(eff) && proxied,
+        priority: eff === 'MX' && priority !== '' ? Number(priority) : undefined,
         force: false,
       })
     } finally {
@@ -365,7 +390,7 @@ export function RecordSheet({
   onFav: () => void
   onProxy: () => void
   onTTL: () => void
-  onType: () => void
+  onType?: () => void
   onTraffic: () => void
   onRefs: () => void
   onLB: () => void
@@ -437,7 +462,7 @@ export function RecordSheet({
       <div className="cc-section">مدیریت رکورد</div>
       <div className="cc-rec-group">
         <RecRow icon={<Clock size={17} />} title="زمان TTL" sub={ttlLabel(r.ttl)} onClick={onTTL} />
-        {(r.type === 'A' || r.type === 'CNAME') && (
+        {onType && (r.type === 'A' || r.type === 'CNAME') && (
           <RecRow
             icon={<ArrowsClockwise size={17} />}
             title="نوع رکورد"

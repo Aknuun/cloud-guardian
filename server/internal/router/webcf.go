@@ -408,6 +408,10 @@ func (r *Router) webCfRecordOp(w http.ResponseWriter, req *http.Request, uid int
 			return
 		}
 		changes := map[string]any{}
+		// The editor picks A/CNAME/AAAA from what was typed, so let one save change the type too.
+		if t := strings.ToUpper(strings.TrimSpace(in.Type)); t != "" && !strings.EqualFold(t, cur.Type) {
+			changes["type"] = t
+		}
 		if c := strings.TrimSpace(in.Content); c != "" && c != cur.Content {
 			r.cfPushHistory(in.Acc, in.Zid, cur.ID, cur.Content)
 			changes["content"] = c

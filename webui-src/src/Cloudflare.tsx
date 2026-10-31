@@ -1920,31 +1920,6 @@ ${reason}`,
             </>
           )}
           {dlg.k === 'tree' && <RefTreeDialog dlg={dlg} onClose={() => setDlg(null)} onCopy={copy} />}
-          {dlg.k === 'convert' && (
-            <ConvertRecordDialog
-              dlg={dlg}
-              onClose={() => setDlg(null)}
-              onSubmit={async (content) => {
-                const rec = dlg.rec
-                const next = dlg.next
-                const d = await post(
-                  '/api/cf/record',
-                  { ...recBody(rec, dlg.acc, dlg.zid), op: 'type', type: next, content },
-                  true,
-                  { refresh: false },
-                )
-                if (!d) return false
-                if (d.record) {
-                  patchRec(d.record)
-                  setDlg({ k: 'record', acc: dlg.acc, zid: dlg.zid, zone: dlg.zone, rec: d.record })
-                } else {
-                  patchRec({ ...rec, type: next, content })
-                  setDlg(null)
-                }
-                return true
-              }}
-            />
-          )}
           {dlg.k === 'record' && (
             <RecordSheet
               key={dlg.rec.id}
@@ -1955,20 +1930,6 @@ ${reason}`,
               onFav={() => toggleFav(dlg.acc, dlg.zid, dlg.rec)}
               onProxy={() => toggleProxy(dlg.acc, dlg.zid, dlg.rec)}
               onTTL={() => cycleTTL(dlg.acc, dlg.zid, dlg.rec)}
-              onType={() => {
-                const rec = dlg.rec
-                const next = rec.type === 'A' ? 'CNAME' : 'A'
-                const seen = new Set<string>()
-                const candidates = records
-                  .filter((r) => {
-                    if (r.id === rec.id || seen.has(r.name)) return false
-                    if (!['A', 'AAAA', 'CNAME'].includes(r.type)) return false
-                    seen.add(r.name)
-                    return true
-                  })
-                  .map((r) => ({ name: r.name, type: r.type, content: r.content }))
-                setDlg({ k: 'convert', acc: dlg.acc, zid: dlg.zid, zone: dlg.zone, rec, next, candidates })
-              }}
               onTraffic={() => showRecordTraffic(dlg.acc, dlg.zid, dlg.rec, dlg.zone)}
               onRefs={() => showRefs(dlg.acc, dlg.zid, dlg.rec)}
               onLB={() => {
