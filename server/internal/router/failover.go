@@ -63,23 +63,45 @@ func (r *Router) foConfigured() bool {
 }
 
 func (r *Router) fetchWorkerJS() ([]byte, error) {
-	url := strings.TrimSpace(os.Getenv("CG_WORKER_JS_URL"))
-	if url == "" {
-		url = defaultWorkerJS
+	hc := &http.Client{Timeout: 40 * time.Second}
+	if u := strings.TrimSpace(os.Getenv("CG_WORKER_JS_URL")); u != "" {
+		if strings.HasPrefix(u, "/") {
+			return os.ReadFile(u)
+		}
+		return fetchURL(hc, u)
 	}
-	if strings.HasPrefix(url, "/") {
-		return os.ReadFile(url)
-	}
-	cli := &http.Client{Timeout: 40 * time.Second}
-	resp, err := cli.Get(url)
+	// Pin to the running tag and verify the release signature: the worker runs
+	// with the bot token and KV credentials, so an unsigned download is a full
+	// takeover of the standby bot.
+	tag := r.curTag()
+	js, err := fetchURL(hc, updateScriptURL(tag, "worker.js"))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("دریافت فایل ورکر: %w", err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("http %d", resp.StatusCode)
+	sig, err := fetchURL(hc, updateScriptURL(tag, "worker.js.sig"))
+	if err != nil {
+		if os.Getenv("CG_ALLOW_UNSIGNED_UPDATE") == "1" {
+			return js, nil
+		}
+		return nil, fmt.Errorf("امضای worker.js برای %s منتشر نشده است", tag)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err := verifyScriptSig(js, strings.TrimSpace(string(sig)), updatePubKeyHex); err != nil {
+		return nil, fmt.Errorf("امضای worker.js نامعتبر است")
+	}
+	return js, nil
+}
+
+// foPublicBase prefers the HTTPS panel origin over the raw :8789 address, so the
+// standby worker probes the public endpoint instead of plain HTTP.
+func (r *Router) foPublicBase() string {
+	pub := strings.TrimRight(strings.TrimSpace(r.foVal("public_url")), "/")
+	if strings.HasPrefix(pub, "https://") {
+		return pub
+	}
+	if u, err := url.Parse(strings.TrimRight(strings.TrimSpace(r.WebAppURL), "/")); err == nil && u.Scheme == "https" && u.Host != "" {
+		return u.Scheme + "://" + u.Host
+	}
+	return pub
 }
 
 func foPing(url string) (bool, int) {
@@ -348,7 +370,7 @@ func (r *Router) foDeployCore(token, aid, aname, name string) (map[string]string
 		c.DeleteKV(aid, ns)
 		return nil, fmt.Errorf("دریافت فایل ورکر: %v", err)
 	}
-	pub := strings.TrimRight(r.foVal("public_url"), "/")
+	pub := r.foPublicBase()
 	health := ""
 	zoneID, recID, zoneName := "", "", ""
 	if pub != "" {
