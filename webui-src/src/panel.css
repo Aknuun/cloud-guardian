@@ -2235,3 +2235,8 @@ body .cc-menu-item {
 .cc-tplbtns [data-kumo-component='Button'] { padding: 0 7px; font-size: 12px; min-width: 0 }
 .cc-tplbtns { justify-content: flex-end }
 .cc-hs .cc-trow .cc-name { direction: ltr; text-align: left }
+/* home grid: two columns on wide screens */
+.cc-hg-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 0; border-radius: 0; overflow: visible }
+.cc-hg-list .cc-hrow { border: 1px solid var(--ds-hairline); border-radius: 10px; min-height: 44px; background: var(--ds-card) }
+.cc-hg-list .cc-hrow:first-child { border-top: 1px solid var(--ds-hairline) }
+@media (max-width: 699px) { .cc-hg-list { grid-template-columns: 1fr } }

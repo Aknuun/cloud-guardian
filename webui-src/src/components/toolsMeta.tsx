@@ -7,31 +7,33 @@ import type { Provider } from './Sidebar'
 export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub' | 'cfcheck' | 'hs'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
-  { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
-  { id: 'rem', label: 'یادآورها', Icon: BellRinging },
+  { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
   { id: 'pg', label: 'پاسارگارد', Icon: ShieldCheck },
-  { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
-  { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
+  { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
   { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: CalendarDots },
-  { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
+  { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
+  { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
+  { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
+  { id: 'rem', label: 'یادآورها', Icon: BellRinging },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
+  { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
-  { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
-  { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
+]
+
+// Sidebar + home share one order; the first item of each group is the important one.
+export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
+  { title: 'پاسارگارد', tools: ['hs', 'pg', 'hook', 'hf', 'hfd', 'um'] },
+  { title: 'سرور و دامنه', tools: ['srv', 'dom', 'rem', 'mail', 'cfcheck'] },
+  { title: 'ابزارها', tools: ['hub', 'fo', 'set'] },
 ]
 
 // Landing page: every ported section, grouped and one tap away.
 export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
   const byId = new Map(TOOLS.map((t) => [t.id, t]))
-  const groups: { title: string; tools: ToolId[] }[] = [
-    { title: 'سرویس‌ها', tools: [] },
-    { title: 'پاسارگارد', tools: ['pg', 'hook', 'hf', 'hfd', 'hs', 'um'] },
-    { title: 'سرور و دامنه', tools: ['srv', 'rem', 'dom', 'mail', 'cfcheck'] },
-    { title: 'ابزارها', tools: ['hub', 'fo', 'set'] },
-  ]
+  const groups = TOOL_GROUPS
   return (
     <div className="cc-hg">
       <div className="cc-hg-title">سرویس‌ها</div>
@@ -44,7 +46,7 @@ export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) =
           </button>
         ))}
       </div>
-      {groups.slice(1).map((g) => (
+      {groups.map((g) => (
         <div key={g.title}>
           <div className="cc-hg-title">{g.title}</div>
           <div className="cc-hg-list">

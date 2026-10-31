@@ -7,7 +7,8 @@ export type Provider = 'hz' | 'cf' | 'arv'
 
 export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
-const PG_IDS = ['pg', 'hook', 'um', 'hf', 'hfd']
+const PG_IDS = ['hs', 'pg', 'hook', 'hf', 'hfd', 'um']
+const MISC_IDS = ['hub', 'fo', 'set']
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
@@ -64,7 +65,8 @@ export function Sidebar({
       window.removeEventListener('touchend', end)
     }
   }, [open, onToggle])
-  const rest = tools?.filter((t) => t.id !== 'home' && !PG_IDS.includes(t.id))
+  const rest = tools?.filter((t) => t.id !== 'home' && !PG_IDS.includes(t.id) && !MISC_IDS.includes(t.id))
+  const misc = tools?.filter((t) => MISC_IDS.includes(t.id))
   const pgItems = tools?.filter((t) => PG_IDS.includes(t.id))
 
   return (
@@ -173,9 +175,30 @@ export function Sidebar({
         )}
 
         {rest && rest.length > 0 && (
+          <nav className="cc-sidenav" aria-label="سرور و دامنه">
+            <div className="cc-sidenav-label">سرور و دامنه</div>
+            {rest.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={'cc-sideitem' + (t.active ? ' on' : '')}
+                aria-current={t.active ? 'page' : undefined}
+                onClick={() => {
+                  t.onSelect()
+                  if (window.innerWidth < 900) onToggle()
+                }}
+              >
+                <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
+                <span className="cc-sideitem-label">{t.label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {misc && misc.length > 0 && (
           <nav className="cc-sidenav" aria-label="ابزارها">
             <div className="cc-sidenav-label">ابزارها</div>
-            {rest.map((t) => (
+            {misc.map((t) => (
               <button
                 key={t.id}
                 type="button"
