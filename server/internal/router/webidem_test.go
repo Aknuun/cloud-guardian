@@ -47,3 +47,46 @@ func TestWebIdemReplay(t *testing.T) {
 		t.Fatalf("new key did not run: %d", calls)
 	}
 }
+
+func TestWebIdemKeyBoundToBody(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t2.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	r := &Router{Store: st}
+	hits := 0
+	fn := func(w http.ResponseWriter, req *http.Request, uid int64) {
+		hits++
+		webOK(w, map[string]any{"n": hits})
+	}
+	call := func(path, body string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Idempotency-Key", "same-key")
+		return req
+	}
+	// first request reserves the key for /a with body {"x":1}
+	w1 := httptest.NewRecorder()
+	r.webIdemRun(w1, call("/a", `{"x":1}`), 1, fn)
+	// same key, different path -> must not replay the first response
+	w2 := httptest.NewRecorder()
+	r.webIdemRun(w2, call("/b", `{"x":1}`), 1, fn)
+	if w2.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("different path: code = %d, want 422", w2.Code)
+	}
+	// same key, same path, different body -> 422
+	w3 := httptest.NewRecorder()
+	r.webIdemRun(w3, call("/a", `{"x":2}`), 1, fn)
+	if w3.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("different body: code = %d, want 422", w3.Code)
+	}
+	// identical retry -> replayed, handler not run again
+	w4 := httptest.NewRecorder()
+	r.webIdemRun(w4, call("/a", `{"x":1}`), 1, fn)
+	if hits != 1 {
+		t.Fatalf("handler ran %d times, want 1", hits)
+	}
+	if w4.Header().Get("X-Idempotent-Replay") != "1" {
+		t.Fatalf("expected replay header")
+	}
+}

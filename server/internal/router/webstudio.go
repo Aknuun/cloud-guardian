@@ -478,51 +478,21 @@ func (r *Router) hsPlan(in hsPlanIn) ([]hsRow, []map[string]any, error) {
 		}
 		return rows[i].Priority < rows[j].Priority
 	})
-	if in.Mode != "name" && len(want) > 0 {
-		// subset apply: permute the existing priority slots of the selected hosts
-		// so no priority collides with hosts outside the selection
-		vals := []int{}
-		for i := range rows {
-			if want[rows[i].ID] && !rows[i].Locked {
-				vals = append(vals, rows[i].Priority)
-			}
+	inScope := func(r hsRow) bool {
+		if len(want) > 0 && !want[r.ID] {
+			return false
 		}
-		sort.Ints(vals)
-		k := 0
-		for i := range rows {
-			if !want[rows[i].ID] || rows[i].Locked {
-				continue
-			}
-			rows[i].NewPriority = vals[k]
-			k++
+		if in.Group != "" && in.Group != "all" && r.Group != in.Group {
+			return false
 		}
-	} else if in.Mode != "name" {
-		used := map[int]bool{}
-		for i := range rows {
-			if rows[i].Locked {
-				rows[i].NewPriority = rows[i].Priority
-				if rows[i].ID == anchorID {
-					rows[i].NewPriority = 0
-					if t.Anchor.Slot == "second" {
-						rows[i].NewPriority = 10
-					}
-				}
-				used[rows[i].NewPriority] = true
-			}
+		if r.Group == "status" && !in.Force {
+			return false
 		}
-		next := 0
-		for i := range rows {
-			if rows[i].Locked {
-				rows[i].NewPriority = rows[i].Priority
-				continue
-			}
-			for used[next] {
-				next += 10
-			}
-			rows[i].NewPriority = next
-			used[next] = true
-			next += 10
-		}
+		return true
+	}
+	partial := len(want) > 0 || (in.Group != "" && in.Group != "all")
+	if in.Mode != "name" {
+		hsAssignPriorities(rows, inScope, partial, anchorID, t.Anchor.Slot)
 	}
 	// filters: selection, group, exemptions
 	for i := range rows {
@@ -556,6 +526,58 @@ func (r *Router) hsPlan(in hsPlanIn) ([]hsRow, []map[string]any, error) {
 		row.Changed = row.New != row.Remark || row.NewPriority != row.Priority
 	}
 	return rows, hosts, nil
+}
+
+// hsAssignPriorities sets NewPriority on rows. In a partial apply (a few hosts
+// or one group) it permutes the priority slots those hosts already own, so a
+// priority can never collide with a host outside the selection.
+func hsAssignPriorities(rows []hsRow, inScope func(hsRow) bool, partial bool, anchorID, slot string) {
+	if partial {
+		vals := make([]int, 0, len(rows))
+		for i := range rows {
+			if inScope(rows[i]) && !rows[i].Locked {
+				vals = append(vals, rows[i].Priority)
+			}
+		}
+		sort.Ints(vals)
+		k := 0
+		for i := range rows {
+			if !inScope(rows[i]) || rows[i].Locked {
+				continue
+			}
+			if k < len(vals) {
+				rows[i].NewPriority = vals[k]
+			}
+			k++
+		}
+		return
+	}
+	used := map[int]bool{}
+	for i := range rows {
+		if !rows[i].Locked {
+			continue
+		}
+		rows[i].NewPriority = rows[i].Priority
+		if rows[i].ID == anchorID && anchorID != "" {
+			rows[i].NewPriority = 0
+			if slot == "second" {
+				rows[i].NewPriority = 10
+			}
+		}
+		used[rows[i].NewPriority] = true
+	}
+	next := 0
+	for i := range rows {
+		if rows[i].Locked {
+			continue
+		}
+		for used[next] {
+			next += 10
+		}
+		rows[i].NewPriority = next
+		used[next] = true
+		next += 10
+	}
 }
 
 // ---------- handlers ----------

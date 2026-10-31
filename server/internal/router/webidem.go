@@ -2,8 +2,11 @@ package router
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -23,6 +26,7 @@ type webIdemEntry struct {
 	Code int             `json:"code"`
 	Body json.RawMessage `json:"body"`
 	Busy bool            `json:"busy"`
+	Hash string          `json:"hash"`
 }
 
 var webIdemMu sync.Mutex
@@ -55,23 +59,23 @@ func (r *Router) webIdemStore(m map[string]webIdemEntry) {
 }
 
 // webIdemReserve returns an existing entry when the key was already used.
-func (r *Router) webIdemReserve(key string) (webIdemEntry, bool) {
+func (r *Router) webIdemReserve(key, hash string) (webIdemEntry, bool) {
 	webIdemMu.Lock()
 	defer webIdemMu.Unlock()
 	m := r.webIdemLoad()
 	if e, ok := m[key]; ok && time.Since(time.Unix(e.TS, 0)) < webIdemTTL {
 		return e, true
 	}
-	m[key] = webIdemEntry{TS: time.Now().Unix(), Busy: true}
+	m[key] = webIdemEntry{TS: time.Now().Unix(), Busy: true, Hash: hash}
 	r.webIdemStore(m)
 	return webIdemEntry{}, false
 }
 
-func (r *Router) webIdemFinish(key string, code int, body []byte) {
+func (r *Router) webIdemFinish(key, hash string, code int, body []byte) {
 	webIdemMu.Lock()
 	defer webIdemMu.Unlock()
 	m := r.webIdemLoad()
-	m[key] = webIdemEntry{TS: time.Now().Unix(), Code: code, Body: append(json.RawMessage(nil), body...)}
+	m[key] = webIdemEntry{TS: time.Now().Unix(), Code: code, Hash: hash, Body: append(json.RawMessage(nil), body...)}
 	r.webIdemStore(m)
 }
 
@@ -95,10 +99,23 @@ func (r *Router) webIdemRun(w http.ResponseWriter, req *http.Request, uid int64,
 		fn(w, req, uid)
 		return
 	}
+	// The key is scoped to the caller, the path and the body: reusing a key for a
+	// different request must not replay someone else's response.
+	var raw []byte
+	if req.Body != nil {
+		raw, _ = io.ReadAll(io.LimitReader(req.Body, 1<<20))
+		req.Body = io.NopCloser(bytes.NewReader(raw))
+	}
+	sum := sha256.Sum256(append([]byte(req.URL.Path+"\n"), raw...))
+	hash := hex.EncodeToString(sum[:])
 	key = fmt.Sprintf("%d|%s", uid, key)
-	if e, ok := r.webIdemReserve(key); ok {
+	if e, ok := r.webIdemReserve(key, hash); ok {
 		if e.Busy {
 			webErr(w, http.StatusConflict, "همین درخواست در حال انجام است؛ چند لحظه صبر کن")
+			return
+		}
+		if e.Hash != "" && e.Hash != hash {
+			webErr(w, http.StatusUnprocessableEntity, "این کلید قبلاً برای درخواست دیگری استفاده شده")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -115,7 +132,7 @@ func (r *Router) webIdemRun(w http.ResponseWriter, req *http.Request, uid int64,
 	}
 	// 5xx is a failed attempt: let the client retry with the same key.
 	if code < 500 {
-		r.webIdemFinish(key, code, rec.buf.Bytes())
+		r.webIdemFinish(key, hash, code, rec.buf.Bytes())
 	}
 	w.WriteHeader(code)
 	_, _ = w.Write(rec.buf.Bytes())
