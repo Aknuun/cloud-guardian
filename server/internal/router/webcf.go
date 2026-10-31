@@ -110,9 +110,17 @@ func (r *Router) webCfZoneInfo(acc int, zid string, cli *cf.Client) map[string]a
 		cfZnCache[fmt.Sprintf("%d:%s", acc, zid)] = cfZnEntry{name: name, at: time.Now()}
 		cfZnMu.Unlock()
 	}
+	// plan is an object in the CF API; fmt.Sprint on it used to leak the whole
+	// subscription blob into the zone header.
+	plan := ""
+	if p, ok := z["plan"].(map[string]any); ok {
+		plan = strv(p["name"])
+	} else {
+		plan = strv(z["plan"])
+	}
 	return map[string]any{
 		"id": zid, "name": name, "status": strv(z["status"]),
-		"paused": strv(z["status"]) == "paused", "plan": strv(z["plan"]),
+		"paused": strv(z["status"]) == "paused", "plan": plan,
 		"created": created, "account": accName, "ns": ns,
 	}
 }
