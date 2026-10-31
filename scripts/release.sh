@@ -14,7 +14,6 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-[[ -n "$(git status --porcelain)" ]] || { echo "nothing to release"; exit 1; }
 
 echo "▶ versions → $VER"
 echo "$VER" > server/VERSION
