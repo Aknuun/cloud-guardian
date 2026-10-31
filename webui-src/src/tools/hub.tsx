@@ -9,7 +9,12 @@ import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
 import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
 
-type HubStats = { bot: string; version: string; go: string; uptime: string; mem_mb: number; db_mb: number; admins: number; users: number; panels: number; zones: number; cf_accs: number; servers: number }
+type HubStats = Partial<{ bot: string; version: string; go: string; uptime: string; mem_mb: number; db_mb: number; admins: number; users: number; panels: number; zones: number; cf_accs: number; servers: number }>
+
+// stats come from older/newer peers; never let a missing field crash the page
+const sv = (v?: string) => (v && String(v).trim() ? v : '—')
+const sn = (v?: number) => (typeof v === 'number' && Number.isFinite(v) ? faNum(v) : '—')
+const sf = (v: number | undefined, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(d) : '—')
 type HubData = { hubUrl: string; annUrl: string; secret: boolean; root?: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
 type Ann = { id: string; text: string; until: string; reply: boolean }
 
@@ -99,8 +104,8 @@ function HubView() {
     <>
       <StatGrid
         items={[
-          { label: 'نسخه', value: s?.version || '—' },
-          { label: 'آپ‌تایم', value: s?.uptime || '—' },
+          { label: 'نسخه', value: sv(s?.version) },
+          { label: 'آپ‌تایم', value: sv(s?.uptime) },
           { label: 'نصب‌های هاب', value: data?.installs?.length ? faNum(data.installs.length) : '—' },
         ]}
       />
@@ -119,10 +124,10 @@ function HubView() {
         <div className="cc-section">
           <div className="cc-section-head"><h2>این نصب</h2></div>
           <div className="cc-trow"><div className="cc-grow"><div className="cc-name">ربات</div><div className="cc-sub">{(s.bot || '—').startsWith('@') ? (s.bot || '—') : '@' + (s.bot || '—')}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">کاربران / ادمین‌ها</div><div className="cc-sub">{faNum(s.users)} / {faNum(s.admins)}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">پنل‌ها / سرورها</div><div className="cc-sub">{faNum(s.panels)} / {faNum(s.servers)}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">دامنه‌ها</div><div className="cc-sub">{faNum(s.zones)} در {faNum(s.cf_accs)} اکانت</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">حافظه / دیتابیس</div><div className="cc-sub">{s.mem_mb.toFixed(1)} MB / {s.db_mb.toFixed(2)} MB</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">کاربران / ادمین‌ها</div><div className="cc-sub">{sn(s.users)} / {sn(s.admins)}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">پنل‌ها / سرورها</div><div className="cc-sub">{sn(s.panels)} / {sn(s.servers)}</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">دامنه‌ها</div><div className="cc-sub">{sn(s.zones)} در {sn(s.cf_accs)} اکانت</div></div></div>
+          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">حافظه / دیتابیس</div><div className="cc-sub">{sf(s.mem_mb, 1)} MB / {sf(s.db_mb, 2)} MB</div></div></div>
         </div>
       )}
 

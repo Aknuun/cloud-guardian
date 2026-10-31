@@ -100,3 +100,19 @@ test('sidebar opens a tool and keeps no console errors', async ({ page }) => {
   await expect(page.locator('.cc-title')).toContainText('تنظیمات')
   expect(errors).toEqual([])
 })
+
+// Older hub peers may send a partial stats object; the page must not crash.
+test('hub page tolerates missing stats fields', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(String(e)))
+  await page.addInitScript(() => sessionStorage.setItem('cg_token', 'test-token'))
+  await page.route('**/api/**', (route) => {
+    const path = new URL(route.request().url()).pathname
+    const data = path === '/api/tools/hub' ? { hubUrl: '', annUrl: '', secret: false, hubOk: true, installs: [], stats: {} } : FIXTURES[path] ?? []
+    return route.fulfill({ json: { ok: true, data } })
+  })
+  await page.goto('/app/?go=hub')
+  await expect(page.locator('.cc-topbar')).toBeVisible()
+  await expect(page.locator('.cc-main')).toContainText('حافظه / دیتابیس')
+  expect(errors).toEqual([])
+})
