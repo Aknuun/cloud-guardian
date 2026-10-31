@@ -403,7 +403,12 @@ func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]
 		case !custom && username != "":
 			link += "?start=renew_" + trunc(username, 60)
 		}
-		kb = append(kb, []tg.Button{{Text: "🤖 تمدید از ربات", URL: link}})
+		// both renew actions sit on one line
+		if len(kb) > 0 {
+			kb[0] = append(kb[0], tg.Button{Text: "🤖 تمدید از ربات", URL: link})
+		} else {
+			kb = append(kb, []tg.Button{{Text: "🤖 تمدید از ربات", URL: link}})
+		}
 	}
 	return kb
 }
