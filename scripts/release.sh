@@ -28,6 +28,15 @@ echo "▶ ui build"
 echo "▶ go checks"
 (cd server && gofmt -l . | (! grep .) && CGO_ENABLED=0 go build ./... && CGO_ENABLED=0 go vet ./... && CGO_ENABLED=0 go test ./... >/dev/null)
 
+echo "▶ sign install script"
+SIGN_KEY="${CG_SIGN_KEY:-/root/cg-signing.key}"
+if [[ -f "$SIGN_KEY" ]]; then
+  (cd server && CGO_ENABLED=0 go run ./cmd/cgsign "$SIGN_KEY" ../install-server.sh) > install-server.sh.sig
+else
+  echo "!! signing key missing at $SIGN_KEY — self-update will refuse this release" >&2
+  rm -f install-server.sh.sig
+fi
+
 echo "▶ commit + tag"
 git add -A
 git -c user.name=Aknuun -c user.email=aknuun@users.noreply.github.com commit -q -m "${MSG:-release v$VER}"

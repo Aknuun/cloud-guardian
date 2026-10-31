@@ -1,6 +1,9 @@
 package router
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,7 +19,14 @@ import (
 
 const repo = "Aknuun/cloud-guardian"
 
-const installScriptURL = "https://raw.githubusercontent.com/" + repo + "/main/install-server.sh"
+// Public half of the release signing key (ed25519). The private key never ships;
+// scripts/release.sh signs install-server.sh with it and the signature is
+// published next to the script in the same tag.
+const updatePubKeyHex = "d27f5aa6f107a2c6c86c93eb4a024e35527d3c72798e775497aeca0d88967628"
+
+func updateScriptURL(tag, file string) string {
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s", repo, tag, file)
+}
 
 var tagRe = regexp.MustCompile(`^v?\d+(\.\d+){1,2}$`)
 
@@ -280,14 +290,80 @@ func installDir() string {
 	return "/opt/cloud-guardian"
 }
 
+// verifyScriptSig checks the detached ed25519 signature of the update script.
+func verifyScriptSig(script []byte, sigB64, pubHex string) error {
+	pub, err := hex.DecodeString(strings.TrimSpace(pubHex))
+	if err != nil || len(pub) != ed25519.PublicKeySize {
+		return fmt.Errorf("کلید عمومی آپدیت نامعتبر است")
+	}
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sigB64))
+	if err != nil || len(sig) != ed25519.SignatureSize {
+		return fmt.Errorf("امضای اسکریپت آپدیت نامعتبر است")
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), script, sig) {
+		return fmt.Errorf("امضای اسکریپت آپدیت معتبر نیست")
+	}
+	return nil
+}
+
+func fetchURL(hc *http.Client, url string) ([]byte, error) {
+	resp, err := hc.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("دانلود ناموفق (%d)", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+}
+
+// downloadUpdateScript pulls the installer from the requested tag (immutable)
+// and refuses to run it unless the signature matches the release key.
+func downloadUpdateScript(tag string) ([]byte, error) {
+	hc := &http.Client{Timeout: 30 * time.Second}
+	script, err := fetchURL(hc, updateScriptURL(tag, "install-server.sh"))
+	if err != nil {
+		return nil, err
+	}
+	if os.Getenv("CG_ALLOW_UNSIGNED_UPDATE") == "1" {
+		return script, nil
+	}
+	sig, err := fetchURL(hc, updateScriptURL(tag, "install-server.sh.sig"))
+	if err != nil {
+		return nil, fmt.Errorf("امضای آپدیت در دسترس نیست: %v", err)
+	}
+	if err := verifyScriptSig(script, string(sig), updatePubKeyHex); err != nil {
+		return nil, err
+	}
+	return script, nil
+}
+
 func startSelfUpdate(tag string) error {
+	if !strings.HasPrefix(tag, "v") {
+		tag = "v" + tag
+	}
+	script, err := downloadUpdateScript(tag)
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp("", "cg-install-*.sh")
+	if err != nil {
+		return err
+	}
+	path := f.Name()
+	if _, err := f.Write(script); err != nil {
+		f.Close()
+		return err
+	}
+	f.Close()
+	if err := os.Chmod(path, 0o700); err != nil {
+		return err
+	}
 	logPath := installDir() + "/update.log"
-	cmd := fmt.Sprintf(
-		`curl -fsSL %q -o /tmp/cg-install.sh && REF=%q bash /tmp/cg-install.sh update >>%q 2>&1`,
-		installScriptURL, tag, logPath)
-	c := exec.Command("bash", "-lc", cmd)
-	c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	return c.Start()
+	cmd := exec.Command("bash", "-lc", fmt.Sprintf(`REF=%q bash %q update >>%q 2>&1`, tag, path, logPath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	return cmd.Start()
 }
 
 // CheckUpdate fetches the latest published tag and notifies admins once per
