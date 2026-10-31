@@ -399,7 +399,7 @@ func renewKBUser(bot *tg.Client, panel pg.Panel, username, renewBot string) [][]
 		case custom && username != "" && CopyBase != "":
 			// Telegram cannot prefill another bot's chat, so hand off through a page
 			// that copies the username before opening the renew bot.
-			link = CopyBase + "/copy?u=" + url.QueryEscape(trunc(username, 80)) + "&b=" + url.QueryEscape(u)
+			link = CopyBase + "/app/copy?u=" + url.QueryEscape(trunc(username, 80)) + "&b=" + url.QueryEscape(u)
 		case !custom && username != "":
 			link += "?start=renew_" + trunc(username, 60)
 		}
