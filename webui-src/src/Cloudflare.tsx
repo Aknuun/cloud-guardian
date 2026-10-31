@@ -60,6 +60,8 @@ import {
   SpareSheet,
 } from './cloudflare/components'
 
+const accName = (a: any) => (typeof a === 'string' ? a : a?.name || a?.email || '')
+
 export default function Cloudflare({
   onSwitch,
   onBackRef,
@@ -620,7 +622,7 @@ ${reason}`,
         { title: statusLabel(zone.status), sub: 'وضعیت' },
         { title: zone.plan || '—', sub: 'پلن' },
         { title: faDate(zone.created), sub: 'ساخت' },
-        { title: zone.account || '—', sub: 'اکانت' },
+        { title: accName(zone.account) || '—', sub: 'اکانت' },
         ...(zone.ns || []).map((n) => ({ title: n, sub: 'نیم‌سرور' })),
       ],
     })
@@ -1539,7 +1541,7 @@ ${reason}`,
           <div className="cc-grow">
             <div className="cc-name cc-mono">{zone?.name || ''}</div>
             <div className="cc-sub">
-              {zone?.account || ''} {zone?.plan ? ' · ' + zone.plan : ''}
+              {accName(zone?.account)} {zone?.plan ? ' · ' + zone.plan : ''}
             </div>
           </div>
           <Badge variant={ZONE_BADGE[zone?.status || ''] || 'secondary'} dot>
