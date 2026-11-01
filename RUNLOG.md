@@ -88,3 +88,10 @@
 - New `RowMenu` in ui-kit: a ⋯ button using the existing `.cc-menu` styles, so row action clusters stop eating the row width. Used on dom domain rows (استعلام/ثبت تاریخ/حذف) and pg panel cards (ویرایش/حذف).
 - `timeAgo()` now returns Persian digits, so every «… دقیقه پیش» matches the rest of the UI; `.cc-chip` centers its text as an inline-flex pill.
 - checks: tsc clean, biome 0 errors (27 warnings — the new menu scrim matches the existing FilterBar warning), build ok, playwright 18/18.
+
+## v4.92.0 — global search removed, mobile pass, instant field chips
+- The topbar search is gone for good: `GlobalSearch.tsx` deleted, the field and the mobile sheet removed from both shells, and every `.cc-gsearch*`/`.cc-gres*` rule dropped. Tool pages keep their own `FilterBar`; nothing else searches globally.
+- hf/hfd field chips now answer instantly: the chip flips locally on tap, the API call confirms in the background, and the host list only reloads if the call fails. Previously every tap waited for two round-trips (`exc` + `hosts`) and a slow one felt like a lost tap.
+- Mobile (390px) pass over all 15 pages: section counts sit next to their titles again (the stray `margin-inline-end:auto` on `.cc-section-head .cc-sub` pushed them away and forced action buttons onto a second line); pg panel actions no longer wrap the ⋯ menu above the node button.
+- hs no longer crashes on a template without `segments` (preview, editor state, and the save validation all treat it as an empty list).
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.

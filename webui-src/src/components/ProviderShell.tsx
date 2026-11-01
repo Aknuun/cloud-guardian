@@ -7,7 +7,6 @@ import { useSectionTheme } from './sectionTheme'
 import { Button } from './ui'
 import { Sidebar, ThemeToggle } from './Sidebar'
 import { toolItems } from './toolsMeta'
-import { GlobalSearch } from './GlobalSearch'
 import { PageActionProvider } from './PageAction'
 import { ActionCluster } from './FabActions'
 import type { PageAction } from './PageAction'
@@ -70,12 +69,6 @@ export function ProviderShell({
           </button>
           <h1 className="cc-title">{title}</h1>
           <ActionCluster actions={shown} />
-          <GlobalSearch
-            go={(p, t) => {
-              if (t && onTool) onTool(t)
-              else if (p) onChange(p)
-            }}
-          />
           <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}

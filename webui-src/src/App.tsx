@@ -15,7 +15,6 @@ import { TOOLS, toolItems } from './components/toolsMeta'
 import { setHubOn } from './components/toolsMeta'
 import type { ToolId } from './components/toolsMeta'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
-import { GlobalSearch } from './components/GlobalSearch'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
@@ -1000,12 +999,6 @@ export default function App() {
                       .join(' / ')}
             </span>
           )}
-          <GlobalSearch
-            go={(p, t) => {
-              if (t) setTool(t)
-              else if (p) pickProvider(p)
-            }}
-          />
           <ThemeToggle />
           <ActionCluster actions={actions} />
           {cur.v !== 'create' && (

@@ -990,69 +990,6 @@ html[data-mode='dark'] .cc-setcard {
   background: var(--ds-brand-soft);
 }
 
-/* global quick-jump search in the topbar */
-.cc-gsearch {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 1 300px;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--ds-tint);
-  color: var(--ds-muted);
-}
-.cc-gsearch input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font: inherit;
-  font-size: 13px;
-  color: var(--ds-text);
-}
-.cc-gres {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline: 0;
-  z-index: 60;
-  background: var(--ds-card);
-  border: 1px solid var(--ds-line);
-  border-radius: 14px;
-  box-shadow: var(--ds-shadow-pop);
-  overflow: hidden;
-}
-.cc-gres button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  color: var(--ds-text);
-  cursor: pointer;
-  text-align: start;
-}
-.cc-gres button:hover {
-  background: var(--ds-brand-soft);
-}
-.cc-gres i {
-  font-style: normal;
-  font-size: 11px;
-  color: var(--ds-muted);
-}
-@media (max-width: 899px) {
-  .cc-gsearch {
-    display: none;
-  }
-}
-
 /* ---------- section headers + row icon buttons ---------- */
 .cc-section-head {
   display: flex;
@@ -2287,16 +2224,10 @@ body .cc-menu-item {
 .cc-trow.sel:hover { background: var(--ds-brand-soft) }
 .cc-rowbtn:hover, .cc-menu-btn:hover, .cc-rec-row:hover { background: var(--ds-tint) }
 .cc-crumb { font-size: 12px; color: var(--ds-muted); margin-inline-start: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw }
-.cc-gsearch-btn { display: none }
 @media (max-width: 419px) {
   .cc-app { padding-inline-start: 0 !important }
   .cc-sidebar { display: none !important }
   .cc-sidebar.open { display: flex !important; position: fixed; inset-block: 0; inset-inline-end: 0; width: min(284px, 88vw) !important; z-index: 60 }
-  .cc-gsearch-btn { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border: 0; border-radius: 10px; background: transparent; color: var(--ds-text) }
-  .cc-gsearch-sheet { position: fixed; inset: 0; z-index: 70; background: rgba(17, 17, 20, 0.28); display: flex; align-items: flex-start; justify-content: center; padding: 62px 12px 12px }
-  .cc-gsearch-sheetbox { width: 100%; background: var(--ds-card); border: 1px solid var(--ds-line); border-radius: 14px; padding: 10px; box-shadow: var(--ds-shadow-pop) }
-  .cc-gsearch-sheetbox input { width: 100%; height: 42px; border: 1px solid var(--ds-line); border-radius: 10px; padding: 0 12px; font: inherit; background: var(--ds-tint); color: var(--ds-text) }
-  .cc-gsearch-sheetbox .cc-gres { position: static; margin-top: 6px; box-shadow: none; border: 0; padding: 0; background: transparent }
 }
 
 /* stat tiles: real ratios only, compact cards otherwise */
@@ -2431,7 +2362,7 @@ body .cc-menu-item {
 .cc-pgcard { min-width: 0; overflow: visible }
 .cc-pgcard-top { min-width: 0 }
 .cc-pgcard-top > * { min-width: 0 }
-.cc-pgcard-actions { flex-wrap: wrap }
+.cc-pgcard-actions { flex-wrap: nowrap }
 .cc-pgcard-actions > button[data-kumo-component='Button'] { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; font-size: 12.5px; height: 36px }
 .cc-pgcard-actions .cc-rowbtn { flex: 0 0 34px }
 .cc-code { direction: ltr; text-align: left; unicode-bidi: plaintext }
@@ -2647,28 +2578,6 @@ body .cc-menu-item {
 
 /* global search: fixed layout + in-page results */
 .cc-topbar { overflow: visible !important }
-.cc-gsearch { position: relative; padding-inline-start: 34px; text-align: start }
-.cc-gsearch-ico { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); pointer-events: none }
-.cc-gsearch input { text-align: start }
-.cc-gres { min-width: min(340px, 86vw); max-height: min(58vh, 420px); overflow: auto; text-align: start }
-.cc-gres button { justify-content: flex-start; gap: 10px }
-.cc-gres-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.cc-gres i { flex: 0 0 auto }
-.cc-gres-empty { padding: 12px 14px; font-size: 12.5px; color: var(--ds-muted) }
-.cc-gsearch-field { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border: 1px solid var(--ds-line); border-radius: 12px; background: var(--ds-tint) }
-.cc-gsearch-field svg { flex: 0 0 16px; color: var(--ds-muted) }
-.cc-gsearch-field input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; outline: none; font: inherit; font-size: 13.5px; color: var(--ds-text); text-align: start }
-.cc-gsearch-sheetbox .cc-gres { position: static; margin-top: 8px; min-width: 0; box-shadow: none; border: 0; padding: 0; background: transparent; max-height: 56vh }
-/* search dropdown: buttons must span the full panel width (label was collapsing to 0) */
-.cc-gres { width: min(340px, 86vw); box-sizing: border-box }
-.cc-gres button { width: 100%; justify-content: flex-start; gap: 8px }
-.cc-gres .cc-gres-label { flex: 1 1 auto; min-width: 0; width: auto; color: var(--ds-text) !important }
-.cc-gres i { flex: 0 0 auto }
-.cc-gsearch-sheetbox .cc-gres { width: 100% }
-/* the results panel is a flex column; rows must stretch, not hug their content */
-.cc-gres { align-items: stretch !important }
-.cc-gres > button { align-self: stretch !important; width: 100% !important; min-width: 0 !important }
-.cc-gres > button .cc-gres-label { flex: 1 1 auto !important; min-width: 0 !important; width: auto !important }
 
 /* theme switch: soft cross-fade of colors instead of an instant flip */
 html.cc-theming,
@@ -2684,28 +2593,11 @@ html.cc-theming body *:not(svg):not(path) {
   html.cc-theming, html.cc-theming body, html.cc-theming body * { transition: none !important }
 }
 
-/* search must never be squeezed out of the topbar */
-.cc-topbar .cc-gsearch {
-  flex: 1 1 240px !important;
-  min-width: 170px !important;
-  max-width: 360px !important;
-  display: flex !important;
-}
-.cc-topbar .cc-gsearch input { min-width: 0 }
-@media (max-width: 899px) {
-  .cc-topbar .cc-gsearch { display: none !important }
-  .cc-topbar .cc-gsearch-btn { display: grid !important }
-}
 .cc-section-head { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px }
 .cc-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 }
-.cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted); margin-inline-end: auto }
+.cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted) }
 .cc-section-action { margin-inline-start: auto }
 
-/* single search field everywhere: no icon button, no sheet */
-@media (max-width: 899px) {
-  .cc-topbar .cc-gsearch { display: flex !important; flex: 1 1 auto !important; min-width: 0 !important; max-width: none !important }
-  .cc-topbar .cc-gsearch-btn { display: none !important }
-}
 
 /* ---------- run strip, filter counts, monitor card ---------- */
 .cc-fcount {

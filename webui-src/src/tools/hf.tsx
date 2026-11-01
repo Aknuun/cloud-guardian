@@ -56,6 +56,12 @@ function HfView() {
       setHErr(e.message || 'خواندن هاست‌ها ناموفق')
     }
   }
+  // Flip the chip locally first and only reload if the request failed, so taps feel instant.
+  async function toggleField(h: HfHost, f: string) {
+    const skip = { ...h.skip, [f]: !h.skip[f] }
+    setHosts((hs) => hs?.map((x) => (x.id === h.id ? { ...x, skip } : x)) ?? hs)
+    if (!(await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f }))) loadHosts(pi)
+  }
   async function act(path: string, body: any, msg?: string) {
     setFErr('')
     try {
@@ -215,9 +221,7 @@ function HfView() {
               <ChipGroup
                 items={FIELDS.map(([id, label]) => ({ id, label }))}
                 value={FIELDS.filter(([f]) => !h.skip[f]).map(([f]) => f)}
-                onChange={async (f) => {
-                  if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f })) loadHosts(pi)
-                }}
+                onChange={(f) => toggleField(h, f)}
               />
             </div>
           </div>

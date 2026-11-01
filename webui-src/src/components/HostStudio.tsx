@@ -256,7 +256,7 @@ export function HostStudio() {
                   <b>{t.name}</b>
                   {t.is_default && <Badge variant="success">پیش‌فرض</Badge>}
                 </div>
-                <div className="cc-tplprev">{t.segments.join(t.separator || ' | ')}</div>
+                <div className="cc-tplprev">{(t.segments || []).join(t.separator || ' | ')}</div>
                 <div className="cc-sub">{t.description}</div>
                 <div className="cc-tplbtns">
                   {!t.is_default && (
@@ -436,8 +436,8 @@ export function HostStudio() {
           err={editErr}
           onClose={() => { setEdit(null); setEditErr('') }}
           onSave={() => {
-            const bad = edit.segments.filter((s) => !s.trim())
-            if (bad.length === edit.segments.length) {
+            const bad = (edit.segments || []).filter((s) => !s.trim())
+            if (bad.length === (edit.segments || []).length) {
               setEditErr('حداقل یک بخش نام لازم است.')
               return
             }
@@ -512,10 +512,10 @@ function blankTpl(d: Data): Tpl {
     description: '',
     is_default: false,
     scope: 'global',
-    segments: base ? [...base.segments] : ['{flag} {group_icon} {group_name}', '{service}', '{noads}'],
+    segments: base ? [...(base.segments || [])] : ['{flag} {group_icon} {group_name}', '{service}', '{noads}'],
     variables: [],
-    fonts: base ? { ...base.fonts } : { '0': 'mono', '1': 'bold', '2': 'serif' },
-    emojis: base ? { ...base.emojis } : {},
+    fonts: base ? { ...(base.fonts || {}) } : { '0': 'mono', '1': 'bold', '2': 'serif' },
+    emojis: base ? { ...(base.emojis || {}) } : {},
     separator: base?.separator || ' | ',
     spacing: base?.spacing || 'spaced',
     group_order: base ? [...base.group_order] : ['direct', 'tunnel', 'fastly', 'cdn', 'unknown', 'status'],
@@ -541,7 +541,7 @@ function TplEditor({
   onClose: () => void
   onSave: () => void
 }) {
-  const [t, setT] = useState<Tpl>({ ...tpl, segments: [...tpl.segments], fonts: { ...tpl.fonts }, emojis: { ...tpl.emojis }, group_order: [...tpl.group_order] })
+  const [t, setT] = useState<Tpl>({ ...tpl, segments: [...(tpl.segments || [])], fonts: { ...(tpl.fonts || {}) }, emojis: { ...(tpl.emojis || {}) }, group_order: [...(tpl.group_order || [])] })
   const set = (p: Partial<Tpl>) => setT({ ...t, ...p })
 
   function moveGroup(i: number, dir: number) {
