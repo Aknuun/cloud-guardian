@@ -2577,3 +2577,7 @@ body .cc-menu-item {
 @media (prefers-reduced-motion: reduce) {
   .cc-sidebar, .cc-sidebar * { transition: none !important }
 }
+/* keep every label readable at the 20% tighter width */
+.cc-sidebar .cc-sideitem { gap: 8px; padding-inline: 7px }
+.cc-sidebar .cc-sideitem-label { font-size: 12.4px; letter-spacing: -0.1px }
+.cc-sidebar .cc-sidenav { padding-inline: 2px }
