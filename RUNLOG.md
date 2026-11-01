@@ -72,3 +72,10 @@
 - `.cc-btnrow` is gone from markup and CSS; action groups use the existing `.cc-actions` card list or the header action slot.
 - Pages touched: dom, hf, hfd, hook, mail, set, fo, hub, hs (HostStudio), srv, pg, cfcheck, HetznerIpsView.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.
+
+## v4.90.0 — settings forms on SettingsCard (package B)
+- In-page forms (hf, hfd, hook, um, dom SSL warning) moved from loose `.cc-form` blocks into a titled `SettingsCard`: one row per setting, the label on the right, the control on the left, units as `.cc-unit` next to the number («دقیقه»، «ساعت»، «شهر»، «بار»، «از ۴»، «GB», «روز»).
+- Save + feedback live in the card footer: the primary button and «ذخیره شد» / the error text right next to it — no more page-top hint floating away from the form.
+- Toggles use the same Switch row inside the card; hook saves each switch immediately, hf/hfd/um/dom save on the button.
+- Dialog forms (server, mail, backups, monitor, host studio, cfcheck, arvan) stay on `FormDialog` — the dialog is already one card.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.

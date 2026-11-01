@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
-import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
+import { Button, Dialog, Empty, Input, Loader, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
-import { ChipGroup, ListRow } from '../components/ui-kit'
+import { ChipGroup, ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HfCfg = {
@@ -29,6 +29,7 @@ function HfView() {
   const [notice, setNotice] = useState('')
   const [fErr, setFErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
   const [log, setLog] = useState<any[] | null>(null)
   const [revOpen, setRevOpen] = useState(false)
@@ -71,14 +72,18 @@ function HfView() {
     return (
       <Skeleton rows={5} />
     )
-  const num = (k: keyof HfCfg, label: string) => (
-    <label className="cc-field">
-      <span>{label}</span>
-      <Input type="number" value={String(cfg[k])} onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 } as HfCfg)} />
-    </label>
+  const num = (k: keyof HfCfg, label: string, unit: string) => (
+    <SettingsRow label={label}>
+      <Input className="cc-num" type="number" value={String(cfg[k])} onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 } as HfCfg)} />
+      <span className="cc-unit">{unit}</span>
+    </SettingsRow>
   )
   const submit = async () => {
-    if (await act('/api/tools/hf/cfg', cfg, 'تنظیمات ذخیره شد')) reload()
+    setSaved(false)
+    if (await act('/api/tools/hf/cfg', cfg)) {
+      setSaved(true)
+      reload()
+    }
   }
   return (
     <>
@@ -88,31 +93,26 @@ function HfView() {
       </div>
       {cfg.lastSummary && <div className="cc-hint cc-center cc-mb">آخرین اجرا: {cfg.lastSummary}</div>}
 
-      <div className="cc-form">
-        <label className="cc-checkline">
-          <input id="cgc4" name="cgc4" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
-          <span>تعویض خودکار فعال باشد</span>
-        </label>
-        <div className="cc-field-row">
-          {num('intervalMin', 'فاصلهٔ اجرا (دقیقه)')}
-          {num('cities', 'حداقل شهر فیلتر')}
-        </div>
-        <div className="cc-field-row">
-          {num('maxOk', 'حداکثر پینگ موفق (۰-۴)')}
-          {num('batch', 'تعداد بررسی هر اجرا')}
-        </div>
-        <div className="cc-field-row">
-          {num('maxChanges', 'حداکثر تعویض')}
-          {num('recheckCount', 'تعداد بررسی مجدد')}
-        </div>
-        <div className="cc-field-row">
-          {num('recheckMin', 'فاصلهٔ بررسی مجدد (دقیقه)')}
-        </div>
-        {fErr && <div className="cc-form-err">{fErr}</div>}
-        <Button variant="primary" onClick={submit}>
-          ذخیرهٔ تنظیمات
-        </Button>
-      </div>
+      <SettingsCard
+        title="تنظیمات تعویض"
+        footer={
+          <>
+            <Button variant="primary" onClick={submit}>ذخیرهٔ تنظیمات</Button>
+            {fErr ? <span className="cc-form-err">{fErr}</span> : saved ? <span className="cc-hint">ذخیره شد</span> : null}
+          </>
+        }
+      >
+        <SettingsRow label="تعویض خودکار">
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="تعویض خودکار فعال باشد" />
+        </SettingsRow>
+        {num('intervalMin', 'فاصلهٔ اجرا', 'دقیقه')}
+        {num('cities', 'حداقل شهر فیلتر', 'شهر')}
+        {num('maxOk', 'حداکثر پینگ موفق', 'از ۴')}
+        {num('batch', 'تعداد بررسی هر اجرا', 'هاست')}
+        {num('maxChanges', 'حداکثر تعویض', 'هاست')}
+        {num('recheckCount', 'تعداد بررسی مجدد', 'بار')}
+        {num('recheckMin', 'فاصلهٔ بررسی مجدد', 'دقیقه')}
+      </SettingsCard>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 

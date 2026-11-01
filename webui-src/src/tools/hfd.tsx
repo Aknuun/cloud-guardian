@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
-import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
+import { Button, Dialog, Empty, Input, Loader, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
-import { ChipGroup, ListRow } from '../components/ui-kit'
+import { ChipGroup, ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; totalCreated: number }
@@ -19,6 +19,7 @@ function HfdView() {
   const [notice, setNotice] = useState('')
   const [fErr, setFErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [logOpen, setLogOpen] = useState(false)
   const [log, setLog] = useState<any[] | null>(null)
   const [revOpen, setRevOpen] = useState(false)
@@ -68,36 +69,38 @@ function HfdView() {
         برای هر هاست یکی از سه فیلد «آدرس» (IP درخواست)، «SNI» (نام TLS) یا «Host» (هدر دامنه) را روشن کن.
       </div>
 
-      <div className="cc-form">
-        <label className="cc-checkline">
-          <input id="cgc8" name="cgc8" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
-          <span>چرخش روزانه فعال باشد</span>
-        </label>
-        <div className="cc-field-row">
-          <label className="cc-field">
-            <span>فاصله (ساعت)</span>
-            <Input
-              type="number"
-              value={String(cfg.intervalH)}
-              onChange={(e) => setCfg({ ...cfg, intervalH: Number(e.target.value) || 0 })}
-            />
-          </label>
-          <label className="cc-field">
-            <span>ساعت شروع (HH:MM)</span>
-            <Input className="cc-input" value={cfg.at} onChange={(e) => setCfg({ ...cfg, at: e.target.value })} placeholder="03:00" />
-          </label>
-        </div>
-        {cfg.totalCreated > 0 && <div className="cc-hint">تاکنون {faNum(cfg.totalCreated)} ساب ساخته شده.</div>}
-        {fErr && <div className="cc-form-err">{fErr}</div>}
-        <Button
-          variant="primary"
-          onClick={async () => {
-            if (await act('/api/tools/hfd/cfg', cfg, 'تنظیمات ذخیره شد')) reload()
-          }}
-        >
-          ذخیرهٔ تنظیمات
-        </Button>
-      </div>
+      <SettingsCard
+        title="تنظیمات چرخش"
+        footer={
+          <>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                setSaved(false)
+                if (await act('/api/tools/hfd/cfg', cfg)) {
+                  setSaved(true)
+                  reload()
+                }
+              }}
+            >
+              ذخیرهٔ تنظیمات
+            </Button>
+            {fErr ? <span className="cc-form-err">{fErr}</span> : saved ? <span className="cc-hint">ذخیره شد</span> : null}
+            {cfg.totalCreated > 0 && <span className="cc-hint">تاکنون {faNum(cfg.totalCreated)} ساب ساخته شده.</span>}
+          </>
+        }
+      >
+        <SettingsRow label="چرخش روزانه">
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="چرخش روزانه فعال باشد" />
+        </SettingsRow>
+        <SettingsRow label="فاصله">
+          <Input className="cc-num" type="number" value={String(cfg.intervalH)} onChange={(e) => setCfg({ ...cfg, intervalH: Number(e.target.value) || 0 })} />
+          <span className="cc-unit">ساعت</span>
+        </SettingsRow>
+        <SettingsRow label="ساعت شروع">
+          <Input className="cc-num" value={cfg.at} onChange={(e) => setCfg({ ...cfg, at: e.target.value })} placeholder="03:00" aria-label="ساعت شروع (HH:MM)" />
+        </SettingsRow>
+      </SettingsCard>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 

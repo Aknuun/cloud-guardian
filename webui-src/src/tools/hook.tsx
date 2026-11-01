@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Copy, } from '@phosphor-icons/react'
 import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Button, Empty, Input, } from '../components/ui'
+import { Button, Empty, Input, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
 import { FormDialog } from './shared'
+import { SettingsCard, SettingsRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HookPanel = {
@@ -22,6 +23,7 @@ function HookView() {
   const [auto, setAuto] = useState(false)
   const [fErr, setFErr] = useState('')
   const [notice, setNotice] = useState('')
+  const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (data) setD(data)
@@ -51,36 +53,46 @@ function HookView() {
         آدرس وبهوک هر پنل را در تنظیمات webhook پنل (بخش اعلان‌ها) بگذار؛ خود پنل وقتی کاربری به آستانهٔ انقضا یا حجم رسید خبر
         می‌دهد. آستانه‌ها (days_left و usage_percent) هم همان‌جا در پنل تنظیم می‌شوند.
       </div>
-      <div className="cc-form">
-        <label className="cc-checkline">
-          <input id="cgc5" name="cgc5" type="checkbox" checked={!!d.enabled} onChange={(e) => act('/api/tools/hook/cfg', { enabled: e.target.checked })} />
-          <span>هشدار انقضا و حجم فعال باشد</span>
-        </label>
-        <label className="cc-checkline">
-          <input id="cgc6" name="cgc6" type="checkbox" checked={!!d.silentMe} onChange={(e) => act('/api/tools/hook/cfg', { silentMe: e.target.checked })} />
-          <span>بی‌صدا: هشدارها به خود کاربران برود، نه به من</span>
-        </label>
-        <div className="cc-field-row">
-          <label className="cc-field">
-            <span>آستانهٔ روز (با کاما)</span>
-            <Input
-              value={(d.days || []).join(', ')}
-              onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
-            />
-          </label>
-          <label className="cc-field">
-            <span>آستانهٔ حجم ٪ (با کاما)</span>
-            <Input
-              value={(d.usage || []).join(', ')}
-              onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
-            />
-          </label>
-        </div>
-        {fErr && <div className="cc-form-err">{fErr}</div>}
-        <Button variant="primary" onClick={() => act('/api/tools/hook/cfg', { days: d.days, usage: d.usage }, 'ذخیره شد')}>
-          ذخیرهٔ آستانه‌ها
-        </Button>
-      </div>
+      <SettingsCard
+        title="تنظیمات هشدار"
+        footer={
+          <>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                setSaved(false)
+                if (await act('/api/tools/hook/cfg', { days: d.days, usage: d.usage })) setSaved(true)
+              }}
+            >
+              ذخیرهٔ آستانه‌ها
+            </Button>
+            {fErr ? <span className="cc-form-err">{fErr}</span> : saved ? <span className="cc-hint">ذخیره شد</span> : null}
+          </>
+        }
+      >
+        <SettingsRow label="هشدار انقضا و حجم">
+          <Switch checked={!!d.enabled} onCheckedChange={(v) => act('/api/tools/hook/cfg', { enabled: v })} aria-label="هشدار انقضا و حجم فعال باشد" />
+        </SettingsRow>
+        <SettingsRow label="بی‌صدا" hint="هشدارها به خود کاربران برود، نه به من">
+          <Switch checked={!!d.silentMe} onCheckedChange={(v) => act('/api/tools/hook/cfg', { silentMe: v })} aria-label="ارسال بی‌صدا به کاربران" />
+        </SettingsRow>
+        <SettingsRow label="آستانهٔ روز" hint="با کاما جدا کن">
+          <Input
+            className="cc-num"
+            aria-label="آستانهٔ روز"
+            value={(d.days || []).join(', ')}
+            onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+          />
+        </SettingsRow>
+        <SettingsRow label="آستانهٔ حجم" hint="درصد، با کاما">
+          <Input
+            className="cc-num"
+            aria-label="آستانهٔ حجم"
+            value={(d.usage || []).join(', ')}
+            onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+          />
+        </SettingsRow>
+      </SettingsCard>
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api, } from '../lib'
-import { Button, Input, } from '../components/ui'
+import { Button, Input, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { save, } from './shared'
+import { SettingsCard, SettingsRow } from '../components/ui-kit'
 
 type UmCfg = {
   enabled: boolean
@@ -19,6 +20,7 @@ function UmView() {
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
   const [fErr, setFErr] = useState('')
+  const [saved, setSaved] = useState(false)
   const load = () => {
     setErr('')
     api<UmCfg>('/api/tools/um')
@@ -32,21 +34,26 @@ function UmView() {
     return (
       <Skeleton rows={5} />
     )
-  const num = (k: keyof UmCfg, label: string, hint: string) => (
-    <label className="cc-field">
-      <span>{label}</span>
+  const num = (k: keyof UmCfg, label: string, unit: string, hint: string) => (
+    <SettingsRow label={label}>
       <Input
+        className="cc-num"
         type="number"
         value={String(cfg[k])}
         onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 })}
         placeholder={hint}
+        aria-label={label}
       />
-    </label>
+      <span className="cc-unit">{unit}</span>
+    </SettingsRow>
   )
   const submit = async () => {
     setFErr('')
+    setSaved(false)
     try {
-      await save('/api/tools/um', cfg, () => setNotice('ذخیره شد'))
+      await save('/api/tools/um', cfg, () => {})
+      setSaved(true)
+      setNotice('')
     } catch (e: any) {
       setFErr(e.message || 'ذخیره نشد')
     }
@@ -56,27 +63,27 @@ function UmView() {
       <div className="cc-hint cc-mb">
         کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند را پیدا می‌کند؛ هر ۶۰ دقیقه مصرف فعلی را با ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌کند و هشدار را فقط برای ادمین می‌فرستد.
       </div>
-      <div className="cc-form">
-        <label className="cc-checkline">
-          <input id="cgc2" name="cgc2" type="checkbox" checked={!!cfg.enabled} onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })} />
-          <span>پایش بد مصرف فعال باشد</span>
-        </label>
-        <label className="cc-checkline">
-          <input id="cgc3" name="cgc3" type="checkbox" checked={!!cfg.report} onChange={(e) => setCfg({ ...cfg, report: e.target.checked })} />
-          <span>گزارش روزانهٔ اخطارشده‌ها ارسال شود</span>
-        </label>
-        {num('hourlyGb', 'آستانهٔ ساعتی (GB)', '7')}
-        {num('dailyGb', 'آستانهٔ روزانه (GB)', '25')}
-        {num('cooldownH', 'فاصلهٔ تکرار هشدار هر کاربر (ساعت)', '6')}
-        {num('minGb', 'حداقل مصرف برای اسنپ‌شات (GB)', '1')}
-        {num('activeMin', 'حداقل مدت فعال بودن (دقیقه)', '75')}
-      </div>
-      <div className="cc-pagebar">
-        <Button variant="primary" onClick={submit}>
-          ذخیره
-        </Button>
-      </div>
-      {fErr && <div className="cc-form-err cc-center">{fErr}</div>}
+      <SettingsCard
+        title="تنظیمات پایش"
+        footer={
+          <>
+            <Button variant="primary" onClick={submit}>ذخیره</Button>
+            {fErr ? <span className="cc-form-err">{fErr}</span> : saved ? <span className="cc-hint">ذخیره شد</span> : null}
+          </>
+        }
+      >
+        <SettingsRow label="پایش بد مصرف">
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="پایش بد مصرف فعال باشد" />
+        </SettingsRow>
+        <SettingsRow label="گزارش روزانهٔ اخطارشده‌ها">
+          <Switch checked={!!cfg.report} onCheckedChange={(v) => setCfg({ ...cfg, report: v })} aria-label="گزارش روزانه ارسال شود" />
+        </SettingsRow>
+        {num('hourlyGb', 'آستانهٔ ساعتی', 'GB', '7')}
+        {num('dailyGb', 'آستانهٔ روزانه', 'GB', '25')}
+        {num('cooldownH', 'فاصلهٔ تکرار هشدار', 'ساعت', '6')}
+        {num('minGb', 'حداقل مصرف برای اسنپ‌شات', 'GB', '1')}
+        {num('activeMin', 'حداقل مدت فعال بودن', 'دقیقه', '75')}
+      </SettingsCard>
       {notice && <div className="cc-hint cc-center">{notice}</div>}
     </>
   )

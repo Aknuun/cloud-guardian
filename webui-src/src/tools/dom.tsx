@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { ArrowClockwise, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
+import { Badge, Button, Dialog, Empty, Input, Switch } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
-import { ListRow } from '../components/ui-kit'
+import { ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { FormDialog } from './shared'
 import { useTool, faTxt } from './shared'
 
@@ -135,6 +135,7 @@ function DomView() {
   const [busy, setBusy] = useState(false)
   const [warnOn, setWarnOn] = useState<boolean | null>(null)
   const [warnDays, setWarnDays] = useState<number | null>(null)
+  const [saved, setSaved] = useState(false)
   const [cfgOpen, setCfgOpen] = useState(false)
 
   if (err) return <ErrBox msg={err} onRetry={reload} />
@@ -156,11 +157,13 @@ function DomView() {
   const saveCfg = async () => {
     setBusy(true)
     setFErr('')
+    setSaved(false)
     try {
       await api('/api/tools/dom/sslcfg', { enabled: on, warnDays: warn })
       invalidateCache()
       setWarnOn(null)
       setWarnDays(null)
+      setSaved(true)
       reload()
     } catch (e: any) {
       setFErr(e.message || 'ذخیره نشد')
@@ -225,34 +228,33 @@ function DomView() {
 
       {showSsl && <div className="cc-section">
         <SectionHeader title="گواهی SSL" count={faNum(data.ssl.length) + ' گواهی'} />
-        <div className="cc-checkline">
-          <input
-            type="checkbox"
-            id="ssl-alert-on"
-            name="sslAlertOn"
-            aria-label="هشدار تلگرام گواهی"
-            checked={on}
-            onChange={(e) => setWarnOn(e.target.checked)}
-          />
-          <span>هشدار تلگرام</span>
-          <span className="cc-grow" />
-          <input
-            className="cc-input cc-num"
-            id="ssl-warn-days"
-            name="sslWarnDays"
-            aria-label="روزهای هشدار گواهی"
-            type="number" inputMode="numeric"
-            min={1}
-            max={365}
-            value={warn}
-            onChange={(e) => setWarnDays(Number(e.target.value))}
-          />
-          <span>روز مانده</span>
-          <Button variant="outline" onClick={saveCfg} disabled={busy}>
-            ذخیره
-          </Button>
-        </div>
-        <div className="cc-hint cc-mb">وقتی گواهی به این تعداد روز یا کمتر برسد، روزی یک بار در تلگرام هشدار می‌آید.</div>
+        <SettingsCard
+          title="هشدار گواهی"
+          footer={
+            <>
+              <Button variant="outline" onClick={saveCfg} disabled={busy}>ذخیره</Button>
+              {fErr ? <span className="cc-form-err">{fErr}</span> : saved ? <span className="cc-hint">ذخیره شد</span> : null}
+            </>
+          }
+        >
+          <SettingsRow label="هشدار تلگرام" hint="وقتی گواهی به روزهای هشدار برسد، روزی یک بار پیام می‌آید.">
+            <Switch checked={on} onCheckedChange={setWarnOn} aria-label="هشدار تلگرام گواهی" />
+          </SettingsRow>
+          <SettingsRow label="روز مانده">
+            <input
+              className="cc-input cc-num"
+              id="ssl-warn-days"
+              name="sslWarnDays"
+              aria-label="روزهای هشدار گواهی"
+              type="number" inputMode="numeric"
+              min={1}
+              max={365}
+              value={warn}
+              onChange={(e) => setWarnDays(Number(e.target.value))}
+            />
+            <span className="cc-unit">روز</span>
+          </SettingsRow>
+        </SettingsCard>
         {ssl.length === 0 && <Empty title="گواهی‌ای نیست" description="دامنه‌ات را اضافه کن تا انقضای SSL هر ۶ ساعت بررسی شود." action={<Button variant="primary" icon={Plus} onClick={() => setAddSsl(true)}>افزودن گواهی</Button>} />}
         {ssl.map((s) => (
           <ListRow
