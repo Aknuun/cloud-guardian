@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aknuun/cg-server/internal/hostfilter"
 	"github.com/aknuun/cg-server/internal/pg"
 )
 
@@ -77,6 +78,7 @@ type hsRow struct {
 	Locked      bool     `json:"locked"`
 	Excluded    bool     `json:"excluded"`
 	Disabled    bool     `json:"disabled"`
+	Auto        bool     `json:"auto"`
 	Changed     bool     `json:"changed"`
 	Warnings    []string `json:"warnings,omitempty"`
 }
@@ -205,7 +207,7 @@ func hsGroupOf(panel int, id string, h map[string]any, manual map[string]string)
 		return g
 	}
 	remark := strings.ToLower(strv(h["remark"]))
-	if boolVal(h["is_disabled"]) {
+	if hostfilter.IsAutoHost(h) {
 		return "status"
 	}
 	for _, k := range []string{"status", "وضعیت", "تمدید", "اخطار", "renew", "expire"} {
@@ -505,8 +507,11 @@ func (r *Router) hsPlan(in hsPlanIn) ([]hsRow, []map[string]any, error) {
 			skip = true
 		}
 		if row.Group == "status" && !in.Force {
-			skip = true
-			row.Excluded = true
+			// an override that explicitly un-excludes the host puts it back
+			if ov := ovMap[row.ID]; ov == nil || !ov.Enabled || ov.Excluded {
+				skip = true
+				row.Excluded = true
+			}
 		}
 		if row.Excluded && !in.Force {
 			skip = true
@@ -619,6 +624,9 @@ func (r *Router) webToolsStudio(w http.ResponseWriter, req *http.Request, uid in
 		g := hsGroupOf(panel, id, h, manual)
 		row := hsRow{Panel: panel, ID: id, Remark: strv(h["remark"]), Group: g, Priority: intOrAny(h["priority"]), Disabled: boolVal(h["is_disabled"])}
 		row.GroupName, _, _ = hsGroupMeta(g)
+		// disabled hosts and status-text entries are exceptions by default
+		row.Auto = hostfilter.IsAutoHost(h)
+		row.Excluded = row.Auto
 		if ov := r.hsOvGet(panel, id); ov != nil && ov.Enabled {
 			row.Excluded = ov.Excluded
 			row.Locked = ov.LockedName || ov.LockedPriority

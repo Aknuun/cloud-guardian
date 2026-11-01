@@ -37,6 +37,7 @@ type HHost = {
   disabled: boolean
   excluded: boolean
   locked: boolean
+  auto?: boolean
 }
 type Ov = {
   panel: number
@@ -126,6 +127,7 @@ export function HostStudio() {
   useEffect(load, [panel])
 
   const groups = data?.groups || []
+  const autoRows = (data?.hosts || []).filter((h) => h.auto && h.excluded)
   const shown = useMemo(() => {
     const list = data?.hosts || []
     const s = q.trim().toLowerCase()
@@ -368,7 +370,33 @@ export function HostStudio() {
       {data && tab === 'exc' && (
         <>
           <div className="cc-hint cc-mb">هاست‌های این لیست در اعمال گروهی دست‌نخورده می‌مانند مگر با تأیید Force.</div>
-          {data.overrides.length === 0 && <Empty title="هیچ استثنایی ثبت نشده" description="از تب هاست‌ها روی هر هاست بزن تا قفل یا استثنا بسازی." />}
+          {autoRows.length > 0 && (
+            <>
+              <div className="cc-section-head">
+                <h2>خودکار</h2>
+                <span className="cc-sub">{faNum(autoRows.length)} هاست</span>
+              </div>
+              <div className="cc-trowlist">
+                {autoRows.map((h) => (
+                  <ListRow
+                    key={'auto:' + h.id}
+                    lead={<Lock size={15} className="cc-lock" />}
+                    title={h.remark || '#' + h.id}
+                    meta={h.disabled ? 'در پنل خاموش است' : 'متن وضعیت است، نه هاست'}
+                    trailing={
+                      <Button
+                        variant="outline"
+                        onClick={() => act('/api/tools/hs/ov', { op: 'save', panel: h.panel, host_id: h.id, excluded: false, enabled: true }, () => load())}
+                      >
+                        برگرداندن به چرخه
+                      </Button>
+                    }
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {data.overrides.length === 0 && autoRows.length === 0 && <Empty title="هیچ استثنایی ثبت نشده" description="از تب هاست‌ها روی هر هاست بزن تا قفل یا استثنا بسازی." />}
           <div className="cc-trowlist">
             {data.overrides.map((o) => (
               <ListRow

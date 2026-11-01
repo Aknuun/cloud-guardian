@@ -140,3 +140,9 @@
 - Manager card and «خروج کامل» moved inside the sidebar's scroll area, so they scroll with the sections instead of hanging at the bottom as a fixed footer; the hairline above them stays.
 - Host Studio: «استثنا فعال باشد» no longer appears ticked for a host that has no exception yet. The toggle only shows when an existing exception is edited (fresh records are simply active), so opening any host no longer looks like it is already excepted.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; drawer measured at 390×600 (footer inside the scroll container, scrollHeight 1180 > 510).
+
+## v4.95.5 — Host Studio lists auto-excluded hosts
+- Host Studio now uses the same detector as «تعویض ساب فیلتر»: hosts disabled in the panel and entries whose remark is a status template/text are marked `auto` and excluded by default.
+- The «استثناها» tab gained a «خودکار» block that shows those hosts (with the reason: disabled in panel, or status text) and a «برگرداندن به چرخه» button. Pressing it stores an ordinary override with `excluded: false`, so the host is treated like any other until the override is deleted.
+- Bulk apply honours that: a status-group host is skipped unless an enabled override explicitly un-excludes it (the existing «نادیده‌گرفتن استثناها» switch still forces everything).
+- checks: go build/vet/test ok, tsc clean, biome 0 errors (26 warnings), webui build ok, playwright 18/18; exceptions tab checked at 390 with one text host and one disabled host.
