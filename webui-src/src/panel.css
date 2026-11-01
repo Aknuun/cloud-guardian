@@ -2553,3 +2553,27 @@ body .cc-menu-item {
 .cc-allservers svg { color: var(--ds-brand); flex: 0 0 18px }
 .cc-allservers span:first-of-type { flex: 1; text-align: start }
 .cc-allservers-n { font-size: 12px; color: var(--ds-muted) }
+/* sidebar: 20% tighter than its content needs, and animate it properly again */
+.cc-sidebar,
+.cc-sidebar.open,
+.cc-sidebar:not(.open) {
+  transition: width 260ms cubic-bezier(0.23, 1, 0.32, 1), padding 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 260ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 200ms ease !important;
+}
+.cc-sidebar .cc-sidebrand-text,
+.cc-sidebar .cc-sidenav-label,
+.cc-sidebar .cc-sideitem-label,
+.cc-sidebar .cc-profile .cc-grow {
+  transition: opacity 140ms ease, max-width 260ms cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+.cc-sidebar:not(.open) .cc-sidebrand-text,
+.cc-sidebar:not(.open) .cc-sidenav-label,
+.cc-sidebar:not(.open) .cc-sideitem-label,
+.cc-sidebar:not(.open) .cc-profile .cc-grow { max-width: 0 }
+.cc-sidebar .cc-sidebrand-text,
+.cc-sidebar .cc-sidenav-label,
+.cc-sidebar .cc-sideitem-label,
+.cc-sidebar .cc-profile .cc-grow { max-width: 240px }
+@media (prefers-reduced-motion: reduce) {
+  .cc-sidebar, .cc-sidebar * { transition: none !important }
+}

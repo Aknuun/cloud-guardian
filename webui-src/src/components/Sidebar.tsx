@@ -75,7 +75,7 @@ export function Sidebar({
     if (!el || !open) return
     // scrollWidth of the rail is the width its content actually needs
     const need = el.scrollWidth
-    if (need > 0) setSbw(Math.min(320, Math.max(196, need + 2)))
+    if (need > 0) setSbw(Math.min(300, Math.max(176, Math.round(need * 0.8))))
   }, [open, tools, provider, expanded])
 
   const version = useVersion()
