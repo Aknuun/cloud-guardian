@@ -215,7 +215,7 @@ function HfView() {
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
               </div>
-              <div className="cc-sub">{(h.address || []).join('، ') || '—'}</div>
+              {(h.address || []).length > 0 && <div className="cc-sub">{(h.address || []).join('، ')}</div>}
               {(h.sni || []).length > 0 && <div className="cc-sub">sni: {(h.sni || []).join('، ')}</div>}
               {(h.host || []).length > 0 && <div className="cc-sub">host: {(h.host || []).join('، ')}</div>}
               <ChipGroup

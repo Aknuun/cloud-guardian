@@ -2,8 +2,7 @@ import { SignOut } from '@phosphor-icons/react'
 import { haptic, setToken, TG } from '../lib'
 import { Button } from './ui'
 
-export function LogoutButton() {
-  function logout() {
+export function logoutNow() {
     haptic('light')
     setToken('')
     try {
@@ -22,8 +21,9 @@ export function LogoutButton() {
     } catch {
       /* ignore */
     }
-  }
+}
 
+export function LogoutButton() {
   return (
     <Button
       variant="ghost"
@@ -31,7 +31,7 @@ export function LogoutButton() {
       icon={SignOut}
       aria-label="خروج کامل"
       title="خروج کامل"
-      onClick={logout}
+      onClick={logoutNow}
     />
   )
 }

@@ -373,11 +373,8 @@ export function CfCheckView() {
           )}
         </div>
         <Button variant="outline" icon={ShieldCheck} onClick={() => setCfg({ enabled: !!st?.enabled, intervalMin: st?.intervalMin || 60 })}>
-          مانیتور
+          {st?.enabled ? 'مانیتور · هر ' + faNum(st.intervalMin || 60) + ' دقیقه' : 'مانیتور'}
         </Button>
-        {st?.enabled ? (
-          <span className="cc-sub">هر {faNum(st?.intervalMin || 60)} دقیقه · روشن</span>
-        ) : null}
       </div>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}

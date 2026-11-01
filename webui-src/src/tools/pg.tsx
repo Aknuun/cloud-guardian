@@ -172,7 +172,7 @@ function PgView() {
             <span>
               آخرین بررسی: <b>{m.last ? timeAgo(Date.parse(m.last)) || 'همین حالا' : '—'}</b>
             </span>
-            <span className="cc-chip cc-chip-sm">{faNum(m.interval)} دقیقه</span>
+            <span>هر {faNum(m.interval)} دقیقه</span>
           </div>
         </div>
       ))}

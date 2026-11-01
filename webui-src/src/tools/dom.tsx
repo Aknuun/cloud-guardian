@@ -280,14 +280,9 @@ function DomView() {
           title="انقضای دامنه"
           count={faNum(doms.length) + ' دامنه'}
           action={
-            <>
-              <Button variant="outline" icon={ArrowClockwise} onClick={refresh} disabled={busy}>
-                استعلام دوباره
-              </Button>
-              <Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>
-                افزودن
-              </Button>
-            </>
+            <Button variant="outline" icon={ArrowClockwise} onClick={refresh} disabled={busy}>
+              استعلام دوباره
+            </Button>
           }
         />
         {!data.key && (

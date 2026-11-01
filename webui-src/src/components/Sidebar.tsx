@@ -1,8 +1,9 @@
-import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
+import { Cloud, Globe, HardDrives, Moon, SignOut, Sun, CaretDown } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 import { useTheme } from './theme'
 import { useVersion } from './AppVersion'
 import { BrandMark } from './BrandMark'
+import { logoutNow } from './LogoutButton'
 import type { ToolItem } from './toolsMeta'
 
 export type Provider = 'hz' | 'cf' | 'arv'
@@ -98,13 +99,14 @@ export function Sidebar({
           <div className="cc-sidebrand-mark"><BrandMark size={40} /></div>
           <div className="cc-sidebrand-text">
             <div className="cc-sidebrand-name">Cloud Guardian</div>
-            <div className="cc-sidebrand-sub" dir="ltr">{version ? 'v' + version : 'Cloud Guardian'}</div>
+            <div className="cc-sidebrand-sub" dir="ltr">{version ? 'v' + version : ''}</div>
           </div>
           <button type="button" className="cc-drawer-x" aria-label="بستن منو" onClick={onToggle}>
             ✕
           </button>
         </div>
 
+        <div className="cc-navscroll">
         {home && (
           <nav className="cc-sidenav cc-navhome" aria-label="خانه">
             <button
@@ -244,13 +246,20 @@ export function Sidebar({
             <span className="cc-sideitem-label">{mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}</span>
           </button>
         </nav>
+        </div>
 
-        <div className="cc-profile">
-          <div className="cc-profile-avatar">م</div>
-          <div className="cc-grow">
-            <div className="cc-profile-name">مدیر</div>
-            <div className="cc-profile-role">دسترسی کامل</div>
+        <div className="cc-sidefoot">
+          <div className="cc-profile">
+            <div className="cc-profile-avatar">م</div>
+            <div className="cc-grow">
+              <div className="cc-profile-name">مدیر</div>
+              <div className="cc-profile-role">دسترسی کامل</div>
+            </div>
           </div>
+          <button type="button" className="cc-side-logout" onClick={logoutNow}>
+            <SignOut size={19} />
+            <span>خروج کامل</span>
+          </button>
         </div>
       </aside>
     </>

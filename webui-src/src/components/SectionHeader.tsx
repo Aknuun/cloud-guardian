@@ -14,8 +14,10 @@ export function SectionHeader({
 }) {
   return (
     <div className={'cc-section-head' + (className ? ' ' + className : '')}>
-      <h2>{title}</h2>
-      {count ? <span className="cc-sub">{count}</span> : null}
+      <div className="cc-section-title">
+        <h2>{title}</h2>
+        {count ? <span className="cc-sub">{count}</span> : null}
+      </div>
       {action ? <span className="cc-section-action">{action}</span> : null}
     </div>
   )

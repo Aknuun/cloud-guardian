@@ -47,7 +47,7 @@ function HomeSection({ title, children }: { title: string; children: ReactNode }
     <section className="cc-hg-sec">
       <button type="button" className="cc-hg-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span>{title}</span>
-        <CaretDown size={14} className={'cc-hg-caret' + (open ? ' on' : '')} />
+        <CaretDown size={16} className={'cc-hg-caret' + (open ? ' on' : '')} />
       </button>
       {open && <div className="cc-hg-list">{children}</div>}
     </section>

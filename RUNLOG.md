@@ -100,3 +100,12 @@
 - Home is one column again: the 2-col grid is gone, every group is its own card.
 - Each section header is now a button with a caret; tapping it folds the list away. All sections start open, and the caret flips when the section is closed. The rows inside are unchanged.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.
+
+## v4.94.0 — unslop pass: quiet chrome, phone-first
+- Chrome is quieter: the FAB lost its brand-coloured glow (neutral soft shadow in both themes), stat tiles dropped the conic ring and became compact label/value tiles on phones, and «خروج کامل» left the mobile topbar — it now sits at the bottom of the drawer, above a hairline, outside the scrolling nav, so a misplaced thumb can no longer sign out.
+- Drawer: nav gets its own scroll area (`overflow` on the list, sticky footer for profile + sign-out); the brand line no longer repeats «Cloud Guardian» when the version is unknown.
+- `SectionHeader` was rewritten as title+count in one group with the action in its own span. On phones the header packs from the reading edge, so a short action sits next to the count and a long one wraps underneath instead of floating at the far side; the zone accordion header on cfcheck got the same treatment (title, count, caret at the end).
+- Rows: `.cc-rowbtn` and RowMenu are 40px on touch screens (were 34), hs template preview/actions aligned to the reading edge, tabs 40px, `.cc-tplbtns` gap 6 with 36–40px buttons. hf host rows drop the empty address line, mail forward rows read «به …» instead of a bidi-flipped arrow, and the cfcheck monitor interval moved into its button label («مانیتور · هر ۱۵ دقیقه») instead of a clipped caption inside the action grid.
+- SettingsCards stay inline on phones (label right, unit+input left) instead of stacking to full-width controls; RunStrip stacks the summary under the timestamp; monitor meta is 12px with real gaps.
+- dom dropped the second «افزودن» button (the page action already exists), and hover tints no longer stick after a tap.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; every page reviewed at 390×844.

@@ -65,7 +65,7 @@ function MailView() {
             <ListRow
               key={`${z.acc}|${z.zid}`}
               title={z.zname}
-              meta={'← ' + z.dest}
+              meta={'به ' + z.dest}
               trailing={
                 <button className="cc-rowbtn danger" onClick={() => off(z)} aria-label="قطع" title="قطع">
                   <Trash size={16} />
