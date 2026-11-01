@@ -977,6 +977,9 @@ export default function App() {
       <div className="cc-content">
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
+            <List size={20} />
+          </button>
           <h1 className="cc-title">{title}</h1>
           {!tool && (cur.v === 'server' || cur.v === 'ips' || cur.v === 'create') && (
             <span className="cc-crumb">
@@ -1009,9 +1012,6 @@ export default function App() {
               onClick={reload}
             />
           )}
-          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
-            <List size={20} />
-          </button>
           <LogoutButton />
         </header>
         <main className="cc-main" aria-busy={busy > 0}>

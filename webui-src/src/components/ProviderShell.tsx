@@ -60,6 +60,9 @@ export function ProviderShell({
       <div className="cc-content">
         <div className={'cc-progress' + (busy ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
+          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
+            <List size={20} />
+          </button>
           <h1 className="cc-title">{title}</h1>
           {action && (
             <Button className="cc-pageaction" variant="primary" icon={action.icon} disabled={action.disabled} onClick={action.onClick}>
@@ -86,9 +89,6 @@ export function ProviderShell({
             }}
           />
           <LogoutButton />
-          <button type="button" className="cc-menu-btn" aria-label="منو" onClick={() => setNavOpen((o) => !o)}>
-            <List size={20} />
-          </button>
         </header>
         <main className="cc-main" aria-busy={busy}>
           {showSwitch && (

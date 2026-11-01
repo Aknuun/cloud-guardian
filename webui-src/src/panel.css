@@ -2309,6 +2309,22 @@ body .cc-menu-item {
   padding: 0 14px !important;
   white-space: nowrap;
 }
-@media (max-width: 899px) {
-  .cc-topbar .cc-pageaction { height: 32px !important; padding: 0 10px !important; font-size: 12px !important; }
+/* On phones the primary action leaves the header and becomes a labelled pill at
+   the bottom of the screen: it never truncates and stays in thumb reach. */
+@media (max-width: 699px) {
+  .cc-topbar .cc-pageaction,
+  .cc-topbar button.cc-pageaction {
+    position: fixed;
+    inset-inline-end: 16px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    z-index: 40;
+    height: 46px !important;
+    padding: 0 18px !important;
+    font-size: 13.5px !important;
+    border-radius: 999px !important;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--ds-brand) 30%, transparent);
+    margin: 0 !important;
+  }
+  .cc-main { padding-bottom: 92px !important; }
 }
+@media (max-width: 420px) { .cc-pageaction { font-size: 12.5px !important; padding: 0 14px !important } }
