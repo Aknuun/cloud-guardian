@@ -4,14 +4,19 @@ import { api, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
-import { usePageAction } from '../components/PageAction'
+import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
 import type { Srv, } from './shared'
 
 function SrvView() {
-  usePageAction({ label: 'افزودن سرور', icon: Plus, onClick: () => setEdit({ port: 22, user: 'root' }) })
+  usePageActions([
+    { label: 'افزودن سرور', icon: Plus, onClick: () => setEdit({ port: 22, user: 'root' }) },
+    { label: 'افزودن گروهی', icon: Plus, onClick: () => setImpOpen(true) },
+    { label: 'از ساب‌دامنه', icon: Plus, onClick: () => setSubOpen(true) },
+    { label: 'رمزهای ذخیره‌شده', icon: Plus, onClick: () => setPwOpen(true) },
+  ])
 
   const { data, err, loaded, reload } = useTool<Srv[]>('/api/tools/srv')
   const [edit, setEdit] = useState<Partial<Srv> | null>(null)

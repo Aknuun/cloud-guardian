@@ -4,7 +4,7 @@ import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
-import { usePageAction } from '../components/PageAction'
+import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, faTxt } from './shared'
@@ -115,7 +115,10 @@ function DomCfgDialog({ onClose }: { onClose: () => void }) {
 }
 
 function DomView() {
-  usePageAction({ label: 'افزودن گواهی', icon: Plus, onClick: () => setAddSsl(true) })
+  usePageActions([
+    { label: 'افزودن گواهی', icon: Plus, onClick: () => setAddSsl(true) },
+    { label: 'افزودن دامنه', icon: Plus, onClick: () => setAddDom(true) },
+  ])
 
   const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
   const [q, setQ] = useState('')

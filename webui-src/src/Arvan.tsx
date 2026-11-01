@@ -19,6 +19,7 @@ import { Badge, Button, Empty, Input, LayerCard, Loader } from './components/ui'
 import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ArvanDialogs } from './arvan/dialogs'
+import { usePageActions } from './components/PageAction'
 import { ActionModalHost, type ActionModal } from './components/ActionModal'
 import type { Provider, SubItem } from './components/Sidebar'
 import type { ToolId } from './components/toolsMeta'
@@ -120,6 +121,9 @@ export default function Arvan({
   const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
   const [accBusy, setAccBusy] = useState(false)
   const [accErr, setAccErr] = useState('')
+  usePageActions([
+    { label: 'افزودن اکانت آروان کلاد', icon: Plus, onClick: () => { setAccErr(''); setAccForm({ name: '', token: '' }) } },
+  ])
   const [accDel, setAccDel] = useState<Account | null>(null)
   const [arvIP, setArvIP] = useState<{ ip: string; clean: boolean; verdict: string } | null>(null)
   const [arvIPBusy, setArvIPBusy] = useState(false)
@@ -593,14 +597,9 @@ export default function Arvan({
   function accountsPage() {
     return (
       <>
-        <div className="cc-pagebar">
-          <Button variant="primary" icon={Plus} onClick={() => { setAccErr(''); setAccForm({ name: '', token: '' }) }}>
-            افزودن اکانت آروان کلاد
-          </Button>
-        </div>
         {!accounts.length && busy > 0 && <Loader />}
         {!accounts.length && busy === 0 && (
-          <Empty title="اکانتی ثبت نشده" description="با دکمهٔ بالا کلید API آروان کلاد را اضافه کن." />
+          <Empty title="اکانتی ثبت نشده" description="با دکمهٔ «افزودن» بالای صفحه کلید API آروان کلاد را اضافه کن." />
         )}
         {accounts.map((a) => (
           <div key={a.i}>

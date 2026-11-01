@@ -2332,3 +2332,43 @@ body .cc-menu-item {
   .cc-pagebar > button[data-variant='primary'] { display: none }
   .cc-pagebar { flex-wrap: wrap; gap: 8px }
 }
+
+/* ---------- one actions cluster: labeled on desktop, + FAB on phones ---------- */
+.cc-fab { display: none }
+.cc-pageaction-more {
+  display: inline-grid; place-items: center; width: 32px; height: 36px;
+  border: 1px solid var(--ds-line); border-radius: 10px; background: var(--ds-card);
+  color: var(--ds-muted); flex: 0 0 auto;
+}
+@media (max-width: 699px) {
+  .cc-topbar .cc-pageaction,
+  .cc-topbar button.cc-pageaction,
+  .cc-topbar .cc-pageaction-more { display: none !important }
+  .cc-fab {
+    display: grid; place-items: center; position: fixed;
+    inset-inline-start: 16px; bottom: calc(18px + env(safe-area-inset-bottom));
+    width: 56px; height: 56px; border-radius: 50%; border: 0; z-index: 45;
+    background: var(--ds-brand); color: #fff;
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--ds-brand) 38%, transparent);
+  }
+  .cc-fab:disabled { opacity: .5 }
+  .cc-main { padding-bottom: 96px !important }
+}
+.cc-sheet-scrim { position: fixed; inset: 0; background: rgb(16 24 40 / .38); z-index: 60 }
+.cc-actionsheet {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 61;
+  background: var(--ds-card); border-radius: 22px 22px 0 0;
+  padding: 8px 12px calc(14px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px rgb(16 24 40 / .18);
+  max-width: 520px; margin: 0 auto;
+}
+.cc-actionsheet-grip { width: 38px; height: 4px; border-radius: 999px; background: var(--ds-line); margin: 4px auto 10px }
+.cc-actionsheet-title { font-size: 13px; font-weight: 600; color: var(--ds-muted); padding: 0 6px 8px }
+.cc-actionrow {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px;
+  padding: 0 10px; border: 0; border-radius: 12px; background: transparent;
+  color: var(--ds-text); font: inherit; font-size: 14.5px; text-align: start; cursor: pointer;
+}
+.cc-actionrow:hover { background: var(--ds-tint) }
+.cc-actionrow:disabled { opacity: .45 }
+.cc-actionrow svg { color: var(--ds-brand); flex: 0 0 18px }

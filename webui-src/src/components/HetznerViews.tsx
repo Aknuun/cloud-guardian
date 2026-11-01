@@ -7,6 +7,7 @@ import { FormDialog } from './toolsMeta'
 import { AppSkeleton } from './AppDialogs'
 import type { Account, Server } from './hetzner/types'
 import { badgeVariant, locFa, STATUS } from './hetzner/ui'
+import { usePageActions } from './PageAction'
 
 export function AccountsView(p: {
   accounts: Account[]
@@ -28,6 +29,9 @@ export function AccountsView(p: {
   setServersAcc: (v: number | null) => void
 }) {
   const { accounts, q, setQ, aflt, setAflt, reload, busy, accForm, setAccForm, accErr, setAccErr, accDel, setAccDel, push, toast, setServers, setServersAcc } = p
+  usePageActions([
+    { label: 'افزودن اکانت', icon: Plus, onClick: () => { setAccErr(''); setAccForm({ name: '', token: '' }) } },
+  ])
 
       const aq = q.trim().toLowerCase()
       const list0 = accounts.filter(
@@ -37,18 +41,6 @@ export function AccountsView(p: {
       const _totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
       return (
         <>
-          <div className="cc-pagebar">
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => {
-                setAccErr('')
-                setAccForm({ name: '', token: '' })
-              }}
-            >
-              افزودن اکانت
-            </Button>
-          </div>
           <FilterBar
             q={q}
             onQ={setQ}
@@ -184,6 +176,17 @@ export function ServersView(p: {
   setCreateName: (v: string) => void
 }) {
   const { cur, servers, q, setQ, sflt, setSflt, reload, busy, push, copy, setCreateName } = p
+  usePageActions([
+    {
+      label: 'ساخت سرور',
+      icon: Plus,
+      onClick: () => {
+        setCreateName('')
+        push({ v: 'create', acc: cur.acc, step: 1, loc: '', type: '', typeName: '', arch: '', image: '', imageName: '' })
+      },
+    },
+    { label: 'آی‌پی‌های تمیز', icon: GlobeHemisphereWest, onClick: () => push({ v: 'ips', acc: cur.acc }) },
+  ])
 
       const ql = q.trim().toLowerCase()
       const list = servers
@@ -205,21 +208,6 @@ export function ServersView(p: {
             onValue={setSflt}
             onRefresh={reload}
           />
-          <div className="cc-grid2 cc-mb">
-            <Button variant="outline" icon={GlobeHemisphereWest} onClick={() => push({ v: 'ips', acc: cur.acc })}>
-              آی‌پی‌های تمیز
-            </Button>
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => {
-                setCreateName('')
-                push({ v: 'create', acc: cur.acc, step: 1, loc: '', type: '', typeName: '', arch: '', image: '', imageName: '' })
-              }}
-            >
-              ساخت سرور
-            </Button>
-          </div>
           <div className="cc-section">{num(list.length)} سرور</div>
           {servers.length === 0 && busy > 0 && <AppSkeleton />}
           {list.length === 0 && busy === 0 && <Empty title="سروری پیدا نشد" />}

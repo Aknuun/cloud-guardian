@@ -25,6 +25,9 @@ import { CreateView } from './components/HetznerCreateView'
 import type { Account, CleanIP, OptType, Options, Server, } from './components/hetzner/types'
 import { locFa, } from './components/hetzner/ui'
 import { ModalHost } from './components/AppDialogs'
+import { PageActionProvider } from './components/PageAction'
+import type { PageAction } from './components/PageAction'
+import { ActionCluster } from './components/FabActions'
 import type { Modal, } from './components/AppDialogs'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
@@ -121,6 +124,7 @@ export default function App() {
   const [sflt, setSflt] = useState('all')
   const [createName, setCreateName] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [actions, setActions] = useState<PageAction[]>([])
   const [accForm, setAccForm] = useState<{ name: string; token: string } | null>(null)
   const [accErr, setAccErr] = useState('')
   const [accDel, setAccDel] = useState<Account | null>(null)
@@ -945,6 +949,7 @@ export default function App() {
   }
 
   return (
+    <PageActionProvider set={setActions}>
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar
         provider={provider}
@@ -983,6 +988,7 @@ export default function App() {
             }}
           />
           <ThemeToggle />
+          <ActionCluster actions={actions} />
           {cur.v !== 'create' && (
             <Button
               className={busy > 0 ? 'cc-spin' : ''}
@@ -1012,6 +1018,7 @@ export default function App() {
         <ModalHost modal={modal} onClose={() => setModal(null)} onCopy={copy} />
       </div>
     </div>
+    </PageActionProvider>
   )
 }
 

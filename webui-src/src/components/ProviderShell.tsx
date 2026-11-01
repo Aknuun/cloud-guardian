@@ -9,6 +9,7 @@ import { Sidebar, ThemeToggle } from './Sidebar'
 import { toolItems } from './toolsMeta'
 import { GlobalSearch } from './GlobalSearch'
 import { PageActionProvider } from './PageAction'
+import { ActionCluster } from './FabActions'
 import type { PageAction } from './PageAction'
 import type { ToolId } from './toolsMeta'
 import type { SubItem } from './Sidebar'
@@ -45,7 +46,7 @@ export function ProviderShell({
 }) {
   const sectionTheme = useSectionTheme(provider)
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
-  const [action, setAction] = useState<PageAction | null>(null)
+  const [actions, setActions] = useState<PageAction[]>([])
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar
@@ -64,11 +65,7 @@ export function ProviderShell({
             <List size={20} />
           </button>
           <h1 className="cc-title">{title}</h1>
-          {action && (
-            <Button className="cc-pageaction" variant="primary" icon={action.icon} disabled={action.disabled} onClick={action.onClick}>
-              {action.label}
-            </Button>
-          )}
+          <ActionCluster actions={actions} />
           <GlobalSearch
             go={(p, t) => {
               if (t && onTool) onTool(t)
@@ -96,7 +93,7 @@ export function ProviderShell({
               <ProviderSwitch provider={provider} onChange={onChange} />
             </div>
           )}
-          <PageActionProvider set={setAction}>{children}</PageActionProvider>
+          <PageActionProvider set={setActions}>{children}</PageActionProvider>
         </main>
         {toast && (
           <div className={'cc-toast ' + (toast.err ? 'err' : 'ok')} role="status" aria-live="polite">

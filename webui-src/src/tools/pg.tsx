@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
-import { BellSimple, ArrowClockwise, BellRinging, Copy, Plus, Power, Trash } from '@phosphor-icons/react'
+import { BellSimple, ArrowClockwise, BellRinging, Copy, Plus, Power, ShieldCheck, Trash } from '@phosphor-icons/react'
 import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
-import { usePageAction } from '../components/PageAction'
+import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
 import type { PgPanel, PgMon, PgData } from './shared'
 
 function PgView() {
-  usePageAction({ label: 'افزودن پنل', icon: Plus, onClick: () => setPf({ name: '', url: '', user: '', pass: '' }) })
+  usePageActions([
+    { label: 'افزودن پنل', icon: Plus, onClick: () => setPf({ name: '', url: '', user: '', pass: '' }) },
+    { label: 'افزودن مانیتور', icon: ShieldCheck, onClick: () => setMf({ panel_url: (data?.panels[0]?.url) || '', name: '', interval: 5 }) },
+  ])
 
   const { data, err, loaded, reload } = useTool<PgData>('/api/tools/pg')
   const [q, setQ] = useState('')
