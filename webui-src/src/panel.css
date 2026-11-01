@@ -2481,3 +2481,40 @@ body .cc-menu-item {
   }
   .cc-topbar .cc-fab > svg { width: 32px; height: 32px }
 }
+
+/* desktop/mobile action menu: anchored popover, not a bottom sheet */
+.cc-pop-scrim { position: fixed; inset: 0; background: transparent; z-index: 60 }
+.cc-pop {
+  position: fixed;
+  inset-inline-end: 16px;
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  z-index: 61;
+  width: min(300px, calc(100vw - 32px));
+  padding: 6px;
+  background: var(--ds-card);
+  border: 1px solid var(--ds-line);
+  border-radius: 18px;
+  box-shadow: 0 18px 44px rgb(16 24 40 / .2);
+  transform-origin: left bottom;
+  transition-property: opacity, transform !important;
+  transition-duration: 160ms !important;
+  transition-timing-function: cubic-bezier(.23, 1, .32, 1) !important;
+}
+@starting-style {
+  .cc-pop { opacity: 0; transform: scale(.95) translateY(6px) }
+}
+.cc-pop-title {
+  font-size: 11.5px; font-weight: 600; color: var(--ds-muted);
+  padding: 8px 10px 6px;
+}
+.cc-pop .cc-actionrow {
+  width: 100% !important; height: 46px !important; flex: 1 1 auto !important;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; border: 0; border-radius: 12px;
+  background: transparent; color: var(--ds-text); font-size: 13.5px; text-align: start;
+}
+.cc-pop .cc-actionrow:hover { background: var(--ds-tint) }
+.cc-pop .cc-actionrow svg { color: var(--ds-brand); flex: 0 0 18px }
+@media (min-width: 700px) {
+  .cc-pop { inset-inline-end: 24px; bottom: 104px; width: 320px }
+}

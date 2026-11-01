@@ -41,10 +41,9 @@ export function ActionCluster({ actions }: { actions: PageAction[] }) {
       </button>
       {open && (
         <>
-          <div className="cc-sheet-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div className="cc-actionsheet" role="menu" aria-label="افزودن">
-            <div className="cc-actionsheet-grip" aria-hidden="true" />
-            <div className="cc-actionsheet-title">چه چیزی اضافه کنم؟</div>
+          <div className="cc-pop-scrim" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="cc-pop" role="menu" aria-label="افزودن">
+            <div className="cc-pop-title">چه چیزی اضافه کنم؟</div>
             {actions.map((a) => (
               <button
                 key={a.label}
