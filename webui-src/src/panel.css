@@ -2533,3 +2533,11 @@ body .cc-menu-item {
 .cc-acctcard-go { display: inline-flex; align-items: center; gap: 2px; font-size: 11.5px; color: var(--ds-muted); flex: 0 0 auto }
 .cc-acctcard .cc-rowbtn { flex: 0 0 34px }
 @media (max-width: 699px) { .cc-acctgrid { grid-template-columns: 1fr } }
+/* keep the expanded rail wide enough for its labels (regression 4.84.1) */
+@media (min-width: 900px) {
+  .cc-sidebar.open,
+  .cc-sidebar.open.cc-sidebar { width: 232px !important; min-width: 232px !important; max-width: 232px !important }
+  .cc-sidebar:not(.open),
+  .cc-sidebar:not(.open).cc-sidebar { width: 64px !important; min-width: 64px !important; padding: 14px 8px !important }
+}
+.cc-sidebar .cc-sideitem-label { white-space: nowrap; overflow: hidden; text-overflow: clip }
