@@ -90,6 +90,7 @@ func (r *Router) WebApp() http.Handler {
 	mux.HandleFunc("/api/tools/pg/mon/add", r.webAuthed(r.webPgMonAdd))
 	mux.HandleFunc("/api/tools/pg/mon/toggle", r.webAuthed(r.webPgMonToggle))
 	mux.HandleFunc("/api/tools/pg/mon/del", r.webAuthed(r.webPgMonDel))
+	mux.HandleFunc("/api/tools/pg/node", r.webAuthed(r.webPgNodeScript))
 	mux.HandleFunc("/api/tools/pg/mon", r.webAuthed(r.webToolsNd))
 	mux.HandleFunc("/api/tools/pg/mon/sync", r.webAuthed(r.webNdSync))
 	mux.HandleFunc("/api/tools/pg/mon/test", r.webAuthed(r.webNdTest))

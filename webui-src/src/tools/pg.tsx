@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BellSimple, ArrowClockwise, BellRinging, Copy, Plus, Power, ShieldCheck, Trash } from '@phosphor-icons/react'
+import { ArrowClockwise, BellRinging, BellSimple, Copy, PencilSimple, Plus, Power, ShieldCheck, Trash, WarningCircle } from '@phosphor-icons/react'
 import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
@@ -25,6 +25,7 @@ function PgView() {
   const [mfErr, setMfErr] = useState('')
   const [mdel, setMdel] = useState<PgMon | null>(null)
   const [nd, setNd] = useState<PgMon | null>(null)
+  const [node, setNode] = useState<PgPanel | null>(null)
   if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded) return <Skeleton />
   const iso0 = data || { panels: [], monitors: [] }
@@ -87,32 +88,73 @@ function PgView() {
           reload()
         }}
       />
-      {flt !== 'mons' && <div className="cc-section">پنل‌ها</div>}
-      {flt !== 'mons' && iso.panels.length === 0 && <Empty title="پنلی ثبت نشده" description="با دکمهٔ «افزودن پنل» یکی اضافه کن." />}
-      {flt !== 'mons' && iso.panels.map((p) => (
-        <div key={p.url} className="cc-trow cc-tap" onClick={() => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' })}>
-          <div className="cc-grow">
-            <div className="cc-name">{p.name || p.url}</div>
-            <div className="cc-sub cc-mono">{p.url}</div>
-          </div>
-          {p.user && <Badge>{p.user}</Badge>}
-          <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
-            <button type="button" aria-label="حذف" className="danger" onClick={() => setPdel(p)}>
-              <Trash size={17} />
-            </button>
-          </div>
+      {flt !== 'mons' && (
+        <div className="cc-section-head">
+          <h2>پنل‌ها</h2>
+          <span className="cc-sub">{faNum(iso.panels.length)} پنل متصل</span>
         </div>
-      ))}
-      {flt !== 'panels' && <div className="cc-section">مانیتور نودها</div>}
-      {flt !== 'panels' && iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ + پایین صفحه یک مانیتور نود بساز." />}
+      )}
+      {flt !== 'mons' && iso.panels.length === 0 && (
+        <Empty
+          title="پنلی ثبت نشده"
+          description="برای مانیتور نودها و مدیریت کاربران، اول یک پنل پاسارگارد وصل کن."
+          action={
+            <Button variant="primary" icon={Plus} onClick={() => setPf({ name: '', url: '', user: '', pass: '' })}>
+              افزودن پنل
+            </Button>
+          }
+        />
+      )}
+      {flt !== 'mons' && iso.panels.length > 0 && (
+        <div className="cc-panelgrid">
+          {iso.panels.map((p) => (
+            <div key={p.url} className="cc-pgcard">
+              <div className="cc-pgcard-top">
+                <span className="cc-pgcard-ico"><ShieldCheck size={19} /></span>
+                <div className="cc-grow">
+                  <div className="cc-name">{p.name || p.url}</div>
+                  <div className="cc-sub cc-mono cc-ltr">{p.url.replace(/^https?:\/\//, '')}</div>
+                </div>
+                {p.user && <Badge>{p.user}</Badge>}
+              </div>
+              <div className="cc-pgcard-actions">
+                <Button variant="primary" icon={Plus} onClick={() => setNode(p)}>
+                  نود جدید
+                </Button>
+                <button
+                  type="button"
+                  aria-label="ویرایش پنل"
+                  className="cc-rowbtn"
+                  onClick={() => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' })}
+                >
+                  <PencilSimple size={16} />
+                </button>
+                <button type="button" aria-label="حذف پنل" className="cc-rowbtn danger" onClick={() => setPdel(p)}>
+                  <Trash size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {flt !== 'panels' && (
+        <div className="cc-section-head cc-mt">
+          <h2>مانیتور نودها</h2>
+          <span className="cc-sub">{faNum(iso.monitors.length)} مانیتور</span>
+        </div>
+      )}
+      {flt !== 'panels' && iso.monitors.length === 0 && (
+        <Empty title="مانیتوری نیست" description="با دکمهٔ + پایین صفحه یک مانیتور نود بساز." />
+      )}
       {flt !== 'panels' && iso.monitors.map((m) => (
-        <div key={m.id} className="cc-trow cc-tap" onClick={() => setNd(m)}>
+        <div key={m.id} className={'cc-trow cc-tap' + (m.enabled ? '' : ' cc-off')} onClick={() => setNd(m)}>
+          <span className={'cc-st' + (m.enabled ? ' up' : '')} />
           <div className="cc-grow">
             <div className="cc-name">{m.name || m.id}</div>
-            <div className="cc-sub">
-              {m.panel} · هر {faNum(m.interval)} دقیقه
-            </div>
+            <div className="cc-sub cc-ltr">{m.panel.replace(/^https?:\/\//, '')}</div>
           </div>
+          <span className="cc-chip cc-chip-sm">{faNum(m.interval)} دقیقه</span>
           <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -127,6 +169,8 @@ function PgView() {
           </div>
         </div>
       ))}
+
+      {node && <NodeDialog panel={node} onClose={() => setNode(null)} />}
 
       {nd && <NdDialog m={nd} onClose={() => setNd(null)} onChanged={reload} />}
 
@@ -377,3 +421,70 @@ function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; on
 /* ---------------- server extras ---------------- */
 
 export default PgView
+
+function NodeDialog({ panel, onClose }: { panel: PgPanel; onClose: () => void }) {
+  const [data, setData] = useState<{ script: string; url: string; user: string; panel: string } | null>(null)
+  const [err, setErr] = useState('')
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    api<{ script: string; url: string; user: string; panel: string }>('/api/tools/pg/node', { idx: panel.idx })
+      .then(setData)
+      .catch((e) => setErr(e.message || 'ساخت اسکریپت ناموفق بود'))
+  }, [panel.idx])
+  const copy = async () => {
+    if (!data) return
+    await fallbackCopy(data.script)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1800)
+  }
+  return (
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+      <Dialog className="cc-dialog" size="base">
+        <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
+        <Dialog.Title className="cc-dialog-title">افزودن نود به «{panel.name || panel.url}»</Dialog.Title>
+        <Dialog.Description className="cc-dialog-desc">
+          اسکریپت زیر مخصوص <b>همین پنل</b> ساخته شده و روی سرور نودی که می‌خواهی عضو این پنل شود اجرا می‌شود.
+        </Dialog.Description>
+
+        <ol className="cc-steps-list">
+          <li>با SSH به سرور نود وصل شو (Ubuntu/Debian تازه).</li>
+          <li>دستور زیر را کامل کپی و اجرا کن؛ نصب و اتصال خودکار انجام می‌شود.</li>
+          <li>حدود یک دقیقه بعد، نود در همین پنل و در فهرست مانیتورها ظاهر می‌شود.</li>
+        </ol>
+
+        <div className="cc-warnbox">
+          <WarningCircle size={18} />
+          <span>
+            رمز پنل داخل این دستور است. آن را فقط روی سرور خودت اجرا کن و در چت، گروه یا جای عمومی نفرست.
+            اگر لو رفت، رمز پنل را عوض کن.
+          </span>
+        </div>
+
+        {err && <div className="cc-form-err">{err}</div>}
+        {!data && !err && <Loader size="sm" />}
+        {data && (
+          <>
+            <div className="cc-codewrap">
+              <button type="button" className="cc-codecopy" onClick={copy} aria-label="کپی اسکریپت">
+                <Copy size={15} /> {copied ? 'کپی شد' : 'کپی'}
+              </button>
+              <pre className="cc-code cc-ltr">{data.script}</pre>
+            </div>
+            <div className="cc-hint">
+              پنل: <span className="cc-ltr cc-mono">{data.url}</span> · کاربر: <span className="cc-ltr cc-mono">{data.user}</span>
+            </div>
+          </>
+        )}
+
+        <div className="cc-dialog-actions">
+          <Button variant="secondary" onClick={onClose}>
+            بستن
+          </Button>
+          <Button variant="primary" icon={Copy} onClick={copy} disabled={!data}>
+            {copied ? 'کپی شد' : 'کپی اسکریپت'}
+          </Button>
+        </div>
+      </Dialog>
+    </Dialog.Root>
+  )
+}

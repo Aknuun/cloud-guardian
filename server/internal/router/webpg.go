@@ -208,3 +208,28 @@ func (r *Router) webPgMonDel(w http.ResponseWriter, req *http.Request, uid int64
 	ndmon.SaveMonitors(r.Store, kept)
 	webOK(w, map[string]any{"ok": true})
 }
+
+// webPgNodeScript builds the node bootstrap one-liner for one panel. It embeds
+// that panel's password, so the response is admin-only and never cached.
+func (r *Router) webPgNodeScript(w http.ResponseWriter, req *http.Request, uid int64) {
+	var in struct {
+		Index int `json:"idx"`
+	}
+	if !webDecode(w, req, &in) {
+		return
+	}
+	ps := pg.Panels(r.Store)
+	if in.Index < 0 || in.Index >= len(ps) {
+		webErr(w, http.StatusNotFound, "پنل پیدا نشد")
+		return
+	}
+	p := ps[in.Index]
+	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+	script := fmt.Sprintf(`sudo PANEL_URL=%s \
+     PANEL_USERNAME=%s \
+     PANEL_PASSWORD=%s \
+     bash -c "$(wget -qO- https://raw.githubusercontent.com/Aknuun/pg-node-deploy/main/bootstrap.sh)"`,
+		q(p.URL), q(p.Username), q(p.Password))
+	w.Header().Set("Cache-Control", "no-store")
+	webOK(w, map[string]any{"script": script, "panel": p.Name, "url": p.URL, "user": p.Username})
+}

@@ -2388,3 +2388,37 @@ body .cc-menu-item {
 .cc-sidebrand-mark { background: transparent !important; padding: 0 !important; border-radius: 12px; overflow: hidden }
 .cc-sidebrand-mark > svg { width: 100% !important; height: 100% !important; max-width: none; flex: 0 0 auto }
 .cc-login-mark { display: grid; place-items: center; margin-bottom: 10px }
+
+/* pasarguard: panel cards + node bootstrap dialog */
+.cc-panelgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-bottom: 6px }
+.cc-pgcard { border: 1px solid var(--ds-line); border-radius: 16px; background: var(--ds-card); padding: 14px }
+.cc-pgcard-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
+.cc-pgcard-ico {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--ds-brand-soft); color: var(--ds-brand); flex: 0 0 36px;
+}
+.cc-pgcard-actions { display: flex; align-items: center; gap: 6px }
+.cc-pgcard-actions > button[data-kumo-component='Button'] { flex: 1; justify-content: center }
+.cc-chip-sm { height: 26px; font-size: 11.5px; padding: 0 9px; flex: 0 0 auto }
+.cc-trow.cc-off { opacity: .62 }
+.cc-mt { margin-top: 18px }
+.cc-steps-list { margin: 12px 0; padding-inline-start: 20px; font-size: 13px; line-height: 2; color: var(--ds-text) }
+.cc-warnbox {
+  display: flex; gap: 9px; align-items: flex-start; margin: 10px 0 12px;
+  padding: 11px 13px; border-radius: 12px; font-size: 12.5px; line-height: 1.9;
+  background: color-mix(in srgb, #f79009 9%, var(--ds-card));
+  border: 1px solid color-mix(in srgb, #f79009 28%, transparent);
+  color: #7a4a00;
+}
+.cc-warnbox svg { flex: 0 0 18px; margin-top: 3px; color: #b54708 }
+.cc-codewrap { position: relative; margin-bottom: 8px }
+.cc-code {
+  margin: 0; padding: 34px 12px 12px; border-radius: 12px; background: var(--ds-tint);
+  border: 1px solid var(--ds-line); font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto;
+}
+.cc-codecopy {
+  position: absolute; top: 6px; inset-inline-end: 6px; height: 24px; padding: 0 8px;
+  display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px;
+  border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-card); color: var(--ds-muted);
+}
