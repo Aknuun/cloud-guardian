@@ -173,3 +173,7 @@
 - UI follows the house kit: `SettingsCard` for the paste box, `ListRow` + status dot for results, a sheet with the big median figure and five sample bars (the bar nearest the median carries the accent), `Badge` for the verdict, and the page keeps its dot-and-hairline look in both themes.
 - Backend: `webcfgtest.go` (parse, guard, engine install, SOCKS probe, stats, history) + `webcfgtest_parse.go` + tests for parsing, the private-address guard, the stats, redaction and the history cap; three new routes under `/api/tools/cfgtest`.
 - checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 19/19.
+
+## v4.97.1 — config test: per-minute run budget
+- Runs are heavier than a page load, so they get their own budget of ten per minute per admin (the shared limiter still allows 300 ordinary calls). The eleventh run answers «کمی صبر کن؛ هر دقیقه ۱۰ تست».
+- checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 19/19.

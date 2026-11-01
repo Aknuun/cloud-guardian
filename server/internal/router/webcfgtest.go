@@ -39,6 +39,36 @@ const (
 // only two engines may run at once, whatever the request mix.
 var cfgSlots = make(chan struct{}, 2)
 
+// The shared limiter allows 300 calls a minute; a run is far heavier than a
+// page load, so runs get their own ten-per-minute budget per admin.
+const cfgRunPerMin = 10
+
+var (
+	cfgRateMu sync.Mutex
+	cfgRate   = map[int64]*cfgRateWin{}
+)
+
+type cfgRateWin struct {
+	start time.Time
+	n     int
+}
+
+func cfgRateAllow(uid int64) bool {
+	now := time.Now()
+	cfgRateMu.Lock()
+	defer cfgRateMu.Unlock()
+	w := cfgRate[uid]
+	if w == nil || now.Sub(w.start) > time.Minute {
+		cfgRate[uid] = &cfgRateWin{start: now, n: 1}
+		return true
+	}
+	if w.n >= cfgRunPerMin {
+		return false
+	}
+	w.n++
+	return true
+}
+
 // ---------- engine ----------
 
 func cfgEnginePath() string {
@@ -717,6 +747,10 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, req.Body, 1<<20)).Decode(&in); err != nil {
 		webErr(w, http.StatusBadRequest, "درخواست خوانا نیست")
+		return
+	}
+	if !cfgRateAllow(uid) {
+		webErr(w, http.StatusTooManyRequests, cfgErrFA["rate_limited"])
 		return
 	}
 	if len(in.Links) == 0 {
