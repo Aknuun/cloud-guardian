@@ -2299,3 +2299,16 @@ body .cc-menu-item {
 .cc-stat.compact .cc-stat-box { padding: 8px 10px; background: transparent; border: 1px solid var(--ds-hairline); border-radius: 12px; justify-content: flex-start }
 .cc-stat.compact .cc-stat-value { font-size: 19px }
 .cc-stat.compact .cc-stat-label { font-size: 12px }
+/* page action inside the topbar must keep its label, not collapse to a square icon */
+.cc-topbar .cc-pageaction,
+.cc-topbar button.cc-pageaction {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  white-space: nowrap;
+}
+@media (max-width: 899px) {
+  .cc-topbar .cc-pageaction { height: 32px !important; padding: 0 10px !important; font-size: 12px !important; }
+}
