@@ -55,6 +55,9 @@ function HookView() {
       </div>
       <SettingsCard
         title="تنظیمات هشدار"
+        action={
+          <Switch checked={!!d.enabled} onCheckedChange={(v) => act('/api/tools/hook/cfg', { enabled: v })} aria-label="هشدار انقضا و حجم فعال باشد" />
+        }
         footer={
           <>
             <Button
@@ -70,28 +73,33 @@ function HookView() {
           </>
         }
       >
-        <SettingsRow label="هشدار انقضا و حجم">
-          <Switch checked={!!d.enabled} onCheckedChange={(v) => act('/api/tools/hook/cfg', { enabled: v })} aria-label="هشدار انقضا و حجم فعال باشد" />
-        </SettingsRow>
         <SettingsRow label="بی‌صدا" hint="هشدارها به خود کاربران برود، نه به من">
           <Switch checked={!!d.silentMe} onCheckedChange={(v) => act('/api/tools/hook/cfg', { silentMe: v })} aria-label="ارسال بی‌صدا به کاربران" />
         </SettingsRow>
-        <SettingsRow label="آستانهٔ روز" hint="با کاما جدا کن">
-          <Input
-            className="cc-num"
-            aria-label="آستانهٔ روز"
-            value={(d.days || []).join(', ')}
-            onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
-          />
-        </SettingsRow>
-        <SettingsRow label="آستانهٔ حجم" hint="درصد، با کاما">
-          <Input
-            className="cc-num"
-            aria-label="آستانهٔ حجم"
-            value={(d.usage || []).join(', ')}
-            onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
-          />
-        </SettingsRow>
+        <div className="cc-setgrid">
+          <label className="cc-setfield">
+            <span>
+              آستانهٔ روز <i>(با کاما)</i>
+            </span>
+            <Input
+              className="cc-num"
+              aria-label="آستانهٔ روز"
+              value={(d.days || []).join(', ')}
+              onChange={(e) => setD({ ...d, days: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+            />
+          </label>
+          <label className="cc-setfield">
+            <span>
+              آستانهٔ حجم <i>(٪ با کاما)</i>
+            </span>
+            <Input
+              className="cc-num"
+              aria-label="آستانهٔ حجم"
+              value={(d.usage || []).join(', ')}
+              onChange={(e) => setD({ ...d, usage: e.target.value.split(',').map((x) => Number(x.trim()) || 0).filter((x) => x > 0) })}
+            />
+          </label>
+        </div>
       </SettingsCard>
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 

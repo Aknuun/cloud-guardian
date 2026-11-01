@@ -39,16 +39,23 @@ export function ListRow({
 /** Grouped settings block: one card, rows of label/value, optional footer. */
 export function SettingsCard({
   title,
+  action,
   children,
   footer,
 }: {
   title?: string
+  action?: ReactNode
   children: ReactNode
   footer?: ReactNode
 }) {
   return (
     <div className="cc-setcard">
-      {title ? <div className="cc-setcard-title">{title}</div> : null}
+      {title || action ? (
+        <div className="cc-setcard-head">
+          {title ? <div className="cc-setcard-title">{title}</div> : null}
+          {action}
+        </div>
+      ) : null}
       <div className="cc-setcard-body">{children}</div>
       {footer ? <div className="cc-setcard-foot">{footer}</div> : null}
     </div>

@@ -78,6 +78,9 @@ function HfdView() {
 
       <SettingsCard
         title="تنظیمات چرخش"
+        action={
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="چرخش روزانه فعال باشد" />
+        }
         footer={
           <>
             <Button
@@ -97,9 +100,6 @@ function HfdView() {
           </>
         }
       >
-        <SettingsRow label="چرخش روزانه">
-          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="چرخش روزانه فعال باشد" />
-        </SettingsRow>
         <SettingsRow label="فاصله">
           <Input className="cc-num" type="number" value={String(cfg.intervalH)} onChange={(e) => setCfg({ ...cfg, intervalH: Number(e.target.value) || 0 })} />
           <span className="cc-unit">ساعت</span>

@@ -109,3 +109,11 @@
 - SettingsCards stay inline on phones (label right, unit+input left) instead of stacking to full-width controls; RunStrip stacks the summary under the timestamp; monitor meta is 12px with real gaps.
 - dom dropped the second «افزودن» button (the page action already exists), and hover tints no longer stick after a tap.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; every page reviewed at 390×844.
+
+## v4.95.0 — denser, quieter controls (MoreBot pass)
+- Controls got professional-sized: `--cc-btn-h` is 40px, the FAB is 50px, and `.cc-actions` is no longer a 2×54px card list — it is a wrap toolbar of 34px (36 on phones) outline buttons. Dialogs inherit the same row.
+- Rows stopped reserving empty space: `.cc-trow` lost its forced 78px min-height (padding 10×12, radius 12, 6px gap), and destructive icon buttons are a quiet tint instead of a bordered red square.
+- Settings cards gained a header action slot (`SettingsCard action={…}`): the master on/off switch now sits in the card title row on hf, hfd, hook, um and dom instead of taking a whole row.
+- Numeric settings are a compact grid (`cc-setgrid`): two fields per row on phones, four on wide screens, label above a small input — hf/hfd/hook/um moved from stacked full-width rows to this.
+- hf reads shorter: the intro is one sentence, a host shows one combined address/SNI/host line instead of three, and field chips are 28px.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18 (reviewed hf/hook/um/dom/srv/set/mail at 390 and 1280).

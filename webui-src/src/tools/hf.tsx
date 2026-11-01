@@ -5,7 +5,7 @@ import { Button, Dialog, Empty, Input, Loader, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
 import { RunStrip } from '../components/RunStrip'
-import { ChipGroup, ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
+import { ChipGroup, ListRow, SettingsCard } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HfCfg = {
@@ -80,10 +80,12 @@ function HfView() {
       <Skeleton rows={5} />
     )
   const num = (k: keyof HfCfg, label: string, unit: string) => (
-    <SettingsRow label={label}>
+    <label className="cc-setfield">
+      <span>
+        {label} <i>({unit})</i>
+      </span>
       <Input className="cc-num" type="number" value={String(cfg[k])} onChange={(e) => setCfg({ ...cfg, [k]: Number(e.target.value) || 0 } as HfCfg)} />
-      <span className="cc-unit">{unit}</span>
-    </SettingsRow>
+    </label>
   )
   const submit = async () => {
     setSaved(false)
@@ -95,13 +97,15 @@ function HfView() {
   return (
     <>
       <div className="cc-hint cc-mb">
-        دامنهٔ هاست‌ها هر {faNum(cfg.intervalMin)} دقیقه از داخل ایران بررسی می‌شود؛ اگر فیلتر شد، ساب‌دامنهٔ تازه ساخته و
-        جایگزین می‌شود. هاست‌هایی که لازم نیست بررسی شوند را در لیست پایین «استثنا» کن.
+        هاست‌ها هر {faNum(cfg.intervalMin)} دقیقه از داخل ایران بررسی می‌شوند؛ اگر فیلتر شدند، ساب‌دامنهٔ تازه جایگزین می‌شود.
       </div>
       <RunStrip ts={cfg.lastRun} text={cfg.lastSummary} />
 
       <SettingsCard
         title="تنظیمات تعویض"
+        action={
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="تعویض خودکار فعال باشد" />
+        }
         footer={
           <>
             <Button variant="primary" onClick={submit}>ذخیرهٔ تنظیمات</Button>
@@ -109,16 +113,15 @@ function HfView() {
           </>
         }
       >
-        <SettingsRow label="تعویض خودکار">
-          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="تعویض خودکار فعال باشد" />
-        </SettingsRow>
-        {num('intervalMin', 'فاصلهٔ اجرا', 'دقیقه')}
-        {num('cities', 'حداقل شهر فیلتر', 'شهر')}
-        {num('maxOk', 'حداکثر پینگ موفق', 'از ۴')}
-        {num('batch', 'تعداد بررسی هر اجرا', 'هاست')}
-        {num('maxChanges', 'حداکثر تعویض', 'هاست')}
-        {num('recheckCount', 'تعداد بررسی مجدد', 'بار')}
-        {num('recheckMin', 'فاصلهٔ بررسی مجدد', 'دقیقه')}
+        <div className="cc-setgrid">
+          {num('intervalMin', 'فاصلهٔ اجرا', 'دقیقه')}
+          {num('cities', 'حداقل شهر فیلتر', 'شهر')}
+          {num('maxOk', 'حداکثر پینگ موفق', 'از ۴')}
+          {num('batch', 'بررسی در هر اجرا', 'هاست')}
+          {num('maxChanges', 'حداکثر تعویض', 'هاست')}
+          {num('recheckCount', 'بررسی مجدد', 'بار')}
+          {num('recheckMin', 'فاصلهٔ بررسی مجدد', 'دقیقه')}
+        </div>
       </SettingsCard>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
@@ -215,9 +218,15 @@ function HfView() {
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
               </div>
-              {(h.address || []).length > 0 && <div className="cc-sub">{(h.address || []).join('، ')}</div>}
-              {(h.sni || []).length > 0 && <div className="cc-sub">sni: {(h.sni || []).join('، ')}</div>}
-              {(h.host || []).length > 0 && <div className="cc-sub">host: {(h.host || []).join('، ')}</div>}
+              <div className="cc-sub">
+                {[
+                  (h.address || []).join('، '),
+                  (h.sni || []).length > 0 ? 'sni: ' + h.sni.join('، ') : '',
+                  (h.host || []).length > 0 ? 'host: ' + h.host.join('، ') : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
+              </div>
               <ChipGroup
                 items={FIELDS.map(([id, label]) => ({ id, label }))}
                 value={FIELDS.filter(([f]) => !h.skip[f]).map(([f]) => f)}

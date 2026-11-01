@@ -230,6 +230,7 @@ function DomView() {
         <SectionHeader title="گواهی SSL" count={faNum(data.ssl.length) + ' گواهی'} />
         <SettingsCard
           title="هشدار گواهی"
+          action={<Switch checked={on} onCheckedChange={setWarnOn} aria-label="هشدار تلگرام گواهی" />}
           footer={
             <>
               <Button variant="outline" onClick={saveCfg} disabled={busy}>ذخیره</Button>
@@ -237,10 +238,7 @@ function DomView() {
             </>
           }
         >
-          <SettingsRow label="هشدار تلگرام" hint="وقتی گواهی به روزهای هشدار برسد، روزی یک بار پیام می‌آید.">
-            <Switch checked={on} onCheckedChange={setWarnOn} aria-label="هشدار تلگرام گواهی" />
-          </SettingsRow>
-          <SettingsRow label="روز مانده">
+          <SettingsRow label="روز مانده" hint="با رسیدن گواهی به این روزها، روزی یک بار پیام می‌آید.">
             <input
               className="cc-input cc-num"
               id="ssl-warn-days"

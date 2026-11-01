@@ -35,7 +35,10 @@ function UmView() {
       <Skeleton rows={5} />
     )
   const num = (k: keyof UmCfg, label: string, unit: string, hint: string) => (
-    <SettingsRow label={label}>
+    <label className="cc-setfield">
+      <span>
+        {label} <i>({unit})</i>
+      </span>
       <Input
         className="cc-num"
         type="number"
@@ -44,8 +47,7 @@ function UmView() {
         placeholder={hint}
         aria-label={label}
       />
-      <span className="cc-unit">{unit}</span>
-    </SettingsRow>
+    </label>
   )
   const submit = async () => {
     setFErr('')
@@ -65,6 +67,9 @@ function UmView() {
       </div>
       <SettingsCard
         title="تنظیمات پایش"
+        action={
+          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="پایش بد مصرف فعال باشد" />
+        }
         footer={
           <>
             <Button variant="primary" onClick={submit}>ذخیره</Button>
@@ -72,17 +77,16 @@ function UmView() {
           </>
         }
       >
-        <SettingsRow label="پایش بد مصرف">
-          <Switch checked={!!cfg.enabled} onCheckedChange={(v) => setCfg({ ...cfg, enabled: v })} aria-label="پایش بد مصرف فعال باشد" />
-        </SettingsRow>
         <SettingsRow label="گزارش روزانهٔ اخطارشده‌ها">
           <Switch checked={!!cfg.report} onCheckedChange={(v) => setCfg({ ...cfg, report: v })} aria-label="گزارش روزانه ارسال شود" />
         </SettingsRow>
-        {num('hourlyGb', 'آستانهٔ ساعتی', 'GB', '7')}
-        {num('dailyGb', 'آستانهٔ روزانه', 'GB', '25')}
-        {num('cooldownH', 'فاصلهٔ تکرار هشدار', 'ساعت', '6')}
-        {num('minGb', 'حداقل مصرف برای اسنپ‌شات', 'GB', '1')}
-        {num('activeMin', 'حداقل مدت فعال بودن', 'دقیقه', '75')}
+        <div className="cc-setgrid">
+          {num('hourlyGb', 'آستانهٔ ساعتی', 'GB', '7')}
+          {num('dailyGb', 'آستانهٔ روزانه', 'GB', '25')}
+          {num('cooldownH', 'تکرار هشدار', 'ساعت', '6')}
+          {num('minGb', 'حداقل برای اسنپ‌شات', 'GB', '1')}
+          {num('activeMin', 'حداقل مدت فعال بودن', 'دقیقه', '75')}
+        </div>
       </SettingsCard>
       {notice && <div className="cc-hint cc-center">{notice}</div>}
     </>

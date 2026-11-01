@@ -56,7 +56,7 @@ body {
 }
 
 .cc-app {
-  --cc-btn-h: 44px;
+  --cc-btn-h: 40px;
   --cc-radius: 12px;
   min-height: 100vh;
   display: flex;
