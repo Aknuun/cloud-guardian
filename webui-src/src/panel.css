@@ -2587,3 +2587,21 @@ body .cc-menu-item {
 }
 .cc-sidebar .cc-sideitem { height: auto; min-height: 42px; padding-block: 6px }
 .cc-sidebar.measuring .cc-sideitem-label { white-space: nowrap; overflow: visible }
+/* sidebar: compact fixed width, single-line labels with ellipsis (v4.85.5) */
+@media (min-width: 900px) {
+  .cc-sidebar.open,
+  .cc-sidebar.open.cc-sidebar { width: 208px !important; min-width: 208px !important; max-width: 208px !important }
+  .cc-sidebar:not(.open),
+  .cc-sidebar:not(.open).cc-sidebar { width: 64px !important; min-width: 64px !important; max-width: 64px !important }
+}
+@media (max-width: 899px) {
+  .cc-sidebar,
+  .cc-sidebar.open { width: min(260px, 80vw) !important }
+}
+.cc-sidebar .cc-sideitem {
+  height: 42px !important; min-height: 42px !important; padding-block: 0 !important; gap: 10px !important; min-width: 0;
+}
+.cc-sidebar .cc-sideitem-label {
+  display: block; min-width: 0; white-space: nowrap !important;
+  overflow: hidden !important; text-overflow: ellipsis !important; line-height: 1.3;
+}

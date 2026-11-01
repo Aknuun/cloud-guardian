@@ -147,7 +147,7 @@ export function Sidebar({
                   }}
                 >
                   <it.Icon size={19} weight={on ? 'fill' : 'regular'} />
-                  <span className="cc-sideitem-label">{it.label}</span>
+                  <span className="cc-sideitem-label" title={it.label}>{it.label}</span>
                   {hasSub && (
                     <CaretDown size={14} className={'cc-caret' + (isOpen ? ' open' : '')} aria-hidden="true" />
                   )}
@@ -189,7 +189,7 @@ export function Sidebar({
                 }}
               >
                 <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
-                <span className="cc-sideitem-label">{t.label}</span>
+                <span className="cc-sideitem-label" title={t.label}>{t.label}</span>
               </button>
             ))}
           </nav>
@@ -210,7 +210,7 @@ export function Sidebar({
                 }}
               >
                 <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
-                <span className="cc-sideitem-label">{t.label}</span>
+                <span className="cc-sideitem-label" title={t.label}>{t.label}</span>
               </button>
             ))}
           </nav>
@@ -231,7 +231,7 @@ export function Sidebar({
                 }}
               >
                 <t.Icon size={19} weight={t.active ? 'fill' : 'regular'} />
-                <span className="cc-sideitem-label">{t.label}</span>
+                <span className="cc-sideitem-label" title={t.label}>{t.label}</span>
               </button>
             ))}
           </nav>
