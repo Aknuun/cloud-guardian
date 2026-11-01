@@ -316,7 +316,9 @@ html[data-mode='light'] .cc-main {
     box-sizing: border-box;
   }
   .cc-sidebar.open {
-    width: 272px;
+    width: max-content;
+    min-width: 196px;
+    max-width: 272px;
     padding: 18px 14px;
   }
 }
@@ -2521,3 +2523,28 @@ body .cc-menu-item {
 .cc-pop .cc-actionrow { margin: 0 !important; height: 44px !important; }
 .cc-pop { padding: 6px !important; }
 .cc-pop-title { padding: 6px 10px 4px !important; }
+
+/* home: two columns at every width, one card per section */
+.cc-home2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start }
+.cc-hg-sec {
+  background: var(--ds-card);
+  border: 1px solid var(--ds-line);
+  border-radius: 14px;
+  padding: 6px 6px 8px;
+  min-width: 0;
+}
+.cc-hg-sec .cc-hg-title { margin: 2px 4px 6px; padding: 0 }
+.cc-hg-sec .cc-hg-list { display: block; border: 0; border-radius: 0; overflow: visible }
+.cc-hg-sec .cc-hg-list .cc-hrow {
+  border: 0; border-radius: 9px; min-height: 40px; padding: 0 8px; gap: 8px; font-size: 12.5px;
+}
+.cc-hg-sec .cc-hg-list .cc-hrow:hover { background: var(--ds-tint) }
+.cc-hg-sec .cc-hg-list .cc-hrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+@media (max-width: 420px) {
+  .cc-home2 { gap: 8px }
+  .cc-hg-sec { padding: 4px 4px 6px; border-radius: 12px }
+  .cc-hg-sec .cc-hg-list .cc-hrow { font-size: 11.5px; min-height: 38px; padding: 0 6px }
+}
+@media (max-width: 899px) {
+  .cc-sidebar.open { width: max-content; min-width: 210px; max-width: min(296px, 86vw) }
+}

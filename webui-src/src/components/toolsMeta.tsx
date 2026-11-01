@@ -24,7 +24,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
-  { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
+  { id: 'cfcheck', label: 'بررسی سلامت ساب‌ها', Icon: Pulse },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'شبکهٔ نصب‌ها', Icon: Broadcast },
   { id: 'rem', label: 'یادآورها', Icon: BellRinging },
@@ -41,21 +41,22 @@ export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
 // Landing page: every ported section, grouped and one tap away.
 export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
   const byId = new Map(toolsVisible().map((t) => [t.id, t]))
-  const groups = TOOL_GROUPS
   return (
-    <div className="cc-hg">
-      <div className="cc-hg-title">سرویس‌ها</div>
-      <div className="cc-hg-list">
-        {PROVIDERS.map((p) => (
-          <button key={p.id} className="cc-hrow" onClick={() => go!(p.id as Provider, null)}>
-            <p.Icon size={18} />
-            <span>{p.label}</span>
-            <CaretLeft size={14} className="cc-hchev" />
-          </button>
-        ))}
-      </div>
-      {groups.map((g) => (
-        <div key={g.title}>
+    <div className="cc-home2">
+      <section className="cc-hg-sec">
+        <div className="cc-hg-title">سرویس‌ها</div>
+        <div className="cc-hg-list">
+          {PROVIDERS.map((p) => (
+            <button key={p.id} className="cc-hrow" onClick={() => go!(p.id as Provider, null)}>
+              <p.Icon size={17} />
+              <span>{p.label}</span>
+              <CaretLeft size={13} className="cc-hchev" />
+            </button>
+          ))}
+        </div>
+      </section>
+      {TOOL_GROUPS.map((g) => (
+        <section key={g.title} className="cc-hg-sec">
           <div className="cc-hg-title">{g.title}</div>
           <div className="cc-hg-list">
             {g.tools.map((id) => {
@@ -63,14 +64,14 @@ export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) =
               if (!t) return null
               return (
                 <button key={id} className="cc-hrow" onClick={() => go!(null, id)}>
-                  <t.Icon size={18} />
+                  <t.Icon size={17} />
                   <span>{t.label}</span>
-                  <CaretLeft size={14} className="cc-hchev" />
+                  <CaretLeft size={13} className="cc-hchev" />
                 </button>
               )
             })}
           </div>
-        </div>
+        </section>
       ))}
     </div>
   )
