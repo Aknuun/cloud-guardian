@@ -318,7 +318,7 @@ html[data-mode='light'] .cc-main {
   .cc-sidebar.open {
     width: max-content;
     min-width: 196px;
-    max-width: 272px;
+    max-width: 232px;
     padding: 18px 14px;
   }
 }
