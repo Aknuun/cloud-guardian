@@ -56,14 +56,19 @@ var runLock sync.Mutex
 
 // Cfg mirrors host_filter_cfg in the Python store.
 type Cfg struct {
-	Enabled       *bool    `json:"enabled"`
-	IntervalMin   int      `json:"intervalMin"`
-	Cities        int      `json:"cities"`
-	CitiesSel     []string `json:"citiesSel"`
-	MaxOk         int      `json:"maxOk"`
-	RecheckCount  int      `json:"recheckCount"`
-	RecheckMin    int      `json:"recheckMin"`
-	Exceptions    []string `json:"exceptions"`
+	Enabled      *bool    `json:"enabled"`
+	IntervalMin  int      `json:"intervalMin"`
+	Cities       int      `json:"cities"`
+	CitiesSel    []string `json:"citiesSel"`
+	MaxOk        int      `json:"maxOk"`
+	RecheckCount int      `json:"recheckCount"`
+	RecheckMin   int      `json:"recheckMin"`
+	Exceptions   []string `json:"exceptions"`
+	// Forced holds exception keys the user took back out of the list, e.g.
+	// "0:abc:address" for one field or "0:abc" for the whole host. It exists so
+	// hosts that are auto-excluded (disabled or a status-text remark) can still
+	// be put back into rotation on purpose.
+	Forced        []string `json:"forced"`
 	Batch         int      `json:"batch"`
 	MaxChanges    int      `json:"maxChanges"`
 	BackupKeep    int      `json:"backupKeep"`
@@ -73,6 +78,47 @@ type Cfg struct {
 }
 
 func (c Cfg) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
+
+// reStatusText matches remarks that are status text rather than a host name,
+// e.g. "زمان شما به پایان رسید" or an unexpanded panel template.
+var reStatusText = regexp.MustCompile(`(?i)زمان شما|به پایان رسید|پایان یافت|منقضی|expired|disabled`)
+
+// IsAutoHost reports a panel entry that must not be rotated: hosts disabled in
+// the panel and entries whose remark is a status message/template instead of a
+// host name. They are listed as exceptions and can be forced back by the user.
+func IsAutoHost(h map[string]any) bool {
+	if b, ok := h["is_disabled"].(bool); ok && b {
+		return true
+	}
+	remark := strv(h["remark"])
+	if reHostPlaceholder.MatchString(remark) || reStatusText.MatchString(remark) {
+		return true
+	}
+	return false
+}
+
+// forcedAnyField reports whether any field of the host was forced back.
+func forcedAnyField(c Cfg, pi int, hid string) bool {
+	pre := fmt.Sprintf("%d:%s:", pi, hid)
+	for _, k := range c.Forced {
+		if strings.HasPrefix(k, pre) {
+			return true
+		}
+	}
+	return false
+}
+
+// ForcedKey reports whether the field (or the whole host) was forced back into
+// rotation. Empty field checks the host-level key.
+func ForcedKey(c Cfg, pi int, hid, field string) bool {
+	base := fmt.Sprintf("%d:%s", pi, hid)
+	for _, k := range c.Forced {
+		if k == base || (field != "" && k == base+":"+field) {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	domRe = regexp.MustCompile(`(?i)^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$`)
@@ -211,10 +257,10 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 			if !ok {
 				continue
 			}
-			if b, ok := h["is_disabled"].(bool); ok && b {
+			hid := strv(h["id"])
+			if IsAutoHost(h) && !ForcedKey(cfg, pi, hid, "") && !forcedAnyField(cfg, pi, hid) {
 				continue
 			}
-			hid := strv(h["id"])
 			// Exception keys are stored by the UI as "<panelIndex>:<hostID>[:<field>]"
 			// (see hfAllKeys). Also accept the legacy "<panelURL>:<hostID>" form.
 			base := fmt.Sprintf("%d:%s", pi, hid)
@@ -226,9 +272,13 @@ func doRun(bot *tg.Client, st *store.Store, panels []pg.Panel, adminID int64,
 					excSet[f] = true
 				}
 			}
+			auto := IsAutoHost(h)
 			var allowed []string
 			for _, f := range []string{"address", "sni", "host"} {
 				if excSet[f] {
+					continue
+				}
+				if auto && !ForcedKey(cfg, pi, hid, f) && !ForcedKey(cfg, pi, hid, "") {
 					continue
 				}
 				for _, x := range asList(h[f]) {

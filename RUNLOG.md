@@ -129,3 +129,9 @@
 ## v4.95.2 — disabled hosts stay out of the list
 - «تعویض ساب فیلتر» and «چرخش روزانه» only list hosts that are actually in rotation; a host disabled in the panel is hidden instead of sitting in the list with no effect. The section count and the empty state follow the same filtered list, so a panel with only disabled hosts reads «هاستی نیست».
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; both pages checked at 390 with one active and one disabled host.
+
+## v4.95.3 — status-text hosts are recognised and can be forced back
+- «تعویض ساب فیلتر» now lists every panel entry again, but entries that are not real hosts are auto-excluded: hosts disabled in the panel, and remarks that are a status template or text («{STATUS_EMOJI} زمان شما به پایان رسید», «منقضی», …). They show up with all three field chips off and a «غیرفعال» / «متنی» note, so they are visible in the exception list instead of silently disappearing.
+- Tapping a chip on such a host forces that field back into rotation; tapping again returns it to auto-exclusion. The force list lives in the config as `forced` (a key per host or per field) so it survives restarts.
+- The rotation itself now skips status-text hosts the same way it skips disabled ones, and honours the forced keys per field — previously a text entry could be picked as a swap target.
+- checks: go build/vet/test ok, tsc clean, biome 0 errors (26 warnings), webui build ok, playwright 18/18.

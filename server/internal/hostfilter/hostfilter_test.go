@@ -38,3 +38,35 @@ func TestVerdictNothingMeasured(t *testing.T) {
 		t.Fatalf("foreign verdict should be unknown: %+v", d)
 	}
 }
+
+func TestIsAutoHost(t *testing.T) {
+	cases := []struct {
+		host map[string]any
+		want bool
+	}{
+		{map[string]any{"remark": "🇩🇪 DE-01"}, false},
+		{map[string]any{"remark": "🇩🇪 DE-01", "is_disabled": true}, true},
+		{map[string]any{"remark": "{STATUS_EMOJI} زمان شما به پایان رسید"}, true},
+		{map[string]any{"remark": "زمان شما به پایان رسید"}, true},
+		{map[string]any{"remark": "{USERNAME} | {TIME_LEFT}"}, true},
+		{map[string]any{"remark": ""}, false},
+	}
+	for _, c := range cases {
+		if got := IsAutoHost(c.host); got != c.want {
+			t.Fatalf("IsAutoHost(%v) = %v, want %v", c.host["remark"], got, c.want)
+		}
+	}
+}
+
+func TestForcedKey(t *testing.T) {
+	cfg := Cfg{Forced: []string{"0:h1:address", "0:h2"}}
+	if !ForcedKey(cfg, 0, "h1", "address") || !ForcedKey(cfg, 0, "h2", "sni") {
+		t.Fatal("forced keys should match")
+	}
+	if ForcedKey(cfg, 0, "h1", "sni") || ForcedKey(cfg, 1, "h2", "address") {
+		t.Fatal("unforced keys must not match")
+	}
+	if !forcedAnyField(cfg, 0, "h1") || forcedAnyField(cfg, 0, "h9") {
+		t.Fatal("forcedAnyField mismatch")
+	}
+}

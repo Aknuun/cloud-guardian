@@ -134,13 +134,18 @@ func (r *Router) webHfHosts(w http.ResponseWriter, req *http.Request, uid int64)
 		}
 		hid := strv(h["id"])
 		base := fmt.Sprintf("%d:%s", pi, hid)
+		auto := hostfilter.IsAutoHost(h)
+		forced := map[string]bool{}
+		for _, f := range []string{"address", "sni", "host"} {
+			forced[f] = hostfilter.ForcedKey(cfg, pi, hid, f) || hostfilter.ForcedKey(cfg, pi, hid, "")
+		}
 		skip := map[string]bool{}
 		for _, f := range []string{"address", "sni", "host"} {
-			skip[f] = exc[base+":"+f] || exc[base]
+			skip[f] = exc[base+":"+f] || exc[base] || (auto && !forced[f])
 		}
 		out = append(out, map[string]any{
 			"id": hid, "remark": strv(h["remark"]),
-			"disabled": boolVal(h["is_disabled"]), "reality": hfReality(h),
+			"disabled": boolVal(h["is_disabled"]), "reality": hfReality(h), "auto": auto,
 			"address": hfList(h["address"]), "sni": hfList(h["sni"]),
 			"host": hfList(h["host"]), "skip": skip,
 			"all": exc[base],
@@ -155,6 +160,17 @@ type webHfExcIn struct {
 	Field string `json:"field"`
 	All   bool   `json:"all"`
 	Clear bool   `json:"clear"`
+	// Allow toggles the force-back list for auto-excluded hosts.
+	Allow bool `json:"allow"`
+}
+
+func hfToggleForce(list []string, key string) []string {
+	for i, k := range list {
+		if k == key {
+			return append(append([]string{}, list[:i]...), list[i+1:]...)
+		}
+	}
+	return append(append([]string{}, list...), key)
 }
 
 func (r *Router) webHfExc(w http.ResponseWriter, req *http.Request, uid int64) {
@@ -164,6 +180,19 @@ func (r *Router) webHfExc(w http.ResponseWriter, req *http.Request, uid int64) {
 	}
 	cfg := hostfilter.GetCfg(r.Store)
 	set := hfExcSet(cfg)
+	if in.Allow && in.Host != "" {
+		// auto-excluded hosts (disabled / status text) are put back field by field
+		if in.All {
+			cfg.Forced = hfToggleForce(cfg.Forced, fmt.Sprintf("%d:%s", in.Panel, in.Host))
+		} else {
+			cfg.Forced = hfToggleForce(cfg.Forced, fmt.Sprintf("%d:%s:%s", in.Panel, in.Host, in.Field))
+		}
+		delete(set, fmt.Sprintf("%d:%s:%s", in.Panel, in.Host, in.Field))
+		cfg.Exceptions = hfExcList(set)
+		hostfilter.SaveCfg(r.Store, cfg)
+		webOK(w, map[string]any{"ok": true})
+		return
+	}
 	if in.Clear {
 		pre := fmt.Sprintf("%d:", in.Panel)
 		for k := range set {

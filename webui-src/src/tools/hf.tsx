@@ -15,7 +15,7 @@ type HfCfg = {
 }
 type HfData = { cfg: HfCfg; panels: { idx: number; name: string; url: string }[] }
 type HfHost = {
-  id: string; remark: string; disabled: boolean; reality: boolean
+  id: string; remark: string; disabled: boolean; reality: boolean; auto?: boolean
   address: string[]; sni: string[]; host: string[]; skip: Record<string, boolean>; all: boolean
 }
 
@@ -60,7 +60,8 @@ function HfView() {
   async function toggleField(h: HfHost, f: string) {
     const skip = { ...h.skip, [f]: !h.skip[f] }
     setHosts((hs) => hs?.map((x) => (x.id === h.id ? { ...x, skip } : x)) ?? hs)
-    if (!(await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f }))) loadHosts(pi)
+    const body = { panel: pi, host: h.id, field: f, ...(h.auto ? { allow: true } : {}) }
+    if (!(await act('/api/tools/hf/exc', body))) loadHosts(pi)
   }
   async function act(path: string, body: any, msg?: string) {
     setFErr('')
@@ -94,8 +95,6 @@ function HfView() {
       reload()
     }
   }
-  // disabled hosts are noise here: they are not in rotation, so they are not listed
-  const active = hosts?.filter((h) => !h.disabled) ?? null
   return (
     <>
       <div className="cc-hint cc-mb">
@@ -131,7 +130,7 @@ function HfView() {
       <div className="cc-section">
         <SectionHeader
           title="هاست‌ها"
-          count={faNum(active?.length || 0) + ' هاست'}
+          count={faNum(hosts?.length || 0) + ' هاست'}
           action={
             <Button
               variant="outline"
@@ -213,12 +212,14 @@ function HfView() {
             <Loader />
           </div>
         )}
-        {active && active.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
-        {active?.map((h) => (
+        {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
+        {hosts?.map((h) => (
           <div key={h.id} className="cc-trow cc-hostrow">
             <div className="cc-grow">
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
+                {h.disabled && <span className="cc-dim">· غیرفعال</span>}
+                {!h.disabled && h.auto && <span className="cc-dim">· متنی</span>}
               </div>
               <div className="cc-sub">
                 {[
