@@ -94,6 +94,8 @@ function HfView() {
       reload()
     }
   }
+  // disabled hosts are noise here: they are not in rotation, so they are not listed
+  const active = hosts?.filter((h) => !h.disabled) ?? null
   return (
     <>
       <div className="cc-hint cc-mb">
@@ -129,7 +131,7 @@ function HfView() {
       <div className="cc-section">
         <SectionHeader
           title="هاست‌ها"
-          count={faNum(hosts?.length || 0) + ' هاست'}
+          count={faNum(active?.length || 0) + ' هاست'}
           action={
             <Button
               variant="outline"
@@ -211,8 +213,8 @@ function HfView() {
             <Loader />
           </div>
         )}
-        {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
-        {hosts?.map((h) => (
+        {active && active.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
+        {active?.map((h) => (
           <div key={h.id} className="cc-trow cc-hostrow">
             <div className="cc-grow">
               <div className="cc-name">

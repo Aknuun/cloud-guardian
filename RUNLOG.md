@@ -125,3 +125,7 @@
 - Removed the dead `.cc-actions` size ladder from `panel.css` (six generations of height/font overrides plus a duplicate `.cc-actions-danger`); one toolbar block at the end now owns size, radius and padding, and the danger zone has a single definition.
 - Meta lines (`⋆.cc-sub`) keep their own character order but always align under the row name — mixed Latin/Persian strings no longer drift to the left edge.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; hf/srv/dom/pg/set/rem/cfcheck reviewed at 390 and 1280.
+
+## v4.95.2 — disabled hosts stay out of the list
+- «تعویض ساب فیلتر» and «چرخش روزانه» only list hosts that are actually in rotation; a host disabled in the panel is hidden instead of sitting in the list with no effect. The section count and the empty state follow the same filtered list, so a panel with only disabled hosts reads «هاستی نیست».
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; both pages checked at 390 with one active and one disabled host.

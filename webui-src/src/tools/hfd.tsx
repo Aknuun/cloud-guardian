@@ -69,6 +69,8 @@ function HfdView() {
       <Skeleton rows={5} />
     )
   const _next = cfg.nextRun ? faDate(cfg.nextRun) : '—'
+  // disabled hosts are not in rotation: keep them out of the list
+  const active = hosts?.filter((h) => !h.disabled) ?? null
   return (
     <>
       <div className="cc-hint cc-mb">
@@ -116,7 +118,7 @@ function HfdView() {
       <div className="cc-section">
         <SectionHeader
           title="هاست‌ها"
-          count={faNum(hosts?.length || 0) + ' هاست'}
+          count={faNum(active?.length || 0) + ' هاست'}
           action={
             <Button
               variant="outline"
@@ -175,8 +177,8 @@ function HfdView() {
             <Loader />
           </div>
         )}
-        {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
-        {hosts?.map((h) => (
+        {active && active.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
+        {active?.map((h) => (
           <div key={h.id} className="cc-trow">
             <div className="cc-grow">
               <div className="cc-name">
