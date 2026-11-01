@@ -151,3 +151,11 @@
 - The Telegram host list no longer silently drops disabled hosts: after each panel's three-column buttons it prints one line «⛔️ خارج از چرخه: …» listing them by remark, and the intro says those hosts are auto-excluded (matching the web side).
 - The two other leftovers turned out to be already solved: the reminder state pill renders 63×26 and `.cc-main` is a centred 980px column, so neither needed a change.
 - checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok; no frontend change (tsc/biome/build/playwright unchanged from v4.95.5).
+
+## v4.96.0 — host-studio presets that don't assume Fastly, and a friendlier template editor
+- Three new presets ship on every install: «کشور | اپراتور» (`tpl_country`), «تانل VIP» (`tpl_tunnel`) and «چسبیده» (`tpl_glued`). They drop the Fastly-specific wording so a panel can say «🇩🇪 آلمان | همراه اول ³», «🇮🇷 Tunnel VIP Iran (2X)» or «🇫🇮 Finland (WS)» instead.
+- Templates can rename groups: `group_labels` maps a group id to free text, and `hsRender` uses it over the built-in label. The editor grew a «نام و آیکون گروهها» block with one emoji + one name input per group (blank = default).
+- Template editor is no longer a mystery wall of placeholders: a collapsible «راهنمای سریع قالب» explains the order, the buttons and the variables; each segment is a row that can be dragged by its handle or nudged with right/left buttons; delete sits next to them; fonts travel with their row (the old code drifted the font map whenever a segment moved or was removed); a live preview under the rows shows the final name with the current template, group names and fonts.
+- The templates list now previews the real rendered name plus the raw pattern, and a `TestHsPresetsV2Render` guard keeps every shipped preset free of unknown variables.
+- Seeding is versioned (`hs_templates_seed = 2`): existing installs get the new presets on next read without resurrecting presets the user deleted.
+- checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors (27 warnings), build ok, playwright 18/18.

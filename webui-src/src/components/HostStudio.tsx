@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowClockwise, CaretLeft, Check, Copy, Download, Lock, PencilSimple, Plus, ShieldWarning, Trash, Upload } from '@phosphor-icons/react'
+import { ArrowClockwise, CaretLeft, CaretRight, Check, Copy, Download, Lock, PencilSimple, Plus, ShieldWarning, Trash, Upload } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FormDialog, ErrBox } from './toolsMeta'
@@ -19,6 +19,7 @@ type Tpl = {
   variables: string[]
   fonts: Record<string, string>
   emojis: Record<string, string>
+  group_labels: Record<string, string>
   separator: string
   spacing: string
   group_order: string[]
@@ -258,7 +259,8 @@ export function HostStudio() {
                   <b>{t.name}</b>
                   {t.is_default && <Badge variant="success">پیش‌فرض</Badge>}
                 </div>
-                <div className="cc-tplprev">{(t.segments || []).join(t.separator || ' | ')}</div>
+                <div className="cc-tplprev">{sampleName(t, data.groups)}</div>
+                <div className="cc-sub cc-ltr cc-tplraw">{(t.segments || []).join(t.separator || ' | ')}</div>
                 <div className="cc-sub">{t.description}</div>
                 <div className="cc-tplbtns">
                   {!t.is_default && (
@@ -546,6 +548,7 @@ function blankTpl(d: Data): Tpl {
     variables: [],
     fonts: base ? { ...(base.fonts || {}) } : { '0': 'mono', '1': 'bold', '2': 'serif' },
     emojis: base ? { ...(base.emojis || {}) } : {},
+    group_labels: base ? { ...(base.group_labels || {}) } : {},
     separator: base?.separator || ' | ',
     spacing: base?.spacing || 'spaced',
     group_order: base ? [...base.group_order] : ['direct', 'tunnel', 'fastly', 'cdn', 'unknown', 'status'],
@@ -555,6 +558,61 @@ function blankTpl(d: Data): Tpl {
     version: 1,
   }
 }
+
+const FONT_MAP: Record<string, [number, number, number]> = {
+  bold: [0x1d5d4, 0x1d5ee, 0x1d7ec],
+  mono: [0x1d670, 0x1d68a, 0x1d7f6],
+  serif: [0x1d434, 0x1d44e, 0],
+}
+
+/** Same letter mapping as hsFont on the server, so the preview matches the real name. */
+function withFont(s: string, kind: string) {
+  const m = FONT_MAP[kind]
+  if (!m) return s
+  const [up, low, dig] = m
+  let out = ''
+  for (const ch of s) {
+    const c = ch.codePointAt(0) || 0
+    if (c >= 65 && c <= 90) out += String.fromCodePoint(up + c - 65)
+    else if (c >= 97 && c <= 122) out += String.fromCodePoint(kind === 'serif' && c === 104 ? 0x210e : low + c - 97)
+    else if (c >= 48 && c <= 57 && dig) out += String.fromCodePoint(dig + c - 48)
+    else out += ch
+  }
+  return out
+}
+
+function sampleName(t: Tpl, groups: Group[]) {
+  const g = groups[0] || { id: 'direct', label: 'Direct', emoji: '🌍', service: 'Ai' }
+  const vars: Record<string, string> = {
+    flag: '🇩🇪',
+    location_flag: '🇩🇪',
+    iran_flag: '🇮🇷',
+    group_icon: t.emojis[g.id] || g.emoji,
+    group_name: t.group_labels[g.id] || g.label,
+    protocol: 'vless',
+    transport: 'ws',
+    inbound_tag: 'vless',
+    address: '49.12.88.14',
+    port: '443',
+    path: '/ws',
+    sni: 'example.com',
+    USERNAME: '{USERNAME}',
+    STATUS_EMOJI: '🟢',
+    TIME_LEFT: '{TIME_LEFT}',
+    DATA_LEFT: '{DATA_LEFT}',
+    service: g.service || 'Ai',
+    noads: 'NoAds',
+    priority: '0',
+    host_id: '1',
+  }
+  const sep = t.separator || ' | '
+  const parts = t.segments
+    .map((s, i) => withFont(s.replace(/\{([a-zA-Z_]+)\}/g, (_, k: string) => vars[k] ?? '{' + k + '}'), t.fonts[String(i)] || 'sans').trim())
+    .filter(Boolean)
+  return parts.join(t.spacing === 'compact' ? sep.trim() : sep)
+}
+
+type Pair = { s: string; f: string }
 
 function TplEditor({
   tpl,
@@ -571,8 +629,52 @@ function TplEditor({
   onClose: () => void
   onSave: () => void
 }) {
-  const [t, setT] = useState<Tpl>({ ...tpl, segments: [...(tpl.segments || [])], fonts: { ...(tpl.fonts || {}) }, emojis: { ...(tpl.emojis || {}) }, group_order: [...(tpl.group_order || [])] })
+  const [t, setT] = useState<Tpl>({
+    ...tpl,
+    segments: [...(tpl.segments || [])],
+    fonts: { ...(tpl.fonts || {}) },
+    emojis: { ...(tpl.emojis || {}) },
+    group_labels: { ...(tpl.group_labels || {}) },
+    group_order: [...(tpl.group_order || [])],
+  })
+  const [drag, setDrag] = useState(-1)
+  const [over, setOver] = useState(-1)
+  const [focus, setFocus] = useState(0)
   const set = (p: Partial<Tpl>) => setT({ ...t, ...p })
+
+  const pairs: Pair[] = t.segments.map((s, i) => ({ s, f: t.fonts[String(i)] || 'sans' }))
+
+  function commit(ps: Pair[]) {
+    const fonts: Record<string, string> = {}
+    ps.forEach((p, i) => {
+      fonts[String(i)] = p.f
+    })
+    set({ segments: ps.map((p) => p.s), fonts })
+  }
+
+  function move(from: number, to: number) {
+    if (to < 0 || to >= pairs.length || from === to) return
+    const ps = [...pairs]
+    const [it] = ps.splice(from, 1)
+    ps.splice(to, 0, it)
+    commit(ps)
+    setFocus(to)
+  }
+
+  function drop(i: number) {
+    commit(pairs.filter((_, x) => x !== i))
+    setFocus(Math.max(0, Math.min(focus, pairs.length - 2)))
+  }
+
+  function addVar(v: string) {
+    if (pairs.length === 0) {
+      commit([{ s: v, f: 'sans' }])
+      return
+    }
+    const i = Math.min(focus, pairs.length - 1)
+    commit(pairs.map((p, x) => (x === i ? { ...p, s: p.s ? p.s + ' ' + v : v } : p)))
+    setFocus(i)
+  }
 
   function moveGroup(i: number, dir: number) {
     const g = [...t.group_order]
@@ -583,25 +685,115 @@ function TplEditor({
   }
 
   return (
-    <FormDialog title="ویرایش قالب" sub="هر بخش را در یک خط بنویس. متغیرها با کلیک اضافه می‌شوند." onClose={onClose} onSave={onSave} error={err}>
+    <FormDialog title="ویرایش قالب" sub="نام نهایی از چیدن این بخش‌ها ساخته می‌شود." onClose={onClose} onSave={onSave} error={err}>
+      <details className="cc-hsguide">
+        <summary>راهنمای سریع قالب</summary>
+        <ul>
+          <li>هر ردیف یک تکه از نام است و چیدمان از راست به چپ خوانده می‌شود.</li>
+          <li>با دکمه‌های فلش ردیف را جابه‌جا کن؛ با موس هم می‌شود ردیف را از دستگیرهٔ سمت راستش کشید و انداخت.</li>
+          <li>روی یک ردیف بزن تا انتخاب شود، بعد متغیر را از دکمه‌ها اضافه کن.</li>
+          <li>«جداکننده» بین بخش‌ها می‌آید؛ حالت «فشرده» فاصله‌های اضافه را برمی‌دارد.</li>
+          <li>نام گروه‌ها آزاد است: به‌جای Fastly می‌توانی «آلمان | همراه اول» یا هر چیز دیگری بنویسی.</li>
+          <li>فونت هر بخش فقط روی حروف انگلیسی اثر دارد و در پیش‌نمایش هم اعمال می‌شود.</li>
+        </ul>
+      </details>
+
       <div className="cc-field-label">نام قالب</div>
       <Input className="cc-input cc-mb" value={t.name} onChange={(e) => set({ name: e.target.value })} />
       <div className="cc-field-label">توضیح</div>
       <Input className="cc-input cc-mb" value={t.description} onChange={(e) => set({ description: e.target.value })} />
 
       <div className="cc-field-label">بخش‌های نام</div>
-      <textarea
-        className="cc-input cc-textarea cc-mb cc-ltr"
-        rows={3}
-        value={t.segments.join('\n')}
-        onChange={(e) => set({ segments: e.target.value.split('\n') })}
-      />
+      <div className="cc-seglist">
+        {pairs.map((p, i) => (
+          <div
+            key={i}
+            className={'cc-seg' + (i === focus ? ' on' : '') + (over === i ? ' over' : '')}
+            draggable
+            onDragStart={(e) => {
+              setDrag(i)
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setOver(i)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              if (drag >= 0) move(drag, i)
+              setDrag(-1)
+              setOver(-1)
+            }}
+            onDragEnd={() => {
+              setDrag(-1)
+              setOver(-1)
+            }}
+          >
+            <span className="cc-seg-handle" aria-hidden="true">
+              ⠿
+            </span>
+            <span className="cc-seg-idx">{faNum(i + 1)}</span>
+            <Input
+              className="cc-input cc-seg-input cc-ltr"
+              value={p.s}
+              list="cc-vars"
+              onFocus={() => setFocus(i)}
+              placeholder="{flag} {group_name}"
+              aria-label={'بخش ' + faNum(i + 1)}
+              onChange={(e) => commit(pairs.map((x, y) => (y === i ? { ...x, s: e.target.value } : x)))}
+            />
+            <select
+              className="cc-input cc-field-sm"
+              value={p.f}
+              aria-label={'فونت بخش ' + faNum(i + 1)}
+              onFocus={() => setFocus(i)}
+              onChange={(e) => commit(pairs.map((x, y) => (y === i ? { ...x, f: e.target.value } : x)))}
+            >
+              {FONTS.map((f) => (
+                <option key={f.v} value={f.v}>
+                  {f.l}
+                </option>
+              ))}
+            </select>
+            <div className="cc-seg-btns">
+              <button type="button" className="cc-mini" disabled={i === 0} onClick={() => move(i, i - 1)} aria-label="یک پله به راست">
+                <CaretRight size={12} />
+              </button>
+              <button
+                type="button"
+                className="cc-mini"
+                disabled={i === pairs.length - 1}
+                onClick={() => move(i, i + 1)}
+                aria-label="یک پله به چپ"
+              >
+                <CaretLeft size={12} />
+              </button>
+              <button type="button" className="cc-mini danger" onClick={() => drop(i)} aria-label="حذف بخش">
+                <Trash size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
       <div className="cc-varchips">
+        <Button variant="outline" icon={Plus} onClick={() => commit([...pairs, { s: '', f: 'sans' }])}>
+          بخش تازه
+        </Button>
         {VARS.map((v) => (
-          <button key={v} type="button" className="cc-chip" onClick={() => set({ segments: [...t.segments.slice(0, -1), (t.segments[t.segments.length - 1] || '') + ' ' + v] })}>
+          <button key={v} type="button" className="cc-chip" onClick={() => addVar(v)}>
             {v}
           </button>
         ))}
+      </div>
+      <datalist id="cc-vars">
+        {VARS.map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
+
+      <div className="cc-prevbox">
+        <div className="cc-field-label">پیش‌نمایش با نمونه</div>
+        <div className="cc-prevname">{sampleName(t, groups) || '—'}</div>
       </div>
 
       <div className="cc-field-row">
@@ -618,30 +810,23 @@ function TplEditor({
         </div>
       </div>
 
-      <div className="cc-field-label">فونت هر بخش</div>
-      {t.segments.map((s, i) => (
-        <div key={i} className="cc-field-row cc-mb">
-          <div className="cc-grow cc-ltr cc-sub">{s || '—'}</div>
-          <select
-            className="cc-input cc-field-sm"
-            value={t.fonts[String(i)] || 'sans'}
-            onChange={(e) => set({ fonts: { ...t.fonts, [String(i)]: e.target.value } })}
-          >
-            {FONTS.map((f) => (
-              <option key={f.v} value={f.v}>{f.l}</option>
-            ))}
-          </select>
-        </div>
-      ))}
-
-      <div className="cc-field-label">آیکون هر گروه</div>
+      <div className="cc-field-label">نام و آیکون گروه‌ها</div>
+      <div className="cc-hint cc-mb">نام را خالی بگذار تا نام پیش‌فرض بماند؛ آیکون هم خالی باشد از ایموجی پیش‌فرض استفاده می‌شود.</div>
       {groups.map((g) => (
-        <div key={g.id} className="cc-field-row cc-mb">
-          <div className="cc-grow">{g.label}</div>
+        <div key={g.id} className="cc-grouprow">
           <Input
-            className="cc-input cc-field-sm cc-center"
+            className="cc-input cc-emoji"
             value={t.emojis[g.id] || ''}
+            placeholder={g.emoji}
+            aria-label={'آیکون گروه ' + g.label}
             onChange={(e) => set({ emojis: { ...t.emojis, [g.id]: e.target.value } })}
+          />
+          <Input
+            className="cc-input cc-grow"
+            value={t.group_labels[g.id] || ''}
+            placeholder={g.label}
+            aria-label={'نام گروه ' + g.label}
+            onChange={(e) => set({ group_labels: { ...t.group_labels, [g.id]: e.target.value } })}
           />
         </div>
       ))}
@@ -653,15 +838,23 @@ function TplEditor({
           <div key={gid} className="cc-orderrow">
             <Check size={14} className="cc-mutedic" />
             <span className="cc-grow">{g?.label || gid}</span>
-            <button type="button" className="cc-mini" onClick={() => moveGroup(i, -1)} aria-label="بالا">▲</button>
-            <button type="button" className="cc-mini" onClick={() => moveGroup(i, 1)} aria-label="پایین">▼</button>
+            <button type="button" className="cc-mini" onClick={() => moveGroup(i, -1)} aria-label="بالا">
+              ▲
+            </button>
+            <button type="button" className="cc-mini" onClick={() => moveGroup(i, 1)} aria-label="پایین">
+              ▼
+            </button>
           </div>
         )
       })}
 
       <div className="cc-field-label">قفل جایگاه</div>
       <label className="cc-checkline">
-        <input type="checkbox" checked={t.anchor.enabled} onChange={(e) => set({ anchor: { ...t.anchor, enabled: e.target.checked } })} />
+        <input
+          type="checkbox"
+          checked={t.anchor.enabled}
+          onChange={(e) => set({ anchor: { ...t.anchor, enabled: e.target.checked } })}
+        />
         قفل کانفیگ ثابت
       </label>
       <div className="cc-field-row">
@@ -669,10 +862,16 @@ function TplEditor({
           <option value="first">کانفیگ اول (priority 0)</option>
           <option value="second">کانفیگ دوم (priority 10)</option>
         </select>
-        <select className="cc-input cc-grow" value={String(t.anchor.host_id || '')} onChange={(e) => set({ anchor: { ...t.anchor, host_id: e.target.value } })}>
+        <select
+          className="cc-input cc-grow"
+          value={String(t.anchor.host_id || '')}
+          onChange={(e) => set({ anchor: { ...t.anchor, host_id: e.target.value } })}
+        >
           <option value="">بدون هاست</option>
           {hosts.map((h) => (
-            <option key={h.id} value={h.id}>#{h.id} {h.remark.slice(0, 24)}</option>
+            <option key={h.id} value={h.id}>
+              #{h.id} {h.remark.slice(0, 24)}
+            </option>
           ))}
         </select>
       </div>

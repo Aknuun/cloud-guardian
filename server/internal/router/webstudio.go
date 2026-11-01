@@ -23,11 +23,12 @@ import (
 var hsLock sync.Mutex
 
 const (
-	hsTplKey = "hs_templates"
-	hsOvKey  = "hs_overrides"
-	hsGrpKey = "hs_groups"
-	hsBkKey  = "hs_backups"
-	hsAudKey = "hs_audit"
+	hsTplKey     = "hs_templates"
+	hsTplSeedKey = "hs_templates_seed"
+	hsOvKey      = "hs_overrides"
+	hsGrpKey     = "hs_groups"
+	hsBkKey      = "hs_backups"
+	hsAudKey     = "hs_audit"
 )
 
 type hsAnchor struct {
@@ -46,6 +47,7 @@ type hsTpl struct {
 	Variables      []string                  `json:"variables"`
 	Fonts          map[string]string         `json:"fonts"`
 	Emojis         map[string]string         `json:"emojis"`
+	GroupLabels    map[string]string         `json:"group_labels"`
 	Separator      string                    `json:"separator"`
 	Spacing        string                    `json:"spacing"`
 	GroupOrder     []string                  `json:"group_order"`
@@ -148,11 +150,64 @@ func hsDefaultTemplates() []hsTpl {
 	return []hsTpl{three, mini, proto, user, classic, mono}
 }
 
+// hsPresetsV2: layouts that don't assume any specific provider. Group labels are
+// free text, so people can name a group «آلمان | همراه اول» instead of keeping the
+// built-in Direct/Fastly wording.
+func hsPresetsV2() []hsTpl {
+	mk := func(id, name, desc string, segs []string, sep string, fonts map[string]string) hsTpl {
+		return hsTpl{
+			ID: id, Name: name, Description: desc, Scope: "global",
+			Segments: segs, Variables: []string{}, Fonts: fonts,
+			Emojis: map[string]string{
+				"direct": "🌍", "tunnel": "🇮🇷", "fastly": "⚡", "cdn": "☁️", "status": "📢", "unknown": "❔",
+			},
+			GroupLabels: map[string]string{},
+			Separator:   sep, Spacing: "spaced",
+			GroupOrder:     []string{"direct", "tunnel", "fastly", "cdn", "unknown", "status"},
+			Anchor:         hsAnchor{Enabled: true, Slot: "first"},
+			GroupOverrides: map[string]map[string]any{}, HostOverrides: map[string]map[string]any{},
+			Version: 1,
+		}
+	}
+	country := mk("tpl_country", "کشور | اپراتور", "پرچم و نام گروه، بدون اشاره به Fastly یا CDN",
+		[]string{"{flag} {group_name}", "{service}", "{noads}"}, " | ",
+		map[string]string{"0": "mono", "1": "sans", "2": "sans"})
+	country.GroupLabels = map[string]string{
+		"direct": "آلمان | همراه اول ³", "tunnel": "تانل VIP ایران (2X)",
+		"fastly": "Germany 7", "cdn": "فنلاند (WS)",
+	}
+	tunnel := mk("tpl_tunnel", "تانل VIP", "آیکون گروه، متن بولد و پروتکل — مناسب تانل و هاست‌های ایران",
+		[]string{"{flag} {group_icon} {group_name}", "{protocol}", "{noads}"}, " · ",
+		map[string]string{"0": "bold", "1": "mono", "2": "sans"})
+	tunnel.GroupLabels = map[string]string{
+		"tunnel": "𝙏𝙪𝙣𝙣𝙚𝙡 𝙑𝙞𝙥 𝙄𝙧𝙖𝙣(2X)", "direct": "𝗚𝗲𝗿𝗺𝗮𝗻𝘆𝟳", "cdn": "𝙁𝙞𝙣𝙡𝙖𝙣𝙙 (𝙒𝙎)",
+	}
+	glued := mk("tpl_glued", "چسبیده", "همهٔ بخش‌ها بدون جداکننده؛ برای نام‌های کوتاه",
+		[]string{"{flag}{group_icon}{group_name}"}, "",
+		map[string]string{"0": "bold"})
+	return []hsTpl{country, tunnel, glued}
+}
+
 func (r *Router) hsTemplates() []hsTpl {
 	var lst []hsTpl
 	if !r.Store.GetJSON(hsTplKey, &lst) || len(lst) == 0 {
 		lst = hsDefaultTemplates()
 		r.Store.PutJSON(hsTplKey, lst, 0)
+		r.Store.Put(hsTplSeedKey, "2", 0)
+		return lst
+	}
+	if v, _ := r.Store.GetOK(hsTplSeedKey); v != "2" {
+		have := map[string]bool{}
+		for _, t := range lst {
+			have[t.ID] = true
+		}
+		for _, t := range hsPresetsV2() {
+			if !have[t.ID] {
+				lst = append(lst, t)
+			}
+		}
+		r.Store.PutJSON(hsTplKey, lst, 0)
+		r.Store.Put(hsTplSeedKey, "2", 0)
 	}
 	return lst
 }
@@ -308,6 +363,9 @@ func hsRender(t hsTpl, h map[string]any, group, oldRemark string) (string, []str
 	label, icon, service := hsGroupMeta(group)
 	if e := t.Emojis[group]; e != "" {
 		icon = e
+	}
+	if l := t.GroupLabels[group]; l != "" {
+		label = l
 	}
 	addr := strings.Join(hfList(h["address"]), ", ")
 	sni := strings.Join(hfList(h["sni"]), ", ")
