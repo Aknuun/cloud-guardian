@@ -687,13 +687,15 @@ html[data-mode='dark'] .cc-stat-ring {
   height: 20px;
 }
 
-/* no animation: instant popups and page changes */
+/* motion policy: no layout/paint animation, only colour + opacity fades */
 body,
 body *,
 body *::before,
 body *::after {
   animation: none !important;
-  transition: none !important;
+  transition-property: color, background-color, border-color, fill, stroke, opacity !important;
+  transition-duration: 120ms !important;
+  transition-timing-function: ease !important;
 }
 body .animate-spin {
   animation: spin 1s linear infinite !important;
@@ -2272,3 +2274,22 @@ body .cc-menu-item {
 .cc-hint, .cc-stat-label, .cc-stat-note { font-size: 12px }
 .cc-ltr, .cc-mono, .cc-num { unicode-bidi: plaintext }
 .cc-main .cc-sub { unicode-bidi: plaintext }
+
+/* group D: motion, mobile <420, breadcrumb */
+.cc-sideitem:hover, .cc-menu-item:hover { background: var(--ds-tint) }
+.cc-sideitem.on:hover { background: var(--ds-brand-soft) }
+.cc-trow:hover, .cc-hrow:hover, .cc-diff:hover { background: var(--ds-tint) }
+.cc-trow.sel:hover { background: var(--ds-brand-soft) }
+.cc-rowbtn:hover, .cc-menu-btn:hover, .cc-rec-row:hover { background: var(--ds-tint) }
+.cc-crumb { font-size: 12px; color: var(--ds-muted); margin-inline-start: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw }
+.cc-gsearch-btn { display: none }
+@media (max-width: 419px) {
+  .cc-app { padding-inline-start: 0 !important }
+  .cc-sidebar { display: none !important }
+  .cc-sidebar.open { display: flex !important; position: fixed; inset-block: 0; inset-inline-end: 0; width: min(284px, 88vw) !important; z-index: 60 }
+  .cc-gsearch-btn { display: grid; place-items: center; width: 38px; height: 38px; flex: 0 0 38px; border: 0; border-radius: 10px; background: transparent; color: var(--ds-text) }
+  .cc-gsearch-sheet { position: fixed; inset: 0; z-index: 70; background: rgba(17, 17, 20, 0.28); display: flex; align-items: flex-start; justify-content: center; padding: 62px 12px 12px }
+  .cc-gsearch-sheetbox { width: 100%; background: var(--ds-card); border: 1px solid var(--ds-line); border-radius: 14px; padding: 10px; box-shadow: var(--ds-shadow-pop) }
+  .cc-gsearch-sheetbox input { width: 100%; height: 42px; border: 1px solid var(--ds-line); border-radius: 10px; padding: 0 12px; font: inherit; background: var(--ds-tint); color: var(--ds-text) }
+  .cc-gsearch-sheetbox .cc-gres { position: static; margin-top: 6px; box-shadow: none; border: 0; padding: 0; background: transparent }
+}

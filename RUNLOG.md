@@ -53,3 +53,10 @@
 - topbar order: hamburger moved to the end of the bar (title sits at the start edge) in both ProviderShell and App.
 - new e2e: every button on all 15 tool pages has an accessible name (aria-label/title/text).
 - checks: tsc clean, biome 0 errors (174 warnings), build ok, playwright 18/18.
+
+## v4.77.0 — UI group D (items 6, 10, 12)
+- motion policy replaces the global kill-switch: animations stay off, only colour/background/border/opacity transition at 120ms; hover restored on sidebar items, rows, row buttons and menu items (no transform).
+- mobile <420px: the 52–64px rail is gone entirely (drawer only), content uses full width, and the global search becomes an icon that opens a sheet with the same results.
+- version chip removed from both topbars (the installed version is already shown in Settings).
+- breadcrumb next to the page title for nested Hetzner pages (account / server, "clean IPs", "build server").
+- checks: tsc clean, biome 0 errors, build ok, playwright 18/18.

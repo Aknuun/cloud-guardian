@@ -24,7 +24,6 @@ import {
   Wrench,
 } from '@phosphor-icons/react'
 import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, invalidateCache, mem, num, setToken, TG, token } from './lib'
-import { AppVersion } from './components/AppVersion'
 import { CopyBtn } from './components/CopyBtn'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
@@ -979,13 +978,26 @@ export default function App() {
         <div className={'cc-progress' + (busy > 0 ? ' on' : '')} aria-hidden="true" />
         <header className="cc-topbar">
           <h1 className="cc-title">{title}</h1>
+          {!tool && (cur.v === 'server' || cur.v === 'ips' || cur.v === 'create') && (
+            <span className="cc-crumb">
+              {cur.v === 'create'
+                ? 'ساخت سرور'
+                : cur.v === 'ips'
+                  ? 'آی‌پی‌های تمیز'
+                  : [
+                      accounts.find((a) => a.i === (cur as any).acc)?.name,
+                      servers.find((x) => x.id === ((cur as any).sid || (cur as any).id))?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(' / ')}
+            </span>
+          )}
           <GlobalSearch
             go={(p, t) => {
               if (t) setTool(t)
               else if (p) pickProvider(p)
             }}
           />
-          <AppVersion />
           <ThemeToggle />
           {cur.v !== 'create' && (
             <Button

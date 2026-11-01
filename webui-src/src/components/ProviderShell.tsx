@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { ArrowClockwise, CheckCircle, List, WarningCircle } from '@phosphor-icons/react'
-import { AppVersion } from './AppVersion'
 import { cacheHitAge, invalidateCache } from '../lib'
 import { LogoutButton } from './LogoutButton'
 import { useSectionTheme } from './sectionTheme'
@@ -73,7 +72,6 @@ export function ProviderShell({
               else if (p) onChange(p)
             }}
           />
-          <AppVersion />
           <ThemeToggle />
           <Button
             className={busy ? 'cc-spin' : ''}
