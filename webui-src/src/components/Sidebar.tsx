@@ -74,7 +74,9 @@ export function Sidebar({
     const el = asideRef.current
     if (!el || !open) return
     // scrollWidth of the rail is the width its content actually needs
+    el.classList.add('measuring')
     const need = el.scrollWidth
+    el.classList.remove('measuring')
     if (need > 0) setSbw(Math.min(300, Math.max(176, Math.round(need * 0.8))))
   }, [open, tools, provider, expanded])
 

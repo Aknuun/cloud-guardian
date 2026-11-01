@@ -2540,7 +2540,7 @@ body .cc-menu-item {
   .cc-sidebar:not(.open),
   .cc-sidebar:not(.open).cc-sidebar { width: 64px !important; min-width: 64px !important; padding: 14px 8px !important }
 }
-.cc-sidebar .cc-sideitem-label { white-space: nowrap; overflow: hidden; text-overflow: clip }
+
 /* accounts page: all-servers entry */
 .cc-allservers {
   display: flex; align-items: center; gap: 10px; width: 100%;
@@ -2577,7 +2577,13 @@ body .cc-menu-item {
 @media (prefers-reduced-motion: reduce) {
   .cc-sidebar, .cc-sidebar * { transition: none !important }
 }
-/* keep every label readable at the 20% tighter width */
-.cc-sidebar .cc-sideitem { gap: 8px; padding-inline: 7px }
-.cc-sidebar .cc-sideitem-label { font-size: 12.4px; letter-spacing: -0.1px }
-.cc-sidebar .cc-sidenav { padding-inline: 2px }
+/* full-size labels: the 20%-tighter rail wraps long titles instead of shrinking type */
+.cc-sidebar .cc-sideitem { gap: 10px }
+.cc-sidebar .cc-sideitem-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  text-overflow: clip;
+}
+.cc-sidebar .cc-sideitem { height: auto; min-height: 42px; padding-block: 6px }
+.cc-sidebar.measuring .cc-sideitem-label { white-space: nowrap; overflow: visible }
