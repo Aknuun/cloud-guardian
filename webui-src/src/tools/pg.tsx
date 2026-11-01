@@ -3,6 +3,7 @@ import { ArrowClockwise, BellRinging, BellSimple, Copy, PencilSimple, Plus, Powe
 import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
+import { SectionHeader } from '../components/SectionHeader'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
@@ -89,10 +90,7 @@ function PgView() {
         }}
       />
       {flt !== 'mons' && (
-        <div className="cc-section-head">
-          <h2>پنل‌ها</h2>
-          <span className="cc-sub">{faNum(iso.panels.length)} پنل متصل</span>
-        </div>
+        <SectionHeader title="پنل‌ها" count={faNum(iso.panels.length) + ' پنل متصل'} />
       )}
       {flt !== 'mons' && iso.panels.length === 0 && (
         <Empty
@@ -139,10 +137,7 @@ function PgView() {
       )}
 
       {flt !== 'panels' && (
-        <div className="cc-section-head cc-mt">
-          <h2>مانیتور نودها</h2>
-          <span className="cc-sub">{faNum(iso.monitors.length)} مانیتور</span>
-        </div>
+        <SectionHeader title="مانیتور نودها" count={faNum(iso.monitors.length) + ' مانیتور'} className="cc-mt" />
       )}
       {flt !== 'panels' && iso.monitors.length === 0 && (
         <Empty title="مانیتوری نیست" description="با دکمهٔ + پایین صفحه یک مانیتور نود بساز." />

@@ -2657,3 +2657,7 @@ html.cc-theming body *:not(svg):not(path) {
   .cc-topbar .cc-gsearch { display: none !important }
   .cc-topbar .cc-gsearch-btn { display: grid !important }
 }
+.cc-section-head { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px }
+.cc-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 }
+.cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted) }
+.cc-section-action { margin-inline-start: auto }
