@@ -149,26 +149,6 @@ function SrvView() {
           { label: 'با رمز', value: list.filter((s) => !s.key).length, of: list.length },
         ]}
       />
-      <div className="cc-pagebar">
-        <Button variant="primary" icon={Plus} onClick={() => setEdit({ port: 22, user: 'root' })}>
-          افزودن سرور
-        </Button>
-        <Button variant="outline" icon={Pulse} onClick={loadAllMon}>
-          مانیتور همه
-        </Button>
-        <Button variant="outline" icon={ShieldCheck} onClick={() => setPwOpen(true)}>
-          رمزها
-        </Button>
-        <Button variant="outline" icon={Gear} onClick={() => setCfgOpen(true)}>
-          آستانه‌ها
-        </Button>
-        <Button variant="outline" icon={Plus} onClick={() => setImpOpen(true)}>
-          افزودن گروهی
-        </Button>
-        <Button variant="outline" icon={Plus} onClick={() => setSubOpen(true)}>
-          از ساب‌دامنه
-        </Button>
-      </div>
       <FilterBar
         q={q}
         onQ={setQ}
@@ -180,6 +160,11 @@ function SrvView() {
         ]}
         value={flt}
         onValue={setFlt}
+        menu={[
+          { id: 'mon', label: 'مانیتور همهٔ سرورها' },
+          { id: 'cfg', label: 'آستانه‌های هشدار' },
+        ]}
+        onMenu={(id) => (id === 'mon' ? loadAllMon() : setCfgOpen(true))}
         onRefresh={() => {
           invalidateCache()
           reload()

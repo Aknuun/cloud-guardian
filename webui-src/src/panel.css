@@ -2346,7 +2346,7 @@ body .cc-menu-item {
   .cc-topbar .cc-pageaction-more { display: none !important }
   .cc-fab {
     display: grid; place-items: center; position: fixed;
-    inset-inline-start: 16px; bottom: calc(18px + env(safe-area-inset-bottom));
+    inset-inline-start: auto; inset-inline-end: 16px; bottom: calc(18px + env(safe-area-inset-bottom));
     width: 56px; height: 56px; border-radius: 50%; border: 0; z-index: 45;
     background: var(--ds-brand); color: #fff;
     box-shadow: 0 10px 26px color-mix(in srgb, var(--ds-brand) 38%, transparent);
@@ -2377,3 +2377,9 @@ body .cc-menu-item {
 .cc-topbar .cc-actionsheet .cc-actionrow { width: 100% !important; flex: 1 1 auto !important; height: 50px !important; }
 .cc-topbar .cc-actionsheet .cc-actionrow span { flex: 1 1 auto; min-width: 0; text-align: start; }
 .cc-topbar .cc-fab { width: 56px !important; height: 56px !important; flex: 0 0 56px !important; border-radius: 50% !important; }
+
+/* consistent top-of-page rhythm: stats → toolbar → list */
+.cc-main > .cc-stats { margin: 0 0 12px }
+.cc-main > .cc-filterbar { margin: 0 0 12px }
+.cc-main > .cc-section:first-of-type { margin-top: 4px }
+.cc-main > .cc-searchbar { margin-bottom: 12px }

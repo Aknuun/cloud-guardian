@@ -104,12 +104,7 @@ function PgView() {
         </div>
       ))}
       {flt !== 'panels' && <div className="cc-section">مانیتور نودها</div>}
-      {flt !== 'panels' && <div className="cc-btnrow">
-        <Button variant="outline" icon={Plus} onClick={() => setMf({ panel_url: iso0.panels[0]?.url || '', name: '', interval: 5 })}>
-          افزودن مانیتور
-        </Button>
-      </div>}
-      {flt !== 'panels' && iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ بالا یک مانیتور نود بساز." />}
+      {flt !== 'panels' && iso.monitors.length === 0 && <Empty title="مانیتوری نیست" description="با دکمهٔ + پایین صفحه یک مانیتور نود بساز." />}
       {flt !== 'panels' && iso.monitors.map((m) => (
         <div key={m.id} className="cc-trow cc-tap" onClick={() => setNd(m)}>
           <div className="cc-grow">
