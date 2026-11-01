@@ -316,9 +316,7 @@ html[data-mode='light'] .cc-main {
     box-sizing: border-box;
   }
   .cc-sidebar.open {
-    width: max-content;
-    min-width: 196px;
-    max-width: 232px;
+    width: 232px;
     padding: 18px 14px;
   }
 }
@@ -1468,11 +1466,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 }
 
 /* normal sidebar again: no icon rail, drawer slides in with a fade */
-.cc-sidebar,
-.cc-sidebar.open,
-.cc-sidebar:not(.open) {
-  width: 272px;
-}
 .cc-sidebar:not(.open) .cc-sidebrand-text,
 .cc-sidebar:not(.open) .cc-sidenav-label,
 .cc-sidebar:not(.open) .cc-sideitem-label,
@@ -1480,16 +1473,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 .cc-sidebar:not(.open) .cc-profile .cc-grow,
 .cc-sidebar:not(.open) .cc-subnav {
   display: revert;
-}
-.cc-sidebar:not(.open) .cc-sideitem {
-  width: 100%;
-  height: 42px;
-  justify-content: flex-start;
-  padding: 0 10px;
-}
-.cc-sidebar:not(.open) .cc-sidebrand {
-  justify-content: flex-start;
-  padding: 4px 10px 18px;
 }
 .cc-sidebar:not(.open) .cc-sideitem.on {
   background: var(--ds-brand-soft);
@@ -1540,25 +1523,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
     var(--ds-panel) 62%,
     rgba(0, 0, 0, 0) 100%
   );
-}
-@media (min-width: 900px) {
-  .cc-sidebar:not(.open) {
-    transform: translateX(101%);
-    margin-inline-end: -272px;
-  }
-  .cc-sidebar {
-    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-}
-.cc-sidebar:not(.open).cc-sidebar,
-.cc-sidebar.cc-sidebar {
-  width: 272px;
-}
-@media (max-width: 899px) {
-  .cc-sidebar:not(.open).cc-sidebar,
-  .cc-sidebar.cc-sidebar {
-    width: min(280px, 82vw);
-  }
 }
 
 /* unslop pass: quiet chrome, even rows, no decorative rings */
@@ -2546,7 +2510,7 @@ body .cc-menu-item {
   .cc-hg-sec .cc-hg-list .cc-hrow { font-size: 11.5px; min-height: 38px; padding: 0 6px }
 }
 @media (max-width: 899px) {
-  .cc-sidebar.open { width: max-content; min-width: 210px; max-width: min(296px, 86vw) }
+  .cc-sidebar.open { width: min(280px, 82vw) }
 }
 .cc-hg-sec .cc-hg-list .cc-hrow span { white-space: normal; line-height: 1.35; padding: 6px 0 }
 .cc-hg-sec .cc-hg-list .cc-hrow { align-items: center; min-height: 42px }
