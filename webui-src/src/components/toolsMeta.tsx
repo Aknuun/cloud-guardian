@@ -15,27 +15,27 @@ export function toolsVisible() {
 }
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
-  { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
   { id: 'pg', label: 'پاسارگارد و مانیتور نود', Icon: ShieldCheck },
+  { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
   { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
   { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: CalendarDots },
   { id: 'um', label: 'گزارش بد مصرف', Icon: Fire },
   { id: 'srv', label: 'سرورها و مانیتورینگ', Icon: Terminal },
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
-  { id: 'rem', label: 'یادآورها', Icon: BellRinging },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'شبکهٔ نصب‌ها', Icon: Broadcast },
+  { id: 'rem', label: 'یادآورها', Icon: BellRinging },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
 // Sidebar + home share one order; the first item of each group is the important one.
 export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
-  { title: 'پاسارگارد', tools: ['hs', 'pg', 'hook', 'hf', 'hfd', 'um'] },
-  { title: 'سرور و دامنه', tools: ['srv', 'dom', 'rem', 'mail', 'cfcheck'] },
-  { title: 'ابزارها', tools: ['hub', 'fo', 'set'] },
+  { title: 'پاسارگارد', tools: ['pg', 'hs', 'hook', 'hf', 'hfd', 'um'] },
+  { title: 'سرور و دامنه', tools: ['srv', 'dom', 'mail', 'cfcheck'] },
+  { title: 'ابزارها', tools: ['hub', 'fo', 'rem', 'set'] },
 ]
 
 // Landing page: every ported section, grouped and one tap away.

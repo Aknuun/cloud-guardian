@@ -10,7 +10,7 @@ export type Provider = 'hz' | 'cf' | 'arv'
 export type SubItem = { id: string; label: string; active?: boolean; onSelect: () => void }
 
 const PG_IDS = ['hs', 'pg', 'hook', 'hf', 'hfd', 'um']
-const MISC_IDS = ['hub', 'fo', 'set']
+const MISC_IDS = ['hub', 'fo', 'rem', 'set']
 
 export const PROVIDERS: { id: Provider; label: string; Icon: typeof Cloud }[] = [
   { id: 'cf', label: 'کلادفلر', Icon: Cloud },
