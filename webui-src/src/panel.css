@@ -2449,3 +2449,8 @@ body .cc-menu-item {
   .cc-main { padding-bottom: 96px !important }
   .cc-actionsheet { inset-inline: auto 24px !important; width: 340px; border-radius: 18px !important; bottom: 96px !important }
 }
+/* section intro card */
+.cc-intro { border: 1px solid var(--ds-hairline); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; background: var(--ds-card) }
+.cc-intro-title { font-size: 14px; font-weight: 600; margin-bottom: 6px }
+.cc-intro p { margin: 0; font-size: 12.8px; line-height: 2; color: var(--ds-muted) }
+.cc-intro-note { margin-top: 8px; font-size: 12px; color: var(--ds-muted); border-inline-start: 2px solid var(--ds-line); padding-inline-start: 8px }

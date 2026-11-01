@@ -3,6 +3,7 @@ import { ArrowClockwise, Copy, Plus, Power, Trash } from '@phosphor-icons/react'
 import { faNum, fallbackCopy, } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { usePageActions } from '../components/PageAction'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
 
@@ -42,16 +43,31 @@ function FoView() {
     }
   }
 
+  usePageActions([
+    {
+      label: data?.configured ? 'تنظیم مجدد فیلور' : 'راه‌اندازی فیلور',
+      icon: Plus,
+      onClick: () => {
+        setFErr('')
+        setForm({ token: '', name: '' })
+      },
+    },
+  ])
+
   const d = data
   const _ownerTxt = d?.owner === 'worker' ? 'ورکر پشتیبان' : d?.owner === 'other' ? 'نامشخص' : 'سرور'
 
   return (
     <>
 
-      <div className="cc-pagebar">
-        <Button variant="primary" icon={Plus} onClick={() => { setFErr(''); setForm({ token: '', name: '' }) }}>
-          {d?.configured ? 'تنظیم مجدد / تغییر ورکر' : 'راه‌اندازی فیلور'}
-        </Button>
+      <div className="cc-intro">
+        <div className="cc-intro-title">فیلور چه کاری می‌کند؟</div>
+        <p>
+          یک نسخهٔ پشتیبان از ربات روی کلادفلر ساخته می‌شود که هر ۵ دقیقه سلامت سرور را از بیرون چک می‌کند. اگر سرور دو بار پیاپی جواب ندهد،
+          وبهوک تلگرام را موقتاً خودش برمی‌دارد تا دکمه‌های ربات از کار نیفتند، به تو پیام «سرور قطع شد» می‌دهد و به‌محض برگشت سرور کنترل را
+          خودکار پس می‌دهد. اطلاعات اکانت‌ها هم پیش از قطعی در حافظهٔ ورکر ذخیره می‌شود.
+        </p>
+        <div className="cc-intro-note">این بخش سرورها را خاموش یا جابه‌جا نمی‌کند؛ فقط دسترسی ربات را در زمان قطعی زنده نگه می‌دارد.</div>
       </div>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
@@ -109,7 +125,15 @@ function FoView() {
       )}
 
       {d && !d.configured && (
-        <Empty title="فیلور تنظیم نشده" description="با توکن کلادفلر (DNS + Workers) یک ورکر پشتیبان ساخته می‌شود تا هنگام قطعی سرور، ربات از کلادفلر جواب دهد." />
+        <Empty
+          title="فیلور تنظیم نشده"
+          description="با یک توکن کلادفلر (Workers + KV + DNS) همین‌جا ورکر پشتیبان بساز؛ هر زمان حذفش کنی، از همین صفحه دوباره قابل ساخت است."
+          action={
+            <Button variant="primary" icon={Plus} onClick={() => { setFErr(''); setForm({ token: '', name: '' }) }}>
+              راه‌اندازی فیلور
+            </Button>
+          }
+        />
       )}
 
       {form && (
