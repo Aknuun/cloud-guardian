@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowClockwise, TelegramLogo } from '@phosphor-icons/react'
+import { ArrowClockwise, } from '@phosphor-icons/react'
 import { setToken } from '../lib'
 import { Button, Loader } from './ui'
 import { BrandMark } from './BrandMark'

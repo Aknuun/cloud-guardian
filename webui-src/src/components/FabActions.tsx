@@ -10,7 +10,7 @@ export function ActionCluster({ actions }: { actions: PageAction[] }) {
   const [open, setOpen] = useState(false)
   if (actions.length === 0) return null
   const first = actions[0]
-  const rest = actions.slice(1)
+  const _rest = actions.slice(1)
   const one = actions.length === 1
 
   return (

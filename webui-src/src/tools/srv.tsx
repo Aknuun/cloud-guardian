@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pulse, ArrowClockwise, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Trash } from '@phosphor-icons/react'
+import { Pulse, ArrowClockwise, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, Trash } from '@phosphor-icons/react'
 import { api, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'

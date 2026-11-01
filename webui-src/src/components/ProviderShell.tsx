@@ -50,7 +50,7 @@ export function ProviderShell({
   const sectionTheme = useSectionTheme(provider)
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
   const [actions, setActions] = useState<PageAction[]>([])
-  const shown = fixed && fixed.length ? fixed : actions
+  const shown = fixed?.length ? fixed : actions
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar

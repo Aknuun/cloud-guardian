@@ -1,5 +1,5 @@
 import { Badge, Button, Dialog, Empty, Input, LayerCard } from './ui'
-import { CaretLeft, GlobeHemisphereWest, HardDrives, Plus, Trash } from '@phosphor-icons/react'
+import { CaretLeft, GlobeHemisphereWest, HardDrives, Plus, } from '@phosphor-icons/react'
 import { AccountCard } from './AccountCard'
 import { api, invalidateCache, num } from '../lib'
 import { CopyBtn } from './CopyBtn'
