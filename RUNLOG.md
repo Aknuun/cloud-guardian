@@ -184,3 +184,12 @@
 - When the core still refuses to start, the result carries the core's own first error line (`error_detail`) and the sheet shows it under the Persian message, so a config that the core rejects explains itself instead of asking for a retry.
 - New options under the paste box: samples (3/5/7), deadline per link (10/20/30s) and target (کلادفلر / گوگل). The verdict follows the chosen sample count (4 of 5, 3 of 3, …).
 - checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 19/19; the reported broken link now measures 132ms with five successful samples.
+
+## v4.99.0 — config test page takes the shape of zarib.appii.ir
+- The tester now opens with one card instead of a form stack: a big link/subscription field with a link glyph, **segmented pill controls** for samples / deadline / target (no more native selects), a full-width primary CTA whose label counts the configs, and the honest line «هیچ لینکی روی سرور ذخیره نمیشود» under it.
+- While a run is going the card turns into a live panel with two pulsing lines and «در حال تست N کانفیگ · ۵ نمونه · ۲۰ ثانیه مهلت», so the page never looks frozen.
+- Results and history are single bordered cards with hairline-separated rows; each row carries the median in tabular Latin digits over a verdict chip, the host under the name, and the failed-sample count when there is one.
+- The detail sheet became a key/value table with hairlines (DNS، TCP، TLS، کمینه، p95، فاصلهٔ نمونهها، ناموفق) above the sample bars; the bars are now a real mini chart (18px columns, centred, the bar nearest the median accented, failed samples drawn as dashed placeholders).
+- A short «روش اندازهگیری» block explains the three steps and ends with the measurement formula, and a dashed rule under the intro matches the zarib page.
+- Under the hood nothing changed: same endpoints, same thresholds, same privacy behaviour.
+- checks: tsc clean, biome 0 errors (33 warnings baseline for this tree), build ok, playwright 19/19, screenshots checked at 390 and 1280.

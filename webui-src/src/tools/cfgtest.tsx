@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DownloadSimple, Pulse, Trash } from '@phosphor-icons/react'
+import { DownloadSimple, LinkSimple, Pulse, Trash } from '@phosphor-icons/react'
 import { api, faNum, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
@@ -60,6 +60,42 @@ function ms(v: number) {
   return v > 0 ? Math.round(v) + 'ms' : '—'
 }
 
+function targetName(t: string) {
+  return t.includes('cloudflare') ? 'کلادفلر' : t.includes('gstatic') ? 'گوگل' : t
+}
+
+/** Segmented pill control: one track, one active pill. */
+function Seg({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: { id: string; label: string }[]
+  onChange: (id: string) => void
+}) {
+  return (
+    <fieldset className="cc-cfgopt">
+      <legend>{label}</legend>
+      <div className="cc-seg2">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            className={o.id === value ? 'on' : ''}
+            aria-pressed={o.id === value}
+            onClick={() => onChange(o.id)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
 function Bars({ samples, median }: { samples: number[]; median: number }) {
   const top = Math.max(...samples, median, 1)
   // the bar closest to the median carries the accent, so it works even when
@@ -70,7 +106,7 @@ function Bars({ samples, median }: { samples: number[]; median: number }) {
     return best
   }, -1)
   return (
-    <div className="cc-bars" aria-label={'نمونه‌ها: ' + samples.map((s) => (s > 0 ? Math.round(s) + 'ms' : 'ناموفق')).join('، ')}>
+    <div className="cc-bars" role="img" aria-label={'نمونه‌ها: ' + samples.map((s) => (s > 0 ? Math.round(s) + 'ms' : 'ناموفق')).join('، ')}>
       {samples.map((s, i) => (
         <span
           key={i}
@@ -146,7 +182,10 @@ export default function CfgTestView() {
 
   return (
     <>
-      <p className="cc-hint cc-mb">لینک یا آدرس ساب را بچسبان؛ می‌گویم کار می‌کند یا نه و چند میلی‌ثانیه تأخیر دارد.</p>
+      <div className="cc-cfghero">
+        <p>لینک یا آدرس ساب را بچسبان؛ اگر کار کند، تأخیر واقعی‌اش را می‌گویم و اگر نه، می‌گویم کجا شکسته.</p>
+        <hr className="cc-cfgrule" />
+      </div>
 
       {!data.engine.ok && (
         <SettingsCard
@@ -163,119 +202,139 @@ export default function CfgTestView() {
         </SettingsCard>
       )}
 
-      <SectionHeader
-        title="تست زنده"
-        count={links.length ? faNum(links.length) + ' لینک' : undefined}
-        action={
-          links.length ? (
-            <Button variant="ghost" icon={Trash} onClick={() => setText('')} aria-label="پاک کردن">
-              پاک کردن
-            </Button>
-          ) : undefined
-        }
-      />
-
-      <SettingsCard
-        footer={
-          <>
-            <Button
-              variant="primary"
-              icon={Pulse}
-              onClick={run}
-              disabled={busy || !links.length || !data.engine.ok}
-              aria-busy={busy}
-            >
-              {busy ? 'در حال تست…' : 'تست کن'}
-            </Button>
-            {runErr ? <span className="cc-form-err">{runErr}</span> : null}
-          </>
-        }
-      >
-        <div style={{ padding: '10px 14px' }}>
+      <div className="cc-cfgcard">
+        <div className="cc-cfgfield">
           <textarea
-            className="cc-input"
-            style={{ width: '100%', height: 'auto', minHeight: 92, paddingTop: 10, paddingBottom: 10, lineHeight: 1.9 }}
+            className="cc-input cc-cfgarea"
             dir="ltr"
             rows={4}
             value={text}
-            aria-label="لینک کانفیگ"
-            placeholder="vless://… یا آدرس ساب — هر خط یکی"
+            aria-label="لینک کانفیگ یا آدرس ساب"
+            placeholder={'vless://… یا آدرس ساب\nهر خط یک کانفیگ'}
             onChange={(e) => setText(e.target.value)}
           />
-          <div className="cc-setgrid">
-            <label className="cc-setfield">
-              <span>نمونه</span>
-              <select className="cc-input" value={samples} onChange={(e) => setSamples(Number(e.target.value))}>
-                {(data.limits.samples_options || [3, 5, 7]).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="cc-setfield">
-              <span>مهلت (ثانیه)</span>
-              <select className="cc-input" value={timeout} onChange={(e) => setTimeout(Number(e.target.value))}>
-                {(data.limits.timeout_options || [10, 20, 30]).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="cc-setfield" style={{ gridColumn: '1 / -1' }}>
-              <span>مقصد</span>
-              <select className="cc-input" value={target || data.targets[0]} onChange={(e) => setTarget(e.target.value)}>
-                {data.targets.map((t) => (
-                  <option key={t} value={t}>
-                    {t.includes('cloudflare') ? 'کلادفلر' : t.includes('gstatic') ? 'گوگل' : t}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <LinkSimple size={18} className="cc-cfgfield-ico" aria-hidden="true" />
         </div>
-      </SettingsCard>
 
-      {busy && (
-        <div className="cc-runstrip">
-          <span className="cc-st" />
-          <span>
-            در حال تست <b>{faNum(links.length)}</b> کانفیگ…
-          </span>
+        <div className="cc-cfgopts">
+          <Seg
+            label="نمونه"
+            value={String(samples)}
+            options={(data.limits.samples_options || [3, 5, 7]).map((n) => ({ id: String(n), label: faNum(n) }))}
+            onChange={(id) => setSamples(Number(id))}
+          />
+          <Seg
+            label="مهلت"
+            value={String(timeout)}
+            options={(data.limits.timeout_options || [10, 20, 30]).map((n) => ({ id: String(n), label: faNum(n) + ' ثانیه' }))}
+            onChange={(id) => setTimeout(Number(id))}
+          />
+          <Seg
+            label="مقصد"
+            value={target || data.targets[0]}
+            options={data.targets.map((t) => ({ id: t, label: targetName(t) }))}
+            onChange={setTarget}
+          />
         </div>
-      )}
+
+        {busy ? (
+          <div className="cc-cfgpanel" aria-busy="true">
+            <div className="cc-cfgshim">
+              <span />
+              <span />
+            </div>
+            <div className="cc-preline" style={{ textAlign: 'start' }}>
+              در حال تست {faNum(links.length)} کانفیگ · {faNum(samples)} نمونه · {faNum(timeout)} ثانیه مهلت
+            </div>
+          </div>
+        ) : (
+          <Button
+            variant="primary"
+            icon={Pulse}
+            className="cc-cfgcta"
+            onClick={run}
+            disabled={!links.length || !data.engine.ok}
+          >
+            {links.length > 1 ? 'تست ' + faNum(links.length) + ' کانفیگ' : 'تست کن'}
+          </Button>
+        )}
+
+        {runErr ? <div className="cc-form-err" style={{ marginTop: 10 }}>{runErr}</div> : null}
+
+        <p className="cc-cfgnote">هیچ لینکی روی سرور ذخیره نمی‌شود؛ فقط نتیجه و یک اثر انگشت کوتاه می‌ماند.</p>
+
+        {links.length > 0 && !busy ? (
+          <button type="button" className="cc-cfglinkclear" onClick={() => setText('')}>
+            <Trash size={14} /> پاک کردن کادر
+          </button>
+        ) : null}
+      </div>
 
       {results.length > 0 && <SectionHeader title="نتیجهٔ تست" count={faNum(results.length) + ' کانفیگ'} />}
 
       <div aria-live="polite">
-        {results.map((r) => {
-          const v = VERDICT[r.verdict] || VERDICT.fail
-          return (
-            <ListRow
-              key={r.fp + r.host}
-              onClick={() => setDetail(r)}
-              lead={<span className={'cc-st' + (r.verdict === 'ok' ? ' up' : r.verdict === 'fail' ? ' down' : '')} />}
-              title={r.remark || r.host + ':' + r.port}
-              meta={
-                r.protocol +
-                ' · میانه ' +
-                ms(r.median_ms) +
-                (r.loss > 0 ? ' · ' + Math.round(r.loss * r.samples.length) + ' از ' + r.samples.length + ' ناموفق' : '')
-              }
-              trailing={
-                <Badge variant={v.variant as any} dot>
-                  {v.text}
-                </Badge>
-              }
-            />
-          )
-        })}
+        {results.length > 0 && (
+          <div className="cc-cfglist">
+            {results.map((r) => {
+              const v = VERDICT[r.verdict] || VERDICT.fail
+              return (
+                <ListRow
+                  key={r.fp + r.host}
+                  onClick={() => setDetail(r)}
+                  lead={<span className={'cc-st' + (r.verdict === 'ok' ? ' up' : r.verdict === 'fail' ? ' down' : '')} />}
+                  title={r.remark || r.host + ':' + r.port}
+                  meta={
+                    r.protocol +
+                    ' · ' +
+                    r.host +
+                    ':' +
+                    r.port +
+                    (r.loss > 0 ? ' · ' + faNum(Math.round(r.loss * r.samples.length)) + ' از ' + faNum(r.samples.length) + ' ناموفق' : '')
+                  }
+                  trailing={
+                    <span className="cc-cfgtrail">
+                      <b>{ms(r.median_ms)}</b>
+                      <Badge variant={v.variant as any} dot>
+                        {v.text}
+                      </Badge>
+                    </span>
+                  }
+                />
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {!results.length && !busy && (
         <Empty title="هنوز چیزی تست نشده" description="لینک کانفیگ یا آدرس ساب را بالا بچسبان؛ نتیجه همین‌جا می‌آید." />
       )}
+
+      <SectionHeader title="روش اندازه‌گیری" />
+      <div className="cc-cfgsteps">
+        <div className="cc-cfgstep">
+          <span className="cc-cfgnum">۰۱</span>
+          <div>
+            <b>سه پلهٔ تشخیص</b>
+            <span>اول نام دامنه، بعد اتصال TCP و بعد TLS؛ اگر جایی بشکند، همان‌جا را می‌گویم.</span>
+          </div>
+        </div>
+        <div className="cc-cfgstep">
+          <span className="cc-cfgnum">۰۲</span>
+          <div>
+            <b>تأخیر واقعی</b>
+            <span>ترافیک از داخل تونل عبور می‌کند و تا اولین بایت پاسخ زمان گرفته می‌شود؛ نه پینگ سادهٔ TCP.</span>
+          </div>
+        </div>
+        <div className="cc-cfgstep">
+          <span className="cc-cfgnum">۰۳</span>
+          <div>
+            <b>چند نمونه، یک عدد</b>
+            <span>هر کانفیگ چند بار پشت سر هم تست می‌شود و میانه گزارش می‌شود تا یک کندی لحظه‌ای نتیجه را خراب نکند.</span>
+          </div>
+        </div>
+        <div className="cc-cfgformula">median = median(samples[1..n]) · loss = failed ÷ samples</div>
+      </div>
 
       {data.history.length > 0 && (
         <>
@@ -288,21 +347,26 @@ export default function CfgTestView() {
               </Button>
             }
           />
-          {data.history.slice(0, 20).map((h) => {
-            const v = VERDICT[h.verdict] || VERDICT.fail
-            return (
-              <ListRow
-                key={h.fp + h.at}
-                title={h.remark || h.host + ':' + h.port}
-                meta={h.protocol + ' · ' + ms(h.median_ms) + ' · ' + (timeAgo(h.at * 1000) || 'همین حالا')}
-                trailing={
-                  <Badge variant={v.variant as any} dot>
-                    {v.text}
-                  </Badge>
-                }
-              />
-            )
-          })}
+          <div className="cc-cfglist">
+            {data.history.slice(0, 20).map((h) => {
+              const v = VERDICT[h.verdict] || VERDICT.fail
+              return (
+                <ListRow
+                  key={h.fp + h.at}
+                  title={h.remark || h.host + ':' + h.port}
+                  meta={h.protocol + ' · ' + (timeAgo(h.at * 1000) || 'همین حالا')}
+                  trailing={
+                    <span className="cc-cfgtrail">
+                      <b>{ms(h.median_ms)}</b>
+                      <Badge variant={v.variant as any} dot>
+                        {v.text}
+                      </Badge>
+                    </span>
+                  }
+                />
+              )
+            })}
+          </div>
         </>
       )}
 
@@ -314,21 +378,52 @@ export default function CfgTestView() {
             <Dialog.Description className="cc-dialog-desc">
               {detail.protocol} · {detail.host}:{detail.port}
             </Dialog.Description>
-            <div className="cc-bigms">{ms(detail.median_ms)}</div>
-            <div className="cc-preline">
-              DNS {ms(detail.pre.dns_ms)} · TCP {ms(detail.pre.tcp_ms)} · TLS {ms(detail.pre.tls_ms)}
+            <div className="cc-bigms" style={{ textAlign: 'start' }}>
+              {ms(detail.median_ms)}
+              <span className="cc-preline" style={{ marginInlineStart: 8 }}>
+                میانه
+              </span>
             </div>
             <Bars samples={detail.samples} median={detail.median_ms} />
-            <div className="cc-preline">
-              کمینه {ms(detail.min_ms)} · p95 {ms(detail.p95_ms)} · فاصلهٔ نمونه‌ها {ms(detail.jitter_ms)}
-            </div>
+            <dl className="cc-cfgkv">
+              <div>
+                <dt>DNS</dt>
+                <dd>{ms(detail.pre.dns_ms)}</dd>
+              </div>
+              <div>
+                <dt>اتصال TCP</dt>
+                <dd>{ms(detail.pre.tcp_ms)}</dd>
+              </div>
+              <div>
+                <dt>TLS</dt>
+                <dd>{ms(detail.pre.tls_ms)}</dd>
+              </div>
+              <div>
+                <dt>کمینه</dt>
+                <dd>{ms(detail.min_ms)}</dd>
+              </div>
+              <div>
+                <dt>p95</dt>
+                <dd>{ms(detail.p95_ms)}</dd>
+              </div>
+              <div>
+                <dt>فاصلهٔ نمونه‌ها</dt>
+                <dd>{ms(detail.jitter_ms)}</dd>
+              </div>
+              <div>
+                <dt>ناموفق</dt>
+                <dd>{faNum(Math.round(detail.loss * detail.samples.length))} از {faNum(detail.samples.length)}</dd>
+              </div>
+            </dl>
             {detail.error_fa ? <div className="cc-errbox" style={{ marginTop: 12 }}>{detail.error_fa}</div> : null}
             {detail.error_detail ? <div className="cc-preline cc-ltr">{detail.error_detail}</div> : null}
           </Dialog>
         </Dialog.Root>
       )}
 
-      <div className="cc-hint cc-center cc-mb">سقف هر اجرا {faNum(data.limits.links)} لینک · پنج نمونه · {faNum(data.limits.timeout_s)} ثانیه برای هر کانفیگ</div>
+      <div className="cc-hint cc-center cc-mb">
+        سقف هر اجرا {faNum(data.limits.links)} لینک · {faNum(data.limits.samples)} نمونه · {faNum(data.limits.timeout_s)} ثانیه برای هر کانفیگ
+      </div>
     </>
   )
 }
