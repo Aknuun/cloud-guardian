@@ -2431,3 +2431,21 @@ body .cc-menu-item {
 .cc-pgcard-actions .cc-rowbtn { flex: 0 0 34px }
 .cc-code { direction: ltr; text-align: left; unicode-bidi: plaintext }
 .cc-codecopy { white-space: nowrap }
+/* desktop: same floating "+" as the phone, just bigger and out of the way */
+@media (min-width: 700px) {
+  .cc-topbar .cc-pageaction,
+  .cc-topbar .cc-pageaction-more { display: none !important }
+  .cc-topbar .cc-fab {
+    display: grid !important;
+    position: fixed; inset-inline-start: auto; inset-inline-end: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    width: 62px !important; height: 62px !important; flex: 0 0 62px !important;
+    border-radius: 50% !important; border: 0 !important; z-index: 45;
+    background: var(--ds-brand) !important; color: #fff !important;
+    box-shadow: 0 14px 34px color-mix(in srgb, var(--ds-brand) 34%, transparent);
+  }
+  .cc-topbar .cc-fab svg { width: 30px; height: 30px }
+  .cc-topbar .cc-fab:hover { filter: brightness(1.06) }
+  .cc-main { padding-bottom: 96px !important }
+  .cc-actionsheet { inset-inline: auto 24px !important; width: 340px; border-radius: 18px !important; bottom: 96px !important }
+}
