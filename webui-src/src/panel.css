@@ -2372,3 +2372,8 @@ body .cc-menu-item {
 .cc-actionrow:hover { background: var(--ds-tint) }
 .cc-actionrow:disabled { opacity: .45 }
 .cc-actionrow svg { color: var(--ds-brand); flex: 0 0 18px }
+
+/* the cluster lives inside .cc-topbar, where every button is forced to 34px */
+.cc-topbar .cc-actionsheet .cc-actionrow { width: 100% !important; flex: 1 1 auto !important; height: 50px !important; }
+.cc-topbar .cc-actionsheet .cc-actionrow span { flex: 1 1 auto; min-width: 0; text-align: start; }
+.cc-topbar .cc-fab { width: 56px !important; height: 56px !important; flex: 0 0 56px !important; border-radius: 50% !important; }
