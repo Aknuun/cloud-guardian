@@ -16,6 +16,8 @@ import type { SubItem } from './Sidebar'
 import type { Provider } from './Sidebar'
 
 export function ProviderShell({
+  fixed,
+
   provider,
   title,
   busy,
@@ -30,6 +32,7 @@ export function ProviderShell({
   activeTool,
   children,
 }: {
+  fixed?: PageAction[]
   provider: Provider
   title: string
   busy: boolean
@@ -47,6 +50,7 @@ export function ProviderShell({
   const sectionTheme = useSectionTheme(provider)
   const [navOpen, setNavOpen] = useState(() => window.matchMedia('(min-width: 900px)').matches)
   const [actions, setActions] = useState<PageAction[]>([])
+  const shown = fixed && fixed.length ? fixed : actions
   return (
     <div className={"cc-app p-" + provider} style={sectionTheme.style}>
       <Sidebar
@@ -65,7 +69,7 @@ export function ProviderShell({
             <List size={20} />
           </button>
           <h1 className="cc-title">{title}</h1>
-          <ActionCluster actions={actions} />
+          <ActionCluster actions={shown} />
           <GlobalSearch
             go={(p, t) => {
               if (t && onTool) onTool(t)
