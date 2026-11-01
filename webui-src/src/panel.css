@@ -2635,9 +2635,12 @@ body .cc-menu-item {
 html.cc-theming,
 html.cc-theming body,
 html.cc-theming body *:not(svg):not(path) {
-  transition: background-color 320ms ease, color 320ms ease, border-color 320ms ease,
-    fill 320ms ease, stroke 320ms ease, box-shadow 320ms ease !important;
+  transition: background-color 240ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 240ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 240ms cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
+::view-transition-old(root) { animation-duration: 200ms }
+::view-transition-new(root) { animation-duration: 240ms }
 @media (prefers-reduced-motion: reduce) {
   html.cc-theming, html.cc-theming body, html.cc-theming body * { transition: none !important }
 }

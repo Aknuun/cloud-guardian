@@ -41,8 +41,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<Mode>(() => (document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'))
   useEffect(() => {
     const el = document.documentElement
-    el.classList.add('cc-theming')
-    apply(mode)
+    const run = () => {
+      el.classList.add('cc-theming')
+      apply(mode)
+    }
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown }
+    if (!reduce && typeof doc.startViewTransition === 'function') doc.startViewTransition(run)
+    else run()
     const t = window.setTimeout(() => el.classList.remove('cc-theming'), 420)
     return () => window.clearTimeout(t)
   }, [mode])

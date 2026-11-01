@@ -14,36 +14,70 @@ type Hit = { key: string; label: string; sub: string; run: () => void }
 
 // Everything the user can see on the current page: card titles, section heads,
 // submenus and plain buttons (destructive ones are skipped).
+function pageTarget(node: Node): HTMLElement | null {
+  const scope = (node.parentElement && node.parentElement.closest('.cc-main, .cc-sidebar')) as HTMLElement | null
+  let el: HTMLElement | null = node.parentElement
+  while (el && el !== scope) {
+    if (
+      el.matches(
+        'button, [role="button"], a, .cc-trow, .cc-acctcard, .cc-sideitem, .cc-subitem, .cc-hrow, li, tr',
+      )
+    )
+      return el
+    el = el.parentElement
+  }
+  return (node.parentElement as HTMLElement) || null
+}
+
 function pageHits(needle: string): Hit[] {
   const out: Hit[] = []
-  const seen = new Set<string>()
-  const nodes = document.querySelectorAll<HTMLElement>(
-    '.cc-main button, .cc-main .cc-name, .cc-main .cc-acctcard, .cc-main .cc-section-head h2, ' +
-      '.cc-main .cc-hg-title, .cc-main .cc-trow, .cc-sidebar .cc-sideitem, .cc-sidebar .cc-subitem, ' +
-      '.cc-sidebar .cc-sidenav-label',
-  )
-  nodes.forEach((el) => {
-    if (el.offsetParent === null) return
-    if (el.closest('.cc-gsearch') || el.closest('.cc-gsearch-sheet')) return
-    if (el.classList.contains('danger') || el.classList.contains('cc-rec-danger')) return
-    const aria = el.getAttribute('aria-label') || ''
-    if (aria.includes('حذف') || aria.includes('پاک')) return
-    const label = (el.textContent || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 70)
-    if (label.length < 2 || !label.toLowerCase().includes(needle)) return
-    const key = label.toLowerCase() + '|' + el.tagName + '|' + el.className
-    if (seen.has(key)) return
-    seen.add(key)
-    out.push({
-      key,
-      label,
-      sub: 'در این صفحه',
-      run: () => {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') el.click()
-      },
-    })
-  })
-  return out.slice(0, 8)
+  const seen = new Set<Element>()
+  const roots = [document.querySelector('.cc-main'), document.querySelector('.cc-sidebar')].filter(
+    Boolean,
+  ) as HTMLElement[]
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let node: Node | null = walker.nextNode()
+    while (node) {
+      const text = (node.textContent || '').trim()
+      if (text.length >= 2 && text.toLowerCase().includes(needle)) {
+        const host = pageTarget(node)
+        if (
+          host &&
+          host.offsetParent !== null &&
+          !seen.has(host) &&
+          !host.closest('.cc-gsearch, .cc-gsearch-sheet') &&
+          !host.matches('.danger, .cc-rec-danger, [data-variant="destructive"]') &&
+          !(host.getAttribute('aria-label') || '').match(/حذف|پاک/)
+        ) {
+          const label = (host.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 70)
+          if (label.length >= 2) {
+            seen.add(host)
+            out.push({
+              key: 'pg:' + out.length,
+              label,
+              sub: 'در این صفحه',
+              run: () => {
+                host.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                if (
+                  host.tagName === 'BUTTON' ||
+                  host.getAttribute('role') === 'button' ||
+                  host.classList.contains('cc-trow') ||
+                  host.classList.contains('cc-acctcard') ||
+                  host.classList.contains('cc-hrow') ||
+                  host.classList.contains('cc-sideitem')
+                )
+                  host.click()
+              },
+            })
+            if (out.length >= 8) return out
+          }
+        }
+      }
+      node = walker.nextNode()
+    }
+  }
+  return out
 }
 
 export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null) => void }) {
