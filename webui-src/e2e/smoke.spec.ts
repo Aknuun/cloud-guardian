@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 // Every tool page, in the order the sidebar shows them.
-const TOOLS = ['home', 'hs', 'pg', 'hook', 'hf', 'hfd', 'um', 'srv', 'dom', 'rem', 'mail', 'cfcheck', 'fo', 'hub', 'set']
+const TOOLS = ['home', 'hs', 'pg', 'hook', 'hf', 'hfd', 'um', 'srv', 'dom', 'rem', 'mail', 'cfcheck', 'cfgtest', 'fo', 'hub', 'set']
 
 // The app only needs the session token; each /api call is answered here so the
 // smoke test needs no backend, bot token or network access.
@@ -66,6 +66,12 @@ const FIXTURES: Record<string, unknown> = {
   },
   '/api/cf/zones': { zones: [], accounts: [], favs: [] },
   '/api/tools/cfcheck': { rows: [], checked: 0 },
+  '/api/tools/cfgtest': {
+    engine: { ok: true, version: 'v26.10.31', path: '/opt/cloud-guardian/bin/xray' },
+    limits: { links: 20, samples: 5, timeout_s: 20 },
+    targets: ['https://cp.cloudflare.com/generate_204'],
+    history: [],
+  },
 }
 
 async function boot(page: Page, go: string) {

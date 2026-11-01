@@ -2993,3 +2993,37 @@ html[data-mode='dark'] .cc-fab {
   margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
+
+/* ---------- config test: sample bars, one big number, one meta line ---------- */
+.cc-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 72px;
+  margin: 14px 0 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--ds-tint);
+}
+.cc-bar {
+  flex: 1 1 0;
+  min-width: 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ds-muted) 38%, transparent);
+  transition: height 0.16s ease;
+}
+.cc-bar.on { background: var(--ds-brand) }
+.cc-bar.off { background: color-mix(in srgb, var(--ds-danger) 25%, transparent) }
+.cc-bigms {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  margin-top: 10px;
+}
+.cc-preline {
+  font-size: 12px;
+  color: var(--ds-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}

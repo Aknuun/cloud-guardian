@@ -5,7 +5,7 @@ import type { Icon } from '@phosphor-icons/react'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
 
-export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub' | 'cfcheck' | 'hs'
+export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub' | 'cfcheck' | 'cfgtest' | 'hs'
 
 // Hub is the author's own control room, not a feature of a normal install.
 let hubOn = false
@@ -27,6 +27,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'dom', label: 'دامنه و SSL', Icon: GlobeSimple },
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'cfcheck', label: 'سلامت ساب‌ها', Icon: Pulse },
+  { id: 'cfgtest', label: 'تست کانفیگ', Icon: Pulse },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
   { id: 'hub', label: 'شبکهٔ نصب‌ها', Icon: Broadcast },
   { id: 'rem', label: 'یادآورها', Icon: BellRinging },
@@ -36,7 +37,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
 // Sidebar + home share one order; the first item of each group is the important one.
 export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
   { title: 'پاسارگارد', tools: ['pg', 'hs', 'hook', 'hf', 'hfd', 'um'] },
-  { title: 'سرور و دامنه', tools: ['srv', 'dom', 'mail', 'cfcheck'] },
+  { title: 'سرور و دامنه', tools: ['srv', 'dom', 'mail', 'cfcheck', 'cfgtest'] },
   { title: 'ابزارها', tools: ['hub', 'fo', 'rem', 'set'] },
 ]
 

@@ -18,6 +18,7 @@ const VIEWS: Partial<Record<ToolId, LazyExoticComponent<ComponentType>>> = {
   fo: lazy(() => import('./fo')),
   hub: lazy(() => import('./hub')),
   hs: lazy(() => import('../components/HostStudio').then((m) => ({ default: m.HostStudio }))),
+  cfgtest: lazy(() => import('./cfgtest')),
   cfcheck: lazy(() => import('../components/CfCheck').then((m) => ({ default: m.CfCheckView }))),
 }
 
