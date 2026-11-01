@@ -2548,3 +2548,5 @@ body .cc-menu-item {
 @media (max-width: 899px) {
   .cc-sidebar.open { width: max-content; min-width: 210px; max-width: min(296px, 86vw) }
 }
+.cc-hg-sec .cc-hg-list .cc-hrow span { white-space: normal; line-height: 1.35; padding: 6px 0 }
+.cc-hg-sec .cc-hg-list .cc-hrow { align-items: center; min-height: 42px }
