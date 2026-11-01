@@ -2458,8 +2458,8 @@ body .cc-menu-item {
 .cc-pop { padding: 6px !important; }
 .cc-pop-title { padding: 6px 10px 4px !important; }
 
-/* home: two columns at every width, one card per section */
-.cc-home2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start }
+/* home: one column, one collapsible card per section */
+.cc-home2 { display: block }
 .cc-hg-sec {
   background: var(--ds-card);
   border: 1px solid var(--ds-line);
@@ -2467,6 +2467,16 @@ body .cc-menu-item {
   padding: 6px 6px 8px;
   min-width: 0;
 }
+.cc-hg-sec + .cc-hg-sec { margin-top: 10px }
+.cc-hg-toggle {
+  display: flex; align-items: center; justify-content: flex-start; gap: 6px;
+  width: 100%; min-height: 44px; padding: 0 10px; border: 0; border-radius: 9px;
+  background: none; color: var(--ds-text); font: inherit; font-size: 13px; font-weight: 600;
+  text-align: start; cursor: pointer;
+}
+.cc-hg-toggle:hover { background: var(--ds-tint) }
+.cc-hg-caret { color: var(--ds-muted); flex: 0 0 auto; transition: transform 0.15s }
+.cc-hg-caret.on { transform: rotate(180deg) }
 .cc-hg-sec .cc-hg-title { margin: 2px 4px 6px; padding: 0 }
 .cc-hg-sec .cc-hg-list { display: block; border: 0; border-radius: 0; overflow: visible }
 .cc-hg-sec .cc-hg-list .cc-hrow {

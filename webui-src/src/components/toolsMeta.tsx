@@ -1,4 +1,6 @@
-import { CaretLeft, GearSix, House, Envelope, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, BellRinging, ShieldCheck, Tag, Terminal } from '@phosphor-icons/react'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
+import { CaretDown, CaretLeft, GearSix, House, Envelope, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, BellRinging, ShieldCheck, Tag, Terminal } from '@phosphor-icons/react'
 import type { Icon } from '@phosphor-icons/react'
 import { PROVIDERS } from './Sidebar'
 import type { Provider } from './Sidebar'
@@ -38,40 +40,48 @@ export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
   { title: 'ابزارها', tools: ['hub', 'fo', 'rem', 'set'] },
 ]
 
+// One collapsible block per group; open by default, remembered for the visit.
+function HomeSection({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <section className="cc-hg-sec">
+      <button type="button" className="cc-hg-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span>{title}</span>
+        <CaretDown size={14} className={'cc-hg-caret' + (open ? ' on' : '')} />
+      </button>
+      {open && <div className="cc-hg-list">{children}</div>}
+    </section>
+  )
+}
+
 // Landing page: every ported section, grouped and one tap away.
 export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
   const byId = new Map(toolsVisible().map((t) => [t.id, t]))
   return (
     <div className="cc-home2">
-      <section className="cc-hg-sec">
-        <div className="cc-hg-title">سرویس‌ها</div>
-        <div className="cc-hg-list">
-          {PROVIDERS.map((p) => (
-            <button key={p.id} className="cc-hrow" onClick={() => go!(p.id as Provider, null)}>
-              <p.Icon size={17} />
-              <span>{p.label}</span>
-              <CaretLeft size={13} className="cc-hchev" />
-            </button>
-          ))}
-        </div>
-      </section>
+      <HomeSection title="سرویس‌ها">
+        {PROVIDERS.map((p) => (
+          <button key={p.id} className="cc-hrow" onClick={() => go!(p.id as Provider, null)}>
+            <p.Icon size={17} />
+            <span>{p.label}</span>
+            <CaretLeft size={13} className="cc-hchev" />
+          </button>
+        ))}
+      </HomeSection>
       {TOOL_GROUPS.map((g) => (
-        <section key={g.title} className="cc-hg-sec">
-          <div className="cc-hg-title">{g.title}</div>
-          <div className="cc-hg-list">
-            {g.tools.map((id) => {
-              const t = byId.get(id)
-              if (!t) return null
-              return (
-                <button key={id} className="cc-hrow" onClick={() => go!(null, id)}>
-                  <t.Icon size={17} />
-                  <span>{t.label}</span>
-                  <CaretLeft size={13} className="cc-hchev" />
-                </button>
-              )
-            })}
-          </div>
-        </section>
+        <HomeSection key={g.title} title={g.title}>
+          {g.tools.map((id) => {
+            const t = byId.get(id)
+            if (!t) return null
+            return (
+              <button key={id} className="cc-hrow" onClick={() => go!(null, id)}>
+                <t.Icon size={17} />
+                <span>{t.label}</span>
+                <CaretLeft size={13} className="cc-hchev" />
+              </button>
+            )
+          })}
+        </HomeSection>
       ))}
     </div>
   )

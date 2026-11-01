@@ -95,3 +95,8 @@
 - Mobile (390px) pass over all 15 pages: section counts sit next to their titles again (the stray `margin-inline-end:auto` on `.cc-section-head .cc-sub` pushed them away and forced action buttons onto a second line); pg panel actions no longer wrap the ⋯ menu above the node button.
 - hs no longer crashes on a template without `segments` (preview, editor state, and the save validation all treat it as an empty list).
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.
+
+## v4.93.0 — single-column home with collapsible sections
+- Home is one column again: the 2-col grid is gone, every group is its own card.
+- Each section header is now a button with a caret; tapping it folds the list away. All sections start open, and the caret flips when the section is closed. The rows inside are unchanged.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.
