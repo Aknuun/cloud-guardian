@@ -35,7 +35,7 @@ export function ActionModalHost({
     if (modal && modal.kind === 'prompt') setPromptVal(modal.value || '')
     if (modal && modal.kind === 'form') {
       const init: Record<string, string> = {}
-      for (const f of modal.fields) init[f.key] = f.value || (f.select && f.select.length ? f.select[0].value : '')
+      for (const f of modal.fields) init[f.key] = f.value || (f.select?.length ? f.select[0].value : '')
       setFormVal(init)
     }
   }, [modal])
@@ -190,7 +190,7 @@ export function ActionModalHost({
                 variant="primary"
                 onClick={() => {
                   onClose()
-                  modal.onDone && modal.onDone()
+                  modal.onDone?.()
                 }}
               >
                 باشه

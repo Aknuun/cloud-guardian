@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { GearSix, ArrowClockwise, Plus, Trash } from '@phosphor-icons/react'
+import { api, faDate, faNum, } from '../lib'
+import { Badge, Button, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, save, } from './shared'
 
 type HubStats = Partial<{ bot: string; version: string; go: string; uptime: string; mem_mb: number; db_mb: number; admins: number; users: number; panels: number; zones: number; cf_accs: number; servers: number }>
 
 // stats come from older/newer peers; never let a missing field crash the page
-const sv = (v?: string) => (v && String(v).trim() ? v : '—')
+const _sv = (v?: string) => (v && String(v).trim() ? v : '—')
 const sn = (v?: number) => (typeof v === 'number' && Number.isFinite(v) ? faNum(v) : '—')
 const sf = (v: number | undefined, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(d) : '—')
 type HubData = { hubUrl: string; annUrl: string; secret: boolean; root?: boolean; stats: HubStats; hubOk: boolean; hubErr?: string; installs: any[] }
@@ -102,13 +99,6 @@ function HubView() {
 
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'نسخه', value: sv(s?.version) },
-          { label: 'آپ‌تایم', value: sv(s?.uptime) },
-          { label: 'نصب‌های هاب', value: data?.installs?.length ? faNum(data.installs.length) : '—' },
-        ]}
-      />
 
       <div className="cc-pagebar">
         <Button variant="primary" icon={GearSix} onClick={() => { setCErr(''); setCfg({ hubUrl: data?.hubUrl || '', annUrl: data?.annUrl || '', secret: '' }) }}>

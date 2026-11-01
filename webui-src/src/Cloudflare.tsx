@@ -1,33 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Dialog, Empty, LayerCard, Switch } from './components/ui'
+import { Badge, Button, Dialog, Empty, LayerCard, } from './components/ui'
 import type { Provider, SubItem } from './components/Sidebar'
 import type { ToolId } from './components/toolsMeta'
 import { ProviderShell } from './components/ProviderShell'
 import {
-  ArrowRight,
-  ArrowsClockwise,
-  Broom,
-  CaretDown,
   CaretLeft,
-  ChartBar,
-  CheckSquare,
-  Clock,
-  EnvelopeSimple,
-  Gear,
-  Globe,
-  Info,
   Lifebuoy,
-  Link as LinkIcon,
   MagnifyingGlass,
-  Pause,
-  PencilSimple,
-  Play,
   Plus,
-  SlidersHorizontal,
   Star,
-  Trash,
   UsersThree,
-  X,
 } from '@phosphor-icons/react'
 import { api, checkRecord, fallbackCopy, faDate, faNum, haptic, num, TG } from './lib'
 import { CopyBtn } from './components/CopyBtn'
@@ -40,21 +22,15 @@ import { loadView } from './cloudflare/load'
 import type { CFAcc, CFRec, CFZone, Dlg, EmailData, FavItem, LbEntry, LbGroup, SetGroup, SetItem, Tab, View, ZoneInfo } from './cloudflare/model'
 import {
   PROXYABLE,
-  TAB_KEYS,
   ZONE_BADGE,
-  isEmail,
-  isHost,
   isIPv4,
   isIPv6,
   relName,
   restoreCfState,
   riskySetting,
-  splitFavorites,
   statusLabel,
-  ttlLabel,
 } from './cloudflare/model'
 import {
-  ConvertRecordDialog,
   ErrorState,
   FavStar,
   FormDialog,
@@ -161,8 +137,8 @@ export default function Cloudflare({
     if (TG) {
       TG.ready()
       TG.expand()
-      TG.disableVerticalSwipes && TG.disableVerticalSwipes()
-      TG.MainButton && TG.MainButton.hide()
+      TG.disableVerticalSwipes?.()
+      TG.MainButton?.hide()
     }
     return () => clearTimeout(toastTimer.current)
   }, [])
@@ -222,7 +198,7 @@ export default function Cloudflare({
   }
   onBackRef(goBack)
   useEffect(() => {
-    if (TG && TG.BackButton) TG.BackButton.show()
+    if (TG?.BackButton) TG.BackButton.show()
   }, [view, stack.length, dlg])
   useEffect(() => {
     try {
@@ -441,7 +417,7 @@ export default function Cloudflare({
     const next = !rec.proxied
     patchRec({ ...rec, proxied: next })
     const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'proxy', proxied: next }, true, { refresh: false })
-    if (d && d.record) patchRec(d.record)
+    if (d?.record) patchRec(d.record)
     else if (!d) patchRec(rec)
   }
 
@@ -451,7 +427,7 @@ export default function Cloudflare({
     const next = i < 0 ? 1 : steps[(i + 1) % steps.length]
     patchRec({ ...rec, ttl: next })
     const d = await post('/api/cf/record', { ...recBody(rec, acc, zid), op: 'ttl', ttl: 0 }, true, { refresh: false })
-    if (d && d.record) patchRec(d.record)
+    if (d?.record) patchRec(d.record)
     else if (!d) patchRec(rec)
   }
 
@@ -959,7 +935,7 @@ ${reason}`,
     )
   }
 
-  async function showAudit(acc: number, zid: string) {
+  async function showAudit(_acc: number, zid: string) {
     bump(1)
     try {
       const d = await api<{ items: { ts: number; op: string; detail: string }[] }>(
@@ -1338,7 +1314,7 @@ ${reason}`,
                 }
                 setDlg(null)
                 const d = await post(path, body, true, { refresh: false })
-                if (d && d.record) {
+                if (d?.record) {
                   if (prev) patchRec(d.record)
                   else if (temp) {
                     const tid = temp.id

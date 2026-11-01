@@ -17,10 +17,9 @@ export function StatGrid({ items }: { items: Stat[] }) {
         const ratio = s.of !== undefined ? (s.of > 0 && Number.isFinite(num) ? Math.round((num / s.of) * 100) : 0) : s.pct
         const showRing = typeof ratio === 'number' && ratio > 0 && ratio <= 100
         const zero = isZero(s.value)
-        const compact = !showRing && s.of === undefined
         const text = zero && s.of === undefined ? '—' : typeof s.value === 'number' ? faNum(s.value) : s.value
         return (
-          <div className={'cc-stat' + (compact ? ' compact' : '')} key={s.label}>
+          <div className="cc-stat" key={s.label}>
             <div className="cc-stat-label">{s.label}</div>
             <div className="cc-stat-box">
               <b className="cc-stat-value">{text}</b>

@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { api, faDate, faNum, invalidateCache } from '../lib'
+import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
-import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, } from './shared'
 
 type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; totalCreated: number }
 type HfdData = { cfg: HfdCfg; panels: { idx: number; name: string }[]; items: { key: string; panel: number; host: string }[] }
@@ -63,17 +58,9 @@ function HfdView() {
     return (
       <Skeleton rows={5} />
     )
-  const next = cfg.nextRun ? faDate(cfg.nextRun) : '—'
+  const _next = cfg.nextRun ? faDate(cfg.nextRun) : '—'
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'وضعیت', value: cfg.enabled ? 'فعال' : 'خاموش' },
-          { label: 'هر', value: faNum(cfg.intervalH) + ' ساعت' },
-          { label: 'اجرای بعدی', value: next },
-          { label: 'هاست‌های انتخابی', value: faNum(data.items.length) },
-        ]}
-      />
       <div className="cc-hint cc-mb">
         هر {faNum(cfg.intervalH)} ساعت، ساب‌های هاست‌های انتخاب‌شده با نام تازه بازسازی می‌شوند تا فیلترها دور زده شوند.
         برای هر هاست یکی از سه فیلد «آدرس» (IP درخواست)، «SNI» (نام TLS) یا «Host» (هدر دامنه) را روشن کن.

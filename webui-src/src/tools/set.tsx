@@ -1,13 +1,9 @@
-import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { useState } from 'react'
+import { Trash } from '@phosphor-icons/react'
+import { api, faDate, faNum, invalidateCache } from '../lib'
+import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
-import { FormDialog } from './shared'
-import { useTool, save, faTxt, verGt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, verGt } from './shared'
 
 type Sess = { id: string; created: number; last: number; exp: number; ip: string; device: string; current: boolean }
 
@@ -43,13 +39,6 @@ function SetView() {
   const newer = !!data.latest && verGt(data.latest, data.version)
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'نسخهٔ نصب‌شده', value: 'v' + data.version },
-          { label: 'آخرین نسخه', value: data.latest || '—' },
-          { label: 'ادمین‌ها', value: faNum(data.admins.length) },
-        ]}
-      />
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">

@@ -1,5 +1,5 @@
 import { ArrowClockwise, ArrowCounterClockwise, ArrowUp, ArrowsClockwise, Camera, GlobeHemisphereWest, Key, PencilSimple, Power, Scissors, Trash, Wrench } from '@phosphor-icons/react'
-import { Button, Dialog, Empty, LayerCard, Meter } from './ui'
+import { Button, LayerCard, Meter } from './ui'
 import { Badge } from './ui'
 import { CopyBtn } from './CopyBtn'
 import { AppSkeleton } from './AppDialogs'
@@ -20,8 +20,8 @@ export function ServerDetail(p: {
   ipAssignFlow: (id: string) => void
   copy: (v: string, label?: string) => void
 }) {
-  const server = p.server
-  const busy = p.busy
+  const _server = p.server
+  const _busy = p.busy
   const copy = p.copy
       if (!p.server) return p.busy > 0 ? <AppSkeleton rows={3} /> : null
       const s = p.server
@@ -73,7 +73,7 @@ export function ServerDetail(p: {
             </div>
             <div className="cc-kv">
               <span>هزینه</span>
-              <span>{s.prices && s.prices.monthly ? s.prices.monthly + ' ماهانه' : '—'}</span>
+              <span>{s.prices?.monthly ? s.prices.monthly + ' ماهانه' : '—'}</span>
             </div>
           </LayerCard>
 

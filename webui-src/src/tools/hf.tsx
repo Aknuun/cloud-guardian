@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { Trash } from '@phosphor-icons/react'
+import { api, faDate, faNum, invalidateCache } from '../lib'
+import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
-import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, } from './shared'
 
 type HfCfg = {
   enabled: boolean; intervalMin: number; cities: number; citiesSel: string[]; maxOk: number
@@ -84,13 +80,6 @@ function HfView() {
   }
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'وضعیت', value: cfg.enabled ? 'فعال' : 'خاموش' },
-          { label: 'فاصلهٔ اجرا', value: faNum(cfg.intervalMin) + ' دقیقه' },
-          { label: 'استثناها', value: faNum(cfg.excCount) },
-        ]}
-      />
       <div className="cc-hint cc-mb">
         دامنهٔ هاست‌ها هر {faNum(cfg.intervalMin)} دقیقه از داخل ایران بررسی می‌شود؛ اگر فیلتر شد، ساب‌دامنهٔ تازه ساخته و
         جایگزین می‌شود. هاست‌هایی که لازم نیست بررسی شوند را در لیست پایین «استثنا» کن.
@@ -288,8 +277,7 @@ function HfView() {
                   </div>
                 )}
                 {revs && revs.length === 0 && <Empty title="خالی" description="تعویضی برای بازگردانی نیست." />}
-                {revs &&
-                  revs.map((r) => (
+                {revs?.map((r) => (
                     <div key={r.sid} className="cc-trow">
                       <div className="cc-grow">
                         <div className="cc-name cc-ltr">{r.from || r.sid}</div>
@@ -402,7 +390,7 @@ function BkDialog({ onClose, act }: { onClose: () => void; act: (p: string, b: a
 }
 
 // verGt reports whether version a is newer than b (both "x.y.z" or "vx.y.z").
-function verGt(a: string, b: string) {
+function _verGt(a: string, b: string) {
   const pa = String(a).replace(/^v/, '').split('.').map((x) => Number(x) || 0)
   const pb = String(b).replace(/^v/, '').split('.').map((x) => Number(x) || 0)
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {

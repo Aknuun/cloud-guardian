@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { Copy, } from '@phosphor-icons/react'
+import { api, fallbackCopy, invalidateCache } from '../lib'
+import { Button, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, } from './shared'
 
 type HookPanel = {
   idx: number; name: string; url: string; set: boolean
@@ -49,13 +46,6 @@ function HookView() {
     )
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'وضعیت', value: d.enabled ? 'فعال' : 'خاموش' },
-          { label: 'پنل‌های متصل', value: faNum(d.panels.filter((p) => p.set).length) + '/' + faNum(d.panels.length) },
-          { label: 'آستانهٔ حجم', value: (d.usage || []).map((u) => faNum(u) + '٪').join(' · ') || '—' },
-        ]}
-      />
       <div className="cc-hint cc-mb">
         آدرس وبهوک هر پنل را در تنظیمات webhook پنل (بخش اعلان‌ها) بگذار؛ خود پنل وقتی کاربری به آستانهٔ انقضا یا حجم رسید خبر
         می‌دهد. آستانه‌ها (days_left و usage_percent) هم همان‌جا در پنل تنظیم می‌شوند.

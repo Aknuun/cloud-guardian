@@ -1,6 +1,7 @@
 import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { useTheme } from './theme'
+import { useVersion } from './AppVersion'
 import type { ToolItem } from './toolsMeta'
 
 export type Provider = 'hz' | 'cf' | 'arv'
@@ -65,6 +66,7 @@ export function Sidebar({
       window.removeEventListener('touchend', end)
     }
   }, [open, onToggle])
+  const version = useVersion()
   const rest = tools?.filter((t) => t.id !== 'home' && !PG_IDS.includes(t.id) && !MISC_IDS.includes(t.id))
   const misc = tools?.filter((t) => MISC_IDS.includes(t.id))
   const pgItems = tools?.filter((t) => PG_IDS.includes(t.id))
@@ -77,7 +79,7 @@ export function Sidebar({
           <div className="cc-sidebrand-mark">CG</div>
           <div className="cc-sidebrand-text">
             <div className="cc-sidebrand-name">Cloud Guardian</div>
-            <div className="cc-sidebrand-sub">کنسول ابری</div>
+            <div className="cc-sidebrand-sub" dir="ltr">{version ? 'v' + version : 'Cloud Guardian'}</div>
           </div>
           <button type="button" className="cc-drawer-x" aria-label="بستن منو" onClick={onToggle}>
             ✕
@@ -106,7 +108,7 @@ export function Sidebar({
           {PROVIDERS.map((it) => {
             const on = providerActive && provider === it.id
             const isOpen = expanded === it.id
-            const hasSub = on && !!(sections && sections.length)
+            const hasSub = on && !!(sections?.length)
             const items = hasSub && isOpen ? sections || [] : []
             return (
               <div key={it.id} className="cc-navgroup">

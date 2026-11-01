@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowClockwise, CaretDown, Check, FunnelSimple, GlobeSimple, PencilSimple, Pulse, ShieldCheck, SquaresFour, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
+import { Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
 import { ErrBox, FormDialog, Skeleton } from './toolsMeta'
-import { StatGrid } from './Stats'
 import { RecordEditor, RecordSheet } from '../cloudflare/components'
 
 type Row = {
@@ -31,7 +30,7 @@ type State = {
   last: { at: number; rows: Row[]; total: number; bad: number }
 }
 
-const STATUS_FA: Record<string, string> = {
+const _STATUS_FA: Record<string, string> = {
   ok: 'سالم',
   proxy: 'پشت کلادفلر',
   nxdomain: 'ریسالو نمی‌شود',
@@ -247,7 +246,7 @@ export function CfCheckView() {
     return list
   }, [shown, sort])
 
-  const okCount = rows.filter((r) => r.status === 'ok' || r.status === 'proxy').length
+  const _okCount = rows.filter((r) => r.status === 'ok' || r.status === 'proxy').length
 
   const saveFix = async () => {
     if (!fix) return
@@ -294,13 +293,6 @@ export function CfCheckView() {
 
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'رکوردهای بررسی‌شده', value: faNum(st?.last?.total || 0) },
-          { label: 'سالم', value: faNum(okCount), pct: st?.last?.total ? (okCount / st.last.total) * 100 : 0 },
-          { label: 'مشکل‌دار', value: faNum(st?.last?.bad || 0) },
-        ]}
-      />
 
       <FilterBar
         q={q}
@@ -669,7 +661,7 @@ export function CfCheckView() {
                 const names: string[] = []
                 const walk = (ns: any[]) =>
                   ns.forEach((n) => {
-                    if (n && n.name) names.push(n.name)
+                    if (n?.name) names.push(n.name)
                     if (n && Array.isArray(n.children)) walk(n.children)
                   })
                 walk(d.tree || [])

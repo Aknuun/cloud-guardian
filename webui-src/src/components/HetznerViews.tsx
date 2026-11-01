@@ -1,10 +1,9 @@
 import { Badge, Button, Dialog, Empty, Input, LayerCard } from './ui'
 import { CaretLeft, GlobeHemisphereWest, Plus, Trash } from '@phosphor-icons/react'
-import { api, invalidateCache, faNum, num } from '../lib'
+import { api, invalidateCache, num } from '../lib'
 import { CopyBtn } from './CopyBtn'
 import { FilterBar } from './FilterBar'
 import { FormDialog } from './toolsMeta'
-import { StatGrid } from './Stats'
 import { AppSkeleton } from './AppDialogs'
 import type { Account, Server } from './hetzner/types'
 import { badgeVariant, locFa, STATUS } from './hetzner/ui'
@@ -34,16 +33,10 @@ export function AccountsView(p: {
       const list0 = accounts.filter(
         (a) => (!aq || a.name.toLowerCase().includes(aq)) && (aflt === 'has' ? (a.count || 0) > 0 : aflt === 'none' ? (a.count || 0) === 0 : true),
       )
-      const known = accounts.some((a) => a.count !== undefined)
-      const totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
+      const _known = accounts.some((a) => a.count !== undefined)
+      const _totalServers = accounts.reduce((n, a) => n + (a.count || 0), 0)
       return (
         <>
-          <StatGrid
-            items={[
-              { label: 'اکانت‌ها', value: faNum(accounts.length) },
-              { label: 'سرورها', value: known ? faNum(totalServers) : '—', pct: known ? 100 : 0 },
-            ]}
-          />
           <div className="cc-pagebar">
             <Button
               variant="primary"
@@ -195,17 +188,10 @@ export function ServersView(p: {
       const ql = q.trim().toLowerCase()
       const list = servers
         .filter((s) => (sflt === 'run' ? s.status === 'running' : sflt === 'off' ? s.status !== 'running' : true))
-        .filter((s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type && s.type.name)).toLowerCase().includes(ql))
-      const running = list.filter((s) => s.status === 'running').length
+        .filter((s) => !ql || (s.name + ' ' + s.ipv4 + ' ' + s.ipv6 + ' ' + (s.type?.name)).toLowerCase().includes(ql))
+      const _running = list.filter((s) => s.status === 'running').length
       return (
         <>
-          <StatGrid
-            items={[
-              { label: 'سرورها', value: faNum(list.length) },
-              { label: 'روشن', value: faNum(running), pct: list.length ? (running / list.length) * 100 : 0 },
-              { label: 'خاموش', value: faNum(list.length - running), pct: list.length ? ((list.length - running) / list.length) * 100 : 0 },
-            ]}
-          />
           <FilterBar
             q={q}
             onQ={setQ}
@@ -256,7 +242,7 @@ export function ServersView(p: {
                   )}
                 </div>
                 <div className="cc-sub">
-                  {(s.type && s.type.name) || ''}
+                  {(s.type?.name) || ''}
                   {s.type ? ` · ${s.type.cores}vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : ''}
                   {s.location ? ` · ${locFa(s.location.name, s.location.city, s.location.country)}` : ''}
                 </div>

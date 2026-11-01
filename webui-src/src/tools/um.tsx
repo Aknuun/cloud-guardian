@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { api, } from '../lib'
+import { Button, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
-import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { save, } from './shared'
 
 type UmCfg = {
   enabled: boolean
@@ -58,13 +53,6 @@ function UmView() {
   }
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'آستانهٔ ساعتی', value: faNum(cfg.hourlyGb) + ' GB' },
-          { label: 'آستانهٔ روزانه', value: faNum(cfg.dailyGb) + ' GB' },
-          { label: 'حداقل اسنپ‌شات', value: faNum(cfg.minGb) + ' GB' },
-        ]}
-      />
       <div className="cc-hint cc-mb">
         کاربرانی که لینکشان پخش شده و بی‌رویه مصرف می‌کنند را پیدا می‌کند؛ هر ۶۰ دقیقه مصرف فعلی را با ~۱ ساعت و ~۲۴ ساعت قبل مقایسه می‌کند و هشدار را فقط برای ادمین می‌فرستد.
       </div>

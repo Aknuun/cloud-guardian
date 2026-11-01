@@ -18,7 +18,7 @@ export function LogoutButton() {
     }
     window.dispatchEvent(new Event('cg:signed-out'))
     try {
-      if (TG && TG.close) TG.close()
+      if (TG?.close) TG.close()
     } catch {
       /* ignore */
     }

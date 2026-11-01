@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
+import { BellSimple, ArrowClockwise, BellRinging, Copy, Plus, Power, Trash } from '@phosphor-icons/react'
+import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
 import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, save, } from './shared'
+import type { PgPanel, PgMon, PgData } from './shared'
 
 function PgView() {
   usePageAction({ label: 'افزودن پنل', icon: Plus, onClick: () => setPf({ name: '', url: '', user: '', pass: '' }) })
@@ -33,7 +32,7 @@ function PgView() {
         monitors: iso0.monitors.filter((m) => (m.name + ' ' + m.panel).toLowerCase().includes(needle)),
       }
     : iso0
-  const on = iso.monitors.filter((m) => m.enabled).length
+  const _on = iso.monitors.filter((m) => m.enabled).length
 
   const submitPanel = async () => {
     if (!pf) return
@@ -69,13 +68,6 @@ function PgView() {
 
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'پنل‌ها', value: iso0.panels.length, note: 'ثبت‌شده' },
-          { label: 'مانیتور نود', value: iso0.monitors.length, note: 'مجموع' },
-          { label: 'فعال', value: on, of: iso0.monitors.length },
-        ]}
-      />
       <FilterBar
         q={q}
         onQ={setQ}
@@ -265,7 +257,7 @@ function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; on
     setNotice('')
     try {
       const res = await api<NdData>(path, body)
-      if (res && res.nodes) setSt(res)
+      if (res?.nodes) setSt(res)
       invalidateCache()
       onChanged()
     } catch (e: any) {

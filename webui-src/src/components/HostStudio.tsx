@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowClockwise, CaretDown, CaretLeft, Check, Copy, Download, Lock, PencilSimple, Plus, ShieldWarning, Trash, Upload } from '@phosphor-icons/react'
+import { ArrowClockwise, CaretLeft, Check, Copy, Download, Lock, PencilSimple, Plus, ShieldWarning, Trash, Upload } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FormDialog, ErrBox } from './toolsMeta'
@@ -337,7 +337,7 @@ export function HostStudio() {
               نادیده‌گرفتن استثناها
             </label>
             <Button variant="primary" onClick={preview}>پیش‌نمایش</Button>
-            {rows && rows.some((r) => r.changed) && (
+            {rows?.some((r) => r.changed) && (
               <Button variant="secondary" onClick={() => setApplyOpen(true)}>اعمال تغییرات</Button>
             )}
           </div>

@@ -2296,9 +2296,7 @@ body .cc-menu-item {
 
 /* stat tiles: real ratios only, compact cards otherwise */
 .cc-stat-of { font-size: 12px; color: var(--ds-muted); margin-inline-start: 6px; white-space: nowrap }
-.cc-stat.compact .cc-stat-box { padding: 8px 10px; background: transparent; border: 1px solid var(--ds-hairline); border-radius: 12px; justify-content: flex-start }
 .cc-stat.compact .cc-stat-value { font-size: 19px }
-.cc-stat.compact .cc-stat-label { font-size: 12px }
 /* page action inside the topbar must keep its label, not collapse to a square icon */
 .cc-topbar .cc-pageaction,
 .cc-topbar button.cc-pageaction {

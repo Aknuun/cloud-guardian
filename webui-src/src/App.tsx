@@ -1,39 +1,20 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader, Meter } from './components/ui'
+import { Button, Loader, } from './components/ui'
 import {
   ArrowClockwise,
-  ArrowCounterClockwise,
-  ArrowRight,
-  ArrowUp,
-  ArrowsClockwise,
-  Camera,
-  CaretLeft,
   CheckCircle,
-  Copy,
-  GlobeHemisphereWest,
-  Key,
-  Lightning,
   List,
-  PencilSimple,
-  Plus,
-  Power,
-  Scissors,
   SignIn,
-  Trash,
   WarningCircle,
-  Wrench,
 } from '@phosphor-icons/react'
-import { api, ApiError, fallbackCopy, faDate, faNum, gb, gbf, haptic, invalidateCache, mem, num, setToken, TG, token } from './lib'
-import { CopyBtn } from './components/CopyBtn'
+import { api, ApiError, fallbackCopy, haptic, invalidateCache, setToken, TG, token } from './lib'
 import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { WebLogin } from './components/WebLogin'
-import { FormDialog, TOOLS, toolItems } from './components/toolsMeta'
+import { TOOLS, toolItems } from './components/toolsMeta'
 import type { ToolId } from './components/toolsMeta'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
-import { StatGrid } from './components/Stats'
 import { GlobalSearch } from './components/GlobalSearch'
-import { FilterBar } from './components/FilterBar'
 import type { Provider } from './components/Sidebar'
 import type { SubItem } from './components/Sidebar'
 import { ProviderShell, ProviderSwitch } from './components/ProviderShell'
@@ -41,10 +22,10 @@ import { AccountsView, ServersView } from './components/HetznerViews'
 import { ServerDetail } from './components/HetznerServerView'
 import { IpsView } from './components/HetznerIpsView'
 import { CreateView } from './components/HetznerCreateView'
-import type { Account, CleanIP, OptType, Options, Server, Traffic } from './components/hetzner/types'
-import { badgeVariant, locFa, STATUS } from './components/hetzner/ui'
-import { AppSkeleton, ModalHost } from './components/AppDialogs'
-import type { Modal, PickerItem } from './components/AppDialogs'
+import type { Account, CleanIP, OptType, Options, Server, } from './components/hetzner/types'
+import { locFa, } from './components/hetzner/ui'
+import { ModalHost } from './components/AppDialogs'
+import type { Modal, } from './components/AppDialogs'
 
 const Cloudflare = lazy(() => import('./Cloudflare'))
 const Arvan = lazy(() => import('./Arvan'))
@@ -210,8 +191,8 @@ export default function App() {
       if (TG) {
         TG.ready()
         TG.expand()
-        TG.isVersionAtLeast && TG.isVersionAtLeast('7.0') && TG.disableVerticalSwipes && TG.disableVerticalSwipes()
-        TG.MainButton && TG.MainButton.hide()
+        TG.isVersionAtLeast?.('7.0') && TG.disableVerticalSwipes?.()
+        TG.MainButton?.hide()
       }
       // the bot links with a one-time ticket: no approval round-trip needed
       const k = new URLSearchParams(location.search).get('k')
@@ -235,7 +216,7 @@ export default function App() {
         if (!cancelled) setPhase('signedout')
         return
       }
-      if (!TG || !TG.initData) {
+      if (!TG?.initData) {
         // browser: reuse the same shell, log in with a Telegram approval
         if (token) {
           try {
@@ -295,13 +276,13 @@ export default function App() {
   /* telegram back button */
   const backRef = useRef<() => void>(() => {})
   useEffect(() => {
-    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
+    if (!TG?.BackButton || !TG.isVersionAtLeast?.('6.1')) return
     const h = () => backRef.current()
     TG.BackButton.onClick(h)
-    return () => TG.BackButton.offClick && TG.BackButton.offClick(h)
+    return () => TG.BackButton.offClick?.(h)
   }, [])
   useEffect(() => {
-    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
+    if (!TG?.BackButton || !TG.isVersionAtLeast?.('6.1')) return
     if (provider !== 'hz' || modal || cur.v !== 'accounts' || stack.length) TG.BackButton.show()
     else TG.BackButton.hide()
   }, [modal, cur, stack, provider])
@@ -470,8 +451,8 @@ export default function App() {
         ipId: Number(o.ipId || 0),
         confirm: true,
       })
-      if (d && d.password) setModal({ kind: 'password', password: d.password })
-      else toast((d && d.message) || 'انجام شد')
+      if (d?.password) setModal({ kind: 'password', password: d.password })
+      else toast((d?.message) || 'انجام شد')
       setServers([])
       setServersAcc(null)
       if (o.op === 'delete') {
@@ -945,7 +926,7 @@ export default function App() {
     )
   }
 
-  const showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
+  const _showBack = !!modal || cur.v !== 'accounts' || stack.length > 0
 
   const accId = 'acc' in cur ? cur.acc : null
   const sections: SubItem[] = [

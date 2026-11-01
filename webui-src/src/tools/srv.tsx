@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
+import { Pulse, ArrowClockwise, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Trash } from '@phosphor-icons/react'
+import { api, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
 import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, save, } from './shared'
+import type { Srv, } from './shared'
 
 function SrvView() {
   usePageAction({ label: 'افزودن سرور', icon: Plus, onClick: () => setEdit({ port: 22, user: 'root' }) })

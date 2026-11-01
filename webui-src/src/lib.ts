@@ -1,4 +1,4 @@
-export const TG: any = (window as any).Telegram && (window as any).Telegram.WebApp ? (window as any).Telegram.WebApp : null
+export const TG: any = (window as any).Telegram?.WebApp ? (window as any).Telegram.WebApp : null
 
 export let token = sessionStorage.getItem('cg_token') || ''
 
@@ -88,7 +88,7 @@ async function request<T>(path: string, body?: any, signal?: AbortSignal): Promi
     /* ignore */
   }
   if (res.status === 401) setToken('')
-  if (!res.ok || !j || j.ok === false) throw new ApiError((j && j.error) || 'خطای سرور (' + res.status + ')')
+  if (!res.ok || !j || j.ok === false) throw new ApiError((j?.error) || 'خطای سرور (' + res.status + ')')
   return j.data as T
 }
 
@@ -139,7 +139,7 @@ export async function fallbackCopy(v: string): Promise<boolean> {
 
 export function haptic(kind: 'light' | 'success' | 'error' = 'light') {
   try {
-    if (!TG || !TG.HapticFeedback) return
+    if (!TG?.HapticFeedback) return
     if (kind === 'light') TG.HapticFeedback.impactOccurred('light')
     else TG.HapticFeedback.notificationOccurred(kind)
   } catch {

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowClockwise,
-  ArrowCounterClockwise,
-  ArrowRight,
   Camera,
   CaretLeft,
   Cloud,
@@ -17,7 +15,7 @@ import {
   Trash,
   WarningCircle,
 } from '@phosphor-icons/react'
-import { Badge, Button, Dialog, Empty, Input, LayerCard, Loader } from './components/ui'
+import { Badge, Button, Empty, Input, LayerCard, Loader } from './components/ui'
 import { CopyBtn } from './components/CopyBtn'
 import { ProviderShell } from './components/ProviderShell'
 import { ArvanDialogs } from './arvan/dialogs'
@@ -96,7 +94,7 @@ export default function Arvan({
   onTool?: (id: ToolId) => void
 }) {
   const [acc, setAcc] = useState<number | null>(null)
-  const [tab, setTab] = useState<Tab>('dns')
+  const [_tab, setTab] = useState<Tab>('dns')
   const [view, setView] = useState<View>({ v: 'accounts' })
   const [stack, setStack] = useState<View[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -235,14 +233,14 @@ export default function Arvan({
     onSwitch('hz')
   }
   useEffect(() => {
-    if (!TG || !TG.BackButton || !TG.isVersionAtLeast || !TG.isVersionAtLeast('6.1')) return
+    if (!TG?.BackButton || !TG.isVersionAtLeast?.('6.1')) return
     const h = () => goBack()
     TG.BackButton.onClick(h)
-    return () => TG.BackButton.offClick && TG.BackButton.offClick(h)
+    return () => TG.BackButton.offClick?.(h)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, stack, modal, acc])
   useEffect(() => {
-    if (TG && TG.BackButton) TG.BackButton.show()
+    if (TG?.BackButton) TG.BackButton.show()
   }, [view, stack, modal, acc])
 
   function reload() {
@@ -259,7 +257,7 @@ export default function Arvan({
           const d = await api<{ accounts: Account[] }>('/api/arv/accounts')
           if (!cancelled) {
             setAccounts(d.accounts || [])
-            if (d.accounts && d.accounts.length) setAcc(d.accounts[0].i)
+            if (d.accounts?.length) setAcc(d.accounts[0].i)
           }
           return
         }
@@ -305,7 +303,7 @@ export default function Arvan({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, acc])
 
-  function openAccount(i: number) {
+  function _openAccount(i: number) {
     setAcc(i)
     setTab('dns')
     setView({ v: 'dns' })
@@ -314,7 +312,7 @@ export default function Arvan({
     requestAnimationFrame(() => window.scrollTo(0, 0))
   }
 
-  function openTab(t: Tab) {
+  function _openTab(t: Tab) {
     setTab(t)
     setStack([])
     setQ('')
@@ -524,7 +522,7 @@ export default function Arvan({
     })
   }
 
-  const accInfo = acc !== null ? accounts.find((a) => a.i === acc) : null
+  const _accInfo = acc !== null ? accounts.find((a) => a.i === acc) : null
   const currentServer =
     view.v === 'server' ? servers.find((s) => s.id === view.id && s.region === view.region) || null : null
   const title =

@@ -54,7 +54,6 @@ export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null
           <input
             id="cc-gsearch-m"
             name="gsearchM"
-            autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="جستجوی کلی…"

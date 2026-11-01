@@ -22,6 +22,20 @@ function fetchVersion(): Promise<string> {
   return versionRequest
 }
 
+export function useVersion() {
+  const [version, setVersion] = useState(cachedVersion)
+  useEffect(() => {
+    let alive = true
+    fetchVersion().then((v) => {
+      if (alive && v) setVersion(v)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+  return version
+}
+
 export function AppVersion() {
   const [version, setVersion] = useState(cachedVersion)
 

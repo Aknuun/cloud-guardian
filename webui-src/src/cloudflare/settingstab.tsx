@@ -1,5 +1,5 @@
-import { Broom, CaretDown, GearSix, Info, Pause, Play, SlidersHorizontal } from '@phosphor-icons/react'
-import { Button, Empty, LayerCard, Switch } from '../components/ui'
+import { Broom, CaretDown, Info, Pause, Play, } from '@phosphor-icons/react'
+import { Button, LayerCard, Switch } from '../components/ui'
 import { SkeletonList } from './components'
 import type { SetGroup } from './model'
 

@@ -1,4 +1,4 @@
-import type { Server } from './types'
+
 
 export const LOC_FA: Record<string, string> = {
   nbg1: 'نورنبرگ، آلمان',

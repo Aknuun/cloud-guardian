@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { ArrowsClockwise, CheckSquare, Clock, PencilSimple, Plus, Star, Trash, X, ArrowClockwise } from '@phosphor-icons/react'
+import { ArrowsClockwise, CheckSquare, Clock, PencilSimple, Plus, Star, Trash, X, } from '@phosphor-icons/react'
 import { Button, Empty } from '../components/ui'
 import { SearchInput } from './components'
 import { SkeletonList } from './components'

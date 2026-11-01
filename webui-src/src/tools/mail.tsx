@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
+import { Plus, Trash } from '@phosphor-icons/react'
+import { api, invalidateCache } from '../lib'
+import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
 import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
-import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, } from './shared'
 
 type MailZone = { acc: number; zid: string; zname: string; dest?: string }
 type MailData = { fwd: MailZone[]; worker: MailZone[] }
@@ -43,13 +40,6 @@ function MailView() {
   const shownWorker = data.worker.filter((z) => flt !== 'fwd' && (!q || z.zname.includes(q)))
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'دامنه‌های وصل', value: faNum(all.length) },
-          { label: 'فوروارد', value: faNum(data.fwd.length) },
-          { label: 'ورکر', value: faNum(data.worker.length) },
-        ]}
-      />
       <FilterBar
         q={q}
         onQ={setQ}

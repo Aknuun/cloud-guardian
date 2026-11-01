@@ -87,7 +87,7 @@ export function IpsView(p: {
               <Badge variant="secondary">بررسی نشده</Badge>
             ) : c.clean ? (
               <Badge variant="success">تمیز</Badge>
-            ) : c.listed && c.listed.length ? (
+            ) : c.listed?.length ? (
               <Badge variant="error">لیست‌شده</Badge>
             ) : (
               <Badge variant="warning">نامشخص</Badge>
@@ -103,7 +103,7 @@ export function IpsView(p: {
                   <div className="cc-sub">
                     {ip.loc || ''}
                     {busyIp ? ' · ' + ip.assignee : ' · آزاد'}
-                    {c && c.listed && c.listed.length ? ' · ' + c.listed.slice(0, 2).join(', ') : ''}
+                    {c?.listed?.length ? ' · ' + c.listed.slice(0, 2).join(', ') : ''}
                   </div>
                 </div>
                 {badge}

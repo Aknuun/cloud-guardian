@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
+import { ArrowClockwise, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
+import { api, faDate, faNum, invalidateCache } from '../lib'
+import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
 import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, faTxt } from './shared'
 
 type DomSsl = { host: string; ok: boolean; days: number; expiry: string; error: string }
 type DomItem = { domain: string; status: string; expiry: number | null; manual: boolean; remaining: string; message?: string }

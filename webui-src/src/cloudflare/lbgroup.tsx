@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { ArrowRight, ArrowsClockwise, Globe, Info, Lifebuoy, Plus, SlidersHorizontal, Trash } from '@phosphor-icons/react'
-import { Badge, Button, Empty, LayerCard, Switch } from '../components/ui'
+import { Button, Empty, LayerCard, Switch } from '../components/ui'
 import { CopyBtn } from '../components/CopyBtn'
 import { faNum } from '../lib'
 import { isHost, isIPv4, isIPv6 } from './model'

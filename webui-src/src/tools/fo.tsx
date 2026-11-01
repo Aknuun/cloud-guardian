@@ -1,13 +1,10 @@
-import { useEffect, useState } from 'react'
-import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
-import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
-import { StatGrid } from '../components/Stats'
-import { FilterBar } from '../components/FilterBar'
+import { useState } from 'react'
+import { ArrowClockwise, Copy, Plus, Power, Trash } from '@phosphor-icons/react'
+import { faNum, fallbackCopy, } from '../lib'
+import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
-import { useTool, save, faTxt } from './shared'
-import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
+import { useTool, save, } from './shared'
 
 type FoData = {
   configured: boolean
@@ -46,17 +43,10 @@ function FoView() {
   }
 
   const d = data
-  const ownerTxt = d?.owner === 'worker' ? 'ورکر پشتیبان' : d?.owner === 'other' ? 'نامشخص' : 'سرور'
+  const _ownerTxt = d?.owner === 'worker' ? 'ورکر پشتیبان' : d?.owner === 'other' ? 'نامشخص' : 'سرور'
 
   return (
     <>
-      <StatGrid
-        items={[
-          { label: 'وضعیت فیلور', value: d?.configured ? (d.enabled ? 'فعال' : 'خاموش') : 'تنظیم نشده' },
-          { label: 'سرور', value: d?.serverUp ? 'سالم' : 'قطع' },
-          { label: 'مسئول وبهوک', value: ownerTxt },
-        ]}
-      />
 
       <div className="cc-pagebar">
         <Button variant="primary" icon={Plus} onClick={() => { setFErr(''); setForm({ token: '', name: '' }) }}>
@@ -68,7 +58,7 @@ function FoView() {
       {err && <ErrBox msg={err} onRetry={reload} />}
       {!loaded && <Skeleton rows={3} />}
 
-      {d && d.configured && (
+      {d?.configured && (
         <div className="cc-section">
           <div className="cc-section-head"><h2>ورکر پشتیبان</h2></div>
           <div className="cc-trow">

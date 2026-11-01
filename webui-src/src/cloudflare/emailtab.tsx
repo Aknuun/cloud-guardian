@@ -1,5 +1,5 @@
 import { EnvelopeSimple, Plus, Trash } from '@phosphor-icons/react'
-import { Badge, Button, Empty, LayerCard } from '../components/ui'
+import { Button, Empty, LayerCard } from '../components/ui'
 import { SkeletonList } from './components'
 import { isEmail } from './model'
 import type { EmailData } from './model'
