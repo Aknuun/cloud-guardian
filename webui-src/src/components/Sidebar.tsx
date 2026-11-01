@@ -73,9 +73,9 @@ export function Sidebar({
   useEffect(() => {
     const el = asideRef.current
     if (!el || !open) return
-    const labels = Array.from(el.querySelectorAll<HTMLElement>('.cc-sideitem-label'))
-    const widest = labels.reduce((m, l) => Math.max(m, l.scrollWidth), 0)
-    if (widest > 0) setSbw(Math.min(320, Math.ceil(widest) + 62))
+    // scrollWidth of the rail is the width its content actually needs
+    const need = el.scrollWidth
+    if (need > 0) setSbw(Math.min(320, Math.max(196, need + 2)))
   }, [open, tools, provider, expanded])
 
   const version = useVersion()
