@@ -309,8 +309,9 @@ func (r *Router) hfHosts(chat, mid int64, note ...string) {
 	for _, x := range selStrings(sel["sel"]) {
 		selSet[x] = true
 	}
-	lines := []string{"📋 لیست هاست‌ها (فقط فعال‌ها)", "",
+	lines := []string{"📋 لیست هاست‌ها", "",
 		"سه ستون: Host | Address | Network — کلیک هر کدام = استثنای همون فیلد (آبی در چرخه · خاکستری مستثنا)",
+		"⛔️ خط‌های پایانی هر پنل = هاست‌های خاموش/متنی که خودکار خارج از چرخه‌اند.",
 		"⚡ برای سرعت بیشتر، هاست‌های اضافه را گروهی استثنا کن 👇", ""}
 	if len(note) > 0 && note[0] != "" {
 		lines = append(lines, note[0], "")
@@ -331,12 +332,14 @@ func (r *Router) hfHosts(chat, mid int64, note ...string) {
 		kb = append(kb, []Btn{
 			btn("🚫 همهٔ این پنل", fmt.Sprintf("hfexcpanel:%d", pi)),
 			btn("✅ فعال‌سازی همه", fmt.Sprintf("hfunexcpanel:%d", pi))})
+		var off []string
 		for _, hv := range hosts {
 			h, ok := hv.(map[string]any)
 			if !ok {
 				continue
 			}
 			if b, ok := h["is_disabled"].(bool); ok && b {
+				off = append(off, hfShort(firstOf(h["remark"], strv(h["id"])), 24))
 				continue
 			}
 			n++
@@ -369,6 +372,9 @@ func (r *Router) hfHosts(chat, mid int64, note ...string) {
 					btnS(excMark(eA)+hfShort(addrL, 20), fmt.Sprintf("hfexc:%d:%s:address", pi, hid), excStyle(eA)),
 					btnS(excMark(eN)+hfShort(netL, 20), fmt.Sprintf("hfexc:%d:%s:sni", pi, hid), excStyle(eN))})
 			}
+		}
+		if len(off) > 0 {
+			lines = append(lines, "⛔️ خارج از چرخه: "+strings.Join(off, " · "))
 		}
 	}
 	if n == 0 {

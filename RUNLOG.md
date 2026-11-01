@@ -146,3 +146,8 @@
 - The «استثناها» tab gained a «خودکار» block that shows those hosts (with the reason: disabled in panel, or status text) and a «برگرداندن به چرخه» button. Pressing it stores an ordinary override with `excluded: false`, so the host is treated like any other until the override is deleted.
 - Bulk apply honours that: a status-group host is skipped unless an enabled override explicitly un-excludes it (the existing «نادیده‌گرفتن استثناها» switch still forces everything).
 - checks: go build/vet/test ok, tsc clean, biome 0 errors (26 warnings), webui build ok, playwright 18/18; exceptions tab checked at 390 with one text host and one disabled host.
+
+## v4.95.6 — bot host list shows the hosts it skipped
+- The Telegram host list no longer silently drops disabled hosts: after each panel's three-column buttons it prints one line «⛔️ خارج از چرخه: …» listing them by remark, and the intro says those hosts are auto-excluded (matching the web side).
+- The two other leftovers turned out to be already solved: the reminder state pill renders 63×26 and `.cc-main` is a centred 980px column, so neither needed a change.
+- checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok; no frontend change (tsc/biome/build/playwright unchanged from v4.95.5).
