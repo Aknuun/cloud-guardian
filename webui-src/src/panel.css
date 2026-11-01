@@ -2536,7 +2536,7 @@ body .cc-menu-item {
 /* keep the expanded rail wide enough for its labels (regression 4.84.1) */
 @media (min-width: 900px) {
   .cc-sidebar.open,
-  .cc-sidebar.open.cc-sidebar { width: 232px !important; min-width: 232px !important; max-width: 232px !important }
+  .cc-sidebar.open.cc-sidebar { width: var(--sb-w, 232px) !important; min-width: var(--sb-w, 232px) !important; max-width: var(--sb-w, 232px) !important }
   .cc-sidebar:not(.open),
   .cc-sidebar:not(.open).cc-sidebar { width: 64px !important; min-width: 64px !important; padding: 14px 8px !important }
 }

@@ -1,5 +1,5 @@
 import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTheme } from './theme'
 import { useVersion } from './AppVersion'
 import { BrandMark } from './BrandMark'
@@ -67,6 +67,17 @@ export function Sidebar({
       window.removeEventListener('touchend', end)
     }
   }, [open, onToggle])
+  const asideRef = useRef<HTMLElement | null>(null)
+  const [sbw, setSbw] = useState(0)
+  // fit the rail to its longest label instead of a magic width
+  useEffect(() => {
+    const el = asideRef.current
+    if (!el || !open) return
+    const labels = Array.from(el.querySelectorAll<HTMLElement>('.cc-sideitem-label'))
+    const widest = labels.reduce((m, l) => Math.max(m, l.scrollWidth), 0)
+    if (widest > 0) setSbw(Math.min(320, Math.ceil(widest) + 62))
+  }, [open, tools, provider, expanded])
+
   const version = useVersion()
   const rest = tools?.filter((t) => t.id !== 'home' && !PG_IDS.includes(t.id) && !MISC_IDS.includes(t.id))
   const misc = tools?.filter((t) => MISC_IDS.includes(t.id))
@@ -75,7 +86,12 @@ export function Sidebar({
   return (
     <>
       <div className={'cc-scrim' + (open ? ' on' : '')} onClick={onToggle} aria-hidden="true" />
-      <aside className={'cc-sidebar p-' + provider + (open ? ' open' : '')} aria-label="منوی اصلی">
+      <aside
+        ref={asideRef}
+        className={'cc-sidebar p-' + provider + (open ? ' open' : '')}
+        style={sbw ? ({ '--sb-w': sbw + 'px' } as React.CSSProperties) : undefined}
+        aria-label="منوی اصلی"
+      >
         <div className="cc-sidebrand">
           <div className="cc-sidebrand-mark"><BrandMark size={40} /></div>
           <div className="cc-sidebrand-text">
