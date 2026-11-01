@@ -31,3 +31,10 @@
 - **مشکل:** با جدا شدن حلقه‌ها، همه در لحظهٔ بوت یک‌بار اجرا می‌شدند و بک‌لاگ هشدارهای بافر‌شده یک‌جا ارسال شد (لاگ: `tg error: sendMessage Bad Request: chat not found` ×۱۲).
 - **رفع:** `every` قبل از اولین اجرا به اندازهٔ دوره (حداکثر ۱ دقیقه) صبر می‌کند.
 - **باز (ثبت‌شده):** یکی از شناسه‌های ادمین در لیست، چتی در ربات ندارد و ارسال به آن همیشه `chat not found` می‌دهد؛ نیاز به حذف آن ادمین یا `/start` از سمت او. (بدون تغییر داده انجام نشد.)
+
+## v4.74.0 — UI group A (items 1, 2, 11)
+- topbar primary action: new `components/PageAction.tsx` (context + `usePageAction`), `ProviderShell` renders the single primary next to the title; wired srv/rem/pg/mail/dom/hs; full-width `.cc-pagebar` removed (kept only for the empty server list).
+- stat tiles: `note` support; empty ring replaced by "از N" where no real ratio (srv, dom).
+- server list: status dot (up/down/unknown) + "آخرین بررسی …" from new per-server snapshot `srv_last:<id>` written by `srvmon.Run`, exposed as `last` in `/api/tools/srv`; `timeAgo()` helper in lib.
+- fix found by e2e: `usePageAction` sat after early returns (React #310) — hooks moved to the top of each view.
+- checks: tsc clean, biome 0 errors (20 warnings), build ok, playwright 17/17.

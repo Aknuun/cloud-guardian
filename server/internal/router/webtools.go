@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
 
@@ -12,7 +13,10 @@ import (
 func (r *Router) webToolsSrv(w http.ResponseWriter, req *http.Request, uid int64) {
 	out := []map[string]any{}
 	for _, s := range r.srvList() {
+		var last map[string]any
+		r.Store.GetJSON("srv_last:"+fmt.Sprint(s["id"]), &last)
 		out = append(out, map[string]any{
+			"last": last,
 			"id":   s["id"],
 			"name": s["name"],
 			"host": s["host"],

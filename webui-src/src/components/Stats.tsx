@@ -1,4 +1,4 @@
-export type Stat = { label: string; value: string | number; pct?: number }
+export type Stat = { label: string; value: string | number; pct?: number; note?: string }
 
 export function StatGrid({ items }: { items: Stat[] }) {
   return (
@@ -8,15 +8,13 @@ export function StatGrid({ items }: { items: Stat[] }) {
           <div className="cc-stat-label">{s.label}</div>
           <div className="cc-stat-box">
             <b className="cc-stat-value">{s.value}</b>
-            {s.pct !== undefined && s.pct > 0 && (
-              <div
-                className="cc-stat-ring"
-                style={{ '--pct': Math.max(0, Math.min(100, s.pct)) } as any}
-                aria-hidden="true"
-              >
+            {s.pct !== undefined && s.pct > 0 ? (
+              <div className="cc-stat-ring" style={{ '--pct': Math.max(0, Math.min(100, s.pct)) } as any} aria-hidden="true">
                 <span />
               </div>
-            )}
+            ) : s.note ? (
+              <span className="cc-stat-note">{s.note}</span>
+            ) : null}
           </div>
         </div>
       ))}

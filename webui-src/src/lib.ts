@@ -175,3 +175,16 @@ export async function checkRecord(
     return { ok: true, message: '' }
   }
 }
+
+// Human relative time for "last checked" labels; ms since epoch.
+export function timeAgo(ms?: number): string {
+  if (!ms || !Number.isFinite(ms)) return ''
+  const d = Date.now() - ms
+  if (d < 0) return 'همین حالا'
+  const m = Math.floor(d / 60000)
+  if (m < 1) return 'همین حالا'
+  if (m < 60) return m + ' دقیقه پیش'
+  const h = Math.floor(m / 60)
+  if (h < 24) return h + ' ساعت پیش'
+  return Math.floor(h / 24) + ' روز پیش'
+}

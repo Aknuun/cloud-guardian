@@ -3,6 +3,7 @@ import { ArrowClockwise, CaretDown, CaretLeft, Check, Copy, Download, Lock, Penc
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FormDialog, ErrBox } from './toolsMeta'
+import { usePageAction } from './PageAction'
 
 type Group = { id: string; label: string; emoji: string; service: string }
 type Anchor = { enabled: boolean; slot: string; host_id: any }
@@ -105,6 +106,7 @@ export function HostStudio() {
   const [force, setForce] = useState(false)
   const [hv, setHv] = useState<HHost | null>(null)
   const [ov, setOv] = useState<Ov | null>(null)
+  usePageAction({ label: 'قالب جدید', icon: Plus, disabled: !data, onClick: () => data && setEdit(blankTpl(data)) })
 
   function load() {
     setErr('')
@@ -239,7 +241,6 @@ export function HostStudio() {
       {data && tab === 'tpl' && (
         <>
           <div className="cc-hsbar">
-            <Button variant="primary" icon={Plus} onClick={() => setEdit(blankTpl(data))}>قالب جدید</Button>
             <Button variant="outline" icon={Download} onClick={exportTpls}>خروجی</Button>
             <label className="cc-filebtn">
               <Upload size={16} /> ورود قالب

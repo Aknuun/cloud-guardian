@@ -4,12 +4,15 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
+import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
 import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
 
 function PgView() {
+  usePageAction({ label: 'افزودن پنل', icon: Plus, onClick: () => setPf({ name: '', url: '', user: '', pass: '' }) })
+
   const { data, err, loaded, reload } = useTool<PgData>('/api/tools/pg')
   const [q, setQ] = useState('')
   const [flt, setFlt] = useState('all')
@@ -73,11 +76,6 @@ function PgView() {
           { label: 'فعال', value: faNum(on) },
         ]}
       />
-      <div className="cc-pagebar">
-        <Button variant="primary" icon={Plus} onClick={() => setPf({ name: '', url: '', user: '', pass: '' })}>
-          افزودن پنل
-        </Button>
-      </div>
       <FilterBar
         q={q}
         onQ={setQ}

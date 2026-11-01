@@ -2253,3 +2253,12 @@ body .cc-menu-item {
 .cc-grid3 > button { min-width: 0 }
 @media (max-width: 420px) { .cc-grid3 { grid-template-columns: 1fr 1fr } }
 .cc-now { color: var(--ds-brand); font-weight: 600; font-size: 12px }
+
+/* group A: topbar primary action, stat note, server status dot */
+.cc-pageaction { height: 36px !important; min-height: 36px !important; padding: 0 14px !important; font-size: 13px !important; border-radius: 10px !important; margin-inline-start: 10px }
+.cc-pageaction svg { width: 16px; height: 16px }
+.cc-stat-note { font-size: 12px; color: var(--ds-muted); white-space: nowrap }
+.cc-st { width: 8px; height: 8px; border-radius: 50%; background: var(--ds-subtle); flex: 0 0 8px; margin-inline-end: 2px }
+.cc-st.up { background: #12b76a }
+.cc-st.down { background: #f04438 }
+@media (max-width: 420px) { .cc-pageaction { font-size: 12px !important; padding: 0 10px !important } }

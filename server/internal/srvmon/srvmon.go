@@ -97,6 +97,11 @@ func Run(st *store.Store, servers []map[string]any, adminID int64,
 		{Text: "🧠 RAM", Data: "noop", Style: ""}}}
 	for si, s := range servers {
 		stt := stats(s)
+		// remember the last probe per server so the panel can show a real status dot
+		errMsg := strAny(stt["error"])
+		st.PutJSON("srv_last:"+strv(s["id"]), map[string]any{
+			"ts": nowMs, "ok": errMsg == "", "err": substr(errMsg, 80),
+		}, 0)
 		shortIP := substr(strv(s["host"], s["name"]), 16)
 		if e := strAny(stt["error"]); e != "" {
 			alerts = append(alerts, fmt.Sprintf("🔴 <code>%s</code> — خطای اتصال SSH (<code>%s</code>)", strv(s["name"]), substr(e, 120)))

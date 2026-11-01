@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { CaretLeft, Lightning, Envelope, GearSix, Lifebuoy, Broadcast, ArrowsClockwise, CalendarDots, BellSimple, Fire, GlobeSimple, Pulse, ArrowClockwise, BellRinging, Check, Copy, Gear, HardDrive, Info, PencilSimple, Plus, Power, ShieldCheck, Terminal, Trash } from '@phosphor-icons/react'
-import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
+import { api, faDate, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
+import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
 import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
 
 function SrvView() {
+  usePageAction({ label: 'افزودن سرور', icon: Plus, onClick: () => setEdit({ port: 22, user: 'root' }) })
+
   const { data, err, loaded, reload } = useTool<Srv[]>('/api/tools/srv')
   const [edit, setEdit] = useState<Partial<Srv> | null>(null)
   const [del, setDel] = useState<Srv | null>(null)
@@ -137,8 +140,8 @@ function SrvView() {
       <StatGrid
         items={[
           { label: 'سرورها', value: faNum(list.length) },
-          { label: 'با کلید', value: faNum(list.filter((s) => s.key).length) },
-          { label: 'با رمز', value: faNum(list.filter((s) => !s.key).length) },
+          { label: 'با کلید', value: faNum(list.filter((s) => s.key).length), note: 'از ' + faNum(list.length) },
+          { label: 'با رمز', value: faNum(list.filter((s) => !s.key).length), note: 'از ' + faNum(list.length) },
         ]}
       />
       <div className="cc-pagebar">
@@ -211,7 +214,9 @@ function SrvView() {
               {s.user}@{s.host}:{s.port}
             </div>
             {s.note && <div className="cc-sub">{s.note}</div>}
+            <div className="cc-sub">{s.last?.ts ? 'آخرین بررسی ' + timeAgo(s.last.ts) : 'بررسی نشده'}</div>
           </div>
+          <span className={'cc-st' + (s.last?.ts ? (s.last.ok ? ' up' : ' down') : '')} title={s.last?.ts ? (s.last.ok ? 'آنلاین' : s.last.err || 'قطع') : 'وضعیت نامشخص'} />
           <Badge>{s.key ? 'کلید' : 'رمز'}</Badge>
         </div>
       ))}

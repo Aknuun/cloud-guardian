@@ -4,12 +4,15 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
+import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
 import type { Srv, Rem, PgPanel, PgMon, PgData } from './shared'
 
 function RemView() {
+  usePageAction({ label: 'یادآور جدید', icon: Plus, onClick: () => setAdd(true) })
+
   const { data, err, loaded, reload } = useTool<Rem[]>('/api/tools/rem')
   const [add, setAdd] = useState(false)
   const [text, setText] = useState('')
@@ -57,11 +60,6 @@ function RemView() {
           { label: 'انجام‌شده', value: faNum(list.length - pending) },
         ]}
       />
-      <div className="cc-pagebar">
-        <Button variant="primary" icon={Plus} onClick={() => setAdd(true)}>
-          یادآور جدید
-        </Button>
-      </div>
       <FilterBar
         q={q}
         onQ={setQ}

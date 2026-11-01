@@ -4,6 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
+import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
@@ -115,6 +116,8 @@ function DomCfgDialog({ onClose }: { onClose: () => void }) {
 }
 
 function DomView() {
+  usePageAction({ label: 'افزودن گواهی', icon: Plus, onClick: () => setAddSsl(true) })
+
   const { data, err, loaded, reload } = useTool<DomData>('/api/tools/dom')
   const [q, setQ] = useState('')
   const [flt, setFlt] = useState('all')
@@ -195,7 +198,7 @@ function DomView() {
       <StatGrid
         items={[
           { label: 'گواهی SSL', value: faNum(data.ssl.length) },
-          { label: 'نیاز به بررسی', value: faNum(bad) },
+          { label: 'نیاز به بررسی', value: faNum(bad), note: 'از ' + faNum(data.ssl.length + data.doms.length) },
           { label: 'دامنه‌ها', value: faNum(data.doms.length) },
         ]}
       />
@@ -221,9 +224,6 @@ function DomView() {
       {showSsl && <div className="cc-section">
         <div className="cc-section-head">
           <h2>گواهی SSL</h2>
-          <Button variant="outline" icon={Plus} onClick={() => setAddSsl(true)}>
-            افزودن دامنه
-          </Button>
         </div>
         <div className="cc-checkline">
           <input

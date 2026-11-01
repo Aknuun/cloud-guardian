@@ -4,6 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
+import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
 import { useTool, save, faTxt } from './shared'
@@ -13,6 +14,8 @@ type MailZone = { acc: number; zid: string; zname: string; dest?: string }
 type MailData = { fwd: MailZone[]; worker: MailZone[] }
 
 function MailView() {
+  usePageAction({ label: 'ایمیل دامنه جدید', icon: Plus, onClick: () => setOpen(true) })
+
   const { data, err, reload } = useTool<MailData>('/api/tools/mail')
   const zones = useTool<{ zones: CfZone[] }>('/api/cf/zones')
   const [open, setOpen] = useState(false)
@@ -49,11 +52,6 @@ function MailView() {
           { label: 'ورکر', value: faNum(data.worker.length) },
         ]}
       />
-      <div className="cc-pagebar">
-        <Button variant="primary" icon={Plus} onClick={() => setOpen(true)}>
-          افزودن ایمیل دامنه
-        </Button>
-      </div>
       <FilterBar
         q={q}
         onQ={setQ}
