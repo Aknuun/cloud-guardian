@@ -113,6 +113,8 @@ func (r *Router) settingsHome(chat, mid int64) {
 	}
 	if r.IsMain(r.curFrom) {
 		rows = append(rows, row(btnS("👥 مدیریت ادمین‌ها", "admins_menu", "primary")))
+	}
+	if r.IsMain(r.curFrom) && r.hubRoot() {
 		rows = append(rows,
 			row(btnS("📊 آمار نصب‌ها", "hubstats", "primary"), btnS("📢 پیام همگانی", "hubcast", "success")),
 			row(btnS("📋 اعلان‌ها", "hubann", "plain"), btnS("📢 تبلیغ منوی اصلی", "promo", "primary")),

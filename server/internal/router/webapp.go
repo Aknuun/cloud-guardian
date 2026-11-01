@@ -406,7 +406,7 @@ func webOK(w http.ResponseWriter, v any) {
 // ---------- api ----------
 
 func (r *Router) webMe(w http.ResponseWriter, req *http.Request, uid int64) {
-	webOK(w, map[string]any{"id": uid, "isMain": r.IsMain(uid)})
+	webOK(w, map[string]any{"id": uid, "isMain": r.IsMain(uid), "hub": r.hubRoot()})
 }
 
 func (r *Router) webAcc(i int) (map[string]any, bool) {

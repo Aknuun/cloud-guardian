@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MagnifyingGlass } from '@phosphor-icons/react'
-import { TOOLS } from './toolsMeta'
+import { toolsVisible } from './toolsMeta'
 import type { ToolId } from './toolsMeta'
 import type { Provider } from './Sidebar'
 
@@ -15,7 +15,7 @@ export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null
   const [open, setOpen] = useState(false)
   const items = [
     ...SERVICES.map((p) => ({ key: 'p:' + p.id, label: p.label, sub: 'سرویس', run: () => go(p.id, null) })),
-    ...TOOLS.map((t) => ({ key: 't:' + t.id, label: t.label, sub: 'ابزار', run: () => go(null, t.id) })),
+    ...toolsVisible().map((t) => ({ key: 't:' + t.id, label: t.label, sub: 'ابزار', run: () => go(null, t.id) })),
   ]
   const needle = q.trim().toLowerCase()
   const hits = needle ? items.filter((i) => i.label.toLowerCase().includes(needle)) : []

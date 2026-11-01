@@ -9,6 +9,10 @@ import (
 
 // webToolsHub returns local install stats, hub settings and hub-wide installs.
 func (r *Router) webToolsHub(w http.ResponseWriter, req *http.Request, uid int64) {
+	if !r.hubRoot() {
+		webErr(w, http.StatusForbidden, "شبکهٔ نصب‌ها فقط روی نصب سازنده فعال است")
+		return
+	}
 	s := r.hubStatsBuild()
 	out := map[string]any{
 		"hubUrl":   r.hubURL(),

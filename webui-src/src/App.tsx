@@ -12,6 +12,7 @@ import { LogoutButton } from './components/LogoutButton'
 import { useSectionTheme } from './components/sectionTheme'
 import { WebLogin } from './components/WebLogin'
 import { TOOLS, toolItems } from './components/toolsMeta'
+import { setHubOn } from './components/toolsMeta'
 import type { ToolId } from './components/toolsMeta'
 import { Sidebar, ThemeToggle } from './components/Sidebar'
 import { GlobalSearch } from './components/GlobalSearch'
@@ -224,7 +225,8 @@ export default function App() {
         // browser: reuse the same shell, log in with a Telegram approval
         if (token) {
           try {
-            await api('/api/me')
+            const me = await api<{ hub?: boolean }>('/api/me')
+            setHubOn(!!me?.hub)
             if (!cancelled) setPhase('ready')
             return
           } catch {
@@ -237,7 +239,8 @@ export default function App() {
       try {
         if (token) {
           try {
-            await api('/api/me')
+            const me = await api<{ hub?: boolean }>('/api/me')
+            setHubOn(!!me?.hub)
             if (!cancelled) setPhase('ready')
             return
           } catch {

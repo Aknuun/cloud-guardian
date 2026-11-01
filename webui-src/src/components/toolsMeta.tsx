@@ -5,6 +5,15 @@ import type { Provider } from './Sidebar'
 
 export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd' | 'hook' | 'mail' | 'set' | 'fo' | 'hub' | 'cfcheck' | 'hs'
 
+// Hub is the author's own control room, not a feature of a normal install.
+let hubOn = false
+export function setHubOn(v: boolean) {
+  hubOn = v
+}
+export function toolsVisible() {
+  return hubOn ? TOOLS : TOOLS.filter((t) => t.id !== 'hub')
+}
+
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
   { id: 'pg', label: 'پاسارگارد و مانیتور نود', Icon: ShieldCheck },
@@ -31,7 +40,7 @@ export const TOOL_GROUPS: { title: string; tools: ToolId[] }[] = [
 
 // Landing page: every ported section, grouped and one tap away.
 export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) => void }) {
-  const byId = new Map(TOOLS.map((t) => [t.id, t]))
+  const byId = new Map(toolsVisible().map((t) => [t.id, t]))
   const groups = TOOL_GROUPS
   return (
     <div className="cc-hg">
@@ -70,7 +79,7 @@ export function HomeView({ go }: { go?: (p: Provider | null, t: ToolId | null) =
 export type ToolItem = { id: ToolId; label: string; Icon: Icon; active?: boolean; onSelect: () => void }
 
 export function toolItems(active: ToolId | null, onSelect: (id: ToolId) => void): ToolItem[] {
-  const all = [{ id: 'home' as ToolId, label: 'خانه', Icon: House }, ...TOOLS]
+  const all = [{ id: 'home' as ToolId, label: 'خانه', Icon: House }, ...toolsVisible()]
   return all.map((t) => ({ ...t, active: active === t.id, onSelect: () => onSelect(t.id) }))
 }
 
