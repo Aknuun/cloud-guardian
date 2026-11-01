@@ -60,3 +60,8 @@
 - version chip removed from both topbars (the installed version is already shown in Settings).
 - breadcrumb next to the page title for nested Hetzner pages (account / server, "clean IPs", "build server").
 - checks: tsc clean, biome 0 errors, build ok, playwright 18/18.
+
+## v4.77.1 — stat tiles fixed properly (item 2)
+- `components/Stats.tsx` redesigned: `of` = real denominator → value + "از N" + ring only when the ratio is computable; tiles without a denominator are compact one-line cards; a lone zero renders "—" instead of "0".
+- call sites updated: srv (با کلید/با رمز از کل), rem (در انتظار/انجامشده از کل), pg (فعال از مانیتورها), dom (نیاز به بررسی از گواهی‌ها).
+- checks: tsc clean, build ok, 18/18 e2e.

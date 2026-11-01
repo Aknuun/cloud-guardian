@@ -71,9 +71,9 @@ function PgView() {
     <>
       <StatGrid
         items={[
-          { label: 'پنل‌ها', value: faNum(iso0.panels.length) },
-          { label: 'مانیتور نود', value: faNum(iso0.monitors.length) },
-          { label: 'فعال', value: faNum(on) },
+          { label: 'پنل‌ها', value: iso0.panels.length, note: 'ثبت‌شده' },
+          { label: 'مانیتور نود', value: iso0.monitors.length, note: 'مجموع' },
+          { label: 'فعال', value: on, of: iso0.monitors.length },
         ]}
       />
       <FilterBar

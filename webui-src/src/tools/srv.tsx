@@ -139,9 +139,9 @@ function SrvView() {
     <>
       <StatGrid
         items={[
-          { label: 'سرورها', value: faNum(list.length) },
-          { label: 'با کلید', value: faNum(list.filter((s) => s.key).length), note: 'از ' + faNum(list.length) },
-          { label: 'با رمز', value: faNum(list.filter((s) => !s.key).length), note: 'از ' + faNum(list.length) },
+          { label: 'سرورها', value: list.length, note: 'ثبت‌شده' },
+          { label: 'با کلید', value: list.filter((s) => s.key).length, of: list.length },
+          { label: 'با رمز', value: list.filter((s) => !s.key).length, of: list.length },
         ]}
       />
       <div className="cc-pagebar">

@@ -195,9 +195,9 @@ function DomView() {
     <>
       <StatGrid
         items={[
-          { label: 'گواهی SSL', value: faNum(data.ssl.length) },
-          { label: 'نیاز به بررسی', value: faNum(bad), note: 'از ' + faNum(data.ssl.length + data.doms.length) },
-          { label: 'دامنه‌ها', value: faNum(data.doms.length) },
+          { label: 'گواهی SSL', value: data.ssl.length, note: 'تحت بررسی' },
+          { label: 'نیاز به بررسی', value: bad, of: data.ssl.length },
+          { label: 'دامنه‌ها', value: data.doms.length, note: 'ثبت‌شده' },
         ]}
       />
       <FilterBar

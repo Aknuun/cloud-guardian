@@ -55,9 +55,9 @@ function RemView() {
     <>
       <StatGrid
         items={[
-          { label: 'یادآورها', value: faNum(list.length) },
-          { label: 'در انتظار', value: faNum(pending) },
-          { label: 'انجام‌شده', value: faNum(list.length - pending) },
+          { label: 'یادآورها', value: list.length, note: 'مجموع' },
+          { label: 'در انتظار', value: pending, of: list.length },
+          { label: 'انجام‌شده', value: list.length - pending, of: list.length },
         ]}
       />
       <FilterBar
