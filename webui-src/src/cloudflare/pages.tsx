@@ -1,5 +1,6 @@
 import { Badge, Button, Empty, LayerCard } from '../components/ui'
-import { CaretLeft, Trash } from '@phosphor-icons/react'
+import { CaretLeft, Cloud, Trash } from '@phosphor-icons/react'
+import { AccountCard } from '../components/AccountCard'
 import type { Dispatch, SetStateAction } from 'react'
 import { CopyBtn } from '../components/CopyBtn'
 import type { CFAcc, Dlg, FavItem } from './model'
@@ -7,13 +8,14 @@ import { FavStar, SkeletonList } from './components'
 
 type Post = (path: string, body: any) => Promise<any>
 
-export function AccountsPage({ accs, busy, err, num, post, setDlg }: {
+export function AccountsPage({ accs, busy, err, num, post, setDlg, onOpen }: {
   accs: CFAcc[]
   busy: number
   err: string
   num: (n: number | undefined) => string
   post: Post
   setDlg: Dispatch<SetStateAction<Dlg | null>>
+  onOpen: (i: number) => void
 }) {
 
     return (
@@ -22,34 +24,31 @@ export function AccountsPage({ accs, busy, err, num, post, setDlg }: {
           <Empty title="اکانتی ثبت نشده" description="توکن کلادفلر را اضافه کن." />
         )}
         {accs.length === 0 && busy > 0 && <SkeletonList />}
+        <div className="cc-acctgrid">
         {accs.map((a) => (
-          <LayerCard key={a.i} className="cc-card cc-row">
-            <div className="cc-grow">
-              <div className="cc-name">{a.name}</div>
-              <div className="cc-sub">{(a.zones ?? 0) >= 0 ? num(a.zones) + ' دامنه' : 'خطا در خواندن دامنه‌ها'}</div>
-            </div>
-            <Button
-              variant="secondary-destructive"
-              size="sm"
-              icon={Trash}
-              aria-label="حذف اکانت"
-              onClick={() =>
-                setDlg({
-                  k: 'confirm',
-                  title: 'حذف اکانت',
-                  desc: `اکانت «${a.name}» حذف شود؟ دامنه‌ها حذف نمی‌شوند ولی از پنل خارج می‌شوند.`,
-                  danger: true,
-                  okText: 'حذف',
-                  onOk: async () => {
-                    await post('/api/cf/accounts', { op: 'del', i: a.i })
-                  },
-                })
-              }
-            >
-              حذف
-            </Button>
-          </LayerCard>
+          <AccountCard
+            key={a.i}
+            icon={<Cloud size={19} />}
+            name={a.name}
+            meta={(a.zones ?? 0) >= 0 ? num(a.zones) + ' دامنه' : 'خطا در خواندن دامنه‌ها'}
+            go="دامنه‌ها"
+            onOpen={() => onOpen(a.i)}
+            delLabel="حذف اکانت"
+            onDelete={() =>
+              setDlg({
+                k: 'confirm',
+                title: 'حذف اکانت',
+                desc: `اکانت «${a.name}» حذف شود؟ دامنه‌ها حذف نمی‌شوند ولی از پنل خارج می‌شوند.`,
+                danger: true,
+                okText: 'حذف',
+                onOk: async () => {
+                  await post('/api/cf/accounts', { op: 'del', i: a.i })
+                },
+              })
+            }
+          />
         ))}
+        </div>
       </>
     )
   

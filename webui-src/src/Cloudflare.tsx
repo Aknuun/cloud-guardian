@@ -843,7 +843,18 @@ ${reason}`,
   /* ---------------- accounts ---------------- */
 
   function accountsPage() {
-    return <AccountsPage accs={accs} busy={busy} err={err} num={num} post={post} setDlg={setDlg} />
+    return <AccountsPage
+          accs={accs}
+          busy={busy}
+          err={err}
+          num={num}
+          post={post}
+          setDlg={setDlg}
+          onOpen={(i) => {
+            setAccFilter(i)
+            push({ v: 'zones' })
+          }}
+        />
   }
 
   /* ---------------- zone ---------------- */

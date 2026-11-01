@@ -1,5 +1,6 @@
 import { Badge, Button, Dialog, Empty, Input, LayerCard } from './ui'
-import { CaretLeft, GlobeHemisphereWest, Plus, Trash } from '@phosphor-icons/react'
+import { CaretLeft, GlobeHemisphereWest, HardDrives, Plus, Trash } from '@phosphor-icons/react'
+import { AccountCard } from './AccountCard'
 import { api, invalidateCache, num } from '../lib'
 import { CopyBtn } from './CopyBtn'
 import { FilterBar } from './FilterBar'
@@ -58,37 +59,24 @@ export function AccountsView(p: {
           {!list0.length && busy === 0 && (
             <Empty title="اکانتی پیدا نشد" description={aq ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن.'} />
           )}
+          <div className="cc-acctgrid">
           {list0.map((a) => (
-            <LayerCard
+            <AccountCard
               key={a.i}
-              className="cc-trow cc-tap"
-              role="button"
-              tabIndex={0}
-              onClick={() => {
+              icon={<HardDrives size={19} />}
+              name={a.name || 'اکانت ' + (a.i + 1)}
+              meta={a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}
+              go="سرورها"
+              onOpen={() => {
                 setServers([])
                 setServersAcc(null)
                 push({ v: 'servers', acc: a.i })
               }}
-            >
-              <span className="cc-avatar">{(a.name || 'C').trim().charAt(0)}</span>
-              <div className="cc-grow">
-                <div className="cc-name">{a.name || 'اکانت ' + (a.i + 1)}</div>
-                <div className="cc-sub">{a.count === undefined ? 'برای دیدن سرورها بزن' : num(a.count) + ' سرور'}</div>
-              </div>
-              <span className="cc-chev"><CaretLeft size={15} weight="bold" /></span>
-              <button
-                type="button"
-                className="cc-rowbtn danger"
-                aria-label={'حذف ' + (a.name || 'اکانت')}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setAccDel(a)
-                }}
-              >
-                <Trash size={16} />
-              </button>
-            </LayerCard>
+              delLabel={'حذف ' + (a.name || 'اکانت')}
+              onDelete={() => setAccDel(a)}
+            />
           ))}
+          </div>
           <div className="cc-hint cc-center cc-mt">هر اکانت را انتخاب کن تا سرورها و آی‌پی‌ها را ببینی.</div>
           {accForm && (
             <FormDialog
