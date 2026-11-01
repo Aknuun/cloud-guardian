@@ -471,7 +471,9 @@ export function HostStudio() {
               <option key={g.id} value={g.id}>{g.label}</option>
             ))}
           </select>
-          <label className="cc-checkline"><input type="checkbox" checked={ov.enabled} onChange={(e) => setOv({ ...ov, enabled: e.target.checked })} /> استثنا فعال باشد</label>
+          {(data?.overrides || []).some((x) => x.panel === ov.panel && x.host_id === ov.host_id) && (
+            <label className="cc-checkline"><input type="checkbox" checked={ov.enabled} onChange={(e) => setOv({ ...ov, enabled: e.target.checked })} /> استثنا فعال باشد</label>
+          )}
           <label className="cc-checkline"><input type="checkbox" checked={ov.excluded} onChange={(e) => setOv({ ...ov, excluded: e.target.checked })} /> از اعمال گروهی مستثنی شود</label>
           <label className="cc-checkline"><input type="checkbox" checked={ov.locked_name} onChange={(e) => setOv({ ...ov, locked_name: e.target.checked })} /> قفل نام</label>
           <label className="cc-checkline"><input type="checkbox" checked={ov.locked_priority} onChange={(e) => setOv({ ...ov, locked_priority: e.target.checked })} /> قفل ترتیب</label>

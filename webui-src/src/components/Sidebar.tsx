@@ -246,7 +246,6 @@ export function Sidebar({
             <span className="cc-sideitem-label">{mode === 'dark' ? 'حالت روشن' : 'حالت تاریک'}</span>
           </button>
         </nav>
-        </div>
 
         <div className="cc-sidefoot">
           <div className="cc-profile">
@@ -260,6 +259,7 @@ export function Sidebar({
             <SignOut size={19} />
             <span>خروج کامل</span>
           </button>
+        </div>
         </div>
       </aside>
     </>

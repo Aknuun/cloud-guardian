@@ -135,3 +135,8 @@
 - Tapping a chip on such a host forces that field back into rotation; tapping again returns it to auto-exclusion. The force list lives in the config as `forced` (a key per host or per field) so it survives restarts.
 - The rotation itself now skips status-text hosts the same way it skips disabled ones, and honours the forced keys per field — previously a text entry could be picked as a swap target.
 - checks: go build/vet/test ok, tsc clean, biome 0 errors (26 warnings), webui build ok, playwright 18/18.
+
+## v4.95.4 — sidebar scrolls as one piece, quieter host dialog
+- Manager card and «خروج کامل» moved inside the sidebar's scroll area, so they scroll with the sections instead of hanging at the bottom as a fixed footer; the hairline above them stays.
+- Host Studio: «استثنا فعال باشد» no longer appears ticked for a host that has no exception yet. The toggle only shows when an existing exception is edited (fresh records are simply active), so opening any host no longer looks like it is already excepted.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; drawer measured at 390×600 (footer inside the scroll container, scrollHeight 1180 > 510).

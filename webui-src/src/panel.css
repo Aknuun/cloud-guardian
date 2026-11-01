@@ -2815,10 +2815,9 @@ html[data-mode='dark'] .cc-fab {
   scrollbar-width: thin;
 }
 .cc-sidefoot {
-  flex: 0 0 auto;
   padding: 8px 0 6px;
+  margin-top: 8px;
   border-top: 1px solid var(--ds-hairline);
-  background: var(--ds-bg);
 }
 .cc-sidefoot .cc-profile {
   margin-top: 0;
