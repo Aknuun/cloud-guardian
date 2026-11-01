@@ -2383,3 +2383,8 @@ body .cc-menu-item {
 .cc-main > .cc-filterbar { margin: 0 0 12px }
 .cc-main > .cc-section:first-of-type { margin-top: 4px }
 .cc-main > .cc-searchbar { margin-bottom: 12px }
+
+/* brand mark: the SVG carries its own tile */
+.cc-sidebrand-mark { background: transparent !important; padding: 0 !important; border-radius: 12px; overflow: hidden }
+.cc-sidebrand-mark > svg { width: 100% !important; height: 100% !important; max-width: none; flex: 0 0 auto }
+.cc-login-mark { display: grid; place-items: center; margin-bottom: 10px }

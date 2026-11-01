@@ -2,6 +2,7 @@ import { Cloud, Globe, HardDrives, Moon, Sun, CaretDown } from '@phosphor-icons/
 import { useEffect, useState } from 'react'
 import { useTheme } from './theme'
 import { useVersion } from './AppVersion'
+import { BrandMark } from './BrandMark'
 import type { ToolItem } from './toolsMeta'
 
 export type Provider = 'hz' | 'cf' | 'arv'
@@ -76,7 +77,7 @@ export function Sidebar({
       <div className={'cc-scrim' + (open ? ' on' : '')} onClick={onToggle} aria-hidden="true" />
       <aside className={'cc-sidebar p-' + provider + (open ? ' open' : '')} aria-label="منوی اصلی">
         <div className="cc-sidebrand">
-          <div className="cc-sidebrand-mark">CG</div>
+          <div className="cc-sidebrand-mark"><BrandMark size={40} /></div>
           <div className="cc-sidebrand-text">
             <div className="cc-sidebrand-name">Cloud Guardian</div>
             <div className="cc-sidebrand-sub" dir="ltr">{version ? 'v' + version : 'Cloud Guardian'}</div>

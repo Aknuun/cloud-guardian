@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowClockwise, TelegramLogo } from '@phosphor-icons/react'
 import { setToken } from '../lib'
 import { Button, Loader } from './ui'
+import { BrandMark } from './BrandMark'
 
 type Status = 'starting' | 'pending' | 'expired' | 'denied' | 'error'
 
@@ -65,8 +66,8 @@ export function WebLogin({ onDone }: { onDone: () => void }) {
   return (
     <div className="cc-main cc-signout">
       <div className="cc-card cc-login-card" role="status">
-        <div className="cc-error-ico">
-          <TelegramLogo size={24} />
+        <div className="cc-login-mark">
+          <BrandMark size={56} />
         </div>
         {status === 'pending' && (
           <>

@@ -18,7 +18,7 @@ export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'mail', label: 'ایمیل دامنه', Icon: Envelope },
   { id: 'cfcheck', label: 'بررسی سلامت رکوردها', Icon: Pulse },
   { id: 'fo', label: 'فیلور / پشتیبان', Icon: Lifebuoy },
-  { id: 'hub', label: 'مرکز هاب', Icon: Broadcast },
+  { id: 'hub', label: 'شبکهٔ نصب‌ها', Icon: Broadcast },
   { id: 'set', label: 'تنظیمات', Icon: GearSix },
 ]
 
