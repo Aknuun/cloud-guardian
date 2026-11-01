@@ -59,6 +59,22 @@ export function AccountsView(p: {
           {!list0.length && busy === 0 && (
             <Empty title="اکانتی پیدا نشد" description={aq ? 'چیزی با این جستجو پیدا نشد.' : 'با دکمهٔ بالا اولین اکانت هتزنر را اضافه کن.'} />
           )}
+          {accounts.length > 0 && (
+            <button
+              type="button"
+              className="cc-allservers"
+              onClick={() => {
+                setServers([])
+                setServersAcc(null)
+                push({ v: 'servers', acc: -1 })
+              }}
+            >
+              <HardDrives size={18} />
+              <span>همهٔ سرورها</span>
+              <span className="cc-allservers-n">{num(accounts.reduce((n, a) => n + (a.count || 0), 0))}</span>
+              <CaretLeft size={14} className="cc-hchev" />
+            </button>
+          )}
           <div className="cc-acctgrid">
           {list0.map((a) => (
             <AccountCard
@@ -205,7 +221,7 @@ export function ServersView(p: {
               className="cc-trow cc-tap"
               role="button"
               tabIndex={0}
-              onClick={() => push({ v: 'server', acc: cur.acc, id: s.id })}
+              onClick={() => push({ v: 'server', acc: s.accIdx ?? cur.acc, id: s.id })}
             >
               <div className="cc-grow">
                 <div className="cc-name">
@@ -218,6 +234,7 @@ export function ServersView(p: {
                   )}
                 </div>
                 <div className="cc-sub">
+                  {s.accName ? s.accName + ' · ' : ''}
                   {(s.type?.name) || ''}
                   {s.type ? ` · ${s.type.cores}vCPU / ${s.type.memory} GB / ${s.type.disk} GB` : ''}
                   {s.location ? ` · ${locFa(s.location.name, s.location.city, s.location.country)}` : ''}

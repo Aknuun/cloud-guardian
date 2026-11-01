@@ -3,6 +3,8 @@ export type SrvType = { id: string; name: string; cores: number; memory: number;
 export type Traffic = { in_gb: number; out_gb: number; total_gb: number; included_gb: number; used_pct: number; extra_gb: number }
 export type Snapshot = { id: string; name: string; size_gb: number; created: string; description: string }
 export type Server = {
+  accName?: string
+  accIdx?: number
   id: string
   name: string
   status: string

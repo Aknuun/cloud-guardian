@@ -2541,3 +2541,15 @@ body .cc-menu-item {
   .cc-sidebar:not(.open).cc-sidebar { width: 64px !important; min-width: 64px !important; padding: 14px 8px !important }
 }
 .cc-sidebar .cc-sideitem-label { white-space: nowrap; overflow: hidden; text-overflow: clip }
+/* accounts page: all-servers entry */
+.cc-allservers {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 50px; margin-bottom: 10px; padding: 0 14px;
+  border: 1px solid var(--ds-line); border-radius: 14px;
+  background: var(--ds-tint); color: var(--ds-text); font: inherit; font-size: 13.5px;
+  cursor: pointer;
+}
+.cc-allservers:hover { background: var(--ds-brand-soft) }
+.cc-allservers svg { color: var(--ds-brand); flex: 0 0 18px }
+.cc-allservers span:first-of-type { flex: 1; text-align: start }
+.cc-allservers-n { font-size: 12px; color: var(--ds-muted) }

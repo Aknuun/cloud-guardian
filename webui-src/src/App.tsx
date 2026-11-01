@@ -312,8 +312,22 @@ export default function App() {
               setServersAcc(cur.acc)
             }
           }
-          const d = await api<{ servers: Server[] }>('/api/hz/servers?acc=' + cur.acc)
-          if (!cancelled) setServers(d.servers || [])
+          if (cur.acc === -1) {
+            const a = await api<{ accounts: Account[] }>('/api/hz/accounts')
+            const accs = a.accounts || []
+            const lists = await Promise.all(
+              accs.map(async (x) => ({
+                name: x.name || 'اکانت ' + (x.i + 1),
+                idx: x.i,
+                d: await api<{ servers: Server[] }>('/api/hz/servers?acc=' + x.i).catch(() => ({ servers: [] as Server[] })),
+              })),
+            )
+            const all = lists.flatMap((l) => (l.d.servers || []).map((sv) => ({ ...sv, accName: l.name, accIdx: l.idx })))
+            if (!cancelled) setServers(all)
+          } else {
+            const d = await api<{ servers: Server[] }>('/api/hz/servers?acc=' + cur.acc)
+            if (!cancelled) setServers(d.servers || [])
+          }
         } else if (cur.v === 'server') {
           const d = await api<{ server: Server }>(
             '/api/hz/server?acc=' + cur.acc + '&id=' + encodeURIComponent(cur.id),
@@ -680,7 +694,9 @@ export default function App() {
         ? 'کلادفلر'
         : 'هتزنر'
       : cur.v === 'servers'
-        ? 'سرورها' + (accName(cur.acc) ? ' · ' + accName(cur.acc) : '')
+        ? cur.acc === -1
+          ? 'همهٔ سرورها'
+          : 'سرورها' + (accName(cur.acc) ? ' · ' + accName(cur.acc) : '')
         : cur.v === 'server'
           ? 'جزئیات سرور'
           : cur.v === 'ips'
