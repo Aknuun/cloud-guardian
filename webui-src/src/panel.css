@@ -2328,3 +2328,9 @@ body .cc-menu-item {
   .cc-main { padding-bottom: 92px !important; }
 }
 @media (max-width: 420px) { .cc-pageaction { font-size: 12.5px !important; padding: 0 14px !important } }
+/* on phones the same primary action lives in the floating pill, so drop the
+   duplicated full-width bar button and keep the secondary ones */
+@media (max-width: 699px) {
+  .cc-pagebar > button[data-variant='primary'] { display: none }
+  .cc-pagebar { flex-wrap: wrap; gap: 8px }
+}
