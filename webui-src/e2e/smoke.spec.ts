@@ -116,3 +116,21 @@ test('hub page tolerates missing stats fields', async ({ page }) => {
   await expect(page.locator('.cc-main')).toContainText('حافظه / دیتابیس')
   expect(errors).toEqual([])
 })
+
+// Item 4 of the UI pass: every control must have a name a screen reader can read.
+test('every button has an accessible name', async ({ page }) => {
+  const unnamed: string[] = []
+  for (const id of TOOLS) {
+    await boot(page, id)
+    const bad = await page.$$eval('button', (els) =>
+      els
+        .filter((b) => {
+          const label = b.getAttribute('aria-label') || b.getAttribute('title') || ''
+          return !label.trim() && !(b.textContent || '').trim()
+        })
+        .map((b) => b.outerHTML.slice(0, 140)),
+    )
+    if (bad.length) unnamed.push(id + ': ' + bad.join(' | '))
+  }
+  expect(unnamed).toEqual([])
+})

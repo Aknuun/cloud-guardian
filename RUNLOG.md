@@ -45,3 +45,11 @@
 - Loading: full-page spinners in dom/hf/hfd/hook/mail/set/um replaced with `<Skeleton rows={5}/>` so layout height stays stable.
 - Forms: `FormDialog` accepts `disabled`; add-server save stays disabled until a host is typed; numeric inputs got `inputMode="numeric"`.
 - checks: tsc clean, biome 0 errors (20 warnings), build ok, playwright 17/17.
+
+## v4.76.0 — UI group C (items 3, 4, 7, 9)
+- type scale: name 15/600, sub 12, section 13/600, stat 26/600, dialog title 20/600, hints 12.
+- contrast: `--ds-subtle` #96979e → #6b6d75 (≥4.5:1 on white).
+- bidi: `unicode-bidi: plaintext` for `.cc-ltr`, `.cc-mono`, `.cc-num`, row subs — host/port/IDs no longer jump in RTL.
+- topbar order: hamburger moved to the end of the bar (title sits at the start edge) in both ProviderShell and App.
+- new e2e: every button on all 15 tool pages has an accessible name (aria-label/title/text).
+- checks: tsc clean, biome 0 errors (174 warnings), build ok, playwright 18/18.

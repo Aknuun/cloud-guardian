@@ -9,7 +9,7 @@ html[data-mode='light'] {
   --ds-hairline: #ececef;
   --ds-text: #111114;
   --ds-muted: #6f7178;
-  --ds-subtle: #96979e;
+  --ds-subtle: #6b6d75;
   --ds-brand: #1f5eff;
   --ds-brand-soft: #eef2ff;
   --ds-primary: #1f5eff;
@@ -2262,3 +2262,13 @@ body .cc-menu-item {
 .cc-st.up { background: #12b76a }
 .cc-st.down { background: #f04438 }
 @media (max-width: 420px) { .cc-pageaction { font-size: 12px !important; padding: 0 10px !important } }
+
+/* ---------- group C: type scale, bidi, contrast ---------- */
+.cc-name { font-size: 15px !important; font-weight: 600 !important }
+.cc-sub { font-size: 12px !important; line-height: 1.5 }
+.cc-section, .cc-section-head h2, .cc-hg-title { font-size: 13px; font-weight: 600 }
+.cc-stat-value { font-size: 26px; font-weight: 600 }
+.cc-dialog-title { font-size: 20px; font-weight: 600 }
+.cc-hint, .cc-stat-label, .cc-stat-note { font-size: 12px }
+.cc-ltr, .cc-mono, .cc-num { unicode-bidi: plaintext }
+.cc-main .cc-sub { unicode-bidi: plaintext }
