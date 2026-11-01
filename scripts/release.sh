@@ -23,7 +23,7 @@ grep -q "const Version = \"$VER\"" server/internal/router/router.go || { echo "r
 grep -q "BOT_VERSION = \"$VER\"" worker.js || { echo "worker.js not bumped" >&2; exit 1; }
 
 echo "▶ ui build"
-(cd webui-src && npm run build >/dev/null)
+(cd webui-src && npm run lint && npm run build >/dev/null)
 
 echo "▶ go checks"
 (cd server && gofmt -l . | (! grep .) && CGO_ENABLED=0 go build ./... && CGO_ENABLED=0 go vet ./... && CGO_ENABLED=0 go test ./... >/dev/null)
