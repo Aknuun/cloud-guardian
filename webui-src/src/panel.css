@@ -2661,3 +2661,9 @@ html.cc-theming body *:not(svg):not(path) {
 .cc-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 }
 .cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted) }
 .cc-section-action { margin-inline-start: auto }
+
+/* single search field everywhere: no icon button, no sheet */
+@media (max-width: 899px) {
+  .cc-topbar .cc-gsearch { display: flex !important; flex: 1 1 auto !important; min-width: 0 !important; max-width: none !important }
+  .cc-topbar .cc-gsearch-btn { display: none !important }
+}

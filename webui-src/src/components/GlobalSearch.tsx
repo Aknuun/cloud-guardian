@@ -82,7 +82,6 @@ function pageHits(needle: string): Hit[] {
 
 export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null) => void }) {
   const [q, setQ] = useState('')
-  const [open, setOpen] = useState(false)
   const needle = q.trim().toLowerCase()
 
   const hits = useMemo(() => {
@@ -97,7 +96,6 @@ export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null
   function pick(h: Hit) {
     h.run()
     setQ('')
-    setOpen(false)
   }
 
   const list = (
@@ -114,29 +112,6 @@ export function GlobalSearch({ go }: { go: (p: Provider | null, t: ToolId | null
 
   return (
     <>
-      <button type="button" className="cc-gsearch-btn" aria-label="جستجوی کلی" onClick={() => setOpen(true)}>
-        <MagnifyingGlass size={18} />
-      </button>
-
-      {open && (
-        <div className="cc-gsearch-sheet" onClick={() => { setOpen(false); setQ('') }}>
-          <div className="cc-gsearch-sheetbox" onClick={(e) => e.stopPropagation()}>
-            <div className="cc-gsearch-field">
-              <MagnifyingGlass size={16} />
-              <input
-                id="cc-gsearch-m"
-                name="gsearchM"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="جستجوی صفحه، کارت‌ها و دکمه‌ها…"
-                aria-label="جستجوی کلی"
-              />
-            </div>
-            {needle.length >= 2 && list}
-          </div>
-        </div>
-      )}
-
       <div className="cc-gsearch">
         <MagnifyingGlass size={16} className="cc-gsearch-ico" />
         <input
