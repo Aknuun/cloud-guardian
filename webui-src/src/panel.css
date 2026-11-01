@@ -2422,3 +2422,12 @@ body .cc-menu-item {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px;
   border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-card); color: var(--ds-muted);
 }
+/* pg cards: keep the primary CTA readable at any width */
+.cc-pgcard { min-width: 0; overflow: visible }
+.cc-pgcard-top { min-width: 0 }
+.cc-pgcard-top > * { min-width: 0 }
+.cc-pgcard-actions { flex-wrap: wrap }
+.cc-pgcard-actions > button[data-kumo-component='Button'] { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; font-size: 12.5px; height: 36px }
+.cc-pgcard-actions .cc-rowbtn { flex: 0 0 34px }
+.cc-code { direction: ltr; text-align: left; unicode-bidi: plaintext }
+.cc-codecopy { white-space: nowrap }
