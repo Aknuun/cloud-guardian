@@ -7,7 +7,7 @@ export type ToolId = 'home' | 'srv' | 'rem' | 'pg' | 'um' | 'dom' | 'hf' | 'hfd'
 
 export const TOOLS: { id: ToolId; label: string; Icon: Icon }[] = [
   { id: 'hs', label: 'استودیوی نام هاست', Icon: Tag },
-  { id: 'pg', label: 'پاسارگارد', Icon: ShieldCheck },
+  { id: 'pg', label: 'پاسارگارد و مانیتور نود', Icon: ShieldCheck },
   { id: 'hook', label: 'هشدار انقضا و حجم', Icon: BellSimple },
   { id: 'hf', label: 'تعویض خودکار ساب‌فیلتر', Icon: ArrowsClockwise },
   { id: 'hfd', label: 'چرخش روزانه ساب‌ها', Icon: CalendarDots },

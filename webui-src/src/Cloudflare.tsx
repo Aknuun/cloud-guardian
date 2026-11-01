@@ -724,33 +724,6 @@ ${reason}`,
   function zonesPage() {
     return (
       <>
-        <Button
-          className="cc-primary-action"
-          variant="primary"
-          size="lg"
-          icon={Plus}
-          onClick={() => {
-            const active = zones.filter((z) => z.status === 'active')
-            setDlg({
-              k: 'pick',
-              title: 'افزودن رکورد به کدام دامنه؟',
-              items: (active.length ? active : zones).map((z) => ({
-                id: z.acc + '|' + z.id,
-                title: z.name,
-                sub: z.accName,
-              })),
-              onPick: (id) => {
-                const [a, zid] = id.split('|')
-                const z = zones.find((x) => x.id === zid)
-                setDlg(null)
-                setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
-                push({ v: 'zone', acc: Number(a), zid })
-              },
-            })
-          }}
-        >
-          افزودن رکورد
-        </Button>
         <div className="cc-action-grid cc-mb">
           <Button variant="outline" icon={Star} onClick={() => push({ v: 'favs' })}>
             منتخب‌ها
@@ -1413,6 +1386,59 @@ ${reason}`,
     setStack([])
     setView(v)
   }
+  const addAcc = () =>
+    setDlg({
+      k: 'form',
+      title: 'افزودن اکانت کلادفلر',
+      desc: 'توکن باید دسترسی Zone → DNS → Edit و Email Routing داشته باشد.',
+      fields: [
+        { key: 'name', label: 'نام اکانت', placeholder: 'مثلاً main', validate: (v) => (v.trim() ? undefined : 'نام اکانت را وارد کن.') },
+        {
+          key: 'token',
+          label: 'API Token',
+          placeholder: 'توکن کلادفلر',
+          password: true,
+          validate: (v) => (v.trim().length >= 20 ? undefined : 'توکن معتبر نیست.'),
+        },
+      ],
+      okText: 'افزودن',
+      onSubmit: async (v) => {
+        await post('/api/cf/accounts', { op: 'add', name: v.name, token: v.token })
+      },
+    })
+
+  const addRecordFlow = () => {
+    const active = zones.filter((z) => z.status === 'active')
+    setDlg({
+      k: 'pick',
+      title: 'افزودن رکورد به کدام دامنه؟',
+      items: (active.length ? active : zones).map((z) => ({ id: z.acc + '|' + z.id, title: z.name, sub: z.accName })),
+      onPick: (id) => {
+        const [a, zid] = id.split('|')
+        const z = zones.find((x) => x.id === zid)
+        setDlg(null)
+        setPendingEditor({ acc: Number(a), zid, zone: z?.name || '' })
+        push({ v: 'zone', acc: Number(a), zid })
+      },
+    })
+  }
+
+  const fixedActions =
+    view.v === 'accounts'
+      ? [{ label: 'افزودن اکانت', icon: Plus, onClick: addAcc }]
+      : view.v === 'zone'
+        ? [
+            {
+              label: 'افزودن رکورد',
+              icon: Plus,
+              onClick: () => setDlg({ k: 'editor', acc: view.acc, zid: view.zid, zone: zone?.name || '' }),
+            },
+          ]
+        : [
+            { label: 'افزودن رکورد', icon: Plus, onClick: addRecordFlow },
+            { label: 'افزودن اکانت', icon: Plus, onClick: addAcc },
+          ]
+
   const cfSections: SubItem[] = [
     { id: 'zones', label: 'زون‌ها', active: view.v === 'zones', onSelect: () => goRoot({ v: 'zones' }) },
     { id: 'accounts', label: 'اکانت‌ها', active: view.v === 'accounts', onSelect: () => goRoot({ v: 'accounts' }) },
@@ -1427,6 +1453,7 @@ ${reason}`,
         provider="cf"
         sections={cfSections}
         title={title}
+        fixed={fixedActions}
         busy={busy > 0}
         showBack={root || stack.length > 0}
         showSwitch={view.v === 'zones' && stack.length === 0}

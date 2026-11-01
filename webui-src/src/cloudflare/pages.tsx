@@ -50,38 +50,6 @@ export function AccountsPage({ accs, busy, err, num, post, setDlg }: {
             </Button>
           </LayerCard>
         ))}
-        <Button
-          className="cc-wide cc-mt"
-          variant="primary"
-          onClick={() =>
-            setDlg({
-              k: 'form',
-              title: 'افزودن اکانت کلادفلر',
-              desc: 'توکن باید دسترسی Zone → DNS → Edit و Email Routing داشته باشد.',
-              fields: [
-                {
-                  key: 'name',
-                  label: 'نام اکانت',
-                  placeholder: 'مثلاً main',
-                  validate: (v) => (v.trim() ? undefined : 'نام اکانت را وارد کن.'),
-                },
-                {
-                  key: 'token',
-                  label: 'API Token',
-                  placeholder: 'توکن کلادفلر',
-                  password: true,
-                  validate: (v) => (v.trim().length >= 20 ? undefined : 'توکن معتبر نیست.'),
-                },
-              ],
-              okText: 'افزودن',
-              onSubmit: async (v) => {
-                await post('/api/cf/accounts', { op: 'add', name: v.name, token: v.token })
-              },
-            })
-          }
-        >
-          افزودن اکانت
-        </Button>
       </>
     )
   
