@@ -3,6 +3,8 @@ import { Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ChipGroup, ListRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HfCfg = {
@@ -115,27 +117,30 @@ function HfView() {
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>هاست‌ها</h2>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true)
-              const ok = await act('/api/tools/hf/run', {}, 'بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
-              setBusy(false)
-              if (ok) setNotice('بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
-            }}
-          >
-            {busy ? 'در حال اجرا…' : 'بررسی الان'}
-          </Button>
-        </div>
-        <div className="cc-btnrow">
-          {data.panels.map((p) => (
-            <Button key={p.idx} variant={p.idx === pi ? 'primary' : 'outline'} onClick={() => setPi(p.idx)}>
-              {p.name}
+        <SectionHeader
+          title="هاست‌ها"
+          count={faNum(hosts?.length || 0) + ' هاست'}
+          action={
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                const ok = await act('/api/tools/hf/run', {}, 'بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
+                setBusy(false)
+                if (ok) setNotice('بررسی شروع شد؛ نتیجه در تلگرام می‌آید')
+              }}
+            >
+              {busy ? 'در حال اجرا…' : 'بررسی الان'}
             </Button>
-          ))}
+          }
+        />
+        <ChipGroup
+          items={data.panels.map((p) => ({ id: String(p.idx), label: p.name }))}
+          value={String(pi)}
+          onChange={(id) => setPi(Number(id))}
+        />
+        <div className="cc-actions">
           <Button variant="outline" onClick={() => setBkOpen(true)}>
             بکاپ‌ها
           </Button>
@@ -206,20 +211,13 @@ function HfView() {
               <div className="cc-sub">{(h.address || []).join('، ') || '—'}</div>
               {(h.sni || []).length > 0 && <div className="cc-sub">sni: {(h.sni || []).join('، ')}</div>}
               {(h.host || []).length > 0 && <div className="cc-sub">host: {(h.host || []).join('، ')}</div>}
-              <div className="cc-btnrow">
-                {FIELDS.map(([f, l]) => (
-                  <Button
-                    key={f}
-                    variant={h.skip[f] ? 'outline' : 'primary'}
-                    onClick={async () => {
-                      if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f })) loadHosts(pi)
-                    }}
-                  >
-                    {l}
-                  </Button>
-                ))}
-
-              </div>
+              <ChipGroup
+                items={FIELDS.map(([id, label]) => ({ id, label }))}
+                value={FIELDS.filter(([f]) => !h.skip[f]).map(([f]) => f)}
+                onChange={async (f) => {
+                  if (await act('/api/tools/hf/exc', { panel: pi, host: h.id, field: f })) loadHosts(pi)
+                }}
+              />
             </div>
           </div>
         ))}
@@ -278,11 +276,11 @@ function HfView() {
                 )}
                 {revs && revs.length === 0 && <Empty title="خالی" description="تعویضی برای بازگردانی نیست." />}
                 {revs?.map((r) => (
-                    <div key={r.sid} className="cc-trow">
-                      <div className="cc-grow">
-                        <div className="cc-name cc-ltr">{r.from || r.sid}</div>
-                        {r.to && <div className="cc-sub cc-ltr">→ {r.to}</div>}
-                      </div>
+                  <ListRow
+                    key={r.sid}
+                    title={r.from || r.sid}
+                    meta={r.to ? '→ ' + r.to : undefined}
+                    trailing={
                       <Button
                         variant="outline"
                         onClick={async () => {
@@ -294,8 +292,9 @@ function HfView() {
                       >
                         بازگردان
                       </Button>
-                    </div>
-                  ))}
+                    }
+                  />
+                ))}
               </div>
               <div className="cc-dialog-actions">
                 {fErr && <div className="cc-form-err">{fErr}</div>}
@@ -331,7 +330,7 @@ function BkDialog({ onClose, act }: { onClose: () => void; act: (p: string, b: a
         <Dialog.Title className="cc-dialog-title">بکاپ هاست‌ها</Dialog.Title>
         <Dialog.Close className="cc-dialog-x">✕</Dialog.Close>
         <div className="cc-dialog-body">
-          <div className="cc-btnrow cc-mb">
+          <div className="cc-actions">
             <Button
               variant="primary"
               disabled={busy}
@@ -352,31 +351,33 @@ function BkDialog({ onClose, act }: { onClose: () => void; act: (p: string, b: a
           )}
           {items && items.length === 0 && <Empty title="بکاپی نیست" description="اولین بکاپ را بگیر." />}
           {items?.map((b) => (
-            <div key={b.id} className="cc-trow">
-              <div className="cc-grow">
-                <div className="cc-name cc-ltr">{faDate(b.ts)}</div>
-                <div className="cc-sub">
-                  {b.label} · {faNum(b.count)} هاست
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  if (await act('/api/tools/hf/bk', { op: 'restore', id: b.id }, 'بازگردانی انجام شد')) onClose()
-                }}
-              >
-                بازگردان
-              </Button>
-              <button
-                className="cc-rowbtn danger"
-                onClick={async () => {
-                  await act('/api/tools/hf/bk', { op: 'del', id: b.id }, 'حذف شد')
-                  load()
-                }}
-              >
-                <Trash size={16} />
-              </button>
-            </div>
+            <ListRow
+              key={b.id}
+              title={faDate(b.ts)}
+              meta={b.label + ' · ' + faNum(b.count) + ' هاست'}
+              trailing={
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      if (await act('/api/tools/hf/bk', { op: 'restore', id: b.id }, 'بازگردانی انجام شد')) onClose()
+                    }}
+                  >
+                    بازگردان
+                  </Button>
+                  <button
+                    className="cc-rowbtn danger"
+                    aria-label="حذف بکاپ"
+                    onClick={async () => {
+                      await act('/api/tools/hf/bk', { op: 'del', id: b.id }, 'حذف شد')
+                      load()
+                    }}
+                  >
+                    <Trash size={16} />
+                  </button>
+                </>
+              }
+            />
           ))}
         </div>
         <div className="cc-dialog-actions">

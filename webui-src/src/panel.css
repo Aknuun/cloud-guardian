@@ -806,6 +806,72 @@ html[data-mode='dark'] .cc-stat {
   margin-bottom: 10px;
 }
 
+/* ---------- grouped settings card ---------- */
+.cc-setcard {
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: var(--ds-tint);
+  overflow: hidden;
+}
+html[data-mode='light'] .cc-setcard {
+  background: #fff;
+  border: 1px solid var(--ds-hairline);
+}
+html[data-mode='dark'] .cc-setcard {
+  background: var(--ds-panel);
+  border: 1px solid var(--ds-line);
+}
+.cc-setcard-title {
+  padding: 12px 14px 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ds-muted);
+}
+.cc-setcard-body {
+  padding: 2px 0;
+}
+.cc-setcard-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ds-hairline);
+}
+.cc-setrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+}
+.cc-setrow + .cc-setrow {
+  border-top: 1px solid var(--ds-hairline);
+}
+.cc-setrow-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 14px;
+}
+.cc-setrow-label small {
+  font-size: 11.5px;
+  color: var(--ds-muted);
+}
+.cc-setrow-ctl {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 520px) {
+  .cc-setrow {
+    flex-wrap: wrap;
+  }
+  .cc-setrow-ctl {
+    width: 100%;
+  }
+}
+
 .cc-mon {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -835,17 +901,6 @@ html[data-mode='dark'] .cc-stat {
 }
 
 /* server section extras */
-.cc-btnrow {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.cc-btnrow button[data-kumo-component='Button'] {
-  flex: 1 1 0;
-  min-width: 0;
-  font-size: 12px !important;
-  padding: 0 8px !important;
-}
 .cc-pre {
   margin: 0 0 12px;
   padding: 12px;
@@ -997,7 +1052,6 @@ html[data-mode='dark'] .cc-stat {
 .cc-section-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   margin: 2px 0 10px;
   flex-wrap: wrap;
@@ -1006,6 +1060,24 @@ html[data-mode='dark'] .cc-stat {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+}
+.cc-section-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+.cc-rowchev {
+  flex: 0 0 auto;
+  color: var(--ds-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+button.cc-trow {
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
 }
 .cc-rowbtn {
   flex: 0 0 auto;
@@ -1026,10 +1098,8 @@ html[data-mode='dark'] .cc-stat {
 }
 
 /* host-filter rows: long panel names and template remarks must wrap, not overlap */
-.cc-btnrow { flex-wrap: wrap; }
 .cc-section-head { flex-wrap: wrap; gap: 8px; }
 .cc-name { overflow-wrap: anywhere; }
-.cc-btnrow .cc-btn { white-space: nowrap; }
 
 /* deepseek.css renders .cc-section as an inline flex label; sections here stack rows */
 .cc-section { display: block; }
@@ -1220,10 +1290,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-trow > .cc-grow {
     flex: 1 1 100%;
   }
-  .cc-trow > .cc-btnrow {
-    flex: 1 1 100%;
-    margin-bottom: 0;
-  }
 }
 
 /* ---------- compact list rows (all sections) ---------- */
@@ -1290,33 +1356,7 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   flex: 0 0 auto;
   padding: 2px;
 }
-.cc-main .cc-trow .cc-btnrow,
-.cc-app .cc-trow .cc-btnrow {
-  flex: 0 0 auto;
-  margin-bottom: 0;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-.cc-main .cc-trow .cc-btnrow button[data-kumo-component='Button'],
-.cc-app .cc-trow .cc-btnrow button[data-kumo-component='Button'] {
-  flex: 0 0 auto;
-  font-size: 11.5px !important;
-  padding: 0 10px !important;
-  height: 32px;
-  min-height: 32px;
-  white-space: nowrap;
-}
-@media (max-width: 699px) {
-  .cc-main .cc-trow .cc-btnrow,
-  .cc-app .cc-trow .cc-btnrow {
-    gap: 4px;
-  }
-  .cc-main .cc-trow .cc-btnrow button[data-kumo-component='Button'],
-  .cc-app .cc-trow .cc-btnrow button[data-kumo-component='Button'] {
-    padding: 0 8px !important;
-    font-size: 11px !important;
-  }
-}
+
 
 /* compact rows: no glow, checkbox at the row end, note line only on wide screens */
 .cc-main .cc-trow,
@@ -1602,9 +1642,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-dialog { width: calc(100vw - 20px); max-width: none }
   .cc-dialog .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px; min-width: 0 }
   .cc-dialog .cc-actions button .cc-btn-ico { width: 16px; height: 16px }
-  .cc-main .cc-trow .cc-btnrow { gap: 4px }
-  .cc-main .cc-trow .cc-btnrow button,
-  .cc-trow .cc-btnrow button { height: 30px; font-size: 11px; padding: 0 8px; min-width: 0; border-radius: 8px }
   .cc-main .cc-trow .cc-name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35 }
   .cc-main .cc-trow .cc-sub { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden }
   .cc-dialog .cc-dialog-title { font-size: 16px }
@@ -1614,10 +1651,6 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 @media (max-width: 699px) {
   .cc-dialog .cc-actions button[data-kumo-component='Button'],
   .cc-main .cc-actions button[data-kumo-component='Button'] { height: 46px !important; font-size: 13px !important; padding: 0 10px !important; min-width: 0 !important }
-}
-@media (max-width: 699px) {
-  .cc-trow .cc-btnrow button[data-kumo-component='Button'] { height: 28px !important; font-size: 11px !important; padding: 0 7px !important; min-width: 0 !important; border-radius: 7px !important }
-  .cc-trow .cc-btnrow { gap: 4px !important }
 }
 
 /* mobile safety net: nothing overflows its container on phones */
@@ -1629,7 +1662,7 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-main input, .cc-main select, .cc-main textarea { max-width: 100% }
   .cc-main .cc-pre { max-width: 100%; overflow: auto }
   .cc-main .cc-field, .cc-main .cc-field-row, .cc-main .cc-form { width: 100%; max-width: 100% }
-  .cc-section-head, .cc-btnrow, .cc-chips, .cc-bulkbar, .cc-filterbar { flex-wrap: wrap }
+  .cc-section-head, .cc-chips, .cc-bulkbar, .cc-filterbar { flex-wrap: wrap }
   .cc-main h1, .cc-main h2, .cc-main .cc-title { overflow-wrap: anywhere }
   .cc-mon { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important }
 }
@@ -1640,8 +1673,8 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 }
 
 @media (max-width: 699px) {
-  .cc-main .cc-btnrow button, .cc-main .cc-section-head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .cc-main .cc-btnrow > *, .cc-main .cc-section-head > * { min-width: 0 }
+  .cc-main .cc-section-head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .cc-main .cc-section-head > * { min-width: 0 }
 }
 
 /* node monitor dialog: tidy action grid + hook url */
@@ -2659,7 +2692,7 @@ html.cc-theming body *:not(svg):not(path) {
 }
 .cc-section-head { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px }
 .cc-section-head h2 { font-size: 13px; font-weight: 600; margin: 0 }
-.cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted) }
+.cc-section-head .cc-sub { font-size: 12px; color: var(--ds-muted); margin-inline-end: auto }
 .cc-section-action { margin-inline-start: auto }
 
 /* single search field everywhere: no icon button, no sheet */

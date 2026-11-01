@@ -1,0 +1,1 @@
+import{j as s}from"./index-CF2dpZ3n.js";function a({title:i,count:c,action:e,className:n}){return s.jsxs("div",{className:"cc-section-head"+(n?" "+n:""),children:[s.jsx("h2",{children:i}),c?s.jsx("span",{className:"cc-sub",children:c}):null,e?s.jsx("span",{className:"cc-section-action",children:e}):null]})}export{a as S};

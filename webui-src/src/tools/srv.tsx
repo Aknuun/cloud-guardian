@@ -7,6 +7,7 @@ import { FilterBar } from '../components/FilterBar'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { FormDialog } from './shared'
+import { ChipGroup } from '../components/ui-kit'
 import { useTool, save, } from './shared'
 import type { Srv, } from './shared'
 
@@ -922,20 +923,17 @@ function SubDialog({ onClose, done }: { onClose: () => void; done: () => void })
             <Loader size="lg" />
           </div>
         )}
-        <div className="cc-btnrow cc-mb">
-          <Button variant={src === 'zones' ? 'primary' : 'outline'} onClick={() => setSrc('zones')}>
-            از زون‌ها
-          </Button>
-          <Button
-            variant={src === 'favs' ? 'primary' : 'outline'}
-            onClick={() => {
-              setSrc('favs')
-              loadFavs()
-            }}
-          >
-            از موردعلاقه‌ها
-          </Button>
-        </div>
+        <ChipGroup
+          items={[
+            { id: 'zones', label: 'از زون‌ها' },
+            { id: 'favs', label: 'از موردعلاقه‌ها' },
+          ]}
+          value={src}
+          onChange={(id) => {
+            setSrc(id as 'zones' | 'favs')
+            if (id === 'favs') loadFavs()
+          }}
+        />
         {src === 'zones' && zones && !zone && (
           <div className="cc-form">
             {zones.length === 0 && <div className="cc-hint">زونی در کلادفلر نیست.</div>}

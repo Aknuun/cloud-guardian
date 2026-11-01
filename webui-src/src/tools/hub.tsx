@@ -3,6 +3,8 @@ import { GearSix, ArrowClockwise, Plus, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, } from '../lib'
 import { Badge, Button, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
 
@@ -35,43 +37,44 @@ function HubHistory() {
   const shown = items.slice().reverse()
   return (
     <div className="cc-section">
-      <div className="cc-section-head">
-        <h2>تاریخچهٔ پیام‌ها</h2>
-        <Button variant="outline" icon={ArrowClockwise} onClick={load}>تازه‌سازی</Button>
-      </div>
+      <SectionHeader
+        title="تاریخچهٔ پیام‌ها"
+        count={faNum(shown.length) + ' پیام'}
+        action={<Button variant="outline" icon={ArrowClockwise} onClick={load}>تازه‌سازی</Button>}
+      />
       {err && <ErrBox msg={err} />}
       {shown.length === 0 && <Empty title="پیامی ثبت نشده" description="هر پیامی که بفرستی اینجا با تعداد دریافت‌کننده‌ها می‌آید." />}
       {shown.map((h) => (
-        <div key={h.id} className="cc-trow">
-          <div className="cc-grow">
-            <div className="cc-name">{h.text}</div>
-            <div className="cc-sub">
-              {h.target === 'installs'
-                ? `${faNum(h.delivered)} از ${faNum(h.members)} نصب دریافت کردند`
-                : `برای ${faNum(h.members)} نفر ارسال شد`}{' · '}{faDate(h.ts)}
-            </div>
-          </div>
-          <Badge variant={h.target === 'installs' ? 'primary' : 'success'}>{h.target === 'installs' ? 'نصب‌ها' : 'کاربران'}</Badge>
-          <button type="button" className="cc-rowbtn danger" aria-label="حذف" onClick={() => del(h.id)}>
-            <Trash size={15} />
-          </button>
-        </div>
+        <ListRow
+          key={h.id}
+          title={h.text}
+          meta={`${h.target === 'installs'
+            ? `${faNum(h.delivered)} از ${faNum(h.members)} نصب دریافت کردند`
+            : `برای ${faNum(h.members)} نفر ارسال شد`} · ${faDate(h.ts)}`}
+          trailing={
+            <>
+              <Badge variant={h.target === 'installs' ? 'primary' : 'success'}>{h.target === 'installs' ? 'نصب‌ها' : 'کاربران'}</Badge>
+              <button type="button" className="cc-rowbtn danger" aria-label="حذف" onClick={() => del(h.id)}>
+                <Trash size={15} />
+              </button>
+            </>
+          }
+        />
       ))}
       {insts.length > 0 && (
         <>
           <div className="cc-sub" style={{ margin: '12px 2px 6px' }}>وضعیت نصب‌های عضو</div>
           {insts.map((m, i) => (
-            <div key={i} className="cc-trow">
-              <div className="cc-grow">
-                <div className="cc-name">{m.name || m.bot}</div>
-                <div className="cc-sub">
-                  {m.feed > 0 ? 'آخرین دریافت: ' + faDate(m.feed) : 'هنوز پیامی دریافت نکرده'} · {faNum(m.users)} کاربر
-                </div>
-              </div>
-              <Badge variant={m.seen > Date.now() - 15 * 60000 ? 'success' : 'error'}>
-                {m.seen > Date.now() - 15 * 60000 ? 'آنلاین' : 'ساکت'}
-              </Badge>
-            </div>
+            <ListRow
+              key={i}
+              title={m.name || m.bot}
+              meta={`${m.feed > 0 ? 'آخرین دریافت: ' + faDate(m.feed) : 'هنوز پیامی دریافت نکرده'} · ${faNum(m.users)} کاربر`}
+              trailing={
+                <Badge variant={m.seen > Date.now() - 15 * 60000 ? 'success' : 'error'}>
+                  {m.seen > Date.now() - 15 * 60000 ? 'آنلاین' : 'ساکت'}
+                </Badge>
+              }
+            />
           ))}
         </>
       )}
@@ -112,45 +115,50 @@ function HubView() {
 
       {s && (
         <div className="cc-section">
-          <div className="cc-section-head"><h2>این نصب</h2></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">ربات</div><div className="cc-sub">{(s.bot || '—').startsWith('@') ? (s.bot || '—') : '@' + (s.bot || '—')}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">کاربران / ادمین‌ها</div><div className="cc-sub">{sn(s.users)} / {sn(s.admins)}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">پنل‌ها / سرورها</div><div className="cc-sub">{sn(s.panels)} / {sn(s.servers)}</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">دامنه‌ها</div><div className="cc-sub">{sn(s.zones)} در {sn(s.cf_accs)} اکانت</div></div></div>
-          <div className="cc-trow"><div className="cc-grow"><div className="cc-name">حافظه / دیتابیس</div><div className="cc-sub">{sf(s.mem_mb, 1)} MB / {sf(s.db_mb, 2)} MB</div></div></div>
+          <SectionHeader title="این نصب" count={'v' + (s.version || '—')} />
+          <SettingsCard>
+            <SettingsRow label="ربات">{(s.bot || '—').startsWith('@') ? (s.bot || '—') : '@' + (s.bot || '—')}</SettingsRow>
+            <SettingsRow label="کاربران / ادمین‌ها">{sn(s.users) + ' / ' + sn(s.admins)}</SettingsRow>
+            <SettingsRow label="پنل‌ها / سرورها">{sn(s.panels) + ' / ' + sn(s.servers)}</SettingsRow>
+            <SettingsRow label="دامنه‌ها">{sn(s.zones) + ' در ' + sn(s.cf_accs) + ' اکانت'}</SettingsRow>
+            <SettingsRow label="حافظه / دیتابیس">{sf(s.mem_mb, 1) + ' MB / ' + sf(s.db_mb, 2) + ' MB'}</SettingsRow>
+          </SettingsCard>
         </div>
       )}
 
       {data && (data.hubUrl || data.root) && (
         <div className="cc-section">
-          <div className="cc-section-head"><h2>نصب‌های هاب</h2></div>
+          <SectionHeader title="نصب‌های هاب" count={faNum(data.installs.length) + ' نصب'} />
           {!data.hubOk && <div className="cc-hint cc-center cc-mb">{data.hubErr || 'هاب در دسترس نیست'}</div>}
           {data.installs.map((x: any, i: number) => (
-            <div key={i} className="cc-trow">
-              <div className="cc-grow">
-                <div className="cc-name">{x.bot || x.name || '—'}</div>
-                <div className="cc-sub">{(x.version ? 'v' + x.version + ' · ' : '')}{faNum(x.users || 0)} کاربر · {faNum(x.servers || 0)} سرور</div>
-              </div>
-            </div>
+            <ListRow
+              key={i}
+              title={x.bot || x.name || '—'}
+              meta={(x.version ? 'v' + x.version + ' · ' : '') + faNum(x.users || 0) + ' کاربر · ' + faNum(x.servers || 0) + ' سرور'}
+            />
           ))}
         </div>
       )}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>اعلان‌ها</h2>
-          <Button variant="outline" icon={Plus} onClick={() => setCast('')}>پیام به کاربرانم</Button>
-          {data?.root && <Button variant="outline" icon={Plus} onClick={() => setCastAll('')}>پیام به نصب‌ها</Button>}
-        </div>
+        <SectionHeader
+          title="اعلان‌ها"
+          count={anns ? faNum(anns.length) + ' اعلان' : undefined}
+          action={
+            <>
+              <Button variant="outline" icon={Plus} onClick={() => setCast('')}>پیام به کاربرانم</Button>
+              {data?.root && <Button variant="outline" icon={Plus} onClick={() => setCastAll('')}>پیام به نصب‌ها</Button>}
+            </>
+          }
+        />
         {annErr && <div className="cc-hint cc-center cc-mb">{annErr}</div>}
         {anns && anns.length === 0 && <Empty title="اعلانی نیست" description="از منبع اعلان‌ها چیزی برنگشت." />}
         {(anns || []).map((a) => (
-          <div key={a.id} className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">{a.text}</div>
-              <div className="cc-sub">{a.until ? 'تا ' + faDate(a.until) : 'بدون پایان'}{a.reply ? ' · با پاسخ' : ''}</div>
-            </div>
-          </div>
+          <ListRow
+            key={a.id}
+            title={a.text}
+            meta={(a.until ? 'تا ' + faDate(a.until) : 'بدون پایان') + (a.reply ? ' · با پاسخ' : '')}
+          />
         ))}
       </div>
 

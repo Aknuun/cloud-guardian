@@ -315,7 +315,7 @@ export function CfCheckView() {
         مرتب‌سازی: {SORTS.find((x) => x.id === sort)?.label}
       </div>
 
-      <div className="cc-btnrow cc-mb">
+      <div className="cc-actions">
         <Button variant="primary" icon={GlobeSimple} onClick={() => void openZones()} disabled={busy}>
           {busy ? 'در حال بررسی…' : 'بررسی دوباره'}
         </Button>

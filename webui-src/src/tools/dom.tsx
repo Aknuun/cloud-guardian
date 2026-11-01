@@ -6,6 +6,8 @@ import { StatGrid } from '../components/Stats'
 import { FilterBar } from '../components/FilterBar'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ListRow } from '../components/ui-kit'
 import { FormDialog } from './shared'
 import { useTool, faTxt } from './shared'
 
@@ -222,9 +224,7 @@ function DomView() {
       {fErr && <div className="cc-form-err cc-mb">{fErr}</div>}
 
       {showSsl && <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>گواهی SSL</h2>
-        </div>
+        <SectionHeader title="گواهی SSL" count={faNum(data.ssl.length) + ' گواهی'} />
         <div className="cc-checkline">
           <input
             type="checkbox"
@@ -255,33 +255,39 @@ function DomView() {
         <div className="cc-hint cc-mb">وقتی گواهی به این تعداد روز یا کمتر برسد، روزی یک بار در تلگرام هشدار می‌آید.</div>
         {ssl.length === 0 && <Empty title="گواهی‌ای نیست" description="دامنه‌ات را اضافه کن تا انقضای SSL هر ۶ ساعت بررسی شود." action={<Button variant="primary" icon={Plus} onClick={() => setAddSsl(true)}>افزودن گواهی</Button>} />}
         {ssl.map((s) => (
-          <div key={s.host} className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">{s.host}</div>
-              <div className="cc-sub">{s.ok ? 'انقضا: ' + faDate(s.expiry) : s.error}</div>
-            </div>
-            <Badge variant={s.ok && s.days > warn ? 'success' : 'error'}>
-              {s.ok ? faNum(s.days) + ' روز' : 'خطا'}
-            </Badge>
-            <button className="cc-rowbtn danger" title="حذف" onClick={() => act('/api/tools/dom/ssl', { host: s.host })}>
-              <Trash size={16} />
-            </button>
-          </div>
+          <ListRow
+            key={s.host}
+            title={s.host}
+            meta={s.ok ? 'انقضا: ' + faDate(s.expiry) : s.error}
+            trailing={
+              <>
+                <Badge variant={s.ok && s.days > warn ? 'success' : 'error'}>
+                  {s.ok ? faNum(s.days) + ' روز' : 'خطا'}
+                </Badge>
+                <button className="cc-rowbtn danger" aria-label="حذف گواهی" title="حذف" onClick={() => act('/api/tools/dom/ssl', { host: s.host })}>
+                  <Trash size={16} />
+                </button>
+              </>
+            }
+          />
         ))}
       </div>}
 
       {showDom && <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>انقضای دامنه</h2>
-          <div className="cc-btnrow">
-            <Button variant="outline" icon={ArrowClockwise} onClick={refresh} disabled={busy}>
-              استعلام دوباره
-            </Button>
-            <Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>
-              افزودن
-            </Button>
-          </div>
-        </div>
+        <SectionHeader
+          title="انقضای دامنه"
+          count={faNum(doms.length) + ' دامنه'}
+          action={
+            <>
+              <Button variant="outline" icon={ArrowClockwise} onClick={refresh} disabled={busy}>
+                استعلام دوباره
+              </Button>
+              <Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>
+                افزودن
+              </Button>
+            </>
+          }
+        />
         {!data.key && (
           <div className="cc-hint cc-mb">
             برای دامنه‌های .ir که ایرنیک تاریخ را مخفی کرده، تاریخ را دستی ثبت کن.
@@ -289,35 +295,42 @@ function DomView() {
         )}
         {doms.length === 0 && <Empty title="دامنه‌ای نیست" description="تاریخ انقضا از RDAP و whois گرفته می‌شود." action={<Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>افزودن دامنه</Button>} />}
         {doms.map((d) => (
-          <div key={d.domain} className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">{d.domain}</div>
-              <div className="cc-sub">{d.expiry ? 'انقضا: ' + faDate(d.expiry) : DOM_STATUS[d.status] || 'تاریخ نامشخص'}</div>
-              {!d.expiry && d.message && <div className="cc-sub">{d.message}</div>}
-            </div>
-            <Badge>{faTxt(d.remaining) || DOM_STATUS[d.status] || d.status}</Badge>
-            <button
-              className="cc-rowbtn"
-              title="استعلام دوباره"
-              onClick={() => act('/api/tools/dom/one', { domain: d.domain })}
-            >
-              <ArrowClockwise size={16} />
-            </button>
-            <button
-              className="cc-rowbtn"
-              title="ثبت تاریخ"
-              onClick={() => {
-                setFErr('')
-                setWhen('')
-                setDateFor(d)
-              }}
-            >
-              <PencilSimple size={16} />
-            </button>
-            <button className="cc-rowbtn danger" title="حذف" onClick={() => act('/api/tools/dom/del', { domain: d.domain })}>
-              <Trash size={16} />
-            </button>
-          </div>
+          <ListRow
+            key={d.domain}
+            title={d.domain}
+            meta={
+              (d.expiry ? 'انقضا: ' + faDate(d.expiry) : DOM_STATUS[d.status] || 'تاریخ نامشخص') +
+              (!d.expiry && d.message ? ' · ' + d.message : '')
+            }
+            trailing={
+              <>
+                <Badge>{faTxt(d.remaining) || DOM_STATUS[d.status] || d.status}</Badge>
+                <button
+                  className="cc-rowbtn"
+                  aria-label="استعلام دوباره"
+                  title="استعلام دوباره"
+                  onClick={() => act('/api/tools/dom/one', { domain: d.domain })}
+                >
+                  <ArrowClockwise size={16} />
+                </button>
+                <button
+                  className="cc-rowbtn"
+                  aria-label="ثبت تاریخ"
+                  title="ثبت تاریخ"
+                  onClick={() => {
+                    setFErr('')
+                    setWhen('')
+                    setDateFor(d)
+                  }}
+                >
+                  <PencilSimple size={16} />
+                </button>
+                <button className="cc-rowbtn danger" aria-label="حذف دامنه" title="حذف" onClick={() => act('/api/tools/dom/del', { domain: d.domain })}>
+                  <Trash size={16} />
+                </button>
+              </>
+            }
+          />
         ))}
       </div>}
 

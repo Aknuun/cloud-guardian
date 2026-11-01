@@ -3,6 +3,8 @@ import { ArrowClockwise, Copy, Plus, Power, Trash } from '@phosphor-icons/react'
 import { faNum, fallbackCopy, } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { SettingsCard, SettingsRow } from '../components/ui-kit'
 import { usePageActions } from '../components/PageAction'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
@@ -76,38 +78,26 @@ function FoView() {
 
       {d?.configured && (
         <div className="cc-section">
-          <div className="cc-section-head"><h2>ورکر پشتیبان</h2></div>
-          <div className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">{d.worker}</div>
-              <div className="cc-sub cc-ltr">{d.url}</div>
-            </div>
-            <button type="button" className="cc-rowbtn" aria-label="کپی آدرس" onClick={async () => {
-              const ok = await fallbackCopy(d.url)
-              setNotice(ok ? 'آدرس کپی شد' : d.url)
-            }}><Copy size={15} /></button>
-          </div>
-          <div className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">تست سلامت</div>
-              <div className="cc-sub cc-ltr">{d.health || '—'}</div>
-            </div>
-            <Badge variant={d.serverUp ? 'success' : 'error'}>{d.serverUp ? 'OK ' + faNum(d.probeCode) : 'خطا'}</Badge>
-          </div>
-          <div className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">اکانت کلادفلر</div>
-              <div className="cc-sub cc-ltr">{d.account || '—'}</div>
-            </div>
-          </div>
-          <div className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">فضای KV</div>
-              <div className="cc-sub cc-ltr">{d.namespace || '—'}</div>
-            </div>
-          </div>
+          <SectionHeader
+            title="ورکر پشتیبان"
+            count={d.enabled ? 'فعال' : 'خاموش'}
+            action={
+              <button type="button" className="cc-rowbtn" aria-label="کپی آدرس" onClick={async () => {
+                const ok = await fallbackCopy(d.url)
+                setNotice(ok ? 'آدرس کپی شد' : d.url)
+              }}><Copy size={15} /></button>
+            }
+          />
+          <SettingsCard>
+            <SettingsRow label={d.worker} hint={d.url} />
+            <SettingsRow label="تست سلامت" hint={d.health || '—'}>
+              <Badge variant={d.serverUp ? 'success' : 'error'}>{d.serverUp ? 'OK ' + faNum(d.probeCode) : 'خطا'}</Badge>
+            </SettingsRow>
+            <SettingsRow label="اکانت کلادفلر" hint={d.account || '—'} />
+            <SettingsRow label="فضای KV" hint={d.namespace || '—'} />
+          </SettingsCard>
 
-          <div className="cc-btnrow cc-mt">
+          <div className="cc-actions">
             <Button variant="outline" icon={ArrowClockwise} disabled={!!busy} onClick={() => act('/api/tools/fo/refresh', {}, 'داده‌های ورکر تازه شد')}>
               تازه‌سازی داده
             </Button>

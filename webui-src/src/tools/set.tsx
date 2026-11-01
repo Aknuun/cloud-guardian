@@ -3,6 +3,8 @@ import { Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ListRow } from '../components/ui-kit'
 import { useTool, verGt } from './shared'
 
 type Sess = { id: string; created: number; last: number; exp: number; ip: string; device: string; current: boolean }
@@ -42,31 +44,34 @@ function SetView() {
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>نسخه و آپدیت</h2>
-          <Button variant="outline" disabled={busy} onClick={async () => {
-            setBusy(true)
-            const r = await act('/api/tools/settings/check', {}, '')
-            setBusy(false)
-            if (r) setNotice(r.newer ? `نسخهٔ جدید موجود است: ${r.latest}` : 'روی آخرین نسخه هستی')
-            reload()
-          }}>
-            بررسی نسخه
-          </Button>
-        </div>
-        {newer && data.isMain && (
-          <div className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">آپدیت به {data.latest}</div>
-              <div className="cc-sub">سرویس چند لحظه ری‌استارت می‌شود.</div>
-            </div>
-            <Button variant="primary" onClick={async () => {
-              const r = await act('/api/tools/settings/update', { tag: data.latest }, '')
-              if (r) setNotice('آپدیت شروع شد؛ ۱ تا ۳ دقیقه صبر کن.')
+        <SectionHeader
+          title="نسخه و آپدیت"
+          count={'v' + data.version}
+          action={
+            <Button variant="outline" disabled={busy} onClick={async () => {
+              setBusy(true)
+              const r = await act('/api/tools/settings/check', {}, '')
+              setBusy(false)
+              if (r) setNotice(r.newer ? `نسخهٔ جدید موجود است: ${r.latest}` : 'روی آخرین نسخه هستی')
+              reload()
             }}>
-              آپدیت
+              بررسی نسخه
             </Button>
-          </div>
+          }
+        />
+        {newer && data.isMain && (
+          <ListRow
+            title={'آپدیت به ' + data.latest}
+            meta="سرویس چند لحظه ری‌استارت می‌شود."
+            trailing={
+              <Button variant="primary" onClick={async () => {
+                const r = await act('/api/tools/settings/update', { tag: data.latest }, '')
+                if (r) setNotice('آپدیت شروع شد؛ ۱ تا ۳ دقیقه صبر کن.')
+              }}>
+                آپدیت
+              </Button>
+            }
+          />
         )}
         <div className="cc-hint">
           نسخه‌ها روی {data.version ? 'همین سرور' : 'سرور'} نصب و سرویس خودکار ری‌استارت می‌شود.
@@ -74,9 +79,10 @@ function SetView() {
       </div>
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>ادمین‌ها</h2>
-          {data.isMain && (
+        <SectionHeader
+          title="ادمین‌ها"
+          count={faNum(data.admins.length) + ' ادمین'}
+          action={data.isMain && (
             <Button variant="outline" onClick={async () => {
               if (!/^\d+$/.test(addId.trim())) return setNotice('شناسهٔ عددی بفرست')
               const r = await act('/api/tools/settings/admin', { add: Number(addId) }, 'ادمین اضافه شد')
@@ -88,53 +94,50 @@ function SetView() {
               افزودن ادمین
             </Button>
           )}
-        </div>
+        />
         {data.isMain && (
           <div className="cc-searchbar">
             <Input value={addId} onChange={(e) => setAddId(e.target.value)} placeholder="شناسهٔ عددی ادمین جدید…" />
           </div>
         )}
         {data.admins.map((id, i) => (
-          <div key={id} className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name cc-ltr">{id}</div>
-              <div className="cc-sub">{i === 0 ? 'ادمین اصلی' : 'ادمین'}</div>
-            </div>
-            {data.isMain && i > 0 && (
-              <button className="cc-rowbtn danger" onClick={async () => {
+          <ListRow
+            key={id}
+            title={id}
+            meta={i === 0 ? 'ادمین اصلی' : 'ادمین'}
+            trailing={data.isMain && i > 0 && (
+              <button className="cc-rowbtn danger" aria-label="حذف ادمین" onClick={async () => {
                 const r = await act('/api/tools/settings/admin', { del: id }, 'ادمین حذف شد')
                 if (r) reload()
               }}>
                 <Trash size={16} />
               </button>
             )}
-          </div>
+          />
         ))}
       </div>
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>دستگاه‌های واردشده</h2>
-          <Button variant="outline" onClick={() => setConfirmAll(true)}>
-            خروج از همه
-          </Button>
-        </div>
+        <SectionHeader
+          title="دستگاه‌های واردشده"
+          count={faNum((sess.data?.sessions || []).length) + ' دستگاه'}
+          action={
+            <Button variant="outline" onClick={() => setConfirmAll(true)}>
+              خروج از همه
+            </Button>
+          }
+        />
         {sessNotice && <div className="cc-hint cc-mb">{sessNotice}</div>}
         {!sess.loaded && <Loader />}
         {(sess.data?.sessions || []).map((x) => (
-          <div key={x.id} className="cc-trow">
-            <div className="cc-grow">
-              <div className="cc-name">
-                {x.device || 'نامشخص'}
-                {x.current && <span className="cc-now"> · همین دستگاه</span>}
-              </div>
-              <div className="cc-sub cc-ltr">
-                {x.ip} · آخرین استفاده {ago(x.last)} · ورود {faDate(x.created)}
-              </div>
-            </div>
-            {!x.current && (
+          <ListRow
+            key={x.id}
+            title={<>{x.device || 'نامشخص'}{x.current && <span className="cc-now"> · همین دستگاه</span>}</>}
+            meta={`${x.ip} · آخرین استفاده ${ago(x.last)} · ورود ${faDate(x.created)}`}
+            trailing={!x.current && (
               <Button
                 variant="ghost"
+                aria-label="خروج دستگاه"
                 onClick={async () => {
                   await act('/api/sessions/revoke', { id: x.id })
                   setSessNotice('آن دستگاه خارج شد')
@@ -144,7 +147,7 @@ function SetView() {
                 <Trash size={15} />
               </Button>
             )}
-          </div>
+          />
         ))}
         {sess.loaded && (sess.data?.sessions || []).length === 0 && <Empty title="نشستی نیست" />}
       </div>
@@ -177,16 +180,9 @@ function SetView() {
       )}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>راهنما</h2>
-        </div>
+        <SectionHeader title="راهنما" count={faNum(data.guides.length) + ' موضوع'} />
         {data.guides.map((g) => (
-          <div key={g.id} className="cc-trow cc-tap" onClick={() => setGuide(g)}>
-            <div className="cc-grow">
-              <div className="cc-name">{g.title}</div>
-              <div className="cc-sub">{g.text}</div>
-            </div>
-          </div>
+          <ListRow key={g.id} title={g.title} meta={g.text} onClick={() => setGuide(g)} />
         ))}
       </div>
 

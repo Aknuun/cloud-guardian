@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trash } from '@phosphor-icons/react'
-import { api, invalidateCache } from '../lib'
+import { api, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
 import { usePageAction } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ListRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type MailZone = { acc: number; zid: string; zname: string; dest?: string }
@@ -58,38 +60,36 @@ function MailView() {
 
       {shownFwd.length > 0 && (
         <div className="cc-section">
-          <div className="cc-section-head">
-            <h2>فوروارد به ایمیل</h2>
-          </div>
+          <SectionHeader title="فوروارد به ایمیل" count={faNum(shownFwd.length) + ' دامنه'} />
           {shownFwd.map((z) => (
-            <div key={`${z.acc}|${z.zid}`} className="cc-trow">
-              <div className="cc-grow">
-                <div className="cc-name">{z.zname}</div>
-                <div className="cc-sub cc-ltr">← {z.dest}</div>
-              </div>
-              <button className="cc-rowbtn danger" onClick={() => off(z)} title="قطع">
-                <Trash size={16} />
-              </button>
-            </div>
+            <ListRow
+              key={`${z.acc}|${z.zid}`}
+              title={z.zname}
+              meta={'← ' + z.dest}
+              trailing={
+                <button className="cc-rowbtn danger" onClick={() => off(z)} aria-label="قطع" title="قطع">
+                  <Trash size={16} />
+                </button>
+              }
+            />
           ))}
         </div>
       )}
 
       {shownWorker.length > 0 && (
         <div className="cc-section">
-          <div className="cc-section-head">
-            <h2>دریافت با ورکر</h2>
-          </div>
+          <SectionHeader title="دریافت با ورکر" count={faNum(shownWorker.length) + ' دامنه'} />
           {shownWorker.map((z) => (
-            <div key={`${z.acc}|${z.zid}`} className="cc-trow">
-              <div className="cc-grow">
-                <div className="cc-name">{z.zname}</div>
-                <div className="cc-sub">Email Worker</div>
-              </div>
-              <button className="cc-rowbtn danger" onClick={() => off(z)} title="قطع">
-                <Trash size={16} />
-              </button>
-            </div>
+            <ListRow
+              key={`${z.acc}|${z.zid}`}
+              title={z.zname}
+              meta="Email Worker"
+              trailing={
+                <button className="cc-rowbtn danger" onClick={() => off(z)} aria-label="قطع" title="قطع">
+                  <Trash size={16} />
+                </button>
+              }
+            />
           ))}
         </div>
       )}

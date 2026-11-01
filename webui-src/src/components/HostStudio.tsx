@@ -3,6 +3,8 @@ import { ArrowClockwise, CaretLeft, Check, Copy, Download, Lock, PencilSimple, P
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from './ui'
 import { FormDialog, ErrBox } from './toolsMeta'
+import { SectionHeader } from './SectionHeader'
+import { ListRow } from './ui-kit'
 import { usePageAction } from './PageAction'
 
 type Group = { id: string; label: string; emoji: string; service: string }
@@ -369,21 +371,21 @@ export function HostStudio() {
           {data.overrides.length === 0 && <Empty title="هیچ استثنایی ثبت نشده" description="از تب هاست‌ها روی هر هاست بزن تا قفل یا استثنا بسازی." />}
           <div className="cc-trowlist">
             {data.overrides.map((o) => (
-              <div key={o.panel + ':' + o.host_id} className="cc-trow">
-                <ShieldWarning size={17} className="cc-lock" />
-                <div className="cc-grow">
-                  <div className="cc-name">#{o.host_id}</div>
-                  <div className="cc-sub">
-                    {[o.locked_name && 'قفل نام', o.locked_priority && 'قفل ترتیب', o.excluded && 'مستثنی', !o.enabled && 'غیرفعال']
-                      .filter(Boolean)
-                      .join(' · ') || 'استثنا'}
-                    {o.reason ? ' — ' + o.reason : ''}
-                  </div>
-                </div>
-                <Button variant="ghost" onClick={() => act('/api/tools/hs/ov', { op: 'del', panel: o.panel, host_id: o.host_id }, () => load())}>
-                  <Trash size={15} />
-                </Button>
-              </div>
+              <ListRow
+                key={o.panel + ':' + o.host_id}
+                lead={<ShieldWarning size={17} className="cc-lock" />}
+                title={'#' + o.host_id}
+                meta={
+                  ([o.locked_name && 'قفل نام', o.locked_priority && 'قفل ترتیب', o.excluded && 'مستثنی', !o.enabled && 'غیرفعال']
+                    .filter(Boolean)
+                    .join(' · ') || 'استثنا') + (o.reason ? ' — ' + o.reason : '')
+                }
+                trailing={
+                  <Button variant="ghost" aria-label="حذف استثنا" onClick={() => act('/api/tools/hs/ov', { op: 'del', panel: o.panel, host_id: o.host_id }, () => load())}>
+                    <Trash size={15} />
+                  </Button>
+                }
+              />
             ))}
           </div>
         </>
@@ -394,32 +396,30 @@ export function HostStudio() {
           <div className="cc-hsbar">
             <Button variant="outline" onClick={() => act('/api/tools/hs/bk', { op: 'new' }, () => load())}>بکاپ دستی</Button>
           </div>
-          <div className="cc-section">بکاپ‌ها</div>
+          <SectionHeader title="بکاپ‌ها" count={faNum(data.backups.length)} />
           <div className="cc-trowlist">
             {data.backups.map((b) => (
-              <div key={b.id} className="cc-trow">
-                <div className="cc-grow">
-                  <div className="cc-name">{faDate(b.ts)}</div>
-                  <div className="cc-sub cc-ltr">{faNum(b.count)} هاست · {b.hash.slice(0, 12)}…</div>
-                </div>
-                <Button variant="ghost" onClick={() => act('/api/tools/hs/bk', { op: 'restore', id: b.id }, () => { load(); setNotice('بازگردانی شد') })}>
-                  بازگردانی
-                </Button>
-              </div>
+              <ListRow
+                key={b.id}
+                title={faDate(b.ts)}
+                meta={faNum(b.count) + ' هاست · ' + b.hash.slice(0, 12) + '…'}
+                trailing={
+                  <Button variant="ghost" onClick={() => act('/api/tools/hs/bk', { op: 'restore', id: b.id }, () => { load(); setNotice('بازگردانی شد') })}>
+                    بازگردانی
+                  </Button>
+                }
+              />
             ))}
             {data.backups.length === 0 && <Empty title="بکاپی نیست" description="قبل از هر اعمال خودکار بکاپ ساخته می‌شود." />}
           </div>
-          <div className="cc-section">Audit Log</div>
+          <SectionHeader title="Audit Log" count={faNum(data.audit.length)} />
           <div className="cc-trowlist">
             {data.audit.map((a, i) => (
-              <div key={i} className="cc-trow">
-                <div className="cc-grow">
-                  <div className="cc-name">{a.ok ? '✅ اعمال موفق' : '❌ ناموفق'}{a.note ? ' — ' + a.note : ''}</div>
-                  <div className="cc-sub">
-                    {faDate(a.ts)} · کاربر {faNum(a.uid)} · {faNum(a.hosts)} هاست · {a.template}
-                  </div>
-                </div>
-              </div>
+              <ListRow
+                key={i}
+                title={(a.ok ? '✅ اعمال موفق' : '❌ ناموفق') + (a.note ? ' — ' + a.note : '')}
+                meta={`${faDate(a.ts)} · کاربر ${faNum(a.uid)} · ${faNum(a.hosts)} هاست · ${a.template}`}
+              />
             ))}
             {data.audit.length === 0 && <Empty title="هنوز عملیاتی ثبت نشده" description="Audit Log بعد از اولین اعمال پر می‌شود." />}
           </div>

@@ -60,7 +60,7 @@ export function SettingsRow({
 }: {
   label: string
   hint?: string
-  children: ReactNode
+  children?: ReactNode
 }) {
   return (
     <div className="cc-setrow">
@@ -68,34 +68,37 @@ export function SettingsRow({
         <span>{label}</span>
         {hint ? <small>{hint}</small> : null}
       </div>
-      <div className="cc-setrow-ctl">{children}</div>
+      {children ? <div className="cc-setrow-ctl">{children}</div> : null}
     </div>
   )
 }
 
-/** Mutually exclusive filter chips. */
+/** Filter chips: one value, or several when `value` is an array. */
 export function ChipGroup({
   items,
   value,
   onChange,
 }: {
   items: { id: string; label: string }[]
-  value: string
+  value: string | string[]
   onChange: (id: string) => void
 }) {
   return (
     <div className="cc-chips" role="group">
-      {items.map((it) => (
-        <button
-          key={it.id}
-          type="button"
-          className={'cc-chip' + (value === it.id ? ' on' : '')}
-          aria-pressed={value === it.id}
-          onClick={() => onChange(it.id)}
-        >
-          {it.label}
-        </button>
-      ))}
+      {items.map((it) => {
+        const on = Array.isArray(value) ? value.includes(it.id) : value === it.id
+        return (
+          <button
+            key={it.id}
+            type="button"
+            className={'cc-chip' + (on ? ' on' : '')}
+            aria-pressed={on}
+            onClick={() => onChange(it.id)}
+          >
+            {it.label}
+          </button>
+        )
+      })}
     </div>
   )
 }

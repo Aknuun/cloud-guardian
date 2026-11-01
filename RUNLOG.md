@@ -65,3 +65,10 @@
 - `components/Stats.tsx` redesigned: `of` = real denominator → value + "از N" + ring only when the ratio is computable; tiles without a denominator are compact one-line cards; a lone zero renders "—" instead of "0".
 - call sites updated: srv (با کلید/با رمز از کل), rem (در انتظار/انجامشده از کل), pg (فعال از مانیتورها), dom (نیاز به بررسی از گواهی‌ها).
 - checks: tsc clean, build ok, 18/18 e2e.
+
+## v4.89.0 — UI kit wired into every tool page (package A)
+- `components/ui-kit.tsx` is now used everywhere it fits: `ListRow` replaces hand-built `.cc-trow` markup, `SectionHeader` replaces every inline `.cc-section-head`, `SettingsCard`/`SettingsRow` group the read-only status blocks (hub "این نصب", fo worker), `ChipGroup` picks the panel (hf/hfd), toggles host fields, and picks the add-source (srv).
+- New CSS: `.cc-setcard*`, `.cc-setrow*`, `.cc-section-action`, `.cc-rowchev`, `button.cc-trow`; section counts now sit next to the title instead of being pushed to the far edge.
+- `.cc-btnrow` is gone from markup and CSS; action groups use the existing `.cc-actions` card list or the header action slot.
+- Pages touched: dom, hf, hfd, hook, mail, set, fo, hub, hs (HostStudio), srv, pg, cfcheck, HetznerIpsView.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.

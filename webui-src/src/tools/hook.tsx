@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Copy, } from '@phosphor-icons/react'
-import { api, fallbackCopy, invalidateCache } from '../lib'
+import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Button, Empty, Input, } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
 import { FormDialog } from './shared'
 import { useTool, } from './shared'
 
@@ -83,9 +84,7 @@ function HookView() {
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>پنل‌ها</h2>
-        </div>
+        <SectionHeader title="پنل‌ها" count={faNum(d.panels.length) + ' پنل'} />
         {d.panels.length === 0 && <Empty title="پنلی نیست" description="اول در بخش پاسارگارد یک پنل اضافه کن؛ بعد اینجا هشدارها را تنظیم کن." />}
         {d.panels.map((p) => (
           <div key={p.idx} className="cc-trow">
@@ -105,7 +104,7 @@ function HookView() {
                 ساخت وبهوک
               </Button>
             ) : (
-              <div className="cc-btnrow">
+              <div className="cc-actions">
                 <Button
                   variant="primary"
                   onClick={() => act('/api/tools/hook/apply', { idx: p.idx }, 'در تنظیمات پنل ثبت شد')}
@@ -151,7 +150,7 @@ function HookView() {
             <div className="cc-field">
               <span>آدرس وبهوک</span>
               <div className="cc-pre" style={{ whiteSpace: 'normal' }}>{edit.hook}</div>
-              <div className="cc-btnrow">
+              <div className="cc-actions">
                 <Button
                   variant="outline"
                   icon={Copy}

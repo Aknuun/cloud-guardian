@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { SectionHeader } from '../components/SectionHeader'
+import { ChipGroup, ListRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
 type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; totalCreated: number }
@@ -100,27 +102,30 @@ function HfdView() {
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
 
       <div className="cc-section">
-        <div className="cc-section-head">
-          <h2>هاست‌ها</h2>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true)
-              const ok = await act('/api/tools/hfd/run', {}, 'چرخش شروع شد؛ نتیجه در تلگرام می‌آید')
-              setBusy(false)
-              if (!ok) setNotice('')
-            }}
-          >
-            {busy ? 'در حال چرخش…' : 'چرخش الان'}
-          </Button>
-        </div>
-        <div className="cc-btnrow">
-          {data.panels.map((p) => (
-            <Button key={p.idx} variant={p.idx === pi ? 'primary' : 'outline'} onClick={() => setPi(p.idx)}>
-              {p.name}
+        <SectionHeader
+          title="هاست‌ها"
+          count={faNum(hosts?.length || 0) + ' هاست'}
+          action={
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                const ok = await act('/api/tools/hfd/run', {}, 'چرخش شروع شد؛ نتیجه در تلگرام می‌آید')
+                setBusy(false)
+                if (!ok) setNotice('')
+              }}
+            >
+              {busy ? 'در حال چرخش…' : 'چرخش الان'}
             </Button>
-          ))}
+          }
+        />
+        <ChipGroup
+          items={data.panels.map((p) => ({ id: String(p.idx), label: p.name }))}
+          value={String(pi)}
+          onChange={(id) => setPi(Number(id))}
+        />
+        <div className="cc-actions">
           <Button
             variant="outline"
             onClick={async () => {
@@ -165,19 +170,13 @@ function HfdView() {
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
               </div>
-              <div className="cc-btnrow">
-                {FIELDS.map(([f, l]) => (
-                  <Button
-                    key={f}
-                    variant={h.fields[f] ? 'primary' : 'outline'}
-                    onClick={async () => {
-                      if (await act('/api/tools/hfd/field', { panel: pi, host: h.id, field: f })) loadHosts(pi)
-                    }}
-                  >
-                    {l}
-                  </Button>
-                ))}
-              </div>
+              <ChipGroup
+                items={FIELDS.map(([id, label]) => ({ id, label }))}
+                value={FIELDS.filter(([f]) => h.fields[f]).map(([f]) => f)}
+                onChange={async (f) => {
+                  if (await act('/api/tools/hfd/field', { panel: pi, host: h.id, field: f })) loadHosts(pi)
+                }}
+              />
             </div>
           </div>
         ))}
@@ -228,23 +227,24 @@ function HfdView() {
               )}
               {revs && revs.length === 0 && <Empty title="خالی" description="چیزی برای بازگردانی نیست." />}
               {revs?.map((r) => (
-                <div key={r.key} className="cc-trow">
-                  <div className="cc-grow">
-                    <div className="cc-name cc-ltr">{r.key}</div>
-                    <div className="cc-sub">{faNum(r.prev)} مقدار قبلی ذخیره شده</div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      if (await act('/api/tools/hfd/revert', { panel: r.panel, host: r.host }, 'بازگردانی شد')) {
-                        setRevOpen(false)
-                        loadHosts(pi)
-                      }
-                    }}
-                  >
-                    بازگردان
-                  </Button>
-                </div>
+                <ListRow
+                  key={r.key}
+                  title={r.key}
+                  meta={faNum(r.prev) + ' مقدار قبلی ذخیره شده'}
+                  trailing={
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (await act('/api/tools/hfd/revert', { panel: r.panel, host: r.host }, 'بازگردانی شد')) {
+                          setRevOpen(false)
+                          loadHosts(pi)
+                        }
+                      }}
+                    >
+                      بازگردان
+                    </Button>
+                  }
+                />
               ))}
             </div>
             <div className="cc-dialog-actions">

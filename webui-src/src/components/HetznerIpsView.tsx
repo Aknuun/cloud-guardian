@@ -24,7 +24,7 @@ export function IpsView(p: {
 
       return (
         <>
-          <div className="cc-btnrow cc-mb">
+          <div className="cc-actions">
             <Button variant="primary" icon={Plus} onClick={() => void p.openIpAdd()} disabled={p.ipBusy}>
               افزودن آی‌پی
             </Button>

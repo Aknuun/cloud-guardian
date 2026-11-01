@@ -354,7 +354,7 @@ function NdDialog({ m, onClose, onChanged }: { m: PgMon; onClose: () => void; on
               </Button>
             </div>
 
-            <div className="cc-btnrow cc-gridbtns">
+            <div className="cc-actions">
               <Button variant="outline" icon={ArrowClockwise} disabled={!!busy} onClick={() => post('/api/tools/pg/mon/sync', { id: m.id }, 'sync')}>
                 همگام‌سازی
               </Button>
