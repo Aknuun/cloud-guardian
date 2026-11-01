@@ -2644,3 +2644,16 @@ html.cc-theming body *:not(svg):not(path) {
 @media (prefers-reduced-motion: reduce) {
   html.cc-theming, html.cc-theming body, html.cc-theming body * { transition: none !important }
 }
+
+/* search must never be squeezed out of the topbar */
+.cc-topbar .cc-gsearch {
+  flex: 1 1 240px !important;
+  min-width: 170px !important;
+  max-width: 360px !important;
+  display: flex !important;
+}
+.cc-topbar .cc-gsearch input { min-width: 0 }
+@media (max-width: 899px) {
+  .cc-topbar .cc-gsearch { display: none !important }
+  .cc-topbar .cc-gsearch-btn { display: grid !important }
+}
