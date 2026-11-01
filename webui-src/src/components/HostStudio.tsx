@@ -587,8 +587,8 @@ function sampleName(t: Tpl, groups: Group[]) {
     flag: '🇩🇪',
     location_flag: '🇩🇪',
     iran_flag: '🇮🇷',
-    group_icon: t.emojis[g.id] || g.emoji,
-    group_name: t.group_labels[g.id] || g.label,
+    group_icon: (t.emojis || {})[g.id] || g.emoji,
+    group_name: (t.group_labels || {})[g.id] || g.label,
     protocol: 'vless',
     transport: 'ws',
     inbound_tag: 'vless',
@@ -606,8 +606,8 @@ function sampleName(t: Tpl, groups: Group[]) {
     host_id: '1',
   }
   const sep = t.separator || ' | '
-  const parts = t.segments
-    .map((s, i) => withFont(s.replace(/\{([a-zA-Z_]+)\}/g, (_, k: string) => vars[k] ?? '{' + k + '}'), t.fonts[String(i)] || 'sans').trim())
+  const parts = (t.segments || [])
+    .map((s, i) => withFont(s.replace(/\{([a-zA-Z_]+)\}/g, (_, k: string) => vars[k] ?? '{' + k + '}'), (t.fonts || {})[String(i)] || 'sans').trim())
     .filter(Boolean)
   return parts.join(t.spacing === 'compact' ? sep.trim() : sep)
 }
@@ -642,7 +642,7 @@ function TplEditor({
   const [focus, setFocus] = useState(0)
   const set = (p: Partial<Tpl>) => setT({ ...t, ...p })
 
-  const pairs: Pair[] = t.segments.map((s, i) => ({ s, f: t.fonts[String(i)] || 'sans' }))
+  const pairs: Pair[] = (t.segments || []).map((s, i) => ({ s, f: (t.fonts || {})[String(i)] || 'sans' }))
 
   function commit(ps: Pair[]) {
     const fonts: Record<string, string> = {}
@@ -816,14 +816,14 @@ function TplEditor({
         <div key={g.id} className="cc-grouprow">
           <Input
             className="cc-input cc-emoji"
-            value={t.emojis[g.id] || ''}
+            value={(t.emojis || {})[g.id] || ''}
             placeholder={g.emoji}
             aria-label={'آیکون گروه ' + g.label}
             onChange={(e) => set({ emojis: { ...t.emojis, [g.id]: e.target.value } })}
           />
           <Input
             className="cc-input cc-grow"
-            value={t.group_labels[g.id] || ''}
+            value={(t.group_labels || {})[g.id] || ''}
             placeholder={g.label}
             aria-label={'نام گروه ' + g.label}
             onChange={(e) => set({ group_labels: { ...t.group_labels, [g.id]: e.target.value } })}

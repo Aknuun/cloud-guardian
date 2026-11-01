@@ -194,9 +194,7 @@ func (r *Router) hsTemplates() []hsTpl {
 		lst = hsDefaultTemplates()
 		r.Store.PutJSON(hsTplKey, lst, 0)
 		r.Store.Put(hsTplSeedKey, "2", 0)
-		return lst
-	}
-	if v, _ := r.Store.GetOK(hsTplSeedKey); v != "2" {
+	} else if v, _ := r.Store.GetOK(hsTplSeedKey); v != "2" {
 		have := map[string]bool{}
 		for _, t := range lst {
 			have[t.ID] = true
@@ -208,6 +206,25 @@ func (r *Router) hsTemplates() []hsTpl {
 		}
 		r.Store.PutJSON(hsTplKey, lst, 0)
 		r.Store.Put(hsTplSeedKey, "2", 0)
+	}
+	// Templates written before a map existed decode as nil, which the JSON API
+	// hands to the web app as null — hand out empty maps instead.
+	for i := range lst {
+		if lst[i].Fonts == nil {
+			lst[i].Fonts = map[string]string{}
+		}
+		if lst[i].Emojis == nil {
+			lst[i].Emojis = map[string]string{}
+		}
+		if lst[i].GroupLabels == nil {
+			lst[i].GroupLabels = map[string]string{}
+		}
+		if lst[i].GroupOverrides == nil {
+			lst[i].GroupOverrides = map[string]map[string]any{}
+		}
+		if lst[i].HostOverrides == nil {
+			lst[i].HostOverrides = map[string]map[string]any{}
+		}
 	}
 	return lst
 }

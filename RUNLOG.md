@@ -159,3 +159,8 @@
 - The templates list now previews the real rendered name plus the raw pattern, and a `TestHsPresetsV2Render` guard keeps every shipped preset free of unknown variables.
 - Seeding is versioned (`hs_templates_seed = 2`): existing installs get the new presets on next read without resurrecting presets the user deleted.
 - checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors (27 warnings), build ok, playwright 18/18.
+
+## v4.96.1 — studio no longer crashes on old templates
+- Entering Host Studio could throw `Cannot read properties of null (reading 'direct')`: templates saved before `group_labels` existed were stored without the key, decoded as a nil map and serialized as `null`, so the editor's group-name lookups blew up.
+- Server now hands every template out with empty maps (`fonts`, `emojis`, `group_labels`, `group_overrides`, `host_overrides`) and a new `TestHsTemplatesNeverNilMaps` guards it. The editor also reads those maps defensively (`segments`, `fonts`, `emojis`, `group_labels`), so a null from any other path only falls back to defaults.
+- checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 18/18.
