@@ -35,12 +35,10 @@ function SetView() {
       return null
     }
   }
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!data)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
   const newer = !!data.latest && verGt(data.latest, data.version)
   return (

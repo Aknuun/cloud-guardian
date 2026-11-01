@@ -133,12 +133,10 @@ function DomView() {
   const [warnDays, setWarnDays] = useState<number | null>(null)
   const [cfgOpen, setCfgOpen] = useState(false)
 
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded || !data)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
 
   const needle = q.trim().toLowerCase()
@@ -241,7 +239,7 @@ function DomView() {
             id="ssl-warn-days"
             name="sslWarnDays"
             aria-label="روزهای هشدار گواهی"
-            type="number"
+            type="number" inputMode="numeric"
             min={1}
             max={365}
             value={warn}
@@ -253,7 +251,7 @@ function DomView() {
           </Button>
         </div>
         <div className="cc-hint cc-mb">وقتی گواهی به این تعداد روز یا کمتر برسد، روزی یک بار در تلگرام هشدار می‌آید.</div>
-        {ssl.length === 0 && <Empty title="خالی است" description="دامنه‌ای برای نظارت گواهی ثبت نشده." />}
+        {ssl.length === 0 && <Empty title="گواهی‌ای نیست" description="دامنه‌ات را اضافه کن تا انقضای SSL هر ۶ ساعت بررسی شود." action={<Button variant="primary" icon={Plus} onClick={() => setAddSsl(true)}>افزودن گواهی</Button>} />}
         {ssl.map((s) => (
           <div key={s.host} className="cc-trow">
             <div className="cc-grow">
@@ -287,7 +285,7 @@ function DomView() {
             برای دامنه‌های .ir که ایرنیک تاریخ را مخفی کرده، تاریخ را دستی ثبت کن.
           </div>
         )}
-        {doms.length === 0 && <Empty title="خالی است" description="دامنه‌ای برای نظارت انقضا ثبت نشده." />}
+        {doms.length === 0 && <Empty title="دامنه‌ای نیست" description="تاریخ انقضا از RDAP و whois گرفته می‌شود." action={<Button variant="outline" icon={Plus} onClick={() => setAddDom(true)}>افزودن دامنه</Button>} />}
         {doms.map((d) => (
           <div key={d.domain} className="cc-trow">
             <div className="cc-grow">

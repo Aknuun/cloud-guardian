@@ -33,12 +33,10 @@ function MailView() {
       setNotice(e.message || 'انجام نشد')
     }
   }
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!data)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
   const all = [...data.fwd, ...data.worker]
   const shownFwd = data.fwd.filter((z) => flt !== 'worker' && (!q || z.zname.includes(q) || (z.dest || '').includes(q)))

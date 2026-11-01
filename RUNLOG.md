@@ -38,3 +38,10 @@
 - server list: status dot (up/down/unknown) + "آخرین بررسی …" from new per-server snapshot `srv_last:<id>` written by `srvmon.Run`, exposed as `last` in `/api/tools/srv`; `timeAgo()` helper in lib.
 - fix found by e2e: `usePageAction` sat after early returns (React #310) — hooks moved to the top of each view.
 - checks: tsc clean, biome 0 errors (20 warnings), build ok, playwright 17/17.
+
+## v4.75.0 — UI group B (items 5, 8)
+- Empty states: `Empty` gained `action` slot; srv/rem/dom empty lists now offer the next step (add server/reminder/cert/domain) instead of dead text.
+- Errors: every tool's hard `if (err) return <Empty title="خطا" .../>` replaced with `ErrBox` + a working «تلاش دوباره» (`reload`); um got an explicit `load()`.
+- Loading: full-page spinners in dom/hf/hfd/hook/mail/set/um replaced with `<Skeleton rows={5}/>` so layout height stays stable.
+- Forms: `FormDialog` accepts `disabled`; add-server save stays disabled until a host is typed; numeric inputs got `inputMode="numeric"`.
+- checks: tsc clean, biome 0 errors (20 warnings), build ok, playwright 17/17.

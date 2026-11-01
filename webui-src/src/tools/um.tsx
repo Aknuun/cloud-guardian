@@ -24,17 +24,18 @@ function UmView() {
   const [err, setErr] = useState('')
   const [notice, setNotice] = useState('')
   const [fErr, setFErr] = useState('')
-  useEffect(() => {
+  const load = () => {
+    setErr('')
     api<UmCfg>('/api/tools/um')
       .then(setCfg)
       .catch((e) => setErr(e.message || 'خطا'))
-  }, [])
-  if (err) return <Empty title="خطا" description={err} />
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: load is stable enough here
+  useEffect(load, [])
+  if (err) return <ErrBox msg={err} onRetry={load} />
   if (!cfg)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
   const num = (k: keyof UmCfg, label: string, hint: string) => (
     <label className="cc-field">

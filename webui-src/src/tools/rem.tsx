@@ -24,7 +24,7 @@ function RemView() {
   const [formErr, setFormErr] = useState('')
   const [q, setQ] = useState('')
   const [flt, setFlt] = useState('all')
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded) return <Skeleton />
   const list = data || []
   const pending = list.filter((r) => !r.ack).length

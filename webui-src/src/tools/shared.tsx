@@ -50,6 +50,7 @@ export function FormDialog({
   onSave,
   children,
   error,
+  disabled,
 }: {
   title: string
   sub?: string
@@ -57,6 +58,7 @@ export function FormDialog({
   onSave: () => void
   children: ReactNode
   error?: string
+  disabled?: boolean
 }) {
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
@@ -70,7 +72,7 @@ export function FormDialog({
           <Button variant="secondary" onClick={onClose}>
             انصراف
           </Button>
-          <Button variant="primary" onClick={onSave}>
+          <Button variant="primary" onClick={onSave} disabled={disabled}>
             ذخیره
           </Button>
         </div>

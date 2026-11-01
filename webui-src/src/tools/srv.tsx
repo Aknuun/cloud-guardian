@@ -84,7 +84,7 @@ function SrvView() {
     setAct(null)
     setActSrv(null)
   }
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded) return <Skeleton />
   const list = data || []
   const needle = q.trim().toLowerCase()
@@ -508,6 +508,7 @@ function SrvView() {
           sub={edit.id ? 'رمز را خالی بگذار تا تغییر نکند.' : undefined}
           onClose={() => setEdit(null)}
           onSave={submit}
+          disabled={!edit.host}
           error={formErr}
         >
           <label className="cc-field">

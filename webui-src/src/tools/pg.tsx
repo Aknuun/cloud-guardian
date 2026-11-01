@@ -23,7 +23,7 @@ function PgView() {
   const [mfErr, setMfErr] = useState('')
   const [mdel, setMdel] = useState<PgMon | null>(null)
   const [nd, setNd] = useState<PgMon | null>(null)
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded) return <Skeleton />
   const iso0 = data || { panels: [], monitors: [] }
   const needle = q.trim().toLowerCase()

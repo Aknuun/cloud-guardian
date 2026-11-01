@@ -58,12 +58,10 @@ function HfdView() {
       return false
     }
   }
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!data || !cfg)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
   const next = cfg.nextRun ? faDate(cfg.nextRun) : '—'
   return (

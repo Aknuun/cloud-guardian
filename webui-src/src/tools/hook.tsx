@@ -42,12 +42,10 @@ function HookView() {
       return false
     }
   }
-  if (err) return <Empty title="خطا" description={err} />
+  if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!d)
     return (
-      <div className="cc-center">
-        <Loader size="lg" />
-      </div>
+      <Skeleton rows={5} />
     )
   return (
     <>
@@ -98,7 +96,7 @@ function HookView() {
         <div className="cc-section-head">
           <h2>پنل‌ها</h2>
         </div>
-        {d.panels.length === 0 && <Empty title="پنلی نیست" description="اول در بخش پاسارگارد یک پنل اضافه کن." />}
+        {d.panels.length === 0 && <Empty title="پنلی نیست" description="اول در بخش پاسارگارد یک پنل اضافه کن؛ بعد اینجا هشدارها را تنظیم کن." />}
         {d.panels.map((p) => (
           <div key={p.idx} className="cc-trow">
             <div className="cc-grow">
