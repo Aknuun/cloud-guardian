@@ -177,14 +177,16 @@ export async function checkRecord(
 }
 
 // Human relative time for "last checked" labels; ms since epoch.
+const faDigits = (n: number) => String(n).replace(/[0-9]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)])
+
 export function timeAgo(ms?: number): string {
   if (!ms || !Number.isFinite(ms)) return ''
   const d = Date.now() - ms
   if (d < 0) return 'همین حالا'
   const m = Math.floor(d / 60000)
   if (m < 1) return 'همین حالا'
-  if (m < 60) return m + ' دقیقه پیش'
+  if (m < 60) return faDigits(m) + ' دقیقه پیش'
   const h = Math.floor(m / 60)
-  if (h < 24) return h + ' ساعت پیش'
-  return Math.floor(h / 24) + ' روز پیش'
+  if (h < 24) return faDigits(h) + ' ساعت پیش'
+  return faDigits(Math.floor(h / 24)) + ' روز پیش'
 }

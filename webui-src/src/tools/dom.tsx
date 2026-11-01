@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowClockwise, PencilSimple, Plus, Trash } from '@phosphor-icons/react'
+import { ArrowClockwise, Plus, Trash } from '@phosphor-icons/react'
 import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Switch } from '../components/ui'
 import { StatGrid } from '../components/Stats'
@@ -7,7 +7,7 @@ import { FilterBar } from '../components/FilterBar'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
-import { ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
+import { ListRow, RowMenu, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { FormDialog } from './shared'
 import { useTool, faTxt } from './shared'
 
@@ -307,29 +307,20 @@ function DomView() {
             trailing={
               <>
                 <Badge>{faTxt(d.remaining) || DOM_STATUS[d.status] || d.status}</Badge>
-                <button
-                  className="cc-rowbtn"
-                  aria-label="استعلام دوباره"
-                  title="استعلام دوباره"
-                  onClick={() => act('/api/tools/dom/one', { domain: d.domain })}
-                >
-                  <ArrowClockwise size={16} />
-                </button>
-                <button
-                  className="cc-rowbtn"
-                  aria-label="ثبت تاریخ"
-                  title="ثبت تاریخ"
-                  onClick={() => {
-                    setFErr('')
-                    setWhen('')
-                    setDateFor(d)
-                  }}
-                >
-                  <PencilSimple size={16} />
-                </button>
-                <button className="cc-rowbtn danger" aria-label="حذف دامنه" title="حذف" onClick={() => act('/api/tools/dom/del', { domain: d.domain })}>
-                  <Trash size={16} />
-                </button>
+                <RowMenu
+                  items={[
+                    { label: 'استعلام دوباره', onClick: () => act('/api/tools/dom/one', { domain: d.domain }) },
+                    {
+                      label: 'ثبت تاریخ',
+                      onClick: () => {
+                        setFErr('')
+                        setWhen('')
+                        setDateFor(d)
+                      },
+                    },
+                    { label: 'حذف', danger: true, onClick: () => act('/api/tools/dom/del', { domain: d.domain }) },
+                  ]}
+                />
               </>
             }
           />

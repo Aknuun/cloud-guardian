@@ -2201,6 +2201,7 @@ body .cc-menu-item {
 .cc-hs { display: block }
 .cc-hschips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px }
 .cc-chip {
+  display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;
   height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--ds-line);
   background: var(--ds-tint); color: var(--ds-text); font-size: 12.5px; line-height: 1;
 }
@@ -2705,3 +2706,61 @@ html.cc-theming body *:not(svg):not(path) {
   .cc-topbar .cc-gsearch { display: flex !important; flex: 1 1 auto !important; min-width: 0 !important; max-width: none !important }
   .cc-topbar .cc-gsearch-btn { display: none !important }
 }
+
+/* ---------- run strip, filter counts, monitor card ---------- */
+.cc-fcount {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ds-tint);
+  font-size: 11px;
+  color: var(--ds-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cc-menu-item.on .cc-fcount,
+.cc-menu-item:hover .cc-fcount {
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+.cc-runstrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--ds-tint);
+  font-size: 12.5px;
+  color: var(--ds-muted);
+}
+.cc-runstrip b { color: var(--ds-text); font-weight: 600 }
+.cc-runstrip.bad b { color: var(--ds-danger) }
+.cc-runstrip-txt { margin-inline-start: auto; text-align: end }
+html[data-mode='light'] .cc-runstrip { background: #fff; border: 1px solid var(--ds-hairline) }
+html[data-mode='dark'] .cc-runstrip { background: var(--ds-panel); border: 1px solid var(--ds-line) }
+
+.cc-moncard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--ds-tint);
+}
+html[data-mode='light'] .cc-moncard { background: #fff; border: 1px solid var(--ds-hairline) }
+html[data-mode='dark'] .cc-moncard { background: var(--ds-panel); border: 1px solid var(--ds-line) }
+.cc-moncard-top { display: flex; align-items: center; gap: 10px }
+.cc-moncard-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--ds-muted);
+}
+.cc-moncard-meta b { color: var(--ds-text); font-weight: 600; font-variant-numeric: tabular-nums }
+.cc-moncard-meta .hot { color: var(--ds-danger) }

@@ -6,7 +6,7 @@ import { Button, Dialog } from '../components/ui'
 export type Srv = { id: string; name: string; host: string; user: string; port: number; note: string; key: boolean; secret?: string; last?: { ts?: number; ok?: boolean; err?: string } }
 export type Rem = { id: string; text: string; when: number; notified: boolean; ack: boolean; server: string; note?: string }
 export type PgPanel = { idx: number; name: string; url: string; user: string }
-export type PgMon = { id: string; name: string; panel: string; interval: number; enabled: boolean }
+export type PgMon = { id: string; name: string; panel: string; interval: number; enabled: boolean; nodes?: number; up?: number; down?: number; last?: string }
 export type PgData = { panels: PgPanel[]; monitors: PgMon[] }
 
 export function useTool<T>(path: string) {

@@ -79,3 +79,12 @@
 - Toggles use the same Switch row inside the card; hook saves each switch immediately, hf/hfd/um/dom save on the button.
 - Dialog forms (server, mail, backups, monitor, host studio, cfcheck, arvan) stay on `FormDialog` — the dialog is already one card.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18.
+
+## v4.91.0 — last-run strip, monitor cards, filter counts, row menu (packages C/D)
+- New `components/RunStrip.tsx`: one line between the toolbar and the list — a status dot, «آخرین اجرا: …» and an optional summary that turns red on trouble. Wired into hf (`lastSummary`), hfd (new `lastRun` from the server) and cfcheck (time + «N رکورد · M مشکل»).
+- Monitor rows on pg are now `.cc-moncard` cards: status dot and name on top, then node counts (سالم / قطع in red when >0), «آخرین بررسی» from the newest node sample, and the poll interval. The server now returns `nodes`, `up`, `down` and `last` per monitor (webtools.go).
+- FilterBar items carry an optional `count`: it shows as a small `.cc-fcount` pill in the menu and next to «فیلتر» on the trigger. Counts wired on pg, cfcheck and srv.
+- srv gained a «فقط خراب‌ها» filter (servers whose last check failed) next to key/password.
+- New `RowMenu` in ui-kit: a ⋯ button using the existing `.cc-menu` styles, so row action clusters stop eating the row width. Used on dom domain rows (استعلام/ثبت تاریخ/حذف) and pg panel cards (ویرایش/حذف).
+- `timeAgo()` now returns Persian digits, so every «… دقیقه پیش» matches the rest of the UI; `.cc-chip` centers its text as an inline-flex pill.
+- checks: tsc clean, biome 0 errors (27 warnings — the new menu scrim matches the existing FilterBar warning), build ok, playwright 18/18.

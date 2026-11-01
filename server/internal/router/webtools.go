@@ -50,12 +50,29 @@ func (r *Router) webToolsPg(w http.ResponseWriter, req *http.Request, uid int64)
 	}
 	mons := []map[string]any{}
 	for _, m := range ndmon.Monitors(r.Store) {
+		nodes := ndmon.Nodes(r.Store, m.ID)
+		up, down, last := 0, 0, ""
+		for _, n := range nodes {
+			switch ndmon.NodeDir(n.Status) {
+			case "up":
+				up++
+			case "down":
+				down++
+			}
+			if n.TS > last {
+				last = n.TS
+			}
+		}
 		mons = append(mons, map[string]any{
 			"id":       m.ID,
 			"name":     m.Label(),
 			"panel":    m.PanelURL,
 			"interval": m.IntervalMin,
 			"enabled":  m.IsEnabled(),
+			"nodes":    len(nodes),
+			"up":       up,
+			"down":     down,
+			"last":     last,
 		})
 	}
 	webOK(w, map[string]any{"panels": panels, "monitors": mons})

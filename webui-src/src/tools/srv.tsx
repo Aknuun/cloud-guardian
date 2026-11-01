@@ -95,7 +95,7 @@ function SrvView() {
   const list = data || []
   const needle = q.trim().toLowerCase()
   const shown = list
-    .filter((s) => (flt === 'key' ? s.key : flt === 'pw' ? !s.key : true))
+    .filter((s) => (flt === 'key' ? s.key : flt === 'pw' ? !s.key : flt === 'bad' ? !!(s.last?.ts && !s.last.ok) : true))
     .filter((s) => !needle || (s.name + ' ' + s.host + ' ' + s.user + ' ' + s.note).toLowerCase().includes(needle))
   const toggle = (id: string) => setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]))
   const bulkRun = async (kind: 'reboot' | 'upd') => {
@@ -155,9 +155,10 @@ function SrvView() {
         onQ={setQ}
         placeholder="جستجوی سرورها"
         filters={[
-          { id: 'all', label: 'همه سرورها' },
-          { id: 'key', label: 'با کلید' },
-          { id: 'pw', label: 'با رمز' },
+          { id: 'all', label: 'همه سرورها', count: list.length },
+          { id: 'key', label: 'با کلید', count: list.filter((s) => s.key).length },
+          { id: 'pw', label: 'با رمز', count: list.filter((s) => !s.key).length },
+          { id: 'bad', label: 'فقط خراب‌ها', count: list.filter((s) => s.last?.ts && !s.last.ok).length },
         ]}
         value={flt}
         onValue={setFlt}

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ArrowClockwise, BellRinging, BellSimple, Copy, PencilSimple, Plus, Power, ShieldCheck, Trash, WarningCircle } from '@phosphor-icons/react'
-import { api, faNum, fallbackCopy, invalidateCache } from '../lib'
+import { ArrowClockwise, BellRinging, BellSimple, Copy, Plus, Power, ShieldCheck, Trash, WarningCircle } from '@phosphor-icons/react'
+import { api, faNum, fallbackCopy, invalidateCache, timeAgo } from '../lib'
 import { Badge, Button, Dialog, Empty, Input, Loader } from '../components/ui'
 import { FilterBar } from '../components/FilterBar'
 import { SectionHeader } from '../components/SectionHeader'
 import { usePageActions } from '../components/PageAction'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
+import { RowMenu } from '../components/ui-kit'
 import { FormDialog } from './shared'
 import { useTool, save, } from './shared'
 import type { PgPanel, PgMon, PgData } from './shared'
@@ -78,9 +79,9 @@ function PgView() {
         onQ={setQ}
         placeholder="جستجوی پاسارگارد"
         filters={[
-          { id: 'all', label: 'همه' },
-          { id: 'panels', label: 'پنل‌ها' },
-          { id: 'mons', label: 'مانیتور نود' },
+          { id: 'all', label: 'همه', count: iso0.panels.length + iso0.monitors.length },
+          { id: 'panels', label: 'پنل‌ها', count: iso0.panels.length },
+          { id: 'mons', label: 'مانیتور نود', count: iso0.monitors.length },
         ]}
         value={flt}
         onValue={setFlt}
@@ -119,17 +120,15 @@ function PgView() {
                 <Button variant="primary" icon={Plus} onClick={() => setNode(p)}>
                   نود جدید
                 </Button>
-                <button
-                  type="button"
-                  aria-label="ویرایش پنل"
-                  className="cc-rowbtn"
-                  onClick={() => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' })}
-                >
-                  <PencilSimple size={16} />
-                </button>
-                <button type="button" aria-label="حذف پنل" className="cc-rowbtn danger" onClick={() => setPdel(p)}>
-                  <Trash size={16} />
-                </button>
+                <RowMenu
+                  items={[
+                    {
+                      label: 'ویرایش پنل',
+                      onClick: () => setPf({ idx: p.idx, name: p.name, url: p.url, user: p.user, pass: '' }),
+                    },
+                    { label: 'حذف پنل', danger: true, onClick: () => setPdel(p) },
+                  ]}
+                />
               </div>
             </div>
           ))}
@@ -143,24 +142,37 @@ function PgView() {
         <Empty title="مانیتوری نیست" description="با دکمهٔ + پایین صفحه یک مانیتور نود بساز." />
       )}
       {flt !== 'panels' && iso.monitors.map((m) => (
-        <div key={m.id} className={'cc-trow cc-tap' + (m.enabled ? '' : ' cc-off')} onClick={() => setNd(m)}>
-          <span className={'cc-st' + (m.enabled ? ' up' : '')} />
-          <div className="cc-grow">
-            <div className="cc-name">{m.name || m.id}</div>
-            <div className="cc-sub cc-ltr">{m.panel.replace(/^https?:\/\//, '')}</div>
+        <div key={m.id} className={'cc-moncard cc-tap' + (m.enabled ? '' : ' cc-off')} onClick={() => setNd(m)}>
+          <div className="cc-moncard-top">
+            <span className={'cc-st' + (m.enabled ? ' up' : '')} />
+            <div className="cc-grow">
+              <div className="cc-name">{m.name || m.id}</div>
+              <div className="cc-sub cc-ltr">{m.panel.replace(/^https?:\/\//, '')}</div>
+            </div>
+            <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                aria-label={m.enabled ? 'خاموش کن' : 'روشن کن'}
+                onClick={() => run('/api/tools/pg/mon/toggle', { id: m.id, enabled: !m.enabled })}
+              >
+                <Power size={17} />
+              </button>
+              <button type="button" aria-label="حذف" className="danger" onClick={() => setMdel(m)}>
+                <Trash size={17} />
+              </button>
+            </div>
           </div>
-          <span className="cc-chip cc-chip-sm">{faNum(m.interval)} دقیقه</span>
-          <div className="cc-rowbtns" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              aria-label={m.enabled ? 'خاموش کن' : 'روشن کن'}
-              onClick={() => run('/api/tools/pg/mon/toggle', { id: m.id, enabled: !m.enabled })}
-            >
-              <Power size={17} />
-            </button>
-            <button type="button" aria-label="حذف" className="danger" onClick={() => setMdel(m)}>
-              <Trash size={17} />
-            </button>
+          <div className="cc-moncard-meta">
+            <span>
+              <b>{faNum(m.up ?? 0)}</b> سالم
+            </span>
+            <span className={m.down ? 'hot' : ''}>
+              <b>{faNum(m.down ?? 0)}</b> قطع
+            </span>
+            <span>
+              آخرین بررسی: <b>{m.last ? timeAgo(Date.parse(m.last)) || 'همین حالا' : '—'}</b>
+            </span>
+            <span className="cc-chip cc-chip-sm">{faNum(m.interval)} دقیقه</span>
           </div>
         </div>
       ))}

@@ -4,6 +4,7 @@ import { api, faDate, faNum, fallbackCopy, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader } from './ui'
 import { FilterBar } from './FilterBar'
 import { ErrBox, FormDialog, Skeleton } from './toolsMeta'
+import { RunStrip } from './RunStrip'
 import { RecordEditor, RecordSheet } from '../cloudflare/components'
 
 type Row = {
@@ -246,7 +247,7 @@ export function CfCheckView() {
     return list
   }, [shown, sort])
 
-  const _okCount = rows.filter((r) => r.status === 'ok' || r.status === 'proxy').length
+  const okCount = rows.filter((r) => r.status === 'ok' || r.status === 'proxy').length
 
   const saveFix = async () => {
     if (!fix) return
@@ -299,10 +300,10 @@ export function CfCheckView() {
         onQ={setQ}
         placeholder="جستجوی نام یا مقدار"
         filters={[
-          { id: 'all', label: 'همه' },
-          { id: 'bad', label: 'مشکل‌دار' },
-          { id: 'ok', label: 'سالم' },
-          { id: 'proxy', label: 'پشت کلادفلر' },
+          { id: 'all', label: 'همه', count: rows.length },
+          { id: 'bad', label: 'مشکل‌دار', count: bad.length },
+          { id: 'ok', label: 'سالم', count: okCount },
+          { id: 'proxy', label: 'پشت کلادفلر', count: rows.filter((r) => r.status === 'proxy').length },
         ]}
         value={flt}
         onValue={setFlt}
@@ -310,6 +311,14 @@ export function CfCheckView() {
         onMenu={(id) => setSort(id as typeof sort)}
         onRefresh={() => void load()}
       />
+
+      {st?.last && (
+        <RunStrip
+          ts={st.lastRun || st.last.at}
+          text={faNum(st.last.total) + ' رکورد · ' + faNum(st.last.bad) + ' مشکل'}
+          tone={st.last.bad ? 'bad' : 'ok'}
+        />
+      )}
 
       <div className="cc-hint cc-center cc-mb">
         مرتب‌سازی: {SORTS.find((x) => x.id === sort)?.label}

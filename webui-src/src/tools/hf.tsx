@@ -4,6 +4,7 @@ import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
+import { RunStrip } from '../components/RunStrip'
 import { ChipGroup, ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
@@ -91,7 +92,7 @@ function HfView() {
         دامنهٔ هاست‌ها هر {faNum(cfg.intervalMin)} دقیقه از داخل ایران بررسی می‌شود؛ اگر فیلتر شد، ساب‌دامنهٔ تازه ساخته و
         جایگزین می‌شود. هاست‌هایی که لازم نیست بررسی شوند را در لیست پایین «استثنا» کن.
       </div>
-      {cfg.lastSummary && <div className="cc-hint cc-center cc-mb">آخرین اجرا: {cfg.lastSummary}</div>}
+      <RunStrip ts={cfg.lastRun} text={cfg.lastSummary} />
 
       <SettingsCard
         title="تنظیمات تعویض"

@@ -24,10 +24,16 @@ func (r *Router) webToolsHfd(w http.ResponseWriter, req *http.Request, uid int64
 			"fields": it.Fields, "prev": it.Prev,
 		})
 	}
+	lastRun := ""
+	for _, it := range cfg.Items {
+		if it.LastRun > lastRun {
+			lastRun = it.LastRun
+		}
+	}
 	webOK(w, map[string]any{
 		"cfg": map[string]any{
 			"enabled": cfg.Enabled, "intervalH": cfg.IntervalH, "at": cfg.At,
-			"nextRun": cfg.NextRun, "totalCreated": cfg.TotalCreated,
+			"nextRun": cfg.NextRun, "totalCreated": cfg.TotalCreated, "lastRun": lastRun,
 		},
 		"panels": panels,
 		"items":  items,

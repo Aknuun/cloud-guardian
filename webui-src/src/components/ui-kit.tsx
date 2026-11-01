@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { DotsThreeVertical } from '@phosphor-icons/react'
 
 /** Row for a list: exactly two lines (title + meta), optional trailing slot. */
 export function ListRow({
@@ -99,6 +101,40 @@ export function ChipGroup({
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** Row overflow: one ⋯ button hiding the secondary actions. */
+export function RowMenu({ items, label = 'کارهای بیشتر' }: { items: { label: string; danger?: boolean; onClick: () => void }[]; label?: string }) {
+  const [open, setOpen] = useState(false)
+  if (!items.length) return null
+  return (
+    <div className="cc-menuwrap">
+      <button type="button" className="cc-rowbtn" aria-label={label} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <DotsThreeVertical size={18} />
+      </button>
+      {open && (
+        <>
+          <div className="cc-menu-scrim" onClick={() => setOpen(false)} />
+          <div className="cc-menu" role="menu">
+            {items.map((it) => (
+              <button
+                key={it.label}
+                type="button"
+                role="menuitem"
+                className={'cc-menu-item' + (it.danger ? ' danger' : '')}
+                onClick={() => {
+                  setOpen(false)
+                  it.onClick()
+                }}
+              >
+                {it.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }

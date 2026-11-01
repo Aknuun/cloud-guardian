@@ -3,10 +3,11 @@ import { api, faDate, faNum, invalidateCache } from '../lib'
 import { Button, Dialog, Empty, Input, Loader, Switch } from '../components/ui'
 import { ErrBox, Skeleton } from '../components/toolsMeta'
 import { SectionHeader } from '../components/SectionHeader'
+import { RunStrip } from '../components/RunStrip'
 import { ChipGroup, ListRow, SettingsCard, SettingsRow } from '../components/ui-kit'
 import { useTool, } from './shared'
 
-type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; totalCreated: number }
+type HfdCfg = { enabled: boolean; intervalH: number; at: string; nextRun: string; lastRun?: string; totalCreated: number }
 type HfdData = { cfg: HfdCfg; panels: { idx: number; name: string }[]; items: { key: string; panel: number; host: string }[] }
 type HfdHost = { id: string; remark: string; disabled: boolean; reality: boolean; fields: Record<string, boolean> }
 
@@ -103,6 +104,8 @@ function HfdView() {
       </SettingsCard>
 
       {notice && <div className="cc-hint cc-center cc-mb">{notice}</div>}
+
+      <RunStrip ts={cfg.lastRun} />
 
       <div className="cc-section">
         <SectionHeader

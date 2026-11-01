@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { ArrowClockwise, Check, FunnelSimple } from '@phosphor-icons/react'
 import { Button, Input } from './ui'
+import { faNum } from '../lib'
 
-export type FilterItem = { id: string; label: string }
+export type FilterItem = { id: string; label: string; count?: number }
 export type MenuItem = { id: string; label: string; danger?: boolean }
 
 type Props = {
@@ -45,7 +46,7 @@ export function FilterBar({ q, onQ, placeholder, filters, value, onValue, menu, 
             aria-label="فیلتر و تنظیمات"
             aria-expanded={open}
           >
-            {changed ? current!.label : 'فیلتر'}
+            {changed ? current!.label + (current!.count != null ? ' · ' + faNum(current!.count) : '') : 'فیلتر'}
           </Button>
         )}
         {onRefresh && (
@@ -68,6 +69,7 @@ export function FilterBar({ q, onQ, placeholder, filters, value, onValue, menu, 
                 }}
               >
                 <span className="cc-grow">{f.label}</span>
+                {f.count != null && <span className="cc-fcount">{faNum(f.count)}</span>}
                 {f.id === value && <Check size={15} />}
               </button>
             ))}
