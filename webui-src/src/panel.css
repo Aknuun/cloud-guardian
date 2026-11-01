@@ -2630,3 +2630,14 @@ body .cc-menu-item {
 .cc-gres { align-items: stretch !important }
 .cc-gres > button { align-self: stretch !important; width: 100% !important; min-width: 0 !important }
 .cc-gres > button .cc-gres-label { flex: 1 1 auto !important; min-width: 0 !important; width: auto !important }
+
+/* theme switch: soft cross-fade of colors instead of an instant flip */
+html.cc-theming,
+html.cc-theming body,
+html.cc-theming body *:not(svg):not(path) {
+  transition: background-color 320ms ease, color 320ms ease, border-color 320ms ease,
+    fill 320ms ease, stroke 320ms ease, box-shadow 320ms ease !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.cc-theming, html.cc-theming body, html.cc-theming body * { transition: none !important }
+}

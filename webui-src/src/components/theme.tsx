@@ -39,7 +39,13 @@ const Ctx = createContext<{ mode: Mode; setMode: (m: Mode) => void; toggle: () =
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<Mode>(() => (document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light'))
-  useEffect(() => apply(mode), [mode])
+  useEffect(() => {
+    const el = document.documentElement
+    el.classList.add('cc-theming')
+    apply(mode)
+    const t = window.setTimeout(() => el.classList.remove('cc-theming'), 420)
+    return () => window.clearTimeout(t)
+  }, [mode])
   const value = useMemo(
     () => ({ mode, setMode, toggle: () => setMode((m) => (m === 'dark' ? 'light' : 'dark')) }),
     [mode],
