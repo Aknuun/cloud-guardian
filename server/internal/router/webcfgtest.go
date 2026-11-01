@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -279,17 +280,19 @@ func cfgBuildConfig(c cfgLink, socksPort int) map[string]any {
 		}
 		stream["httpSettings"] = hs
 	case "tcp":
-		if c.HostHdr != "" {
-			stream["tcpSettings"] = map[string]any{"header": map[string]any{
-				"type": "http", "request": map[string]any{"headers": map[string]any{"Host": []string{c.HostHdr}}},
-			}}
+		if c.HostHdr != "" || c.HeaderType == "http" {
+			req := map[string]any{"path": []string{cfgFirst(c.Path, "/")}}
+			if c.HostHdr != "" {
+				req["headers"] = map[string]any{"Host": []string{c.HostHdr}}
+			}
+			stream["tcpSettings"] = map[string]any{"header": map[string]any{"type": "http", "request": req}}
 		}
 	}
 
 	out := map[string]any{"tag": "proxy", "streamSettings": stream}
 	switch c.Protocol {
 	case "vless":
-		user := map[string]any{"id": c.UUID, "encryption": "none"}
+		user := map[string]any{"id": c.UUID, "encryption": cfgFirst(c.Encryption, "none")}
 		if c.Flow != "" {
 			user["flow"] = c.Flow
 		}
@@ -497,21 +500,22 @@ var cfgErrFA = map[string]string{
 // ---------- result ----------
 
 type cfgResult struct {
-	FP        string    `json:"fp"`
-	Remark    string    `json:"remark"`
-	Protocol  string    `json:"protocol"`
-	Host      string    `json:"host"`
-	Port      int       `json:"port"`
-	Verdict   string    `json:"verdict"`
-	Pre       cfgPre    `json:"pre"`
-	Samples   []float64 `json:"samples"`
-	MinMS     float64   `json:"min_ms"`
-	MedianMS  float64   `json:"median_ms"`
-	P95MS     float64   `json:"p95_ms"`
-	JitterMS  float64   `json:"jitter_ms"`
-	Loss      float64   `json:"loss"`
-	ErrorCode string    `json:"error_code"`
-	ErrorFA   string    `json:"error_fa"`
+	FP          string    `json:"fp"`
+	Remark      string    `json:"remark"`
+	Protocol    string    `json:"protocol"`
+	Host        string    `json:"host"`
+	Port        int       `json:"port"`
+	Verdict     string    `json:"verdict"`
+	Pre         cfgPre    `json:"pre"`
+	Samples     []float64 `json:"samples"`
+	MinMS       float64   `json:"min_ms"`
+	MedianMS    float64   `json:"median_ms"`
+	P95MS       float64   `json:"p95_ms"`
+	JitterMS    float64   `json:"jitter_ms"`
+	Loss        float64   `json:"loss"`
+	ErrorCode   string    `json:"error_code"`
+	ErrorFA     string    `json:"error_fa"`
+	ErrorDetail string    `json:"error_detail,omitempty"`
 }
 
 type cfgPre struct {
@@ -532,7 +536,83 @@ func cfgLinkKey(c cfgLink) string {
 	return c.Protocol + "|" + c.Host + ":" + strconv.Itoa(c.Port) + "|" + c.UUID + c.Password + "|" + c.Net + c.Path + c.SNI
 }
 
-func (r *Router) cfgTestOne(ctx context.Context, c cfgLink) cfgResult {
+// cfgOpts are the per-run knobs the page exposes.
+type cfgOpts struct {
+	Samples int
+	Timeout time.Duration
+	Target  string
+}
+
+func opNormalize(o cfgOpts) cfgOpts {
+	if o.Samples < 1 || o.Samples > 10 {
+		o.Samples = cfgSamples
+	}
+	if o.Timeout < 5*time.Second || o.Timeout > 40*time.Second {
+		o.Timeout = cfgLinkTimeout
+	}
+	if !strings.HasPrefix(o.Target, "https://") && !strings.HasPrefix(o.Target, "http://") {
+		o.Target = cfgTarget
+	}
+	return o
+}
+
+// cfgSubLinks expands one subscription URL into config links. The body is
+// either plain lines or a base64 blob of lines, which is what most providers
+// hand out.
+func cfgSubLinks(ctx context.Context, sub string) ([]string, error) {
+	if err := cfgGuardHost(ctx, cfgHostOf(sub)); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sub, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "CloudGuardian/1.0")
+	client := &http.Client{Timeout: 12 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("اشتراک پاسخ %d داد", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	text := strings.TrimSpace(string(body))
+	if !strings.Contains(text, "://") {
+		for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+			if dec, derr := enc.DecodeString(strings.ReplaceAll(text, "\n", "")); derr == nil && strings.Contains(string(dec), "://") {
+				text = string(dec)
+				break
+			}
+		}
+	}
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "vless://") || strings.HasPrefix(line, "vmess://") || strings.HasPrefix(line, "trojan://") {
+			out = append(out, line)
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("در این اشتراک کانفیگ شناخته‌شده‌ای نبود")
+	}
+	return out, nil
+}
+
+func cfgHostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func (r *Router) cfgTestOne(ctx context.Context, c cfgLink, opt cfgOpts) cfgResult {
+	opt = opNormalize(opt)
 	res := cfgFail(c, "no_response")
 	res.Verdict = "fail"
 	if res.Remark == "" {
@@ -620,6 +700,7 @@ func (r *Router) cfgTestOne(ctx context.Context, c cfgLink) cfgResult {
 		case <-done:
 			res.ErrorCode = "engine_start_fail"
 			res.ErrorFA = cfgErrFA["engine_start_fail"]
+			res.ErrorDetail = cfgLogLine(logs.String())
 			return res
 		case <-time.After(50 * time.Millisecond):
 		}
@@ -633,19 +714,20 @@ func (r *Router) cfgTestOne(ctx context.Context, c cfgLink) cfgResult {
 	if !ready {
 		res.ErrorCode = "engine_start_fail"
 		res.ErrorFA = cfgErrFA["engine_start_fail"]
+		res.ErrorDetail = cfgLogLine(logs.String())
 		return res
 	}
 
-	samples := make([]float64, cfgSamples)
+	samples := make([]float64, opt.Samples)
 	errs := 0
-	for i := 0; i < cfgSamples; i++ {
+	for i := 0; i < opt.Samples; i++ {
 		if i > 0 {
 			select {
 			case <-ctx.Done():
 			case <-time.After(300 * time.Millisecond):
 			}
 		}
-		ms, err := cfgProbe(ctx, proxy, cfgTarget)
+		ms, err := cfgProbe(ctx, proxy, opt.Target)
 		if err != nil {
 			errs++
 			samples[i] = 0
@@ -655,7 +737,7 @@ func (r *Router) cfgTestOne(ctx context.Context, c cfgLink) cfgResult {
 	}
 	res.Samples = samples
 	res.MinMS, res.MedianMS, res.P95MS, res.JitterMS, res.Loss = cfgSummarize(samples)
-	res.Verdict = cfgVerdict(cfgSamples-errs, cfgSamples)
+	res.Verdict = cfgVerdict(opt.Samples-errs, opt.Samples)
 	if res.Verdict != "fail" {
 		res.ErrorCode = ""
 		res.ErrorFA = ""
@@ -716,9 +798,12 @@ func (r *Router) cfgHistAdd(res cfgResult) {
 func (r *Router) webToolsCfgTest(w http.ResponseWriter, req *http.Request, uid int64) {
 	ok, ver := cfgEngineInfo()
 	webOK(w, map[string]any{
-		"engine":  map[string]any{"ok": ok, "version": ver, "path": cfgEnginePath()},
-		"limits":  map[string]any{"links": cfgMaxLinks, "samples": cfgSamples, "timeout_s": int(cfgLinkTimeout.Seconds())},
-		"targets": []string{cfgTarget},
+		"engine": map[string]any{"ok": ok, "version": ver, "path": cfgEnginePath()},
+		"limits": map[string]any{
+			"links": cfgMaxLinks, "samples": cfgSamples, "timeout_s": int(cfgLinkTimeout.Seconds()),
+			"samples_options": []int{3, 5, 7}, "timeout_options": []int{10, 20, 30},
+		},
+		"targets": []string{cfgTarget, "https://www.gstatic.com/generate_204"},
 		"history": r.cfgHistory(),
 	})
 }
@@ -744,6 +829,8 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 	var in struct {
 		Links   []string `json:"links"`
 		Samples int      `json:"samples"`
+		Timeout int      `json:"timeout"`
+		Target  string   `json:"target"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, req.Body, 1<<20)).Decode(&in); err != nil {
 		webErr(w, http.StatusBadRequest, "درخواست خوانا نیست")
@@ -755,10 +842,6 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 	}
 	if len(in.Links) == 0 {
 		webErr(w, http.StatusBadRequest, "حداقل یک لینک لازم است")
-		return
-	}
-	if len(in.Links) > cfgMaxLinks {
-		webErr(w, http.StatusBadRequest, "حداکثر ۲۰ لینک در هر تست")
 		return
 	}
 	if ok, _ := cfgEngineInfo(); !ok {
@@ -775,12 +858,35 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 		return
 	}
 
+	opt := opNormalize(cfgOpts{Samples: in.Samples, Timeout: time.Duration(in.Timeout) * time.Second, Target: in.Target})
+
+	// Subscription URLs expand into their links first; everything else is used
+	// as typed. The total stays capped so one big subscription cannot flood it.
 	results := make([]cfgResult, 0, len(in.Links))
+	items := make([]string, 0, len(in.Links))
 	for _, raw := range in.Links {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
 		}
+		if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+			ctx, cancel := context.WithTimeout(req.Context(), 15*time.Second)
+			sub, err := cfgSubLinks(ctx, raw)
+			cancel()
+			if err != nil {
+				results = append(results, cfgResult{Verdict: "fail", ErrorCode: "parse_error", ErrorFA: err.Error(), FP: cfgFingerprint(raw), Samples: []float64{}})
+				continue
+			}
+			items = append(items, sub...)
+			continue
+		}
+		items = append(items, raw)
+	}
+	if len(items) > cfgMaxLinks {
+		items = items[:cfgMaxLinks]
+	}
+
+	for _, raw := range items {
 		if len(raw) > cfgMaxLinkBytes {
 			results = append(results, cfgResult{Verdict: "fail", ErrorCode: "parse_error", ErrorFA: cfgErrFA["parse_error"], FP: cfgFingerprint(raw), Samples: []float64{}})
 			continue
@@ -790,7 +896,7 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 			results = append(results, cfgResult{Verdict: "fail", ErrorCode: "parse_error", ErrorFA: cfgErrFA["parse_error"], FP: cfgFingerprint(raw), Samples: []float64{}})
 			continue
 		}
-		ctx, cancel := context.WithTimeout(req.Context(), cfgLinkTimeout)
+		ctx, cancel := context.WithTimeout(req.Context(), opt.Timeout)
 		if err := cfgGuardHost(ctx, c.Host); err != nil {
 			cancel()
 			res := cfgFail(c, "blocked_target")
@@ -798,13 +904,31 @@ func (r *Router) webCfgTestRun(w http.ResponseWriter, req *http.Request, uid int
 			results = append(results, res)
 			continue
 		}
-		res := r.cfgTestOne(ctx, c)
+		res := r.cfgTestOne(ctx, c, opt)
 		cancel()
 		res.FP = cfgFingerprint(raw)
 		r.cfgHistAdd(res)
 		results = append(results, res)
 	}
 	webOK(w, map[string]any{"results": results})
+}
+
+// cfgLogLine pulls the one useful line out of core output for the UI.
+func cfgLogLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Xray ") || strings.HasPrefix(line, "A unified") {
+			continue
+		}
+		if i := strings.Index(line, "] "); i > 0 && i < 40 {
+			line = line[i+2:]
+		}
+		if len(line) > 160 {
+			line = line[:160]
+		}
+		return line
+	}
+	return ""
 }
 
 // lockedBuf keeps the tail of xray's stderr without unbounded growth.

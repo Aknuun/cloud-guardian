@@ -15,23 +15,25 @@ import (
 // cfgLink is a single proxy link reduced to what xray needs. The raw link is
 // never stored: it carries the uuid/password.
 type cfgLink struct {
-	Protocol string
-	Host     string
-	Port     int
-	Remark   string
-	UUID     string
-	Password string
-	AlterID  int
-	Net      string
-	Security string
-	SNI      string
-	HostHdr  string
-	Path     string
-	Service  string
-	Flow     string
-	PBK      string
-	SID      string
-	FP       string
+	Protocol   string
+	Host       string
+	Port       int
+	Remark     string
+	UUID       string
+	Password   string
+	AlterID    int
+	Net        string
+	Security   string
+	SNI        string
+	HostHdr    string
+	Path       string
+	Service    string
+	Flow       string
+	PBK        string
+	SID        string
+	FP         string
+	Encryption string
+	HeaderType string
 }
 
 func cfgParseLink(raw string) (cfgLink, error) {
@@ -81,16 +83,18 @@ func cfgParseVless(s string) (cfgLink, error) {
 	q := u.Query()
 	c := cfgLink{
 		Protocol: "vless", Host: u.Hostname(), Port: port, Remark: cfgFrag(u), UUID: id,
-		Net:      cfgFirst(q.Get("type"), "tcp"),
-		Security: cfgFirst(q.Get("security"), "none"),
-		SNI:      cfgFirst(q.Get("sni"), q.Get("peer")),
-		HostHdr:  q.Get("host"),
-		Path:     q.Get("path"),
-		Service:  cfgFirst(q.Get("serviceName"), q.Get("servicename")),
-		Flow:     q.Get("flow"),
-		PBK:      q.Get("pbk"),
-		SID:      q.Get("sid"),
-		FP:       cfgFirst(q.Get("fp"), "chrome"),
+		Net:        cfgFirst(q.Get("type"), "tcp"),
+		Security:   cfgFirst(q.Get("security"), "none"),
+		SNI:        cfgFirst(q.Get("sni"), q.Get("peer")),
+		HostHdr:    q.Get("host"),
+		Path:       q.Get("path"),
+		Service:    cfgFirst(q.Get("serviceName"), q.Get("servicename")),
+		Flow:       q.Get("flow"),
+		PBK:        q.Get("pbk"),
+		SID:        q.Get("sid"),
+		FP:         cfgFirst(q.Get("fp"), "chrome"),
+		Encryption: cfgFirst(q.Get("encryption"), "none"),
+		HeaderType: q.Get("headerType"),
 	}
 	return c, nil
 }

@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,5 +96,30 @@ func TestCfgHistoryCap(t *testing.T) {
 	}
 	if got := len(r.cfgHistory()); got != cfgHistCap {
 		t.Fatalf("history len %d", got)
+	}
+}
+
+// Some providers ship VLESS with its own post-quantum encryption; xray now
+// refuses plain VLESS unless TLS or that encryption is set, so the link value
+// must survive into the generated config.
+func TestCfgVlessEncryption(t *testing.T) {
+	raw := "vless://42a1c069-9dc9-4181-86b8-13bf28632851@dl2.example.com:2041?encryption=mlkem768x25519plus.random.0rtt.ABCDEF&security=none&type=tcp&headerType=http&path=%2F&host=www.upwork.com#FI"
+	c, err := cfgParseLink(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if c.Encryption != "mlkem768x25519plus.random.0rtt.ABCDEF" || c.HeaderType != "http" {
+		t.Fatalf("link fields lost: %+v", c)
+	}
+	cfg := cfgBuildConfig(c, 10808)
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "mlkem768x25519plus") {
+		t.Fatalf("encryption dropped from config: %s", b)
+	}
+	if !strings.Contains(string(b), `"path":["/"]`) {
+		t.Fatalf("http header path missing: %s", b)
 	}
 }

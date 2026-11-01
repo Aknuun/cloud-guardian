@@ -177,3 +177,10 @@
 ## v4.97.1 — config test: per-minute run budget
 - Runs are heavier than a page load, so they get their own budget of ten per minute per admin (the shared limiter still allows 300 ordinary calls). The eleventh run answers «کمی صبر کن؛ هر دقیقه ۱۰ تست».
 - checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 19/19.
+
+## v4.98.0 — config test: subscriptions, real vless encryption, options
+- The page takes subscription URLs too: any line that starts with `http://` or `https://` is fetched (same private-address guard), base64 or plain bodies are both understood, and every recognised link inside is tested. The 20-link cap still applies, so a 300-line subscription tests its first 20.
+- The «هستهٔ تست بالا نیامد» dead end is gone. Two causes were found: VLESS links that carry their own post-quantum `encryption=` value were sent as `encryption=none`, which xray 26 refuses (`vless without TLS or other encryption is prohibited`), and `headerType=http` links lost their `path`. Both now travel into the generated config, and a `TestCfgVlessEncryption` guard pins it.
+- When the core still refuses to start, the result carries the core's own first error line (`error_detail`) and the sheet shows it under the Persian message, so a config that the core rejects explains itself instead of asking for a retry.
+- New options under the paste box: samples (3/5/7), deadline per link (10/20/30s) and target (کلادفلر / گوگل). The verdict follows the chosen sample count (4 of 5, 3 of 3, …).
+- checks: gofmt clean, `CGO_ENABLED=0 go build/vet/test ./...` ok, tsc clean, biome 0 errors, build ok, playwright 19/19; the reported broken link now measures 132ms with five successful samples.

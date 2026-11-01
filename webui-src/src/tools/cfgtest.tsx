@@ -24,6 +24,7 @@ type Result = {
   loss: number
   error_code?: string
   error_fa?: string
+  error_detail?: string
 }
 type Hist = {
   fp: string
@@ -38,7 +39,13 @@ type Hist = {
 }
 type Data = {
   engine: { ok: boolean; version: string; path: string }
-  limits: { links: number; samples: number; timeout_s: number }
+  limits: {
+    links: number
+    samples: number
+    timeout_s: number
+    samples_options: number[]
+    timeout_options: number[]
+  }
   targets: string[]
   history: Hist[]
 }
@@ -84,6 +91,9 @@ export default function CfgTestView() {
   const [results, setResults] = useState<Result[]>([])
   const [detail, setDetail] = useState<Result | null>(null)
   const [installing, setInstalling] = useState(false)
+  const [samples, setSamples] = useState(5)
+  const [timeout, setTimeout] = useState(20)
+  const [target, setTarget] = useState('')
 
   if (err) return <ErrBox msg={err} onRetry={reload} />
   if (!loaded || !data) return <Skeleton />
@@ -97,7 +107,12 @@ export default function CfgTestView() {
     setRunErr('')
     setBusy(true)
     try {
-      const r = await api<{ results: Result[] }>('/api/tools/cfgtest/run', { links, samples: 5 })
+      const r = await api<{ results: Result[] }>('/api/tools/cfgtest/run', {
+        links,
+        samples,
+        timeout,
+        target: target || data.targets[0],
+      })
       setResults(r.results || [])
       reload()
     } catch (e: any) {
@@ -131,7 +146,7 @@ export default function CfgTestView() {
 
   return (
     <>
-      <p className="cc-hint cc-mb">لینک را بچسبان؛ می‌گویم کار می‌کند یا نه و چند میلی‌ثانیه تأخیر دارد.</p>
+      <p className="cc-hint cc-mb">لینک یا آدرس ساب را بچسبان؛ می‌گویم کار می‌کند یا نه و چند میلی‌ثانیه تأخیر دارد.</p>
 
       {!data.engine.ok && (
         <SettingsCard
@@ -184,9 +199,41 @@ export default function CfgTestView() {
             rows={4}
             value={text}
             aria-label="لینک کانفیگ"
-            placeholder="vless://… یا vmess://… — هر خط یک کانفیگ"
+            placeholder="vless://… یا آدرس ساب — هر خط یکی"
             onChange={(e) => setText(e.target.value)}
           />
+          <div className="cc-setgrid">
+            <label className="cc-setfield">
+              <span>نمونه</span>
+              <select className="cc-input" value={samples} onChange={(e) => setSamples(Number(e.target.value))}>
+                {(data.limits.samples_options || [3, 5, 7]).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="cc-setfield">
+              <span>مهلت (ثانیه)</span>
+              <select className="cc-input" value={timeout} onChange={(e) => setTimeout(Number(e.target.value))}>
+                {(data.limits.timeout_options || [10, 20, 30]).map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="cc-setfield" style={{ gridColumn: '1 / -1' }}>
+              <span>مقصد</span>
+              <select className="cc-input" value={target || data.targets[0]} onChange={(e) => setTarget(e.target.value)}>
+                {data.targets.map((t) => (
+                  <option key={t} value={t}>
+                    {t.includes('cloudflare') ? 'کلادفلر' : t.includes('gstatic') ? 'گوگل' : t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </SettingsCard>
 
@@ -227,7 +274,7 @@ export default function CfgTestView() {
       </div>
 
       {!results.length && !busy && (
-        <Empty title="هنوز چیزی تست نشده" description="لینک کانفیگ را بالا بچسبان؛ نتیجه همین‌جا می‌آید." />
+        <Empty title="هنوز چیزی تست نشده" description="لینک کانفیگ یا آدرس ساب را بالا بچسبان؛ نتیجه همین‌جا می‌آید." />
       )}
 
       {data.history.length > 0 && (
@@ -276,6 +323,7 @@ export default function CfgTestView() {
               کمینه {ms(detail.min_ms)} · p95 {ms(detail.p95_ms)} · فاصلهٔ نمونه‌ها {ms(detail.jitter_ms)}
             </div>
             {detail.error_fa ? <div className="cc-errbox" style={{ marginTop: 12 }}>{detail.error_fa}</div> : null}
+            {detail.error_detail ? <div className="cc-preline cc-ltr">{detail.error_detail}</div> : null}
           </Dialog>
         </Dialog.Root>
       )}
