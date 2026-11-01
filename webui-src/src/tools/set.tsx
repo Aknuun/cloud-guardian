@@ -64,7 +64,7 @@ function SetView() {
             title={'آپدیت به ' + data.latest}
             meta="سرویس چند لحظه ری‌استارت می‌شود."
             trailing={
-              <Button variant="primary" onClick={async () => {
+              <Button variant="outline" onClick={async () => {
                 const r = await act('/api/tools/settings/update', { tag: data.latest }, '')
                 if (r) setNotice('آپدیت شروع شد؛ ۱ تا ۳ دقیقه صبر کن.')
               }}>

@@ -117,3 +117,11 @@
 - Numeric settings are a compact grid (`cc-setgrid`): two fields per row on phones, four on wide screens, label above a small input — hf/hfd/hook/um moved from stacked full-width rows to this.
 - hf reads shorter: the intro is one sentence, a host shows one combined address/SNI/host line instead of three, and field chips are 28px.
 - checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18 (reviewed hf/hook/um/dom/srv/set/mail at 390 and 1280).
+
+## v4.95.1 — four small fixes from the 4.95 review
+- Reminder rows stop shouting: the state pill is now a dot plus a coloured label (blue waiting, grey notified, green done) instead of a grey slab.
+- The update row on settings keeps its CTA but quiet: «آپدیت» is an outline button, no longer a blue block inside a list row.
+- hf host rows put the field chips on the same line as the name on tablet/desktop; on phones the meta keeps the full width (two lines) and the chips drop under it.
+- Removed the dead `.cc-actions` size ladder from `panel.css` (six generations of height/font overrides plus a duplicate `.cc-actions-danger`); one toolbar block at the end now owns size, radius and padding, and the danger zone has a single definition.
+- Meta lines (`⋆.cc-sub`) keep their own character order but always align under the row name — mixed Latin/Persian strings no longer drift to the left edge.
+- checks: tsc clean, biome 0 errors (26 warnings), build ok, playwright 18/18; hf/srv/dom/pg/set/rem/cfcheck reviewed at 390 and 1280.

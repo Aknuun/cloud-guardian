@@ -213,7 +213,7 @@ function HfView() {
         )}
         {hosts && hosts.length === 0 && <Empty title="هاستی نیست" description="این پنل هاست فعالی ندارد." />}
         {hosts?.map((h) => (
-          <div key={h.id} className="cc-trow">
+          <div key={h.id} className="cc-trow cc-hostrow">
             <div className="cc-grow">
               <div className="cc-name">
                 {h.remark || h.id} {h.reality && <span className="cc-dim">· REALITY</span>}
@@ -227,12 +227,12 @@ function HfView() {
                   .filter(Boolean)
                   .join(' · ') || '—'}
               </div>
-              <ChipGroup
-                items={FIELDS.map(([id, label]) => ({ id, label }))}
-                value={FIELDS.filter(([f]) => !h.skip[f]).map(([f]) => f)}
-                onChange={(f) => toggleField(h, f)}
-              />
             </div>
+            <ChipGroup
+              items={FIELDS.map(([id, label]) => ({ id, label }))}
+              value={FIELDS.filter(([f]) => !h.skip[f]).map(([f]) => f)}
+              onChange={(f) => toggleField(h, f)}
+            />
           </div>
         ))}
       </div>

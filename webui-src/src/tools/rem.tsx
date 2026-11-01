@@ -89,7 +89,9 @@ function RemView() {
             </div>
             {r.note ? <div className="cc-sub">{r.note}</div> : null}
           </div>
-          <Badge>{r.ack ? 'انجام شد' : r.notified ? 'اطلاع داده شد' : 'در انتظار'}</Badge>
+          <Badge dot variant={r.ack ? 'success' : r.notified ? 'neutral' : 'primary'}>
+            {r.ack ? 'انجام شد' : r.notified ? 'اطلاع داده شد' : 'در انتظار'}
+          </Badge>
         </div>
       ))}
 

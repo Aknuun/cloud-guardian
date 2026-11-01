@@ -643,16 +643,12 @@ html[data-mode='dark'] .cc-stat-ring {
 }
 
 /* action lists: reference-style bordered row cards with a trailing chevron */
+/* size, radius and padding live in the toolbar block at the end of this file */
 .cc-actions button[data-kumo-component='Button'] {
   justify-content: center !important;
-  height: 34px !important;
-  min-height: 34px !important;
-  padding: 0 12px !important;
   border: 1px solid var(--ds-line) !important;
   background: var(--ds-card) !important;
   color: var(--ds-text) !important;
-  border-radius: 10px !important;
-  font-size: 12.5px !important;
   font-weight: 600 !important;
   box-shadow: none !important;
 }
@@ -1615,19 +1611,11 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
 /* unslop mobile pass: keep dialogs and chip rows inside the screen */
 @media (max-width: 699px) {
   .cc-dialog { width: calc(100vw - 20px); max-width: none }
-  .cc-dialog .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px; min-width: 0 }
-  .cc-dialog .cc-actions button .cc-btn-ico { width: 16px; height: 16px }
   .cc-main .cc-trow .cc-name { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.35 }
   .cc-main .cc-trow .cc-sub { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden }
   .cc-dialog .cc-dialog-title { font-size: 16px }
   .cc-dialog .cc-dialog-desc { font-size: 12px }
-  .cc-main .cc-actions button { font-size: 13px; height: 46px; padding: 0 10px }
 }
-@media (max-width: 699px) {
-  .cc-dialog .cc-actions button[data-kumo-component='Button'],
-  .cc-main .cc-actions button[data-kumo-component='Button'] { height: 46px !important; font-size: 13px !important; padding: 0 10px !important; min-width: 0 !important }
-}
-
 /* mobile safety net: nothing overflows its container on phones */
 @media (max-width: 699px) {
   .cc-dialog { width: calc(100vw - 16px) !important; max-width: calc(100vw - 16px) !important; max-height: calc(100dvh - 24px); overflow: auto }
@@ -1663,74 +1651,38 @@ html[data-mode='dark'] .cc-stat-ring span{background:var(--ds-panel)}
   .cc-gridbtns { grid-template-columns: repeat(4, minmax(0, auto)); justify-content: start; }
 }
 
-/* server actions: shorter buttons + separated danger zone */
-.cc-main .cc-actions button[data-kumo-component='Button'] { height: 44px; font-size: 13.5px; }
-.cc-actions-danger { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ds-line);
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.cc-actions-danger-label { grid-column: 1 / -1; font-size: 11px; color: var(--ds-subtle);
-  padding-inline-start: 2px; }
-.cc-actions-danger button[data-kumo-component='Button'] { width: 100%; height: 40px; font-size: 12.5px; }
-.cc-actions-danger button[data-variant='destructive'] { grid-column: 1 / -1; }
+/* danger zone inside the server action list: one compact column */
 .cc-main input[type='number'] { height: 44px; }
-@media (max-width: 699px) {
-  .cc-main .cc-actions button[data-kumo-component='Button'] { height: 42px; font-size: 13px; }
-  .cc-actions-danger button[data-kumo-component='Button'] { height: 38px; }
+.cc-actions-danger {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ds-line);
 }
-
-/* tighter server actions + single-column danger list */
-.cc-main .cc-actions button[data-kumo-component='Button'] { height: 38px; font-size: 12.5px; padding-inline: 12px; }
-.cc-main .cc-actions { gap: 6px; }
-.cc-actions-danger { display: block; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ds-line); }
-.cc-actions-danger-label { display: block; font-size: 10.5px; color: var(--ds-subtle); margin: 0 0 4px 2px; }
+.cc-actions-danger-label {
+  font-size: 10.5px;
+  color: var(--ds-subtle);
+  padding-inline-start: 2px;
+}
+.cc-actions-danger button,
 .cc-actions-danger button[data-kumo-component='Button'] {
-  display: flex; width: 100%; height: 36px; min-height: 36px; margin: 0; padding: 0 10px;
-  justify-content: flex-start; font-size: 12.5px; border: 0; border-radius: 8px; box-shadow: none;
-  background: transparent;
-}
-.cc-actions-danger button[data-kumo-component='Button'] + button[data-kumo-component='Button'] {
-  border-top: 1px solid var(--ds-line); border-radius: 0;
-}
-@media (max-width: 699px) {
-  .cc-main .cc-actions button[data-kumo-component='Button'] { height: 36px; font-size: 12px; }
-  .cc-actions-danger button[data-kumo-component='Button'] { height: 34px; min-height: 34px; font-size: 12px; }
-}
-
-/* dialogs are portalled outside .cc-main: scope action sizing globally */
-.cc-dialog .cc-actions button[data-kumo-component='Button'],
-.cc-actions button[data-kumo-component='Button'] { height: 36px !important; min-height: 36px !important; font-size: 12.5px !important; padding-inline: 10px !important; }
-.cc-actions { gap: 6px !important; }
-.cc-actions-danger button[data-kumo-component='Button'] { height: 32px !important; min-height: 32px !important; font-size: 12px !important; }
-@media (max-width:699px) {
-  .cc-dialog .cc-actions button[data-kumo-component='Button'],
-  .cc-actions button[data-kumo-component='Button'] { height: 34px !important; min-height: 34px !important; font-size: 12px !important; }
-  .cc-actions-danger button[data-kumo-component='Button'] { height: 30px !important; min-height: 30px !important; }
-}
-
-/* dialogs scroll instead of clipping on short screens */
-.cc-dialog { max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
-.cc-dialog-body { overflow-y: auto; overscroll-behavior: contain; }
-.cc-form { max-height: calc(100dvh - 200px); overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 2px; }
-.cc-dialog .cc-actions { max-height: 56vh; overflow-y: auto; overscroll-behavior: contain; }
-
-/* danger actions: compact separated rows, no merging */
-.cc-actions-danger { display: flex !important; flex-direction: column; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--ds-line); }
-.cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] {
-  display: flex !important; align-items: center; justify-content: flex-start;
-  width: 100% !important; height: 30px !important; min-height: 30px !important; max-height: 30px !important;
-  line-height: 1 !important; font-size: 12px !important; padding: 0 10px !important;
-  border: 0 !important; border-radius: 8px !important; box-shadow: none !important;
-  background: var(--ds-tint) !important; color: #c0392b !important;
-}
-.cc-actions-danger button + button { border-top: 0 !important; border-radius: 8px !important; }
-
-/* actions: readable size again inside dialogs */
-.cc-dialog .cc-actions button[data-kumo-component='Button'],
-.cc-actions button[data-kumo-component='Button'] { height:44px !important; min-height:44px !important; font-size:13.5px !important }
-.cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] { height:38px !important; min-height:38px !important; max-height:38px !important; font-size:12.5px !important }
-@media (max-width:699px) {
-  .cc-dialog .cc-actions button[data-kumo-component='Button'],
-  .cc-actions button[data-kumo-component='Button'] { height:42px !important; min-height:42px !important }
-  .cc-actions-danger button, .cc-actions-danger button[data-kumo-component='Button'] { height:36px !important; min-height:36px !important; max-height:36px !important }
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100% !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  line-height: 1 !important;
+  font-size: 12px !important;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  background: var(--ds-tint) !important;
+  color: #c0392b !important;
 }
 
 /* One scroll per surface: forms and action lists never scroll on their own. */
@@ -2250,7 +2202,11 @@ body .cc-menu-item {
 .cc-dialog-title { font-size: 20px; font-weight: 600 }
 .cc-hint, .cc-stat-label, .cc-stat-note { font-size: 12px }
 .cc-ltr, .cc-mono, .cc-num { unicode-bidi: plaintext }
-.cc-main .cc-sub { unicode-bidi: plaintext }
+/* metas: keep each string's own order, but always line up under the name */
+.cc-main .cc-sub {
+  unicode-bidi: plaintext;
+  text-align: right;
+}
 
 /* group D: motion, mobile <420, breadcrumb */
 .cc-sideitem:hover, .cc-menu-item:hover { background: var(--ds-tint) }
@@ -2810,9 +2766,28 @@ html[data-mode='dark'] .cc-fab {
   font-size: 12px;
   gap: 6px 12px;
 }
-.cc-trow .cc-chips {
-  margin: 6px 0 0;
-  padding-bottom: 0;
+.cc-main .cc-trow.cc-hostrow {
+  flex-wrap: wrap;
+}
+.cc-main .cc-trow.cc-hostrow > .cc-grow {
+  flex: 1 1 160px;
+}
+.cc-hostrow > .cc-chips {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+@media (max-width: 520px) {
+  /* the meta needs the width here; chips take their own line */
+  .cc-main .cc-trow.cc-hostrow > .cc-grow {
+    flex: 1 1 100%;
+  }
+  .cc-main .cc-trow.cc-hostrow .cc-sub {
+    -webkit-line-clamp: 2;
+  }
 }
 .cc-tplbtns {
   gap: 6px;
